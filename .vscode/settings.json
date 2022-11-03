@@ -1,0 +1,15 @@
+{
+    "editor.codeActionsOnSave": {
+        "source.organizeImports": true
+    },
+    "editor.formatOnSave": true,
+    "files.exclude": {
+        "**/mcore_*": true,
+        "**/__pycache__": true
+    },
+    "isort.args": [
+        "--profile",
+        "black"
+    ],
+    "python.formatting.provider": "black"
+}
