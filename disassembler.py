@@ -1,27 +1,35 @@
 #!/usr/bin/env python3
-import json
-from dataclasses import dataclass
-from typing import Dict
+from typing import Dict, List
+
+from common import OPCODES, Instruction, Program
 
 
-@dataclass
-class Opcode:
-    code: int
-    name: str
-    fullName: str
-    fee: int
-    isAsync: bool
-    dynamicGas: bool
+def parse_program(code: bytes) -> Program:
+    # Iterate over instructions
+    idx = 0
+    instructions: List[Instruction] = []
+    jumps: Dict[int, int] = {}
+    while idx < len(code):
+        op = OPCODES.get(code[idx])
+        idx += 1
+        data = None
 
+        if op is None:
+            instructions.append(Instruction(None, None))
+        elif op.name == "JUMPDEST":
+            jumps[idx - 1] = len(instructions)
+            # omit the JUMPDEST instruction from the emitted program
+            # TODO: make sure we properly handle a program ending in JUMPDEST
+        elif op.name == "PUSH":
+            # PUSH is the only opcode that takes an operand...?
+            n = int(op.fullName[4:])
+            data = code[idx : idx + n]
+            idx += n
+            instructions.append(Instruction(op, data))
+        else:
+            instructions.append(Instruction(op, None))
 
-def load_opcodes() -> Dict[int, Opcode]:
-    with open("opcodes.json") as f:
-        raw = json.load(f)
-        tuples = [Opcode(**item) for item in raw]
-        return dict((item.code, item) for item in tuples)
-
-
-OPCODES = load_opcodes()
+    return Program(instructions, jumps)
 
 
 def disassemble(code: bytes) -> None:
@@ -37,31 +45,26 @@ def disassemble(code: bytes) -> None:
     else:
         trailer = b""
 
-    # Iterate over instructions
-    pc = 0
-    while pc < len(code):
-        if code[pc] not in OPCODES:
-            print("REMAINDER:", code[pc:])
-        op = OPCODES[code[pc]]
-        pc += 1
-
-        # Print and skip over PUSH arguments (...the only opcodes which read
-        # data from the program itself?)
-        data = None
-        text = None
-        if op.fullName.startswith("PUSH"):
-            n = int(op.fullName[4:])
-            data = code[pc : pc + n]
-            if len(data) > 3:
+    program = parse_program(code)
+    print(program)
+    for instr in program.instructions:
+        op = instr.opcode
+        if op:
+            print(
+                f"{op.fullName.ljust(12)} ({op.fee: 5}{'*' if op.dynamicGas else ' '})",
+                end="",
+            )
+        else:
+            print("???", end="")
+        if instr.operand:
+            text = None
+            if len(instr.operand) > 3:
                 try:
-                    text = data.decode("ascii")
+                    text = instr.operand.decode("ascii")
                 except UnicodeDecodeError:
                     pass
-            pc += n
-
-        print(
-            f"{op.fullName.ljust(12)} ({op.fee: 5}{'*' if op.dynamicGas else ' '})  {'0x' + data.hex() if data else ''} {text or ''}"
-        )
+            print(f"  {'0x' + instr.operand.hex()} {text or ''}", end="")
+        print()
 
     if trailer:
         print(f"> ignoring metadata trailer{' (**)' if 0x5B in trailer else ''} <")
