@@ -1,11 +1,30 @@
 #!/usr/bin/env python3
 import json
+from dataclasses import dataclass
+from typing import Dict
 
-with open("opcodes.json") as f:
-    OPCODES = dict([item["code"], item] for item in json.load(f))
+
+@dataclass
+class Opcode:
+    code: int
+    name: str
+    fullName: str
+    fee: int
+    isAsync: bool
+    dynamicGas: bool
 
 
-def disassemble(code: bytes):
+def load_opcodes() -> Dict[int, Opcode]:
+    with open("opcodes.json") as f:
+        raw = json.load(f)
+        tuples = [Opcode(**item) for item in raw]
+        return dict((item.code, item) for item in tuples)
+
+
+OPCODES = load_opcodes()
+
+
+def disassemble(code: bytes) -> None:
     # Strip the optional contract metadata trailer:
     # https://docs.soliditylang.org/en/latest/metadata.html#encoding-of-the-metadata-hash-in-the-bytecode
     trailer = code[-54:]
@@ -16,7 +35,7 @@ def disassemble(code: bytes):
     ):
         code = code[:-53]  # preserve the INVALID spacer
     else:
-        trailer = None
+        trailer = b""
 
     # Iterate over instructions
     pc = 0
@@ -30,8 +49,8 @@ def disassemble(code: bytes):
         # data from the program itself?)
         data = None
         text = None
-        if op["fullName"].startswith("PUSH"):
-            n = int(op["fullName"][4:])
+        if op.fullName.startswith("PUSH"):
+            n = int(op.fullName[4:])
             data = code[pc : pc + n]
             if len(data) > 3:
                 try:
@@ -41,7 +60,7 @@ def disassemble(code: bytes):
             pc += n
 
         print(
-            f"{op['fullName'].ljust(12)} ({op['fee']: 5}{'*' if op['dynamicGas'] else ' '})  {'0x' + data.hex() if data else ''} {text or ''}"
+            f"{op.fullName.ljust(12)} ({op.fee: 5}{'*' if op.dynamicGas else ' '})  {'0x' + data.hex() if data else ''} {text or ''}"
         )
 
     if trailer:
