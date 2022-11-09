@@ -1,0 +1,1146 @@
+[
+    {
+        "code": 0,
+        "name": "STOP",
+        "fullName": "STOP",
+        "fee": 0,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 1,
+        "name": "ADD",
+        "fullName": "ADD",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 2,
+        "name": "MUL",
+        "fullName": "MUL",
+        "fee": 5,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 3,
+        "name": "SUB",
+        "fullName": "SUB",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 4,
+        "name": "DIV",
+        "fullName": "DIV",
+        "fee": 5,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 5,
+        "name": "SDIV",
+        "fullName": "SDIV",
+        "fee": 5,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 6,
+        "name": "MOD",
+        "fullName": "MOD",
+        "fee": 5,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 7,
+        "name": "SMOD",
+        "fullName": "SMOD",
+        "fee": 5,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 8,
+        "name": "ADDMOD",
+        "fullName": "ADDMOD",
+        "fee": 8,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 9,
+        "name": "MULMOD",
+        "fullName": "MULMOD",
+        "fee": 8,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 10,
+        "name": "EXP",
+        "fullName": "EXP",
+        "fee": 10,
+        "isAsync": false,
+        "dynamicGas": true
+    },
+    {
+        "code": 11,
+        "name": "SIGNEXTEND",
+        "fullName": "SIGNEXTEND",
+        "fee": 5,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 16,
+        "name": "LT",
+        "fullName": "LT",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 17,
+        "name": "GT",
+        "fullName": "GT",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 18,
+        "name": "SLT",
+        "fullName": "SLT",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 19,
+        "name": "SGT",
+        "fullName": "SGT",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 20,
+        "name": "EQ",
+        "fullName": "EQ",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 21,
+        "name": "ISZERO",
+        "fullName": "ISZERO",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 22,
+        "name": "AND",
+        "fullName": "AND",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 23,
+        "name": "OR",
+        "fullName": "OR",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 24,
+        "name": "XOR",
+        "fullName": "XOR",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 25,
+        "name": "NOT",
+        "fullName": "NOT",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 26,
+        "name": "BYTE",
+        "fullName": "BYTE",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 27,
+        "name": "SHL",
+        "fullName": "SHL",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 28,
+        "name": "SHR",
+        "fullName": "SHR",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 29,
+        "name": "SAR",
+        "fullName": "SAR",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 32,
+        "name": "SHA3",
+        "fullName": "SHA3",
+        "fee": 30,
+        "isAsync": false,
+        "dynamicGas": true
+    },
+    {
+        "code": 48,
+        "name": "ADDRESS",
+        "fullName": "ADDRESS",
+        "fee": 2,
+        "isAsync": true,
+        "dynamicGas": false
+    },
+    {
+        "code": 49,
+        "name": "BALANCE",
+        "fullName": "BALANCE",
+        "fee": 0,
+        "isAsync": true,
+        "dynamicGas": true
+    },
+    {
+        "code": 50,
+        "name": "ORIGIN",
+        "fullName": "ORIGIN",
+        "fee": 2,
+        "isAsync": true,
+        "dynamicGas": false
+    },
+    {
+        "code": 51,
+        "name": "CALLER",
+        "fullName": "CALLER",
+        "fee": 2,
+        "isAsync": true,
+        "dynamicGas": false
+    },
+    {
+        "code": 52,
+        "name": "CALLVALUE",
+        "fullName": "CALLVALUE",
+        "fee": 2,
+        "isAsync": true,
+        "dynamicGas": false
+    },
+    {
+        "code": 53,
+        "name": "CALLDATALOAD",
+        "fullName": "CALLDATALOAD",
+        "fee": 3,
+        "isAsync": true,
+        "dynamicGas": false
+    },
+    {
+        "code": 54,
+        "name": "CALLDATASIZE",
+        "fullName": "CALLDATASIZE",
+        "fee": 2,
+        "isAsync": true,
+        "dynamicGas": false
+    },
+    {
+        "code": 55,
+        "name": "CALLDATACOPY",
+        "fullName": "CALLDATACOPY",
+        "fee": 3,
+        "isAsync": true,
+        "dynamicGas": true
+    },
+    {
+        "code": 56,
+        "name": "CODESIZE",
+        "fullName": "CODESIZE",
+        "fee": 2,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 57,
+        "name": "CODECOPY",
+        "fullName": "CODECOPY",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": true
+    },
+    {
+        "code": 58,
+        "name": "GASPRICE",
+        "fullName": "GASPRICE",
+        "fee": 2,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 59,
+        "name": "EXTCODESIZE",
+        "fullName": "EXTCODESIZE",
+        "fee": 0,
+        "isAsync": true,
+        "dynamicGas": true
+    },
+    {
+        "code": 60,
+        "name": "EXTCODECOPY",
+        "fullName": "EXTCODECOPY",
+        "fee": 0,
+        "isAsync": true,
+        "dynamicGas": true
+    },
+    {
+        "code": 61,
+        "name": "RETURNDATASIZE",
+        "fullName": "RETURNDATASIZE",
+        "fee": 2,
+        "isAsync": true,
+        "dynamicGas": false
+    },
+    {
+        "code": 62,
+        "name": "RETURNDATACOPY",
+        "fullName": "RETURNDATACOPY",
+        "fee": 3,
+        "isAsync": true,
+        "dynamicGas": true
+    },
+    {
+        "code": 63,
+        "name": "EXTCODEHASH",
+        "fullName": "EXTCODEHASH",
+        "fee": 0,
+        "isAsync": true,
+        "dynamicGas": true
+    },
+    {
+        "code": 64,
+        "name": "BLOCKHASH",
+        "fullName": "BLOCKHASH",
+        "fee": 20,
+        "isAsync": true,
+        "dynamicGas": false
+    },
+    {
+        "code": 65,
+        "name": "COINBASE",
+        "fullName": "COINBASE",
+        "fee": 2,
+        "isAsync": true,
+        "dynamicGas": false
+    },
+    {
+        "code": 66,
+        "name": "TIMESTAMP",
+        "fullName": "TIMESTAMP",
+        "fee": 2,
+        "isAsync": true,
+        "dynamicGas": false
+    },
+    {
+        "code": 67,
+        "name": "NUMBER",
+        "fullName": "NUMBER",
+        "fee": 2,
+        "isAsync": true,
+        "dynamicGas": false
+    },
+    {
+        "code": 68,
+        "name": "DIFFICULTY",
+        "fullName": "DIFFICULTY",
+        "fee": 2,
+        "isAsync": true,
+        "dynamicGas": false
+    },
+    {
+        "code": 69,
+        "name": "GASLIMIT",
+        "fullName": "GASLIMIT",
+        "fee": 2,
+        "isAsync": true,
+        "dynamicGas": false
+    },
+    {
+        "code": 70,
+        "name": "CHAINID",
+        "fullName": "CHAINID",
+        "fee": 2,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 71,
+        "name": "SELFBALANCE",
+        "fullName": "SELFBALANCE",
+        "fee": 5,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 72,
+        "name": "BASEFEE",
+        "fullName": "BASEFEE",
+        "fee": 2,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 80,
+        "name": "POP",
+        "fullName": "POP",
+        "fee": 2,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 81,
+        "name": "MLOAD",
+        "fullName": "MLOAD",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": true
+    },
+    {
+        "code": 82,
+        "name": "MSTORE",
+        "fullName": "MSTORE",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": true
+    },
+    {
+        "code": 83,
+        "name": "MSTORE8",
+        "fullName": "MSTORE8",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": true
+    },
+    {
+        "code": 84,
+        "name": "SLOAD",
+        "fullName": "SLOAD",
+        "fee": 0,
+        "isAsync": true,
+        "dynamicGas": true
+    },
+    {
+        "code": 85,
+        "name": "SSTORE",
+        "fullName": "SSTORE",
+        "fee": 0,
+        "isAsync": true,
+        "dynamicGas": true
+    },
+    {
+        "code": 86,
+        "name": "JUMP",
+        "fullName": "JUMP",
+        "fee": 8,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 87,
+        "name": "JUMPI",
+        "fullName": "JUMPI",
+        "fee": 10,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 88,
+        "name": "PC",
+        "fullName": "PC",
+        "fee": 2,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 89,
+        "name": "MSIZE",
+        "fullName": "MSIZE",
+        "fee": 2,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 90,
+        "name": "GAS",
+        "fullName": "GAS",
+        "fee": 2,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 91,
+        "name": "JUMPDEST",
+        "fullName": "JUMPDEST",
+        "fee": 1,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 96,
+        "name": "PUSH",
+        "fullName": "PUSH1",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 97,
+        "name": "PUSH",
+        "fullName": "PUSH2",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 98,
+        "name": "PUSH",
+        "fullName": "PUSH3",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 99,
+        "name": "PUSH",
+        "fullName": "PUSH4",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 100,
+        "name": "PUSH",
+        "fullName": "PUSH5",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 101,
+        "name": "PUSH",
+        "fullName": "PUSH6",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 102,
+        "name": "PUSH",
+        "fullName": "PUSH7",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 103,
+        "name": "PUSH",
+        "fullName": "PUSH8",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 104,
+        "name": "PUSH",
+        "fullName": "PUSH9",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 105,
+        "name": "PUSH",
+        "fullName": "PUSH10",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 106,
+        "name": "PUSH",
+        "fullName": "PUSH11",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 107,
+        "name": "PUSH",
+        "fullName": "PUSH12",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 108,
+        "name": "PUSH",
+        "fullName": "PUSH13",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 109,
+        "name": "PUSH",
+        "fullName": "PUSH14",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 110,
+        "name": "PUSH",
+        "fullName": "PUSH15",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 111,
+        "name": "PUSH",
+        "fullName": "PUSH16",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 112,
+        "name": "PUSH",
+        "fullName": "PUSH17",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 113,
+        "name": "PUSH",
+        "fullName": "PUSH18",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 114,
+        "name": "PUSH",
+        "fullName": "PUSH19",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 115,
+        "name": "PUSH",
+        "fullName": "PUSH20",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 116,
+        "name": "PUSH",
+        "fullName": "PUSH21",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 117,
+        "name": "PUSH",
+        "fullName": "PUSH22",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 118,
+        "name": "PUSH",
+        "fullName": "PUSH23",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 119,
+        "name": "PUSH",
+        "fullName": "PUSH24",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 120,
+        "name": "PUSH",
+        "fullName": "PUSH25",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 121,
+        "name": "PUSH",
+        "fullName": "PUSH26",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 122,
+        "name": "PUSH",
+        "fullName": "PUSH27",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 123,
+        "name": "PUSH",
+        "fullName": "PUSH28",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 124,
+        "name": "PUSH",
+        "fullName": "PUSH29",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 125,
+        "name": "PUSH",
+        "fullName": "PUSH30",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 126,
+        "name": "PUSH",
+        "fullName": "PUSH31",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 127,
+        "name": "PUSH",
+        "fullName": "PUSH32",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 128,
+        "name": "DUP",
+        "fullName": "DUP1",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 129,
+        "name": "DUP",
+        "fullName": "DUP2",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 130,
+        "name": "DUP",
+        "fullName": "DUP3",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 131,
+        "name": "DUP",
+        "fullName": "DUP4",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 132,
+        "name": "DUP",
+        "fullName": "DUP5",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 133,
+        "name": "DUP",
+        "fullName": "DUP6",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 134,
+        "name": "DUP",
+        "fullName": "DUP7",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 135,
+        "name": "DUP",
+        "fullName": "DUP8",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 136,
+        "name": "DUP",
+        "fullName": "DUP9",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 137,
+        "name": "DUP",
+        "fullName": "DUP10",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 138,
+        "name": "DUP",
+        "fullName": "DUP11",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 139,
+        "name": "DUP",
+        "fullName": "DUP12",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 140,
+        "name": "DUP",
+        "fullName": "DUP13",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 141,
+        "name": "DUP",
+        "fullName": "DUP14",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 142,
+        "name": "DUP",
+        "fullName": "DUP15",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 143,
+        "name": "DUP",
+        "fullName": "DUP16",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 144,
+        "name": "SWAP",
+        "fullName": "SWAP1",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 145,
+        "name": "SWAP",
+        "fullName": "SWAP2",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 146,
+        "name": "SWAP",
+        "fullName": "SWAP3",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 147,
+        "name": "SWAP",
+        "fullName": "SWAP4",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 148,
+        "name": "SWAP",
+        "fullName": "SWAP5",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 149,
+        "name": "SWAP",
+        "fullName": "SWAP6",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 150,
+        "name": "SWAP",
+        "fullName": "SWAP7",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 151,
+        "name": "SWAP",
+        "fullName": "SWAP8",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 152,
+        "name": "SWAP",
+        "fullName": "SWAP9",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 153,
+        "name": "SWAP",
+        "fullName": "SWAP10",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 154,
+        "name": "SWAP",
+        "fullName": "SWAP11",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 155,
+        "name": "SWAP",
+        "fullName": "SWAP12",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 156,
+        "name": "SWAP",
+        "fullName": "SWAP13",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 157,
+        "name": "SWAP",
+        "fullName": "SWAP14",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 158,
+        "name": "SWAP",
+        "fullName": "SWAP15",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 159,
+        "name": "SWAP",
+        "fullName": "SWAP16",
+        "fee": 3,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 160,
+        "name": "LOG",
+        "fullName": "LOG0",
+        "fee": 375,
+        "isAsync": false,
+        "dynamicGas": true
+    },
+    {
+        "code": 161,
+        "name": "LOG",
+        "fullName": "LOG1",
+        "fee": 375,
+        "isAsync": false,
+        "dynamicGas": true
+    },
+    {
+        "code": 162,
+        "name": "LOG",
+        "fullName": "LOG2",
+        "fee": 375,
+        "isAsync": false,
+        "dynamicGas": true
+    },
+    {
+        "code": 163,
+        "name": "LOG",
+        "fullName": "LOG3",
+        "fee": 375,
+        "isAsync": false,
+        "dynamicGas": true
+    },
+    {
+        "code": 164,
+        "name": "LOG",
+        "fullName": "LOG4",
+        "fee": 375,
+        "isAsync": false,
+        "dynamicGas": true
+    },
+    {
+        "code": 240,
+        "name": "CREATE",
+        "fullName": "CREATE",
+        "fee": 32000,
+        "isAsync": true,
+        "dynamicGas": true
+    },
+    {
+        "code": 241,
+        "name": "CALL",
+        "fullName": "CALL",
+        "fee": 0,
+        "isAsync": true,
+        "dynamicGas": true
+    },
+    {
+        "code": 242,
+        "name": "CALLCODE",
+        "fullName": "CALLCODE",
+        "fee": 0,
+        "isAsync": true,
+        "dynamicGas": true
+    },
+    {
+        "code": 243,
+        "name": "RETURN",
+        "fullName": "RETURN",
+        "fee": 0,
+        "isAsync": false,
+        "dynamicGas": true
+    },
+    {
+        "code": 244,
+        "name": "DELEGATECALL",
+        "fullName": "DELEGATECALL",
+        "fee": 0,
+        "isAsync": true,
+        "dynamicGas": true
+    },
+    {
+        "code": 245,
+        "name": "CREATE2",
+        "fullName": "CREATE2",
+        "fee": 32000,
+        "isAsync": true,
+        "dynamicGas": true
+    },
+    {
+        "code": 250,
+        "name": "STATICCALL",
+        "fullName": "STATICCALL",
+        "fee": 0,
+        "isAsync": true,
+        "dynamicGas": true
+    },
+    {
+        "code": 253,
+        "name": "REVERT",
+        "fullName": "REVERT",
+        "fee": 0,
+        "isAsync": false,
+        "dynamicGas": true
+    },
+    {
+        "code": 254,
+        "name": "INVALID",
+        "fullName": "INVALID",
+        "fee": 0,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 255,
+        "name": "SELFDESTRUCT",
+        "fullName": "SELFDESTRUCT",
+        "fee": 5000,
+        "isAsync": true,
+        "dynamicGas": true
+    }
+]
