@@ -1,10 +1,35 @@
 import typing
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 
-from common import Context
+from Crypto.Hash import keccak
 
 uint256 = int
+Address = int
 
 MAX = 1 << 256
+
+
+@dataclass
+class State:
+    pc: typing.Optional[int] = None
+    memory: typing.Dict[int, int] = field(default_factory=dict)  # index -> 1-byte value
+    address: Address = 0
+    origin: Address = 0
+    caller: Address = 0
+    callvalue: uint256 = 0
+    calldata: bytes = b""
+    gasprice: uint256 = 0
+
+
+class World(ABC):
+    @abstractmethod
+    def balance(self, address: Address) -> uint256:
+        pass
+
+    @abstractmethod
+    def code(self, address: Address) -> bytes:
+        pass
 
 
 def _twos_complement(x: uint256) -> uint256:
@@ -17,8 +42,8 @@ def _twos_complement(x: uint256) -> uint256:
 
 
 # 00 - Halts execution
-def STOP(c: Context) -> None:
-    c.pc = None
+def STOP(s: State) -> None:
+    s.pc = None
 
 
 # 01 - Addition operation
@@ -174,3 +199,98 @@ def SHR(shift: uint256, value: uint256) -> uint256:
 def SAR(shift: uint256, value: uint256) -> uint256:
     value = _twos_complement(value)
     return _twos_complement(value >> shift)
+
+
+# 20 - Compute Keccak-256 hash
+def SHA3(s: State, offset: uint256, size: uint256) -> uint256:
+    hash = keccak.new(digest_bits=256)
+    for idx in range(offset, offset + size):
+        data = s.memory.get(idx, 0).to_bytes(1, "big")
+        hash.update(data)
+    return int.from_bytes(hash.digest(), "big")
+
+
+# 30 - Get address of currently executing account
+def ADDRESS(s: State) -> Address:
+    return s.address
+
+
+# 31 - Get balance of the given account
+def BALANCE(w: World, address: Address) -> uint256:
+    return w.balance(address)
+
+
+# 32 - Get execution origination address
+def ORIGIN(s: State) -> Address:
+    return s.origin
+
+
+# 33 - Get caller address
+def CALLER(s: State) -> Address:
+    return s.caller
+
+
+# 34 - Get deposited value by the instruction/transaction responsible for this
+# execution
+def CALLVALUE(s: State) -> uint256:
+    return s.callvalue
+
+
+# 35 - Get input data of current environment
+def CALLDATALOAD(s: State, i: uint256) -> uint256:
+    if i >= len(s.calldata):
+        return 0
+    extended = s.calldata + (b"\x00" * 32)
+    return int.from_bytes(extended[i : i + 32], "big")
+
+
+# 36 - Get size of input data in current environment
+def CALLDATASIZE(s: State) -> uint256:
+    return len(s.calldata)
+
+
+# 37 - Copy input data in current environment to memory
+def CALLDATACOPY(s: State, destOffset: uint256, offset: uint256, size: uint256) -> None:
+    for i in range(size):
+        val = s.calldata[offset + i] if offset + i < len(s.calldata) else 0
+        s.memory[destOffset + i] = val
+
+
+# 38 - Get size of code running in current environment
+def CODESIZE(s: State, w: World) -> uint256:
+    return len(w.code(s.address))
+
+
+# 39 - Copy code running in current environment to memory
+def CODECOPY(
+    s: State, w: World, destOffset: uint256, offset: uint256, size: uint256
+) -> None:
+    code = w.code(s.address)
+    for i in range(size):
+        val = code[offset + i] if offset + i < len(code) else 0
+        s.memory[destOffset + i] = val
+
+
+# 3A - Get price of gas in current environment
+def GASPRICE(s: State) -> uint256:
+    return s.gasprice
+
+
+# 3B - Get size of an account’s code
+def EXTCODESIZE(w: World, address: Address) -> uint256:
+    return len(w.code(address))
+
+
+# 39 - Copy an account’s code to memory
+def EXTCODECOPY(
+    s: State,
+    w: World,
+    address: Address,
+    destOffset: uint256,
+    offset: uint256,
+    size: uint256,
+) -> None:
+    code = w.code(address)
+    for i in range(size):
+        val = code[offset + i] if offset + i < len(code) else 0
+        s.memory[destOffset + i] = val
