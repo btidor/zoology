@@ -8,15 +8,20 @@ class DummyWorld(World):
         self,
         balances: typing.Dict[Address, uint256] = {},
         codes: typing.Dict[Address, bytes] = {},
+        blockhashes: typing.Dict[uint256, uint256] = {},
     ):
         self.balances = balances
         self.codes = codes
+        self.blockhashes = blockhashes
 
     def balance(self, address: Address) -> uint256:
         return self.balances.get(address, 0)
 
     def code(self, address: Address) -> bytes:
         return self.codes.get(address, b"")
+
+    def blockhash(self, blockNumber: uint256) -> uint256:
+        return self.blockhashes.get(blockNumber, 0)
 
 
 def _dump_memory(s: State) -> str:
@@ -345,3 +350,104 @@ def test_EXTCODECOPY() -> None:
         _dump_memory(s)
         == "0xFF00000000000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
     )
+
+
+def test_RETURNDATASIZE() -> None:
+    s = State(returndata=b"abcdefghijklmnopqrstuvwxyz")
+    assert RETURNDATASIZE(s) == 26
+
+
+def test_RETURNDATACOPY() -> None:
+    s = State(
+        returndata=b"\x7d\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\x7f"
+    )
+
+    RETURNDATACOPY(s, 0, 0, 32)
+    assert (
+        _dump_memory(s)
+        == "0x7DFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF7F"
+    )
+
+    RETURNDATACOPY(s, 0, 31, 8)
+    assert (
+        _dump_memory(s)
+        == "0x7F00000000000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF7F"
+    )
+
+
+def test_EXTCODEHASH() -> None:
+    # The example on evm.codes is wrong: 0xc5d2... is the hash of the empty
+    # string, which shouldn't be possible to observe.
+    w = DummyWorld(
+        codes={0x43A61F3F4C73EA0D444C5C1C1A8544067A86219B: b"\xff\xff\xff\xff"}
+    )
+    assert (
+        EXTCODEHASH(w, 0x43A61F3F4C73EA0D444C5C1C1A8544067A86219B)
+        == 0x29045A592007D0C246EF02C2223570DA9522D0CF0F73282C79A1BC8F0BB2C238
+    )
+    assert EXTCODEHASH(w, 0x123) == 0
+
+
+def test_BLOCKHASH() -> None:
+    w = DummyWorld(
+        blockhashes={
+            100000123: 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF,
+            599423545: 0x29045A592007D0C246EF02C2223570DA9522D0CF0F73282C79A1BC8F0BB2C238,
+            599423546: 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF,
+            599423547: 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF,
+        }
+    )
+    b = Block(number=599423546)
+    assert BLOCKHASH(b, w, 100000123) == 0
+    assert (
+        BLOCKHASH(b, w, 599423545)
+        == 0x29045A592007D0C246EF02C2223570DA9522D0CF0F73282C79A1BC8F0BB2C238
+    )
+    assert BLOCKHASH(b, w, 599423546) == 0
+    assert BLOCKHASH(b, w, 599423547) == 0
+
+
+def test_COINBASE() -> None:
+    b = Block(coinbase=0x5B38DA6A701C568545DCFCB03FCB875F56BEDDC4)
+    assert COINBASE(b) == 0x5B38DA6A701C568545DCFCB03FCB875F56BEDDC4
+
+
+def test_TIMESTAMP() -> None:
+    b = Block(timestamp=1636704767)
+    assert TIMESTAMP(b) == 1636704767
+
+
+def test_NUMBER() -> None:
+    b = Block(number=1636704767)
+    assert NUMBER(b) == 1636704767
+
+
+def test_PREVRANDAO() -> None:
+    b = Block(
+        prevrandao=0xCE124DEE50136F3F93F19667FB4198C6B94EECBACFA300469E5280012757BE94
+    )
+    assert (
+        PREVRANDAO(b)
+        == 0xCE124DEE50136F3F93F19667FB4198C6B94EECBACFA300469E5280012757BE94
+    )
+
+
+def test_GASLIMIT() -> None:
+    b = Block(gaslimit=0xFFFFFFFFFFFF)
+    assert GASLIMIT(b) == 0xFFFFFFFFFFFF
+
+
+def test_CHAINID() -> None:
+    b = Block()
+    assert CHAINID(b) == 1
+
+
+def test_SELFBALANCE() -> None:
+    s = State(address=0x9BBFED6889322E016E0A02EE459D306FC19545D8)
+    w = DummyWorld(balances={0x9BBFED6889322E016E0A02EE459D306FC19545D8: 9})
+    assert SELFBALANCE(s, w) == 9
+
+
+def test_BASEFEE() -> None:
+    b = Block(basefee=10)
+    assert BASEFEE(b) == 10

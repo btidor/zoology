@@ -20,6 +20,18 @@ class State:
     callvalue: uint256 = 0
     calldata: bytes = b""
     gasprice: uint256 = 0
+    returndata: bytes = b""
+
+
+@dataclass
+class Block:
+    number: uint256 = 0
+    coinbase: Address = 0
+    timestamp: uint256 = 0
+    prevrandao: uint256 = 0
+    gaslimit: uint256 = 0
+    chainid: uint256 = 1
+    basefee: uint256 = 0
 
 
 class World(ABC):
@@ -29,6 +41,10 @@ class World(ABC):
 
     @abstractmethod
     def code(self, address: Address) -> bytes:
+        pass
+
+    @abstractmethod
+    def blockhash(self, blockNumber: uint256) -> uint256:
         pass
 
 
@@ -276,12 +292,12 @@ def GASPRICE(s: State) -> uint256:
     return s.gasprice
 
 
-# 3B - Get size of an account’s code
+# 3B - Get size of an account's code
 def EXTCODESIZE(w: World, address: Address) -> uint256:
     return len(w.code(address))
 
 
-# 39 - Copy an account’s code to memory
+# 3C - Copy an account's code to memory
 def EXTCODECOPY(
     s: State,
     w: World,
@@ -294,3 +310,76 @@ def EXTCODECOPY(
     for i in range(size):
         val = code[offset + i] if offset + i < len(code) else 0
         s.memory[destOffset + i] = val
+
+
+# 3D - Get size of output data from the previous call from the current
+# environment
+def RETURNDATASIZE(s: State) -> uint256:
+    return len(s.returndata)
+
+
+# 3E - Copy output data from the previous call to memory
+def RETURNDATACOPY(
+    s: State, destOffset: uint256, offset: uint256, size: uint256
+) -> None:
+    for i in range(size):
+        val = s.returndata[offset + i] if offset + i < len(s.returndata) else 0
+        s.memory[destOffset + i] = val
+
+
+# 3F - Get hash of an account's code
+def EXTCODEHASH(w: World, address: Address) -> uint256:
+    code = w.code(address)
+    if code == b"":
+        return 0
+
+    hash = keccak.new(digest_bits=256)
+    hash.update(code)
+    return int.from_bytes(hash.digest(), "big")
+
+
+# 40 - Get the hash of one of the 256 most recent complete blocks
+def BLOCKHASH(b: Block, w: World, blockNumber: uint256) -> uint256:
+    if blockNumber >= b.number or blockNumber < b.number - 256:
+        return 0
+    return w.blockhash(blockNumber)
+
+
+# 41 - Get the block's beneficiary address
+def COINBASE(b: Block) -> Address:
+    return b.coinbase
+
+
+# 42 - Get the block's timestamp
+def TIMESTAMP(b: Block) -> uint256:
+    return b.timestamp
+
+
+# 43 - Get the block's number
+def NUMBER(b: Block) -> uint256:
+    return b.number
+
+
+# 44 - Get the previous block's RANDAO mix
+def PREVRANDAO(b: Block) -> uint256:
+    return b.prevrandao
+
+
+# 45 - Get the block's gas limit
+def GASLIMIT(b: Block) -> uint256:
+    return b.gaslimit
+
+
+# 46 - Get the chain ID
+def CHAINID(b: Block) -> uint256:
+    return b.chainid
+
+
+# 47 - Get balance of currently executing account
+def SELFBALANCE(s: State, w: World) -> uint256:
+    return w.balance(s.address)
+
+
+# 48 - Get the base fee
+def BASEFEE(b: Block) -> uint256:
+    return b.basefee
