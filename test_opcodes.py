@@ -32,12 +32,6 @@ def _dump_memory(s: State) -> str:
     return "0x" + v.upper()
 
 
-def test_STOP() -> None:
-    s = State(pc=123)
-    STOP(s)
-    assert s.pc == None
-
-
 def test_ADD() -> None:
     assert ADD(10, 10) == 20
     assert (
@@ -451,3 +445,55 @@ def test_SELFBALANCE() -> None:
 def test_BASEFEE() -> None:
     b = Block(basefee=10)
     assert BASEFEE(b) == 10
+
+
+def test_MLOAD() -> None:
+    s = State(memory={31: 0xFF})
+    assert MLOAD(s, 0) == 0xFF
+    assert MLOAD(s, 1) == 0xFF00
+
+
+def test_MSTORE() -> None:
+    s = State()
+    MSTORE(s, 0, 0xFF)
+    assert (
+        _dump_memory(s)
+        == "0x00000000000000000000000000000000000000000000000000000000000000FF"
+    )
+    MSTORE(s, 1, 0xFF)
+    assert (
+        _dump_memory(s)
+        == "0x0000000000000000000000000000000000000000000000000000000000000000FF"
+    )
+
+
+def test_MSTORE8() -> None:
+    s = State()
+    MSTORE8(s, 0, 0xFFFF)
+    assert _dump_memory(s) == "0xFF"
+    MSTORE8(s, 1, 0xAABBCCDDEE)
+    assert _dump_memory(s) == "0xFFEE"
+
+
+def test_SLOAD() -> None:
+    s = State(storage={0: 46})
+    assert SLOAD(s, 0) == 46
+    assert SLOAD(s, 1) == 0
+
+
+def test_SSTORE() -> None:
+    s = State()
+
+    SSTORE(s, 0, 0xFFFF)
+    assert len(s.storage) == 1
+    assert s.storage[0] == 0xFFFF
+
+    SSTORE(s, 8965, 0xFF)
+    assert len(s.storage) == 2
+    assert s.storage[0] == 0xFFFF
+    assert s.storage[8965] == 0xFF
+
+
+def test_MSIZE() -> None:
+    s = State(memory={123: 1})
+    assert MSIZE(s) == 124

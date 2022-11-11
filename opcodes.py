@@ -12,8 +12,9 @@ MAX = 1 << 256
 
 @dataclass
 class State:
-    pc: typing.Optional[int] = None
-    memory: typing.Dict[int, int] = field(default_factory=dict)  # index -> 1-byte value
+    memory: typing.Dict[uint256, int] = field(
+        default_factory=dict
+    )  # index -> 1-byte value
     address: Address = 0
     origin: Address = 0
     caller: Address = 0
@@ -21,6 +22,7 @@ class State:
     calldata: bytes = b""
     gasprice: uint256 = 0
     returndata: bytes = b""
+    storage: typing.Dict[uint256, uint256] = field(default_factory=dict)
 
 
 @dataclass
@@ -57,10 +59,7 @@ def _twos_complement(x: uint256) -> uint256:
         return x
 
 
-# 00 - Halts execution
-def STOP(s: State) -> None:
-    s.pc = None
-
+# TODO: 00 - HALT - Halts execution
 
 # 01 - Addition operation
 def ADD(a: uint256, b: uint256) -> uint256:
@@ -383,3 +382,89 @@ def SELFBALANCE(s: State, w: World) -> uint256:
 # 48 - Get the base fee
 def BASEFEE(b: Block) -> uint256:
     return b.basefee
+
+
+# 50 - Remove item from stack
+def POP(y: uint256) -> None:
+    pass
+
+
+# 51 - Load word from memory
+def MLOAD(s: State, offset: uint256) -> uint256:
+    n = 0
+    for i in range(32):
+        n = (n << 8) | (s.memory.get(offset + i, 0))
+    return n
+
+
+# 52 - Save word to memory
+def MSTORE(s: State, offset: uint256, value: uint256) -> None:
+    for i in range(31, -1, -1):
+        s.memory[offset + i] = value & 0xFF
+        value = value >> 8
+
+
+# 53 - Save byte to memory
+def MSTORE8(s: State, offset: uint256, value: uint256) -> None:
+    s.memory[offset] = value & 0xFF
+
+
+# 54 - Load word from storage
+def SLOAD(s: State, key: uint256) -> uint256:
+    return s.storage.get(key, 0)
+
+
+# 55 - Save word to storage
+def SSTORE(s: State, key: uint256, value: uint256) -> None:
+    s.storage[key] = value
+
+
+# TODO: 56 - JUMP - Alter the program counter
+
+# TODO: 57 - JUMPI - Conditionally alter the program counter
+
+# TODO: 58 - PC - Get the value of the program counter prior to the increment
+# corresponding to this instruction
+
+# 59 - Get the size of active memory in bytes
+def MSIZE(s: State) -> uint256:
+    return max(s.memory.keys()) + 1
+
+
+# TODO: 5A - GAS - Get the amount of available gas, including the corresponding
+# reduction for the cost of this instruction
+
+# TODO: 5B - JUMPDEST - Marks a valid destination for jumps
+
+# TODO: 6X/7X - PUSH* - Place n-byte item on the stack
+
+# TODO: 8X - DUP* - Duplicate nth stack item
+
+# TODO: 9X - SWAP* - Exchange 1st and (n+1)th stack item
+
+# TODO: AX - Append log record with n topics
+
+# TODO: F0 - CREATE - Create a new account with associated code
+
+# TODO: F1 - CALL - Message-call into an account
+
+# TODO: F2 - CALLCODE - Message-call into this account with alternative
+# account's code
+
+# TODO: F3 - RETURN - Halts execution returning output data
+
+# TODO: F4 - DELEGATECALL - Message-call into this account with an alternative
+# account’s code, but persisting the current values for sender and value
+
+# TODO: F5 - CREATE2 - Create a new account with associated code at a
+# predictable address
+
+# TODO: FA - STATICCALL - Static message-call into an account
+
+# TODO: FD - REVERT - Halt execution reverting state changes but returning data
+# and remaining gas
+
+# TODO: FE - INVALID - Designated invalid instruction
+
+# TODO: FF - SELFDESTRUCT - Halt execution and register account for later
+# deletion
