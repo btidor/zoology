@@ -1,6 +1,6 @@
 import typing
 
-from opcodes import *
+from ops import *
 
 
 class DummyWorld(World):

@@ -1,73 +1,29 @@
 #!/usr/bin/env python3
-from typing import Dict, List
 
-from common import OPCODES, Instruction, Program
-
-
-def parse_program(code: bytes) -> Program:
-    # Iterate over instructions
-    idx = 0
-    instructions: List[Instruction] = []
-    jumps: Dict[int, int] = {}
-    while idx < len(code):
-        op = OPCODES.get(code[idx])
-        idx += 1
-        data = None
-
-        if op is None:
-            instructions.append(Instruction(None, None))
-        elif op.name == "JUMPDEST":
-            jumps[idx - 1] = len(instructions)
-            # omit the JUMPDEST instruction from the emitted program
-            # TODO: make sure we properly handle a program ending in JUMPDEST
-        elif op.name == "PUSH":
-            # PUSH is the only opcode that takes an operand...?
-            n = int(op.fullName[4:])
-            data = code[idx : idx + n]
-            idx += n
-            instructions.append(Instruction(op, data))
-        else:
-            instructions.append(Instruction(op, None))
-
-    return Program(instructions, jumps)
+from opcodes import REFERENCE
 
 
 def disassemble(code: bytes) -> None:
-    # Strip the optional contract metadata trailer:
-    # https://docs.soliditylang.org/en/latest/metadata.html#encoding-of-the-metadata-hash-in-the-bytecode
-    trailer = code[-54:]
-    if (
-        trailer.startswith(b"\xfe\xa2\x64ipfs\x58\x22")
-        and trailer.endswith(b"\x00\x33")
-        and len(trailer) == 54
-    ):
-        code = code[:-53]  # preserve the INVALID spacer
-    else:
-        trailer = b""
+    idx = 0
+    while idx < len(code):
+        opcode = code[idx]
+        idx += 1
 
-    program = parse_program(code)
-    print(program)
-    for instr in program.instructions:
-        op = instr.opcode
-        if op:
-            print(
-                f"{op.fullName.ljust(12)} ({op.fee: 5}{'*' if op.dynamicGas else ' '})",
-                end="",
-            )
+        opref = REFERENCE.get(opcode)
+        if opref is None:
+            raise ValueError(f"unknown opcode: 0x{opcode:02x}")
+        elif opref.name == "PUSH":
+            # PUSH is the only opcode that takes an operand.
+            n = int(opref.fullName[4:])
+            operand = code[idx : idx + n]
+            idx += n
+            print(f"{opref.fullName}\t0x{operand.hex()}")
+        elif opref.name == "INVALID":
+            # If we encounter the reserved opcode INVALID (0xFE), assume the
+            # remaining data is a non-code trailer, e.g. contract metadata.
+            return
         else:
-            print("???", end="")
-        if instr.operand:
-            text = None
-            if len(instr.operand) > 3:
-                try:
-                    text = instr.operand.decode("ascii")
-                except UnicodeDecodeError:
-                    pass
-            print(f"  {'0x' + instr.operand.hex()} {text or ''}", end="")
-        print()
-
-    if trailer:
-        print(f"> ignoring metadata trailer{' (**)' if 0x5B in trailer else ''} <")
+            print(opref.fullName)
 
 
 if __name__ == "__main__":
