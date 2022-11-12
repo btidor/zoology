@@ -1,28 +1,12 @@
-import typing
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from typing import cast
 
 from Crypto.Hash import keccak
 
-uint256 = int
-Address = int
+from common import Address, State, uint256
 
 MAX = 1 << 256
-
-
-@dataclass
-class State:
-    memory: typing.Dict[uint256, int] = field(
-        default_factory=dict
-    )  # index -> 1-byte value
-    address: Address = 0
-    origin: Address = 0
-    caller: Address = 0
-    callvalue: uint256 = 0
-    calldata: bytes = b""
-    gasprice: uint256 = 0
-    returndata: bytes = b""
-    storage: typing.Dict[uint256, uint256] = field(default_factory=dict)
 
 
 @dataclass
@@ -59,7 +43,11 @@ def _twos_complement(x: uint256) -> uint256:
         return x
 
 
-# TODO: 00 - HALT - Halts execution
+# 00 - Halts execution
+def STOP(s: State) -> None:
+    s.returndata = b""
+    s.success = True
+
 
 # 01 - Addition operation
 def ADD(a: uint256, b: uint256) -> uint256:
@@ -128,7 +116,7 @@ def MULMOD(a: uint256, b: uint256, N: uint256) -> uint256:
 def EXP(a: uint256, exponent: uint256) -> uint256:
     # Python types this as 'Any' because if exponent were negative, the result
     # will be a float (https://stackoverflow.com/a/64096587).
-    return typing.cast(int, a**exponent) % MAX
+    return cast(int, a**exponent) % MAX
 
 
 # 0B - Extend length of two's complement signed integer
@@ -419,52 +407,99 @@ def SSTORE(s: State, key: uint256, value: uint256) -> None:
     s.storage[key] = value
 
 
-# TODO: 56 - JUMP - Alter the program counter
+# 56 - Alter the program counter
+def JUMP(s: State, counter: uint256) -> None:
+    # TODO: symbolically ensure all jump targets are valid and within the main
+    # body of the code.
+    s.pc = s.jumps[counter]
 
-# TODO: 57 - JUMPI - Conditionally alter the program counter
 
-# TODO: 58 - PC - Get the value of the program counter prior to the increment
-# corresponding to this instruction
+# 57 - Conditionally alter the program counter
+def JUMPI(s: State, counter: uint256, b: uint256) -> None:
+    # TODO: symbolically ensure all jump targets are valid and within the main
+    # body of the code.
+    if b != 0:
+        s.pc = s.jumps[counter]
+
 
 # 59 - Get the size of active memory in bytes
 def MSIZE(s: State) -> uint256:
     return max(s.memory.keys()) + 1
 
 
-# TODO: 5A - GAS - Get the amount of available gas, including the corresponding
-# reduction for the cost of this instruction
+# A0 - Append log record with no topics
+def LOG0(offset: uint256, size: uint256) -> None:
+    # Ignore log records for now, they're mostly for debugging.
+    pass
 
-# TODO: 5B - JUMPDEST - Marks a valid destination for jumps
 
-# TODO: 6X/7X - PUSH* - Place n-byte item on the stack
+# A1 - Append log record with one topic
+def LOG1(offset: uint256, size: uint256, topic1: uint256) -> None:
+    pass
 
-# TODO: 8X - DUP* - Duplicate nth stack item
 
-# TODO: 9X - SWAP* - Exchange 1st and (n+1)th stack item
+# A2 - Append log record with two topics
+def LOG2(offset: uint256, size: uint256, topic1: uint256, topic2: uint256) -> None:
+    pass
 
-# TODO: AX - LOG* - Append log record with n topics
 
-# TODO: F0 - CREATE - Create a new account with associated code
+# A3 - Append log record with three topics
+def LOG3(
+    offset: uint256, size: uint256, topic1: uint256, topic2: uint256, topic3: uint256
+) -> None:
+    pass
+
+
+# A4 - Append log record with four topics
+def LOG4(
+    offset: uint256,
+    size: uint256,
+    topic1: uint256,
+    topic2: uint256,
+    topic3: uint256,
+    topic4: uint256,
+) -> None:
+    pass
+
 
 # TODO: F1 - CALL - Message-call into an account
 
 # TODO: F2 - CALLCODE - Message-call into this account with alternative
 # account's code
 
-# TODO: F3 - RETURN - Halts execution returning output data
+
+# F3 - Halts execution returning output data
+def RETURN(s: State, offset: uint256, size: uint256) -> None:
+    s.returndata = bytes([s.memory.get(i, 0) for i in range(offset, offset + size)])
+    s.success = True
+
 
 # TODO: F4 - DELEGATECALL - Message-call into this account with an alternative
 # account’s code, but persisting the current values for sender and value
 
-# TODO: F5 - CREATE2 - Create a new account with associated code at a
-# predictable address
-
 # TODO: FA - STATICCALL - Static message-call into an account
 
-# TODO: FD - REVERT - Halt execution reverting state changes but returning data
-# and remaining gas
 
-# TODO: FE - INVALID - Designated invalid instruction
+# FD - Halt execution reverting state changes but returning data and remaining
+# gas
+def REVERT(s: State, offset: uint256, size: uint256) -> None:
+    s.returndata = bytes([s.memory.get(i, 0) for i in range(offset, offset + size)])
+    s.success = False
+
+
+# FE - Designated invalid instruction
+def INVALID(s: State) -> None:
+    s.returndata = b""
+    s.success = False
+
+
+# TODO: 5A - GAS - Get the amount of available gas, including the corresponding
+# reduction for the cost of this instruction
+
+# TODO: F0 - CREATE - Create a new account with associated code
+
+# TODO: F5 - CREATE2 - Create a new account with associated code at a
+# predictable address
 
 # TODO: FF - SELFDESTRUCT - Halt execution and register account for later
 # deletion

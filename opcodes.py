@@ -1,16 +1,7 @@
 import json
-from dataclasses import dataclass
 from typing import Dict
 
-
-@dataclass
-class Opcode:
-    code: int
-    name: str
-    fullName: str
-    fee: int
-    isAsync: bool
-    dynamicGas: bool
+from common import Opcode
 
 
 def _load_opcodes() -> Dict[int, Opcode]:

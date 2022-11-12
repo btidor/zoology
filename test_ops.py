@@ -32,6 +32,13 @@ def _dump_memory(s: State) -> str:
     return "0x" + v.upper()
 
 
+def test_STOP() -> None:
+    s = State(returndata=b"1234")
+    STOP(s)
+    assert s.success == True
+    assert s.returndata == b""
+
+
 def test_ADD() -> None:
     assert ADD(10, 10) == 20
     assert (
@@ -494,6 +501,49 @@ def test_SSTORE() -> None:
     assert s.storage[8965] == 0xFF
 
 
+def test_JUMP() -> None:
+    s = State(jumps={12: 34})
+    JUMP(s, 12)
+    assert s.pc == 34
+
+
+def test_JUMPI() -> None:
+    s = State(jumps={12: 34})
+
+    JUMPI(s, 12, 0)
+    assert s.pc == 0
+
+    JUMPI(s, 12, 1)
+    assert s.pc == 34
+
+
 def test_MSIZE() -> None:
     s = State(memory={123: 1})
     assert MSIZE(s) == 124
+
+
+def test_RETURN() -> None:
+    s = State(
+        returndata=b"1234",
+        memory={0: 0xFF, 1: 0x01},
+    )
+    RETURN(s, 0, 2)
+    assert s.success == True
+    assert s.returndata == b"\xff\x01"
+
+
+def test_REVERT() -> None:
+    s = State(
+        returndata=b"1234",
+        memory={0: 0xFF, 1: 0x01},
+    )
+    REVERT(s, 0, 2)
+    assert s.success == False
+    assert s.returndata == b"\xff\x01"
+
+
+def test_INVALID() -> None:
+    s = State(returndata=b"1234")
+    INVALID(s)
+    assert s.success == False
+    assert s.returndata == b""
