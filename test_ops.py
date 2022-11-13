@@ -1,7 +1,25 @@
 from typing import Dict
 
+import z3
+
 from common import Address, State, uint256
 from ops import *
+
+BV00 = z3.BitVecVal(0, 256)
+BV01 = z3.BitVecVal(1, 256)
+BV02 = z3.BitVecVal(2, 256)
+BV04 = z3.BitVecVal(4, 256)
+BV08 = z3.BitVecVal(8, 256)
+BV10 = z3.BitVecVal(10, 256)
+BV0F = z3.BitVecVal(0x0F, 256)
+BVF0 = z3.BitVecVal(0xF0, 256)
+BVFF = z3.BitVecVal(0xFF, 256)
+BVXE = z3.BitVecVal(
+    0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE, 256
+)
+BVXF = z3.BitVecVal(
+    0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF, 256
+)
 
 
 class DummyWorld(World):
@@ -41,178 +59,180 @@ def test_STOP() -> None:
 
 
 def test_ADD() -> None:
-    assert ADD(10, 10) == 20
-    assert (
-        ADD(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF, 1) == 0
-    )
+    assert z3.simplify(ADD(BV10, BV10)) == 20
+    assert z3.simplify(ADD(BVXF, BV01)) == 0
 
 
 def test_MUL() -> None:
-    assert MUL(10, 10) == 100
+    assert z3.simplify(MUL(BV10, BV10)) == 100
     assert (
-        MUL(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF, 2)
+        z3.simplify(MUL(BVXF, 2))
         == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE
     )
 
 
 def test_SUB() -> None:
-    assert SUB(10, 10) == 0
+    assert z3.simplify(SUB(BV10, BV10)) == 0
     assert (
-        SUB(0, 1) == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+        z3.simplify(SUB(BV00, BV01))
+        == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
     )
 
 
 def test_DIV() -> None:
-    assert DIV(10, 10) == 1
-    assert DIV(1, 2) == 0
-    assert DIV(10, 0) == 0
+    assert z3.simplify(DIV(BV10, BV10)) == 1
+    assert z3.simplify(DIV(BV01, BV02)) == 0
+    assert z3.simplify(DIV(BV10, BV00)) == 0
 
 
 def test_SDIV() -> None:
-    assert SDIV(10, 10) == 1
-    assert (
-        SDIV(
-            0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE,
-            0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF,
-        )
-        == 2
-    )
-    assert SDIV(10, 0) == 0
+    assert z3.simplify(SDIV(BV10, BV10)) == 1
+    assert z3.simplify(SDIV(BVXE, BVXF)) == 2
+    assert z3.simplify(SDIV(BV10, BV00)) == 0
 
 
 def test_MOD() -> None:
-    assert MOD(10, 3) == 1
-    assert MOD(17, 5) == 2
-    assert MOD(10, 0) == 0
+    assert z3.simplify(MOD(z3.BitVecVal(10, 256), z3.BitVecVal(3, 256))) == 1
+    assert z3.simplify(MOD(z3.BitVecVal(17, 256), z3.BitVecVal(5, 256))) == 2
+    assert z3.simplify(MOD(z3.BitVecVal(10, 256), z3.BitVecVal(0, 256))) == 0
 
 
 def test_SMOD() -> None:
-    assert SMOD(10, 3) == 1
+    BV03 = z3.BitVecVal(3, 256)
+    BVX8 = z3.BitVecVal(
+        0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF8, 256
+    )
+    BVXD = z3.BitVecVal(
+        0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFD, 256
+    )
+    assert z3.simplify(SMOD(BV10, BV03)) == 1
     assert (
-        SMOD(
-            0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF8,
-            0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFD,
-        )
+        z3.simplify(SMOD(BVX8, BVXD))
         == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE
     )
-    assert SMOD(10, 0) == 0
+    assert z3.simplify(SMOD(BV10, BV00)) == 0
 
 
 def test_ADDMOD() -> None:
-    assert ADDMOD(10, 10, 8) == 4
-    assert (
-        ADDMOD(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF, 2, 2)
-        == 1
-    )
+    assert z3.simplify(ADDMOD(BV10, BV10, BV08)) == 4
+    assert z3.simplify(ADDMOD(BVXF, BV02, BV02)) == 1
 
 
 def test_MULMOD() -> None:
-    assert MULMOD(10, 10, 8) == 4
-    assert (
-        MULMOD(
-            0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF,
-            0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF,
-            12,
-        )
-        == 9
-    )
+    BV12 = z3.BitVecVal(12, 256)
+    assert z3.simplify(MULMOD(BV10, BV10, BV08)) == 4
+    assert z3.simplify(MULMOD(BVXF, BVXF, BV12)) == 9
 
 
 def test_EXP() -> None:
-    assert EXP(10, 2) == 100
-    assert EXP(2, 2) == 4
+    assert z3.simplify(EXP(BV10, BV02)) == 100
+    assert z3.simplify(EXP(BV02, BV02)) == 4
 
 
 def test_SIGNEXTEND() -> None:
+    BVAA = z3.BitVecVal(0xAA, 256)
+    BV7F = z3.BitVecVal(0x7F, 256)
     assert (
-        SIGNEXTEND(0, 0xFF)
+        z3.simplify(SIGNEXTEND(BV00, BVFF))
         == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
     )
     assert (
-        SIGNEXTEND(0, 0xAA)
+        z3.simplify(SIGNEXTEND(BV00, BVAA))
         == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFAA
     )
-    assert SIGNEXTEND(0, 0x7F) == 0x7F
+    assert z3.simplify(SIGNEXTEND(BV00, BV7F)) == 0x7F
+    assert z3.simplify(SIGNEXTEND(BV02, BVFF)) == 0xFF
+    assert z3.simplify(SIGNEXTEND(BV7F, BV7F)) == 0x7F
 
 
 def test_LT() -> None:
-    assert LT(9, 10) == 1
-    assert LT(10, 10) == 0
+    assert z3.simplify(LT(BV08, BV10)) == 1
+    assert z3.simplify(LT(BV10, BV10)) == 0
 
 
 def test_GT() -> None:
-    assert GT(10, 9) == 1
-    assert GT(10, 10) == 0
+    assert z3.simplify(GT(BV10, BV08)) == 1
+    assert z3.simplify(GT(BV10, BV10)) == 0
 
 
 def test_SLT() -> None:
-    assert (
-        SLT(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF, 0) == 1
-    )
-    assert SLT(10, 10) == 0
+    assert z3.simplify(SLT(BVXF, BV00)) == 1
+    assert z3.simplify(SLT(BV10, BV10)) == 0
 
 
 def test_SGT() -> None:
-    assert (
-        SGT(0, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF) == 1
-    )
-    assert SGT(10, 10) == 0
+    assert z3.simplify(SGT(BV00, BVXF)) == 1
+    assert z3.simplify(SGT(BV10, BV10)) == 0
 
 
 def test_EQ() -> None:
-    assert EQ(10, 10) == 1
-    assert EQ(10, 5) == 0
+    assert z3.simplify(EQ(BV10, BV10)) == 1
+    assert z3.simplify(EQ(BV10, BV08)) == 0
 
 
 def test_ISZERO() -> None:
-    assert ISZERO(10) == 0
-    assert ISZERO(0) == 1
+    assert z3.simplify(ISZERO(BV10)) == 0
+    assert z3.simplify(ISZERO(BV00)) == 1
 
 
 def test_AND() -> None:
-    assert AND(0xF, 0xF) == 0xF
-    assert AND(0xFF, 0) == 0
+    assert z3.simplify(AND(BV0F, BV0F)) == 0xF
+    assert z3.simplify(AND(BVFF, BV00)) == 0
 
 
 def test_OR() -> None:
-    assert OR(0xF0, 0xF) == 0xFF
-    assert OR(0xFF, 0xFF) == 0xFF
+    assert z3.simplify(OR(BVF0, BV0F)) == 0xFF
+    assert z3.simplify(OR(BVFF, BVFF)) == 0xFF
 
 
 def test_XOR() -> None:
-    assert XOR(0xF0, 0xF) == 0xFF
-    assert XOR(0xFF, 0xFF) == 0
+    assert z3.simplify(XOR(BVF0, BV0F)) == 0xFF
+    assert z3.simplify(XOR(BVFF, BVFF)) == 0
 
 
 def test_NOT() -> None:
-    assert NOT(0) == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+    assert (
+        z3.simplify(NOT(BV00))
+        == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+    )
 
 
 def test_BYTE() -> None:
-    assert BYTE(31, 0xFF) == 0xFF
-    assert BYTE(30, 0xFF00) == 0xFF
-    assert BYTE(30, 0xAABBCC) == 0xBB
-    assert BYTE(123456, 0xAABBCC) == 0
+    BV30 = z3.BitVecVal(30, 256)
+    BV31 = z3.BitVecVal(31, 256)
+    BV123456 = z3.BitVecVal(123456, 256)
+    assert z3.simplify(BYTE(BV31, z3.BitVecVal(0xFF, 256))) == 0xFF
+    assert z3.simplify(BYTE(BV30, z3.BitVecVal(0x8800, 256))) == 0x88
+    assert z3.simplify(BYTE(BV30, z3.BitVecVal(0xAABBCC, 256))) == 0xBB
+    assert z3.simplify(BYTE(BV123456, z3.BitVecVal(0xAABBCC, 256))) == 0
 
 
 def test_SHL() -> None:
-    assert SHL(1, 1) == 2
+    BVZ2 = z3.BitVecVal(
+        0xFF00000000000000000000000000000000000000000000000000000000000000, 256
+    )
+    assert z3.simplify(SHL(BV01, BV01)) == 2
     assert (
-        SHL(4, 0xFF00000000000000000000000000000000000000000000000000000000000000)
+        z3.simplify(SHL(BV04, BVZ2))
         == 0xF000000000000000000000000000000000000000000000000000000000000000
     )
 
 
 def test_SHR() -> None:
-    assert SHR(1, 2) == 1
-    assert SHR(4, 0xFF) == 0xF
-    assert SHR(123, 0xAA) == 0
+    BV123 = z3.BitVecVal(123, 256)
+    BVAA = z3.BitVecVal(0xAA, 256)
+    assert z3.simplify(SHR(BV01, BV02)) == 1
+    assert z3.simplify(SHR(BV04, BVFF)) == 0xF
+    assert z3.simplify(SHR(BV123, BVAA)) == 0
 
 
 def test_SAR() -> None:
-    assert SAR(1, 2) == 1
+    BVZ = z3.BitVecVal(
+        0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF0, 256
+    )
+    assert z3.simplify(SAR(BV01, BV02)) == 1
     assert (
-        SAR(4, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF0)
+        z3.simplify(SAR(BV04, BVZ))
         == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
     )
 
