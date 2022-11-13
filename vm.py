@@ -20,16 +20,12 @@ def execute(
         ins = instructions[s.pc]
         s.pc += 1
 
-        msg = ins.name
+        msg = f"{(s.pc-1):04} {ins.name}"
         if ins.suffix:
             msg += str(ins.suffix)
         if ins.operand:
             msg += "\t" + hex(ins.operand)
         print(msg)
-
-        for x in stack:
-            print(" ", x.to_bytes(32, "big").hex())
-        print()
 
         if ins.name == "PUSH":
             operand = cast(int, ins.operand)
@@ -63,6 +59,10 @@ def execute(
                 stack.append(r)
         else:
             raise ValueError(f"unimplemented opcode: {ins.name}")
+
+        for x in stack:
+            print(" ", x.to_bytes(32, "big").hex())
+        print()
 
     return (s.success, s.returndata)
 
