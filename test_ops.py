@@ -1,14 +1,15 @@
-import typing
+from typing import Dict
 
+from common import Address, State, uint256
 from ops import *
 
 
 class DummyWorld(World):
     def __init__(
         self,
-        balances: typing.Dict[Address, uint256] = {},
-        codes: typing.Dict[Address, bytes] = {},
-        blockhashes: typing.Dict[uint256, uint256] = {},
+        balances: Dict[Address, uint256] = {},
+        codes: Dict[Address, bytes] = {},
+        blockhashes: Dict[uint256, uint256] = {},
     ):
         self.balances = balances
         self.codes = codes
