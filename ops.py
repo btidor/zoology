@@ -5,12 +5,19 @@ from typing import cast
 import z3
 from Crypto.Hash import keccak
 
-from common import Address, State, uint256
+from common import Address, State, uint8, uint256
 
 MAX = 1 << 256
 
 BV0 = z3.BitVecVal(0, 256)
 BV1 = z3.BitVecVal(1, 256)
+
+
+def _require_concrete(var: uint256, msg: str) -> int:
+    var = z3.simplify(var)
+    if not z3.is_bv_value(var):
+        raise ValueError(msg)
+    return cast(int, var.as_long())
 
 
 @dataclass
@@ -34,7 +41,7 @@ class World(ABC):
         pass
 
     @abstractmethod
-    def blockhash(self, blockNumber: uint256) -> uint256:
+    def blockhash(self, blockNumber: int) -> int:
         pass
 
 
@@ -91,11 +98,9 @@ def MULMOD(a: uint256, b: uint256, N: uint256) -> uint256:
 
 # 0A - Exponential operation
 def EXP(a: uint256, exponent: uint256) -> uint256:
-    exponent = z3.simplify(exponent)
-    if not z3.is_bv_value(exponent):
-        raise ValueError("EXP(a, exponent) requires concrete exponent")
-    exponent = exponent.as_long()
-
+    exponent = _require_concrete(
+        exponent, "EXP(a, exponent) requires concrete exponent"
+    )
     if exponent == 0:
         return BV1
     for i in range(exponent - 1):
@@ -105,11 +110,7 @@ def EXP(a: uint256, exponent: uint256) -> uint256:
 
 # 0B - Extend length of two's complement signed integer
 def SIGNEXTEND(b: uint256, x: uint256) -> uint256:
-    b = z3.simplify(b)
-    if not z3.is_bv_value(b):
-        raise ValueError("SIGNEXTEND(b, x) requires concrete b")
-    b = b.as_long()
-
+    b = _require_concrete(b, "SIGNEXTEND(b, x) requires concrete b")
     if b > 30:
         return x
     bits = (b + 1) * 8
@@ -168,11 +169,7 @@ def NOT(a: uint256) -> uint256:
 
 # 1A - Retrieve single bytes from word
 def BYTE(i: uint256, x: uint256) -> uint256:
-    i = z3.simplify(i)
-    if not z3.is_bv_value(i):
-        raise ValueError("BYTE(i, x) requires concrete i")
-    i = i.as_long()
-
+    i = _require_concrete(i, "BYTE(i, x) requires concrete i")
     if i > 31:
         return BV0
     start = 256 - (8 * i)
@@ -196,11 +193,15 @@ def SAR(shift: uint256, value: uint256) -> uint256:
 
 # 20 - Compute Keccak-256 hash
 def SHA3(s: State, offset: uint256, size: uint256) -> uint256:
+    offset = _require_concrete(offset, "SHA3(offset, size) requires concrete offset")
+    size = _require_concrete(size, "SHA3(offset, size) requires concrete size")
+
     hash = keccak.new(digest_bits=256)
     for idx in range(offset, offset + size):
-        data = s.memory.get(idx, 0).to_bytes(1, "big")
-        hash.update(data)
-    return int.from_bytes(hash.digest(), "big")
+        data = s.memory.get(idx, 0)
+        data = _require_concrete(data, "SHA3(offset, size) requires concrete data")
+        hash.update(data.to_bytes(1, "big"))
+    return z3.BitVecVal(int.from_bytes(hash.digest(), "big"), 256)
 
 
 # 30 - Get address of currently executing account
@@ -231,37 +232,62 @@ def CALLVALUE(s: State) -> uint256:
 
 # 35 - Get input data of current environment
 def CALLDATALOAD(s: State, i: uint256) -> uint256:
+    i = _require_concrete(i, "CALLDATALOAD(i) requires concrete i")
     if i >= len(s.calldata):
-        return 0
+        return BV0
     extended = s.calldata + (b"\x00" * 32)
-    return int.from_bytes(extended[i : i + 32], "big")
+    return z3.BitVecVal(int.from_bytes(extended[i : i + 32], "big"), 256)
 
 
 # 36 - Get size of input data in current environment
 def CALLDATASIZE(s: State) -> uint256:
-    return len(s.calldata)
+    return z3.BitVecVal(len(s.calldata), 256)
 
 
 # 37 - Copy input data in current environment to memory
 def CALLDATACOPY(s: State, destOffset: uint256, offset: uint256, size: uint256) -> None:
+    destOffset = _require_concrete(
+        destOffset,
+        "CALLDATACOPY(destOffset, offset, size) requires concrete destOffset",
+    )
+    offset = _require_concrete(
+        offset, "CALLDATACOPY(destOffset, offset, size) requires concrete offset"
+    )
+    size = _require_concrete(
+        size, "CALLDATACOPY(destOffset, offset, size) requires concrete size"
+    )
     for i in range(size):
         val = s.calldata[offset + i] if offset + i < len(s.calldata) else 0
-        s.memory[destOffset + i] = val
+        s.memory[destOffset + i] = z3.BitVecVal(val, 256)
 
 
 # 38 - Get size of code running in current environment
 def CODESIZE(s: State, w: World) -> uint256:
-    return len(w.code(s.address))
+    address = _require_concrete(s.address, "CODESIZE() requires concrete address")
+    return z3.BitVecVal(len(w.code(address)), 256)
 
 
 # 39 - Copy code running in current environment to memory
 def CODECOPY(
     s: State, w: World, destOffset: uint256, offset: uint256, size: uint256
 ) -> None:
-    code = w.code(s.address)
+    destOffset = _require_concrete(
+        destOffset,
+        "CODECOPY(destOffset, offset, size) requires concrete destOffset",
+    )
+    offset = _require_concrete(
+        offset, "CODECOPY(destOffset, offset, size) requires concrete offset"
+    )
+    size = _require_concrete(
+        size, "CODECOPY(destOffset, offset, size) requires concrete size"
+    )
+    address = _require_concrete(
+        s.address, "CODECOPY(destOffset, offset, size) requires concrete address"
+    )
+    code = w.code(address)
     for i in range(size):
         val = code[offset + i] if offset + i < len(code) else 0
-        s.memory[destOffset + i] = val
+        s.memory[destOffset + i] = z3.BitVecVal(val, 256)
 
 
 # 3A - Get price of gas in current environment
@@ -271,7 +297,10 @@ def GASPRICE(s: State) -> uint256:
 
 # 3B - Get size of an account's code
 def EXTCODESIZE(w: World, address: Address) -> uint256:
-    return len(w.code(address))
+    address = _require_concrete(
+        address, "EXTCODESIZE(address) requires concrete address"
+    )
+    return z3.BitVecVal(len(w.code(address)), 256)
 
 
 # 3C - Copy an account's code to memory
@@ -283,43 +312,77 @@ def EXTCODECOPY(
     offset: uint256,
     size: uint256,
 ) -> None:
+    destOffset = _require_concrete(
+        destOffset,
+        "EXTCODECOPY(address, destOffset, offset, size) requires concrete destOffset",
+    )
+    offset = _require_concrete(
+        offset,
+        "EXTCODECOPY(address, destOffset, offset, size) requires concrete offset",
+    )
+    size = _require_concrete(
+        size, "EXTCODECOPY(address, destOffset, offset, size) requires concrete size"
+    )
+    address = _require_concrete(
+        address,
+        "EXTCODECOPY(address, destOffset, offset, size) requires concrete address",
+    )
     code = w.code(address)
     for i in range(size):
         val = code[offset + i] if offset + i < len(code) else 0
-        s.memory[destOffset + i] = val
+        s.memory[destOffset + i] = z3.BitVecVal(val, 256)
 
 
 # 3D - Get size of output data from the previous call from the current
 # environment
 def RETURNDATASIZE(s: State) -> uint256:
-    return len(s.returndata)
+    return z3.BitVecVal(len(s.returndata), 256)
 
 
 # 3E - Copy output data from the previous call to memory
 def RETURNDATACOPY(
     s: State, destOffset: uint256, offset: uint256, size: uint256
 ) -> None:
+    destOffset = _require_concrete(
+        destOffset,
+        "RETURNDATACOPY(destOffset, offset, size) requires concrete destOffset",
+    )
+    offset = _require_concrete(
+        offset, "RETURNDATACOPY(destOffset, offset, size) requires concrete offset"
+    )
+    size = _require_concrete(
+        size, "RETURNDATACOPY(destOffset, offset, size) requires concrete size"
+    )
     for i in range(size):
         val = s.returndata[offset + i] if offset + i < len(s.returndata) else 0
-        s.memory[destOffset + i] = val
+        s.memory[destOffset + i] = z3.BitVecVal(val, 256)
 
 
 # 3F - Get hash of an account's code
 def EXTCODEHASH(w: World, address: Address) -> uint256:
+    address = _require_concrete(
+        address,
+        "EXTCODEHASH(address) requires concrete address",
+    )
     code = w.code(address)
     if code == b"":
-        return 0
+        return BV0
 
     hash = keccak.new(digest_bits=256)
     hash.update(code)
-    return int.from_bytes(hash.digest(), "big")
+    return z3.BitVecVal(int.from_bytes(hash.digest(), "big"), 256)
 
 
 # 40 - Get the hash of one of the 256 most recent complete blocks
 def BLOCKHASH(b: Block, w: World, blockNumber: uint256) -> uint256:
-    if blockNumber >= b.number or blockNumber < b.number - 256:
-        return 0
-    return w.blockhash(blockNumber)
+    blockNumber = _require_concrete(
+        blockNumber, "BLOCKHASH(blockNumber) requires concrete blockNumber"
+    )
+    return z3.If(
+        z3.Or(blockNumber >= b.number, blockNumber < b.number - 256),
+        BV0,
+        z3.BitVecVal(w.blockhash(blockNumber), 256),
+    )
 
 
 # 41 - Get the block's beneficiary address
@@ -377,23 +440,29 @@ def MLOAD(s: State, offset: uint256) -> uint256:
 
 # 52 - Save word to memory
 def MSTORE(s: State, offset: uint256, value: uint256) -> None:
+    offset = _require_concrete(offset, "MSTORE(offset, value) requires concrete offset")
     for i in range(31, -1, -1):
-        s.memory[offset + i] = value & 0xFF
+        s.memory[offset + i] = z3.Extract(7, 0, value)
         value = value >> 8
 
 
 # 53 - Save byte to memory
-def MSTORE8(s: State, offset: uint256, value: uint256) -> None:
+def MSTORE8(s: State, offset: uint256, value: uint8) -> None:
+    offset = _require_concrete(
+        offset, "MSTORE8(offset, value) requires concrete offset"
+    )
     s.memory[offset] = value & 0xFF
 
 
 # 54 - Load word from storage
 def SLOAD(s: State, key: uint256) -> uint256:
-    return s.storage.get(key, 0)
+    key = _require_concrete(key, "SLOAD(key) requires concrete key")
+    return s.storage.get(key, BV0)
 
 
 # 55 - Save word to storage
 def SSTORE(s: State, key: uint256, value: uint256) -> None:
+    key = _require_concrete(key, "SSTORE(key) requires concrete key")
     s.storage[key] = value
 
 
@@ -401,6 +470,7 @@ def SSTORE(s: State, key: uint256, value: uint256) -> None:
 def JUMP(s: State, counter: uint256) -> None:
     # TODO: symbolically ensure all jump targets are valid and within the main
     # body of the code.
+    counter = _require_concrete(counter, "JUMP(counter) requires concrete counter")
     s.pc = s.jumps[counter]
 
 
@@ -408,13 +478,15 @@ def JUMP(s: State, counter: uint256) -> None:
 def JUMPI(s: State, counter: uint256, b: uint256) -> None:
     # TODO: symbolically ensure all jump targets are valid and within the main
     # body of the code.
+    counter = _require_concrete(counter, "JUMPI(counter, b) requires concrete counter")
+    b = _require_concrete(b, "JUMPI(counter, b) requires concrete b")
     if b != 0:
         s.pc = s.jumps[counter]
 
 
 # 59 - Get the size of active memory in bytes
 def MSIZE(s: State) -> uint256:
-    return max(s.memory.keys()) + 1
+    return z3.BitVecVal(max(s.memory.keys()) + 1, 256)
 
 
 # A0 - Append log record with no topics
@@ -460,7 +532,18 @@ def LOG4(
 
 # F3 - Halts execution returning output data
 def RETURN(s: State, offset: uint256, size: uint256) -> None:
-    s.returndata = bytes([s.memory.get(i, 0) for i in range(offset, offset + size)])
+    offset = _require_concrete(
+        offset,
+        "RETURN(offset, size) requires concrete offset",
+    )
+    size = _require_concrete(size, "RETURN(offset, size) requires concrete size")
+    data = []
+    for i in range(offset, offset + size):
+        elem = _require_concrete(
+            s.memory.get(i, BV0), "RETURN(offset, size) requires concrete data"
+        )
+        data.append(elem)
+    s.returndata = bytes(data)
     s.success = True
 
 
@@ -473,7 +556,18 @@ def RETURN(s: State, offset: uint256, size: uint256) -> None:
 # FD - Halt execution reverting state changes but returning data and remaining
 # gas
 def REVERT(s: State, offset: uint256, size: uint256) -> None:
-    s.returndata = bytes([s.memory.get(i, 0) for i in range(offset, offset + size)])
+    offset = _require_concrete(
+        offset,
+        "REVERT(offset, size) requires concrete offset",
+    )
+    size = _require_concrete(size, "REVERT(offset, size) requires concrete size")
+    data = []
+    for i in range(offset, offset + size):
+        elem = _require_concrete(
+            s.memory.get(i, BV0), "REVERT(offset, size) requires concrete data"
+        )
+        data.append(elem)
+    s.returndata = bytes(data)
     s.success = False
 
 

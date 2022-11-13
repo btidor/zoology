@@ -5,12 +5,14 @@ import z3
 from common import Address, State, uint256
 from ops import *
 
-BV00 = z3.BitVecVal(0, 256)
-BV01 = z3.BitVecVal(1, 256)
-BV02 = z3.BitVecVal(2, 256)
-BV04 = z3.BitVecVal(4, 256)
-BV08 = z3.BitVecVal(8, 256)
-BV10 = z3.BitVecVal(10, 256)
+BV00 = z3.BitVecVal(0x00, 256)
+BV01 = z3.BitVecVal(0x01, 256)
+BV02 = z3.BitVecVal(0x02, 256)
+BV04 = z3.BitVecVal(0x04, 256)
+BV08 = z3.BitVecVal(0x08, 256)
+BV0A = z3.BitVecVal(0x0A, 256)
+BV1F = z3.BitVecVal(0x1F, 256)
+BV20 = z3.BitVecVal(0x20, 256)
 BV0F = z3.BitVecVal(0x0F, 256)
 BVF0 = z3.BitVecVal(0xF0, 256)
 BVFF = z3.BitVecVal(0xFF, 256)
@@ -20,6 +22,7 @@ BVXE = z3.BitVecVal(
 BVXF = z3.BitVecVal(
     0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF, 256
 )
+ADDR = z3.BitVecVal(0x9BBFED6889322E016E0A02EE459D306FC19545D8, 256)
 
 
 class DummyWorld(World):
@@ -47,7 +50,7 @@ def _dump_memory(s: State) -> str:
     v = ""
     lim = max(s.memory.keys())
     for i in range(lim + 1):
-        v += s.memory[i].to_bytes(1, "big").hex()
+        v += z3.simplify(s.memory[i]).as_long().to_bytes(1, "big").hex()
     return "0x" + v.upper()
 
 
@@ -59,12 +62,12 @@ def test_STOP() -> None:
 
 
 def test_ADD() -> None:
-    assert z3.simplify(ADD(BV10, BV10)) == 20
+    assert z3.simplify(ADD(BV0A, BV0A)) == 20
     assert z3.simplify(ADD(BVXF, BV01)) == 0
 
 
 def test_MUL() -> None:
-    assert z3.simplify(MUL(BV10, BV10)) == 100
+    assert z3.simplify(MUL(BV0A, BV0A)) == 100
     assert (
         z3.simplify(MUL(BVXF, 2))
         == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE
@@ -72,7 +75,7 @@ def test_MUL() -> None:
 
 
 def test_SUB() -> None:
-    assert z3.simplify(SUB(BV10, BV10)) == 0
+    assert z3.simplify(SUB(BV0A, BV0A)) == 0
     assert (
         z3.simplify(SUB(BV00, BV01))
         == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
@@ -80,15 +83,15 @@ def test_SUB() -> None:
 
 
 def test_DIV() -> None:
-    assert z3.simplify(DIV(BV10, BV10)) == 1
+    assert z3.simplify(DIV(BV0A, BV0A)) == 1
     assert z3.simplify(DIV(BV01, BV02)) == 0
-    assert z3.simplify(DIV(BV10, BV00)) == 0
+    assert z3.simplify(DIV(BV0A, BV00)) == 0
 
 
 def test_SDIV() -> None:
-    assert z3.simplify(SDIV(BV10, BV10)) == 1
+    assert z3.simplify(SDIV(BV0A, BV0A)) == 1
     assert z3.simplify(SDIV(BVXE, BVXF)) == 2
-    assert z3.simplify(SDIV(BV10, BV00)) == 0
+    assert z3.simplify(SDIV(BV0A, BV00)) == 0
 
 
 def test_MOD() -> None:
@@ -105,27 +108,27 @@ def test_SMOD() -> None:
     BVXD = z3.BitVecVal(
         0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFD, 256
     )
-    assert z3.simplify(SMOD(BV10, BV03)) == 1
+    assert z3.simplify(SMOD(BV0A, BV03)) == 1
     assert (
         z3.simplify(SMOD(BVX8, BVXD))
         == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE
     )
-    assert z3.simplify(SMOD(BV10, BV00)) == 0
+    assert z3.simplify(SMOD(BV0A, BV00)) == 0
 
 
 def test_ADDMOD() -> None:
-    assert z3.simplify(ADDMOD(BV10, BV10, BV08)) == 4
+    assert z3.simplify(ADDMOD(BV0A, BV0A, BV08)) == 4
     assert z3.simplify(ADDMOD(BVXF, BV02, BV02)) == 1
 
 
 def test_MULMOD() -> None:
     BV12 = z3.BitVecVal(12, 256)
-    assert z3.simplify(MULMOD(BV10, BV10, BV08)) == 4
+    assert z3.simplify(MULMOD(BV0A, BV0A, BV08)) == 4
     assert z3.simplify(MULMOD(BVXF, BVXF, BV12)) == 9
 
 
 def test_EXP() -> None:
-    assert z3.simplify(EXP(BV10, BV02)) == 100
+    assert z3.simplify(EXP(BV0A, BV02)) == 100
     assert z3.simplify(EXP(BV02, BV02)) == 4
 
 
@@ -146,32 +149,32 @@ def test_SIGNEXTEND() -> None:
 
 
 def test_LT() -> None:
-    assert z3.simplify(LT(BV08, BV10)) == 1
-    assert z3.simplify(LT(BV10, BV10)) == 0
+    assert z3.simplify(LT(BV08, BV0A)) == 1
+    assert z3.simplify(LT(BV0A, BV0A)) == 0
 
 
 def test_GT() -> None:
-    assert z3.simplify(GT(BV10, BV08)) == 1
-    assert z3.simplify(GT(BV10, BV10)) == 0
+    assert z3.simplify(GT(BV0A, BV08)) == 1
+    assert z3.simplify(GT(BV0A, BV0A)) == 0
 
 
 def test_SLT() -> None:
     assert z3.simplify(SLT(BVXF, BV00)) == 1
-    assert z3.simplify(SLT(BV10, BV10)) == 0
+    assert z3.simplify(SLT(BV0A, BV0A)) == 0
 
 
 def test_SGT() -> None:
     assert z3.simplify(SGT(BV00, BVXF)) == 1
-    assert z3.simplify(SGT(BV10, BV10)) == 0
+    assert z3.simplify(SGT(BV0A, BV0A)) == 0
 
 
 def test_EQ() -> None:
-    assert z3.simplify(EQ(BV10, BV10)) == 1
-    assert z3.simplify(EQ(BV10, BV08)) == 0
+    assert z3.simplify(EQ(BV0A, BV0A)) == 1
+    assert z3.simplify(EQ(BV0A, BV08)) == 0
 
 
 def test_ISZERO() -> None:
-    assert z3.simplify(ISZERO(BV10)) == 0
+    assert z3.simplify(ISZERO(BV0A)) == 0
     assert z3.simplify(ISZERO(BV00)) == 1
 
 
@@ -238,36 +241,37 @@ def test_SAR() -> None:
 
 
 def test_SHA3() -> None:
-    s = State(memory={0: 0xFF, 1: 0xFF, 2: 0xFF, 3: 0xFF})
+    BYFF = z3.BitVecVal(0xFF, 8)
+    s = State(memory={0: BYFF, 1: BYFF, 2: BYFF, 3: BYFF})
     assert (
-        SHA3(s, 0, 4)
+        z3.simplify(SHA3(s, BV00, BV04))
         == 0x29045A592007D0C246EF02C2223570DA9522D0CF0F73282C79A1BC8F0BB2C238
     )
 
 
 def test_ADDRESS() -> None:
-    s = State(address=0x9BBFED6889322E016E0A02EE459D306FC19545D8)
-    assert ADDRESS(s) == s.address
+    s = State(address=ADDR)
+    assert z3.simplify(ADDRESS(s)) == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
 
 
 def test_BALANCE() -> None:
-    w = DummyWorld(balances={0x9BBFED6889322E016E0A02EE459D306FC19545D8: 125985})
-    assert BALANCE(w, 0x9BBFED6889322E016E0A02EE459D306FC19545D8) == 125985
+    w = DummyWorld(balances={ADDR: z3.BitVecVal(125985, 256)})
+    assert z3.simplify(BALANCE(w, ADDR)) == 125985
 
 
 def test_ORIGIN() -> None:
-    s = State(origin=0xBE862AD9ABFE6F22BCB087716C7D89A26051F74C)
-    assert ORIGIN(s) == 0xBE862AD9ABFE6F22BCB087716C7D89A26051F74C
+    s = State(origin=ADDR)
+    assert z3.simplify(ORIGIN(s)) == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
 
 
 def test_CALLER() -> None:
-    s = State(caller=0xBE862AD9ABFE6F22BCB087716C7D89A26051F74C)
-    assert CALLER(s) == 0xBE862AD9ABFE6F22BCB087716C7D89A26051F74C
+    s = State(caller=ADDR)
+    assert z3.simplify(CALLER(s)) == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
 
 
 def test_CALLVALUE() -> None:
-    s = State(callvalue=123456789)
-    assert CALLVALUE(s) == 123456789
+    s = State(callvalue=z3.BitVecVal(123456789, 256))
+    assert z3.simplify(CALLVALUE(s)) == 123456789
 
 
 def test_CALLDATALOAD() -> None:
@@ -275,14 +279,14 @@ def test_CALLDATALOAD() -> None:
         calldata=b"\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff"
     )
     assert (
-        CALLDATALOAD(s, 0)
+        z3.simplify(CALLDATALOAD(s, BV00))
         == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
     )
     assert (
-        CALLDATALOAD(s, 31)
+        z3.simplify(CALLDATALOAD(s, BV1F))
         == 0xFF00000000000000000000000000000000000000000000000000000000000000
     )
-    assert CALLDATALOAD(s, 32) == 0
+    assert z3.simplify(CALLDATALOAD(s, BV20)) == 0
 
 
 def test_CALLDATASIZE() -> None:
@@ -295,13 +299,13 @@ def test_CALLDATACOPY() -> None:
         calldata=b"\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff"
     )
 
-    CALLDATACOPY(s, 0, 0, 32)
+    CALLDATACOPY(s, BV00, BV00, BV20)
     assert (
         _dump_memory(s)
         == "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
     )
 
-    CALLDATACOPY(s, 0, 31, 8)
+    CALLDATACOPY(s, BV00, BV1F, BV08)
     assert (
         _dump_memory(s)
         == "0xFF00000000000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
@@ -309,7 +313,7 @@ def test_CALLDATACOPY() -> None:
 
 
 def test_CODESIZE() -> None:
-    s = State(address=0x9BBFED6889322E016E0A02EE459D306FC19545D8)
+    s = State(address=ADDR)
     w = DummyWorld(
         codes={
             0x9BBFED6889322E016E0A02EE459D306FC19545D8: b"\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff"
@@ -319,20 +323,20 @@ def test_CODESIZE() -> None:
 
 
 def test_CODECOPY() -> None:
-    s = State(address=0x9BBFED6889322E016E0A02EE459D306FC19545D8)
+    s = State(address=ADDR)
     w = DummyWorld(
         codes={
             0x9BBFED6889322E016E0A02EE459D306FC19545D8: b"\x7d\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\x7f"
         }
     )
 
-    CODECOPY(s, w, 0, 0, 32)
+    CODECOPY(s, w, BV00, BV00, BV20)
     assert (
         _dump_memory(s)
         == "0x7DFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF7F"
     )
 
-    CODECOPY(s, w, 0, 31, 8)
+    CODECOPY(s, w, BV00, BV1F, BV08)
     assert (
         _dump_memory(s)
         == "0x7F00000000000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF7F"
@@ -340,34 +344,34 @@ def test_CODECOPY() -> None:
 
 
 def test_GASPRICE() -> None:
-    s = State(gasprice=10)
-    assert GASPRICE(s) == 10
+    s = State(gasprice=BV0A)
+    assert z3.simplify(GASPRICE(s)) == 10
 
 
 def test_EXTCODESIZE() -> None:
     w = DummyWorld(
         codes={
-            0x43A61F3F4C73EA0D444C5C1C1A8544067A86219B: b"\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff",
+            0x9BBFED6889322E016E0A02EE459D306FC19545D8: b"\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff",
         }
     )
-    assert EXTCODESIZE(w, 0x43A61F3F4C73EA0D444C5C1C1A8544067A86219B) == 32
+    assert z3.simplify(EXTCODESIZE(w, ADDR)) == 32
 
 
 def test_EXTCODECOPY() -> None:
     w = DummyWorld(
         codes={
-            0x43A61F3F4C73EA0D444C5C1C1A8544067A86219B: b"\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff",
+            0x9BBFED6889322E016E0A02EE459D306FC19545D8: b"\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff",
         }
     )
     s = State()
 
-    EXTCODECOPY(s, w, 0x43A61F3F4C73EA0D444C5C1C1A8544067A86219B, 0, 0, 32)
+    EXTCODECOPY(s, w, ADDR, BV00, BV00, BV20)
     assert (
         _dump_memory(s)
         == "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
     )
 
-    EXTCODECOPY(s, w, 0x43A61F3F4C73EA0D444C5C1C1A8544067A86219B, 0, 31, 8)
+    EXTCODECOPY(s, w, ADDR, BV00, BV1F, BV08)
     assert (
         _dump_memory(s)
         == "0xFF00000000000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
@@ -376,7 +380,7 @@ def test_EXTCODECOPY() -> None:
 
 def test_RETURNDATASIZE() -> None:
     s = State(returndata=b"abcdefghijklmnopqrstuvwxyz")
-    assert RETURNDATASIZE(s) == 26
+    assert z3.simplify(RETURNDATASIZE(s)) == 26
 
 
 def test_RETURNDATACOPY() -> None:
@@ -384,13 +388,13 @@ def test_RETURNDATACOPY() -> None:
         returndata=b"\x7d\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\x7f"
     )
 
-    RETURNDATACOPY(s, 0, 0, 32)
+    RETURNDATACOPY(s, BV00, BV00, BV20)
     assert (
         _dump_memory(s)
         == "0x7DFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF7F"
     )
 
-    RETURNDATACOPY(s, 0, 31, 8)
+    RETURNDATACOPY(s, BV00, BV1F, BV08)
     assert (
         _dump_memory(s)
         == "0x7F00000000000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF7F"
@@ -401,16 +405,17 @@ def test_EXTCODEHASH() -> None:
     # The example on evm.codes is wrong: 0xc5d2... is the hash of the empty
     # string, which shouldn't be possible to observe.
     w = DummyWorld(
-        codes={0x43A61F3F4C73EA0D444C5C1C1A8544067A86219B: b"\xff\xff\xff\xff"}
+        codes={0x9BBFED6889322E016E0A02EE459D306FC19545D8: b"\xff\xff\xff\xff"}
     )
     assert (
-        EXTCODEHASH(w, 0x43A61F3F4C73EA0D444C5C1C1A8544067A86219B)
+        z3.simplify(EXTCODEHASH(w, ADDR))
         == 0x29045A592007D0C246EF02C2223570DA9522D0CF0F73282C79A1BC8F0BB2C238
     )
-    assert EXTCODEHASH(w, 0x123) == 0
+    assert EXTCODEHASH(w, z3.BitVecVal(0x123, 256)) == 0
 
 
 def test_BLOCKHASH() -> None:
+    BVBLK = z3.BitVecVal(599423546, 256)
     w = DummyWorld(
         blockhashes={
             100000123: 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF,
@@ -419,44 +424,44 @@ def test_BLOCKHASH() -> None:
             599423547: 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF,
         }
     )
-    b = Block(number=599423546)
-    assert BLOCKHASH(b, w, 100000123) == 0
+    b = Block(number=BVBLK)
     assert (
-        BLOCKHASH(b, w, 599423545)
+        z3.simplify(BLOCKHASH(b, w, BVBLK - 1))
         == 0x29045A592007D0C246EF02C2223570DA9522D0CF0F73282C79A1BC8F0BB2C238
     )
-    assert BLOCKHASH(b, w, 599423546) == 0
-    assert BLOCKHASH(b, w, 599423547) == 0
+    assert z3.simplify(BLOCKHASH(b, w, BVBLK)) == 0
+    assert z3.simplify(BLOCKHASH(b, w, BVBLK + 1)) == 0
 
 
 def test_COINBASE() -> None:
-    b = Block(coinbase=0x5B38DA6A701C568545DCFCB03FCB875F56BEDDC4)
-    assert COINBASE(b) == 0x5B38DA6A701C568545DCFCB03FCB875F56BEDDC4
+    b = Block(coinbase=ADDR)
+    assert z3.simplify(COINBASE(b)) == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
 
 
 def test_TIMESTAMP() -> None:
-    b = Block(timestamp=1636704767)
-    assert TIMESTAMP(b) == 1636704767
+    b = Block(timestamp=z3.BitVecVal(1636704767, 256))
+    assert z3.simplify(TIMESTAMP(b)) == 1636704767
 
 
 def test_NUMBER() -> None:
-    b = Block(number=1636704767)
-    assert NUMBER(b) == 1636704767
+    b = Block(number=z3.BitVecVal(1636704767, 256))
+    assert z3.simplify(NUMBER(b)) == 1636704767
 
 
 def test_PREVRANDAO() -> None:
-    b = Block(
-        prevrandao=0xCE124DEE50136F3F93F19667FB4198C6B94EECBACFA300469E5280012757BE94
+    BVRAND = z3.BitVecVal(
+        0xCE124DEE50136F3F93F19667FB4198C6B94EECBACFA300469E5280012757BE94, 256
     )
+    b = Block(prevrandao=BVRAND)
     assert (
-        PREVRANDAO(b)
+        z3.simplify(PREVRANDAO(b))
         == 0xCE124DEE50136F3F93F19667FB4198C6B94EECBACFA300469E5280012757BE94
     )
 
 
 def test_GASLIMIT() -> None:
-    b = Block(gaslimit=0xFFFFFFFFFFFF)
-    assert GASLIMIT(b) == 0xFFFFFFFFFFFF
+    b = Block(gaslimit=z3.BitVecVal(0xFFFFFFFFFFFF, 256))
+    assert z3.simplify(GASLIMIT(b)) == 0xFFFFFFFFFFFF
 
 
 def test_CHAINID() -> None:
@@ -465,30 +470,30 @@ def test_CHAINID() -> None:
 
 
 def test_SELFBALANCE() -> None:
-    s = State(address=0x9BBFED6889322E016E0A02EE459D306FC19545D8)
-    w = DummyWorld(balances={0x9BBFED6889322E016E0A02EE459D306FC19545D8: 9})
-    assert SELFBALANCE(s, w) == 9
+    s = State(address=ADDR)
+    w = DummyWorld(balances={ADDR: BV08})
+    assert z3.simplify(SELFBALANCE(s, w)) == BV08
 
 
 def test_BASEFEE() -> None:
-    b = Block(basefee=10)
-    assert BASEFEE(b) == 10
+    b = Block(basefee=BV0A)
+    assert z3.simplify(BASEFEE(b)) == 10
 
 
 def test_MLOAD() -> None:
-    s = State(memory={31: 0xFF})
-    assert MLOAD(s, 0) == 0xFF
-    assert MLOAD(s, 1) == 0xFF00
+    s = State(memory={31: z3.BitVecVal(0xFF, 8)})
+    assert z3.simplify(MLOAD(s, 0)) == 0xFF
+    assert z3.simplify(MLOAD(s, 1)) == 0xFF00
 
 
 def test_MSTORE() -> None:
     s = State()
-    MSTORE(s, 0, 0xFF)
+    MSTORE(s, BV00, BVFF)
     assert (
         _dump_memory(s)
         == "0x00000000000000000000000000000000000000000000000000000000000000FF"
     )
-    MSTORE(s, 1, 0xFF)
+    MSTORE(s, BV01, BVFF)
     assert (
         _dump_memory(s)
         == "0x0000000000000000000000000000000000000000000000000000000000000000FF"
@@ -497,58 +502,58 @@ def test_MSTORE() -> None:
 
 def test_MSTORE8() -> None:
     s = State()
-    MSTORE8(s, 0, 0xFFFF)
+    MSTORE8(s, BV00, z3.BitVecVal(0xFFFF, 256))
     assert _dump_memory(s) == "0xFF"
-    MSTORE8(s, 1, 0xAABBCCDDEE)
+    MSTORE8(s, BV01, z3.BitVecVal(0xAABBCCDDEE, 256))
     assert _dump_memory(s) == "0xFFEE"
 
 
 def test_SLOAD() -> None:
-    s = State(storage={0: 46})
-    assert SLOAD(s, 0) == 46
-    assert SLOAD(s, 1) == 0
+    s = State(storage={0: z3.BitVecVal(46, 256)})
+    assert z3.simplify(SLOAD(s, BV00)) == 46
+    assert z3.simplify(SLOAD(s, BV01)) == 0
 
 
 def test_SSTORE() -> None:
     s = State()
 
-    SSTORE(s, 0, 0xFFFF)
+    SSTORE(s, BV00, z3.BitVecVal(0xFFFF, 256))
     assert len(s.storage) == 1
     assert s.storage[0] == 0xFFFF
 
-    SSTORE(s, 8965, 0xFF)
+    SSTORE(s, z3.BitVecVal(8965, 256), BVFF)
     assert len(s.storage) == 2
     assert s.storage[0] == 0xFFFF
     assert s.storage[8965] == 0xFF
 
 
 def test_JUMP() -> None:
-    s = State(jumps={12: 34})
-    JUMP(s, 12)
-    assert s.pc == 34
+    s = State(jumps={8: 90})
+    JUMP(s, BV08)
+    assert s.pc == 90
 
 
 def test_JUMPI() -> None:
-    s = State(jumps={12: 34})
+    s = State(jumps={8: 90})
 
-    JUMPI(s, 12, 0)
+    JUMPI(s, BV08, BV00)
     assert s.pc == 0
 
-    JUMPI(s, 12, 1)
-    assert s.pc == 34
+    JUMPI(s, BV08, BV01)
+    assert s.pc == 90
 
 
 def test_MSIZE() -> None:
-    s = State(memory={123: 1})
-    assert MSIZE(s) == 124
+    s = State(memory={123: z3.BitVecVal(0x01, 8)})
+    assert z3.simplify(MSIZE(s)) == 124
 
 
 def test_RETURN() -> None:
     s = State(
         returndata=b"1234",
-        memory={0: 0xFF, 1: 0x01},
+        memory={0: z3.BitVecVal(0xFF, 8), 1: z3.BitVecVal(0x01, 8)},
     )
-    RETURN(s, 0, 2)
+    RETURN(s, BV00, BV02)
     assert s.success == True
     assert s.returndata == b"\xff\x01"
 
@@ -556,9 +561,9 @@ def test_RETURN() -> None:
 def test_REVERT() -> None:
     s = State(
         returndata=b"1234",
-        memory={0: 0xFF, 1: 0x01},
+        memory={0: z3.BitVecVal(0xFF, 8), 1: z3.BitVecVal(0x01, 8)},
     )
-    REVERT(s, 0, 2)
+    REVERT(s, BV00, BV02)
     assert s.success == False
     assert s.returndata == b"\xff\x01"
 

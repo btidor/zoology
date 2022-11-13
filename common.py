@@ -28,8 +28,10 @@ class Instruction:
 @dataclass
 class State:
     pc: int = 0
-    jumps: Dict[uint256, int] = field(default_factory=dict)
-    memory: Dict[uint256, uint8] = field(default_factory=dict)  # index -> 1-byte value
+    jumps: Dict[int, int] = field(default_factory=dict)
+    memory: Dict[int, uint8] = field(
+        default_factory=dict
+    )  # concrete index -> 1-byte value
     address: Address = 0
     origin: Address = 0
     caller: Address = 0
@@ -38,4 +40,4 @@ class State:
     gasprice: uint256 = 0
     returndata: bytes = b""
     success: Optional[bool] = None
-    storage: Dict[uint256, uint256] = field(default_factory=dict)
+    storage: Dict[int, uint256] = field(default_factory=dict)
