@@ -227,16 +227,12 @@ def CALLVALUE(s: State) -> uint256:
 
 # 35 - Get input data of current environment
 def CALLDATALOAD(s: State, i: uint256) -> uint256:
-    i = _require_concrete(i, "CALLDATALOAD(i) requires concrete i")
-    if i >= len(s.calldata):
-        return BW(0)
-    extended = s.calldata + (b"\x00" * 32)
-    return BW(int.from_bytes(extended[i : i + 32], "big"))
+    return z3.Concat(*[s.calldata.get(i + j) for j in range(32)])
 
 
 # 36 - Get size of input data in current environment
 def CALLDATASIZE(s: State) -> uint256:
-    return BW(len(s.calldata))
+    return s.calldata.length()
 
 
 # 37 - Copy input data in current environment to memory
@@ -245,15 +241,11 @@ def CALLDATACOPY(s: State, destOffset: uint256, offset: uint256, size: uint256) 
         destOffset,
         "CALLDATACOPY(destOffset, offset, size) requires concrete destOffset",
     )
-    offset = _require_concrete(
-        offset, "CALLDATACOPY(destOffset, offset, size) requires concrete offset"
-    )
     size = _require_concrete(
         size, "CALLDATACOPY(destOffset, offset, size) requires concrete size"
     )
     for i in range(size):
-        val = s.calldata[offset + i] if offset + i < len(s.calldata) else 0
-        s.memory[destOffset + i] = BW(val)
+        s.memory[destOffset + i] = s.calldata.get(offset + i)
 
 
 # 38 - Get size of code running in current environment

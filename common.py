@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod, abstractproperty
 from dataclasses import dataclass, field
 from typing import Dict, Optional, TypeAlias
 
@@ -18,6 +19,23 @@ def BY(i: int) -> uint8:
     if i >= (1 << 8) or i < 0:
         raise ValueError(f"invalid byte: {i}")
     return z3.BitVecVal(i, 8)
+
+
+class ByteArray:
+    def __init__(self, name: str, data: bytes | None = None) -> None:
+        self.arr = z3.Array(f"{name}", z3.BitVecSort(256), z3.BitVecSort(8))
+        if data is None:
+            self.len = z3.BitVec(f"{name}.length", 256)
+        else:
+            self.len = BW(len(data))
+            for i, b in enumerate(data):
+                self.arr = z3.Store(self.arr, i, b)
+
+    def length(self) -> uint256:
+        return self.len
+
+    def get(self, i: uint256) -> uint8:
+        return z3.If(i >= self.len, BY(0), self.arr[i])
 
 
 @dataclass
@@ -48,7 +66,7 @@ class State:
     origin: Address = BW(0)
     caller: Address = BW(0)
     callvalue: uint256 = BW(0)
-    calldata: bytes = b""
+    calldata: ByteArray = ByteArray("CALLDATA")
     gasprice: uint256 = BW(0)
     returndata: bytes = b""
     success: Optional[bool] = None

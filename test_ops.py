@@ -2,7 +2,7 @@ from typing import Dict
 
 import z3
 
-from common import BW, BY, Address, State, uint256
+from common import BW, BY, Address, ByteArray, State, uint256
 from ops import *
 
 
@@ -310,7 +310,10 @@ def test_CALLVALUE() -> None:
 
 def test_CALLDATALOAD() -> None:
     s = State(
-        calldata=b"\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff"
+        calldata=ByteArray(
+            "CALLDATA",
+            b"\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff",
+        )
     )
     assert (
         z3.simplify(CALLDATALOAD(s, BW(0)))
@@ -324,13 +327,16 @@ def test_CALLDATALOAD() -> None:
 
 
 def test_CALLDATASIZE() -> None:
-    s = State(calldata=b"\xff")
+    s = State(calldata=ByteArray("CALLDATA", b"\xff"))
     assert CALLDATASIZE(s) == 1
 
 
 def test_CALLDATACOPY() -> None:
     s = State(
-        calldata=b"\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff"
+        calldata=ByteArray(
+            "CALLDATA",
+            b"\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff",
+        )
     )
 
     CALLDATACOPY(s, BW(0), BW(0), BW(32))
