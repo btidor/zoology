@@ -5,12 +5,7 @@ from typing import cast
 import z3
 from Crypto.Hash import keccak
 
-from common import Address, State, uint8, uint256
-
-MAX = 1 << 256
-
-BV0 = z3.BitVecVal(0, 256)
-BV1 = z3.BitVecVal(1, 256)
+from common import BW, Address, State, uint8, uint256
 
 
 def _require_concrete(var: uint256, msg: str) -> int:
@@ -68,22 +63,22 @@ def SUB(a: uint256, b: uint256) -> uint256:
 
 # 04 - Integer division operation
 def DIV(a: uint256, b: uint256) -> uint256:
-    return z3.If(b == 0, BV0, z3.UDiv(a, b))
+    return z3.If(b == 0, BW(0), z3.UDiv(a, b))
 
 
 # 05 - Signed integer division operation (truncated)
 def SDIV(a: uint256, b: uint256) -> uint256:
-    return z3.If(b == 0, BV0, a / b)
+    return z3.If(b == 0, BW(0), a / b)
 
 
 # 06 - Modulo remainder operation
 def MOD(a: uint256, b: uint256) -> uint256:
-    return z3.If(b == 0, BV0, z3.URem(a, b))
+    return z3.If(b == 0, BW(0), z3.URem(a, b))
 
 
 # 07 - Signed modulo remainder operation
 def SMOD(a: uint256, b: uint256) -> uint256:
-    return z3.If(b == 0, BV0, a % b)
+    return z3.If(b == 0, BW(0), a % b)
 
 
 # 08 - Modulo addition operation
@@ -102,7 +97,7 @@ def EXP(a: uint256, exponent: uint256) -> uint256:
         exponent, "EXP(a, exponent) requires concrete exponent"
     )
     if exponent == 0:
-        return BV1
+        return BW(1)
     for i in range(exponent - 1):
         a = a * a
     return a
@@ -119,32 +114,32 @@ def SIGNEXTEND(b: uint256, x: uint256) -> uint256:
 
 # 10 - Less-than comparison
 def LT(a: uint256, b: uint256) -> uint256:
-    return z3.If(z3.ULT(a, b), BV1, BV0)
+    return z3.If(z3.ULT(a, b), BW(1), BW(0))
 
 
 # 11 - Greater-than comparison
 def GT(a: uint256, b: uint256) -> uint256:
-    return z3.If(z3.UGT(a, b), BV1, BV0)
+    return z3.If(z3.UGT(a, b), BW(1), BW(0))
 
 
 # 12 - Signed less-than comparison
 def SLT(a: uint256, b: uint256) -> uint256:
-    return z3.If(a < b, BV1, BV0)
+    return z3.If(a < b, BW(1), BW(0))
 
 
 # 13 - Signed greater-than comparison
 def SGT(a: uint256, b: uint256) -> uint256:
-    return z3.If(a > b, BV1, BV0)
+    return z3.If(a > b, BW(1), BW(0))
 
 
 # 14 - Equality comparison
 def EQ(a: uint256, b: uint256) -> uint256:
-    return z3.If(a == b, BV1, BV0)
+    return z3.If(a == b, BW(1), BW(0))
 
 
 # 15 - Simple not operator
 def ISZERO(a: uint256) -> uint256:
-    return z3.If(a == 0, BV1, BV0)
+    return z3.If(a == 0, BW(1), BW(0))
 
 
 # 16 - Bitwise AND operation
@@ -171,7 +166,7 @@ def NOT(a: uint256) -> uint256:
 def BYTE(i: uint256, x: uint256) -> uint256:
     i = _require_concrete(i, "BYTE(i, x) requires concrete i")
     if i > 31:
-        return BV0
+        return BW(0)
     start = 256 - (8 * i)
     return z3.Extract(start - 1, start - 8, x)
 
@@ -201,7 +196,7 @@ def SHA3(s: State, offset: uint256, size: uint256) -> uint256:
         data = s.memory.get(idx, 0)
         data = _require_concrete(data, "SHA3(offset, size) requires concrete data")
         hash.update(data.to_bytes(1, "big"))
-    return z3.BitVecVal(int.from_bytes(hash.digest(), "big"), 256)
+    return BW(int.from_bytes(hash.digest(), "big"))
 
 
 # 30 - Get address of currently executing account
@@ -234,14 +229,14 @@ def CALLVALUE(s: State) -> uint256:
 def CALLDATALOAD(s: State, i: uint256) -> uint256:
     i = _require_concrete(i, "CALLDATALOAD(i) requires concrete i")
     if i >= len(s.calldata):
-        return BV0
+        return BW(0)
     extended = s.calldata + (b"\x00" * 32)
-    return z3.BitVecVal(int.from_bytes(extended[i : i + 32], "big"), 256)
+    return BW(int.from_bytes(extended[i : i + 32], "big"))
 
 
 # 36 - Get size of input data in current environment
 def CALLDATASIZE(s: State) -> uint256:
-    return z3.BitVecVal(len(s.calldata), 256)
+    return BW(len(s.calldata))
 
 
 # 37 - Copy input data in current environment to memory
@@ -258,13 +253,13 @@ def CALLDATACOPY(s: State, destOffset: uint256, offset: uint256, size: uint256) 
     )
     for i in range(size):
         val = s.calldata[offset + i] if offset + i < len(s.calldata) else 0
-        s.memory[destOffset + i] = z3.BitVecVal(val, 256)
+        s.memory[destOffset + i] = BW(val)
 
 
 # 38 - Get size of code running in current environment
 def CODESIZE(s: State, w: World) -> uint256:
     address = _require_concrete(s.address, "CODESIZE() requires concrete address")
-    return z3.BitVecVal(len(w.code(address)), 256)
+    return BW(len(w.code(address)))
 
 
 # 39 - Copy code running in current environment to memory
@@ -287,7 +282,7 @@ def CODECOPY(
     code = w.code(address)
     for i in range(size):
         val = code[offset + i] if offset + i < len(code) else 0
-        s.memory[destOffset + i] = z3.BitVecVal(val, 256)
+        s.memory[destOffset + i] = BW(val)
 
 
 # 3A - Get price of gas in current environment
@@ -300,7 +295,7 @@ def EXTCODESIZE(w: World, address: Address) -> uint256:
     address = _require_concrete(
         address, "EXTCODESIZE(address) requires concrete address"
     )
-    return z3.BitVecVal(len(w.code(address)), 256)
+    return BW(len(w.code(address)))
 
 
 # 3C - Copy an account's code to memory
@@ -330,13 +325,13 @@ def EXTCODECOPY(
     code = w.code(address)
     for i in range(size):
         val = code[offset + i] if offset + i < len(code) else 0
-        s.memory[destOffset + i] = z3.BitVecVal(val, 256)
+        s.memory[destOffset + i] = BW(val)
 
 
 # 3D - Get size of output data from the previous call from the current
 # environment
 def RETURNDATASIZE(s: State) -> uint256:
-    return z3.BitVecVal(len(s.returndata), 256)
+    return BW(len(s.returndata))
 
 
 # 3E - Copy output data from the previous call to memory
@@ -355,7 +350,7 @@ def RETURNDATACOPY(
     )
     for i in range(size):
         val = s.returndata[offset + i] if offset + i < len(s.returndata) else 0
-        s.memory[destOffset + i] = z3.BitVecVal(val, 256)
+        s.memory[destOffset + i] = BW(val)
 
 
 # 3F - Get hash of an account's code
@@ -366,11 +361,11 @@ def EXTCODEHASH(w: World, address: Address) -> uint256:
     )
     code = w.code(address)
     if code == b"":
-        return BV0
+        return BW(0)
 
     hash = keccak.new(digest_bits=256)
     hash.update(code)
-    return z3.BitVecVal(int.from_bytes(hash.digest(), "big"), 256)
+    return BW(int.from_bytes(hash.digest(), "big"))
 
 
 # 40 - Get the hash of one of the 256 most recent complete blocks
@@ -380,8 +375,8 @@ def BLOCKHASH(b: Block, w: World, blockNumber: uint256) -> uint256:
     )
     return z3.If(
         z3.Or(blockNumber >= b.number, blockNumber < b.number - 256),
-        BV0,
-        z3.BitVecVal(w.blockhash(blockNumber), 256),
+        BW(0),
+        BW(w.blockhash(blockNumber)),
     )
 
 
@@ -457,7 +452,7 @@ def MSTORE8(s: State, offset: uint256, value: uint8) -> None:
 # 54 - Load word from storage
 def SLOAD(s: State, key: uint256) -> uint256:
     key = _require_concrete(key, "SLOAD(key) requires concrete key")
-    return s.storage.get(key, BV0)
+    return s.storage.get(key, BW(0))
 
 
 # 55 - Save word to storage
@@ -486,7 +481,7 @@ def JUMPI(s: State, counter: uint256, b: uint256) -> None:
 
 # 59 - Get the size of active memory in bytes
 def MSIZE(s: State) -> uint256:
-    return z3.BitVecVal(max(s.memory.keys()) + 1, 256)
+    return BW(max(s.memory.keys()) + 1)
 
 
 # A0 - Append log record with no topics
@@ -540,7 +535,7 @@ def RETURN(s: State, offset: uint256, size: uint256) -> None:
     data = []
     for i in range(offset, offset + size):
         elem = _require_concrete(
-            s.memory.get(i, BV0), "RETURN(offset, size) requires concrete data"
+            s.memory.get(i, BW(0)), "RETURN(offset, size) requires concrete data"
         )
         data.append(elem)
     s.returndata = bytes(data)
@@ -564,7 +559,7 @@ def REVERT(s: State, offset: uint256, size: uint256) -> None:
     data = []
     for i in range(offset, offset + size):
         elem = _require_concrete(
-            s.memory.get(i, BV0), "REVERT(offset, size) requires concrete data"
+            s.memory.get(i, BW(0)), "REVERT(offset, size) requires concrete data"
         )
         data.append(elem)
     s.returndata = bytes(data)

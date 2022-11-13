@@ -3,7 +3,7 @@
 from typing import Dict, List, Tuple
 
 import ops
-from common import Instruction
+from common import BW, Instruction
 from opcodes import REFERENCE
 
 
@@ -25,7 +25,7 @@ def disassemble(code: bytes) -> Tuple[List[Instruction], Dict[int, int]]:
             for i in range(n):
                 operand = (operand << 8) | code[idx]
                 idx += 1
-            parsed.append(Instruction(opref.name, operand=operand))
+            parsed.append(Instruction(opref.name, operand=BW(operand)))
         elif opref.name == "DUP":
             n = opref.code - 0x7F
             parsed.append(Instruction(opref.name, suffix=n))
@@ -35,7 +35,7 @@ def disassemble(code: bytes) -> Tuple[List[Instruction], Dict[int, int]]:
         elif opref.name == "PC":
             # 58 - Get the value of the program counter prior to the increment
             # corresponding to this instruction
-            parsed.append(Instruction(opref.name, operand=idx - 1))
+            parsed.append(Instruction(opref.name, operand=BW(idx - 1)))
         elif opref.name == "JUMPDEST":
             # 5B - Marks a valid destination for jumps
             #
@@ -67,8 +67,8 @@ if __name__ == "__main__":
     instructions, _ = disassemble(code)
     for i, ins in enumerate(instructions[:-1]):  # skip trailing STOP
         msg = f"{i: 4}\t{ins.name}"
-        if ins.suffix:
+        if ins.suffix is not None:
             msg += str(ins.suffix)
-        if ins.operand:
-            msg += "\t" + hex(ins.operand)
+        if ins.operand is not None:
+            msg += "\t" + hex(ins.operand.as_long())
         print(msg)
