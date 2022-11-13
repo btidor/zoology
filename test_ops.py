@@ -529,8 +529,8 @@ def test_BASEFEE() -> None:
 
 def test_MLOAD() -> None:
     s = State(memory={31: BY(0xFF)})
-    assert z3.simplify(MLOAD(s, 0)) == 0xFF
-    assert z3.simplify(MLOAD(s, 1)) == 0xFF00
+    assert z3.simplify(MLOAD(s, BW(0))) == 0xFF
+    assert z3.simplify(MLOAD(s, BW(1))) == 0xFF00
 
 
 def test_MSTORE() -> None:

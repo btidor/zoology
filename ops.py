@@ -5,7 +5,7 @@ from typing import cast
 import z3
 from Crypto.Hash import keccak
 
-from common import BW, Address, State, uint8, uint256
+from common import BW, BY, Address, State, uint8, uint256
 
 
 def require_concrete(var: uint256, msg: str) -> int:
@@ -417,10 +417,8 @@ def POP(y: uint256) -> None:
 
 # 51 - Load word from memory
 def MLOAD(s: State, offset: uint256) -> uint256:
-    n = 0
-    for i in range(32):
-        n = (n << 8) | (s.memory.get(offset + i, 0))
-    return n
+    offset = require_concrete(offset, "MLOAD(offset) requires concrete offset")
+    return z3.Concat(*[s.memory.get(offset + i, BY(0)) for i in range(32)])
 
 
 # 52 - Save word to memory

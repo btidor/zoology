@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod, abstractproperty
 from dataclasses import dataclass, field
-from typing import Dict, Optional, TypeAlias
+from typing import Dict, List, Optional, TypeAlias
 
 import z3
 
@@ -71,3 +71,21 @@ class State:
     returndata: bytes = b""
     success: Optional[bool] = None
     storage: Dict[int, uint256] = field(default_factory=dict)
+    constraints: z3.ExprRef = z3.BoolVal(True)
+
+    def copy(self) -> "State":
+        return State(
+            pc=self.pc,
+            jumps=self.jumps,
+            memory=self.memory.copy(),
+            address=self.address,
+            origin=self.origin,
+            caller=self.caller,
+            callvalue=self.callvalue,
+            calldata=self.calldata,
+            gasprice=self.gasprice,
+            returndata=self.returndata,
+            success=self.success,
+            storage=self.storage.copy(),
+            constraints=self.constraints,
+        )
