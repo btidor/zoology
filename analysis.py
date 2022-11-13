@@ -61,8 +61,6 @@ def analyze(
             continue
         states += execute(instructions, s, stack)
 
-    print("#### DONE")
-
 
 def execute(
     instructions: List[Instruction],
@@ -72,13 +70,6 @@ def execute(
     while s.success is None:
         ins = instructions[s.pc]
         s.pc += 1
-
-        # msg = f"{(s.pc-1):04} {ins.name}"
-        # if ins.suffix is not None:
-        #     msg += str(ins.suffix)
-        # if ins.operand is not None:
-        #     msg += "\t" + hex(ins.operand.as_long())
-        # print(msg)
 
         if ins.name == "PUSH":
             stack.append(ins.operand)
@@ -112,7 +103,13 @@ def execute(
         elif ins.name == "PC":
             stack.append(ins.operand)
         elif ins.name == "CALL":
-            pass  # TODO
+            for i in range(7):
+                stack.pop()
+            stack.append(BW(1))  # TODO
+        elif ins.name == "SHA3":
+            stack.pop()
+            stack.pop()
+            stack.append(BW(0x1234))  # TODO
         elif hasattr(ops, ins.name):
             fn = getattr(ops, ins.name)
             sig = inspect.signature(fn)
@@ -133,14 +130,6 @@ def execute(
                 stack.append(r)
         else:
             raise ValueError(f"unimplemented opcode: {ins.name}")
-
-        # for x in stack:
-        #     x = z3.simplify(x)
-        #     if z3.is_bv_value(x):
-        #         print(" ", x.as_long().to_bytes(32, "big").hex())
-        #     else:
-        #         print(" ", x)
-        # print()
 
     return [(s, stack)]
 
