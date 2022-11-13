@@ -8,7 +8,7 @@ from Crypto.Hash import keccak
 from common import BW, Address, State, uint8, uint256
 
 
-def _require_concrete(var: uint256, msg: str) -> int:
+def require_concrete(var: uint256, msg: str) -> int:
     var = z3.simplify(var)
     if not z3.is_bv_value(var):
         raise ValueError(msg)
@@ -93,9 +93,7 @@ def MULMOD(a: uint256, b: uint256, N: uint256) -> uint256:
 
 # 0A - Exponential operation
 def EXP(a: uint256, exponent: uint256) -> uint256:
-    exponent = _require_concrete(
-        exponent, "EXP(a, exponent) requires concrete exponent"
-    )
+    exponent = require_concrete(exponent, "EXP(a, exponent) requires concrete exponent")
     if exponent == 0:
         return BW(1)
     for i in range(exponent - 1):
@@ -105,7 +103,7 @@ def EXP(a: uint256, exponent: uint256) -> uint256:
 
 # 0B - Extend length of two's complement signed integer
 def SIGNEXTEND(b: uint256, x: uint256) -> uint256:
-    b = _require_concrete(b, "SIGNEXTEND(b, x) requires concrete b")
+    b = require_concrete(b, "SIGNEXTEND(b, x) requires concrete b")
     if b > 30:
         return x
     bits = (b + 1) * 8
@@ -164,7 +162,7 @@ def NOT(a: uint256) -> uint256:
 
 # 1A - Retrieve single bytes from word
 def BYTE(i: uint256, x: uint256) -> uint256:
-    i = _require_concrete(i, "BYTE(i, x) requires concrete i")
+    i = require_concrete(i, "BYTE(i, x) requires concrete i")
     if i > 31:
         return BW(0)
     start = 256 - (8 * i)
@@ -188,13 +186,13 @@ def SAR(shift: uint256, value: uint256) -> uint256:
 
 # 20 - Compute Keccak-256 hash
 def SHA3(s: State, offset: uint256, size: uint256) -> uint256:
-    offset = _require_concrete(offset, "SHA3(offset, size) requires concrete offset")
-    size = _require_concrete(size, "SHA3(offset, size) requires concrete size")
+    offset = require_concrete(offset, "SHA3(offset, size) requires concrete offset")
+    size = require_concrete(size, "SHA3(offset, size) requires concrete size")
 
     hash = keccak.new(digest_bits=256)
     for idx in range(offset, offset + size):
         data = s.memory.get(idx, 0)
-        data = _require_concrete(data, "SHA3(offset, size) requires concrete data")
+        data = require_concrete(data, "SHA3(offset, size) requires concrete data")
         hash.update(data.to_bytes(1, "big"))
     return BW(int.from_bytes(hash.digest(), "big"))
 
@@ -237,11 +235,11 @@ def CALLDATASIZE(s: State) -> uint256:
 
 # 37 - Copy input data in current environment to memory
 def CALLDATACOPY(s: State, destOffset: uint256, offset: uint256, size: uint256) -> None:
-    destOffset = _require_concrete(
+    destOffset = require_concrete(
         destOffset,
         "CALLDATACOPY(destOffset, offset, size) requires concrete destOffset",
     )
-    size = _require_concrete(
+    size = require_concrete(
         size, "CALLDATACOPY(destOffset, offset, size) requires concrete size"
     )
     for i in range(size):
@@ -250,7 +248,7 @@ def CALLDATACOPY(s: State, destOffset: uint256, offset: uint256, size: uint256) 
 
 # 38 - Get size of code running in current environment
 def CODESIZE(s: State, w: World) -> uint256:
-    address = _require_concrete(s.address, "CODESIZE() requires concrete address")
+    address = require_concrete(s.address, "CODESIZE() requires concrete address")
     return BW(len(w.code(address)))
 
 
@@ -258,17 +256,17 @@ def CODESIZE(s: State, w: World) -> uint256:
 def CODECOPY(
     s: State, w: World, destOffset: uint256, offset: uint256, size: uint256
 ) -> None:
-    destOffset = _require_concrete(
+    destOffset = require_concrete(
         destOffset,
         "CODECOPY(destOffset, offset, size) requires concrete destOffset",
     )
-    offset = _require_concrete(
+    offset = require_concrete(
         offset, "CODECOPY(destOffset, offset, size) requires concrete offset"
     )
-    size = _require_concrete(
+    size = require_concrete(
         size, "CODECOPY(destOffset, offset, size) requires concrete size"
     )
-    address = _require_concrete(
+    address = require_concrete(
         s.address, "CODECOPY(destOffset, offset, size) requires concrete address"
     )
     code = w.code(address)
@@ -284,7 +282,7 @@ def GASPRICE(s: State) -> uint256:
 
 # 3B - Get size of an account's code
 def EXTCODESIZE(w: World, address: Address) -> uint256:
-    address = _require_concrete(
+    address = require_concrete(
         address, "EXTCODESIZE(address) requires concrete address"
     )
     return BW(len(w.code(address)))
@@ -299,18 +297,18 @@ def EXTCODECOPY(
     offset: uint256,
     size: uint256,
 ) -> None:
-    destOffset = _require_concrete(
+    destOffset = require_concrete(
         destOffset,
         "EXTCODECOPY(address, destOffset, offset, size) requires concrete destOffset",
     )
-    offset = _require_concrete(
+    offset = require_concrete(
         offset,
         "EXTCODECOPY(address, destOffset, offset, size) requires concrete offset",
     )
-    size = _require_concrete(
+    size = require_concrete(
         size, "EXTCODECOPY(address, destOffset, offset, size) requires concrete size"
     )
-    address = _require_concrete(
+    address = require_concrete(
         address,
         "EXTCODECOPY(address, destOffset, offset, size) requires concrete address",
     )
@@ -330,14 +328,14 @@ def RETURNDATASIZE(s: State) -> uint256:
 def RETURNDATACOPY(
     s: State, destOffset: uint256, offset: uint256, size: uint256
 ) -> None:
-    destOffset = _require_concrete(
+    destOffset = require_concrete(
         destOffset,
         "RETURNDATACOPY(destOffset, offset, size) requires concrete destOffset",
     )
-    offset = _require_concrete(
+    offset = require_concrete(
         offset, "RETURNDATACOPY(destOffset, offset, size) requires concrete offset"
     )
-    size = _require_concrete(
+    size = require_concrete(
         size, "RETURNDATACOPY(destOffset, offset, size) requires concrete size"
     )
     for i in range(size):
@@ -347,7 +345,7 @@ def RETURNDATACOPY(
 
 # 3F - Get hash of an account's code
 def EXTCODEHASH(w: World, address: Address) -> uint256:
-    address = _require_concrete(
+    address = require_concrete(
         address,
         "EXTCODEHASH(address) requires concrete address",
     )
@@ -362,7 +360,7 @@ def EXTCODEHASH(w: World, address: Address) -> uint256:
 
 # 40 - Get the hash of one of the 256 most recent complete blocks
 def BLOCKHASH(b: Block, w: World, blockNumber: uint256) -> uint256:
-    blockNumber = _require_concrete(
+    blockNumber = require_concrete(
         blockNumber, "BLOCKHASH(blockNumber) requires concrete blockNumber"
     )
     return z3.If(
@@ -427,7 +425,7 @@ def MLOAD(s: State, offset: uint256) -> uint256:
 
 # 52 - Save word to memory
 def MSTORE(s: State, offset: uint256, value: uint256) -> None:
-    offset = _require_concrete(offset, "MSTORE(offset, value) requires concrete offset")
+    offset = require_concrete(offset, "MSTORE(offset, value) requires concrete offset")
     for i in range(31, -1, -1):
         s.memory[offset + i] = z3.Extract(7, 0, value)
         value = value >> 8
@@ -435,21 +433,19 @@ def MSTORE(s: State, offset: uint256, value: uint256) -> None:
 
 # 53 - Save byte to memory
 def MSTORE8(s: State, offset: uint256, value: uint8) -> None:
-    offset = _require_concrete(
-        offset, "MSTORE8(offset, value) requires concrete offset"
-    )
+    offset = require_concrete(offset, "MSTORE8(offset, value) requires concrete offset")
     s.memory[offset] = value & 0xFF
 
 
 # 54 - Load word from storage
 def SLOAD(s: State, key: uint256) -> uint256:
-    key = _require_concrete(key, "SLOAD(key) requires concrete key")
+    key = require_concrete(key, "SLOAD(key) requires concrete key")
     return s.storage.get(key, BW(0))
 
 
 # 55 - Save word to storage
 def SSTORE(s: State, key: uint256, value: uint256) -> None:
-    key = _require_concrete(key, "SSTORE(key) requires concrete key")
+    key = require_concrete(key, "SSTORE(key) requires concrete key")
     s.storage[key] = value
 
 
@@ -457,7 +453,7 @@ def SSTORE(s: State, key: uint256, value: uint256) -> None:
 def JUMP(s: State, counter: uint256) -> None:
     # TODO: symbolically ensure all jump targets are valid and within the main
     # body of the code.
-    counter = _require_concrete(counter, "JUMP(counter) requires concrete counter")
+    counter = require_concrete(counter, "JUMP(counter) requires concrete counter")
     s.pc = s.jumps[counter]
 
 
@@ -465,8 +461,8 @@ def JUMP(s: State, counter: uint256) -> None:
 def JUMPI(s: State, counter: uint256, b: uint256) -> None:
     # TODO: symbolically ensure all jump targets are valid and within the main
     # body of the code.
-    counter = _require_concrete(counter, "JUMPI(counter, b) requires concrete counter")
-    b = _require_concrete(b, "JUMPI(counter, b) requires concrete b")
+    counter = require_concrete(counter, "JUMPI(counter, b) requires concrete counter")
+    b = require_concrete(b, "JUMPI(counter, b) requires concrete b")
     if b != 0:
         s.pc = s.jumps[counter]
 
@@ -519,14 +515,14 @@ def LOG4(
 
 # F3 - Halts execution returning output data
 def RETURN(s: State, offset: uint256, size: uint256) -> None:
-    offset = _require_concrete(
+    offset = require_concrete(
         offset,
         "RETURN(offset, size) requires concrete offset",
     )
-    size = _require_concrete(size, "RETURN(offset, size) requires concrete size")
+    size = require_concrete(size, "RETURN(offset, size) requires concrete size")
     data = []
     for i in range(offset, offset + size):
-        elem = _require_concrete(
+        elem = require_concrete(
             s.memory.get(i, BW(0)), "RETURN(offset, size) requires concrete data"
         )
         data.append(elem)
@@ -543,14 +539,14 @@ def RETURN(s: State, offset: uint256, size: uint256) -> None:
 # FD - Halt execution reverting state changes but returning data and remaining
 # gas
 def REVERT(s: State, offset: uint256, size: uint256) -> None:
-    offset = _require_concrete(
+    offset = require_concrete(
         offset,
         "REVERT(offset, size) requires concrete offset",
     )
-    size = _require_concrete(size, "REVERT(offset, size) requires concrete size")
+    size = require_concrete(size, "REVERT(offset, size) requires concrete size")
     data = []
     for i in range(offset, offset + size):
-        elem = _require_concrete(
+        elem = require_concrete(
             s.memory.get(i, BW(0)), "REVERT(offset, size) requires concrete data"
         )
         data.append(elem)
