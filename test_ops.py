@@ -1,5 +1,6 @@
 from typing import Dict
 
+import pytest
 import z3
 
 from common import BW, BY, Address, ByteArray, State, uint256
@@ -580,6 +581,8 @@ def test_JUMP() -> None:
     s = State(jumps={8: 90})
     JUMP(s, BW(8))
     assert s.pc == 90
+    with pytest.raises(KeyError):
+        JUMP(s, BW(99))
 
 
 def test_JUMPI() -> None:
@@ -590,6 +593,9 @@ def test_JUMPI() -> None:
 
     JUMPI(s, BW(8), BW(1))
     assert s.pc == 90
+
+    with pytest.raises(KeyError):
+        JUMPI(s, BW(99), BW(1))
 
 
 def test_MSIZE() -> None:

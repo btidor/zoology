@@ -1,2 +1,3 @@
 pycryptodome
+pytest
 z3-solver

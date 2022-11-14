@@ -450,16 +450,16 @@ def SSTORE(s: State, key: uint256, value: uint256) -> None:
 
 # 56 - Alter the program counter
 def JUMP(s: State, counter: uint256) -> None:
-    # TODO: symbolically ensure all jump targets are valid and within the main
-    # body of the code.
     counter = require_concrete(counter, "JUMP(counter) requires concrete counter")
+    # In theory, JUMP should revert if counter is not a valid jump target.
+    # Instead, raise an error and fail the whole analysis. This lets us prove
+    # that all jump targets are valid and within the body of the code, which is
+    # why it's safe to strip the metadata trailer.
     s.pc = s.jumps[counter]
 
 
 # 57 - Conditionally alter the program counter
 def JUMPI(s: State, counter: uint256, b: uint256) -> None:
-    # TODO: symbolically ensure all jump targets are valid and within the main
-    # body of the code.
     counter = require_concrete(counter, "JUMPI(counter, b) requires concrete counter")
     b = require_concrete(b, "JUMPI(counter, b) requires concrete b")
     if b != 0:
