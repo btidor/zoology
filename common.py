@@ -62,12 +62,12 @@ class State:
     memory: Dict[int, uint8] = field(
         default_factory=dict
     )  # concrete index -> 1-byte value
-    address: Address = BW(0)
-    origin: Address = BW(0)
-    caller: Address = BW(0)
-    callvalue: uint256 = BW(0)
+    address: Address = z3.BitVec("ADDRESS", 256)
+    origin: Address = z3.BitVec("ORIGIN", 256)
+    caller: Address = z3.BitVec("CALLER", 256)
+    callvalue: uint256 = z3.BitVec("CALLVALUE", 256)
     calldata: ByteArray = ByteArray("CALLDATA")
-    gasprice: uint256 = BW(0)
+    gasprice: uint256 = z3.BitVec("GASPRICE", 256)
     returndata: bytes = b""
     success: Optional[bool] = None
     storage: Dict[int, uint256] = field(default_factory=dict)
