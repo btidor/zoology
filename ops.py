@@ -83,12 +83,14 @@ def SMOD(a: uint256, b: uint256) -> uint256:
 
 # 08 - Modulo addition operation
 def ADDMOD(a: uint256, b: uint256, N: uint256) -> uint256:
-    return MOD(ADD(a, b), N)
+    a, b, N = z3.ZeroExt(1, a), z3.ZeroExt(1, b), z3.ZeroExt(1, N)
+    return z3.If(N == 0, BW(0), z3.Extract(255, 0, z3.URem(a + b, N)))
 
 
 # 09 - Modulo multiplication operation
 def MULMOD(a: uint256, b: uint256, N: uint256) -> uint256:
-    return MOD(MUL(a, b), N)
+    a, b, N = z3.ZeroExt(256, a), z3.ZeroExt(256, b), z3.ZeroExt(256, N)
+    return z3.If(N == 0, BW(0), z3.Extract(255, 0, z3.URem(a * b, N)))
 
 
 # 0A - Exponential operation
