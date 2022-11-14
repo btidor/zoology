@@ -42,7 +42,7 @@ class World(ABC):
 
 # 00 - Halts execution
 def STOP(s: State) -> None:
-    s.returndata = b""
+    s.returndata = []
     s.success = True
 
 
@@ -341,8 +341,9 @@ def RETURNDATACOPY(
         size, "RETURNDATACOPY(destOffset, offset, size) requires concrete size"
     )
     for i in range(size):
-        val = s.returndata[offset + i] if offset + i < len(s.returndata) else 0
-        s.memory[destOffset + i] = BW(val)
+        s.memory[destOffset + i] = (
+            s.returndata[offset + i] if offset + i < len(s.returndata) else BW(0)
+        )
 
 
 # 3F - Get hash of an account's code
@@ -439,14 +440,12 @@ def MSTORE8(s: State, offset: uint256, value: uint8) -> None:
 
 # 54 - Load word from storage
 def SLOAD(s: State, key: uint256) -> uint256:
-    key = require_concrete(key, "SLOAD(key) requires concrete key")
-    return s.storage.get(key, BW(0))
+    return s.storage[key]
 
 
 # 55 - Save word to storage
 def SSTORE(s: State, key: uint256, value: uint256) -> None:
-    key = require_concrete(key, "SSTORE(key) requires concrete key")
-    s.storage[key] = value
+    s.storage = z3.Store(s.storage, key, value)
 
 
 # 56 - Alter the program counter
@@ -520,13 +519,7 @@ def RETURN(s: State, offset: uint256, size: uint256) -> None:
         "RETURN(offset, size) requires concrete offset",
     )
     size = require_concrete(size, "RETURN(offset, size) requires concrete size")
-    data = []
-    for i in range(offset, offset + size):
-        elem = require_concrete(
-            s.memory.get(i, BW(0)), "RETURN(offset, size) requires concrete data"
-        )
-        data.append(elem)
-    s.returndata = bytes(data)
+    s.returndata = [s.memory.get(i, BW(0)) for i in range(offset, offset + size)]
     s.success = True
 
 
@@ -544,19 +537,13 @@ def REVERT(s: State, offset: uint256, size: uint256) -> None:
         "REVERT(offset, size) requires concrete offset",
     )
     size = require_concrete(size, "REVERT(offset, size) requires concrete size")
-    data = []
-    for i in range(offset, offset + size):
-        elem = require_concrete(
-            s.memory.get(i, BW(0)), "REVERT(offset, size) requires concrete data"
-        )
-        data.append(elem)
-    s.returndata = bytes(data)
+    s.returndata = [s.memory.get(i, BW(0)) for i in range(offset, offset + size)]
     s.success = False
 
 
 # FE - Designated invalid instruction
 def INVALID(s: State) -> None:
-    s.returndata = b""
+    s.returndata = []
     s.success = False
 
 

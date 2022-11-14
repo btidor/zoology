@@ -68,9 +68,9 @@ class State:
     callvalue: uint256 = z3.BitVec("CALLVALUE", 256)
     calldata: ByteArray = ByteArray("CALLDATA")
     gasprice: uint256 = z3.BitVec("GASPRICE", 256)
-    returndata: bytes = b""
+    returndata: List[z3.BitVecRef] = field(default_factory=list)
     success: Optional[bool] = None
-    storage: Dict[int, uint256] = field(default_factory=dict)
+    storage: z3.Array = z3.Array("STORAGE", z3.BitVecSort(256), z3.BitVecSort(256))
     constraints: z3.ExprRef = z3.BoolVal(True)
 
     def copy(self) -> "State":
@@ -86,6 +86,6 @@ class State:
             gasprice=self.gasprice,
             returndata=self.returndata,
             success=self.success,
-            storage=self.storage.copy(),
+            storage=self.storage,
             constraints=self.constraints,
         )

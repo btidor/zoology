@@ -68,6 +68,7 @@ def analyze(
                 )
             if z3.is_bv_value(m.eval(s.gasprice)):
                 print(f"Gas\tETH {m.eval(s.gasprice).as_long():09,}")
+            print(f"Storage\t{s.storage}")
             print()
         else:
             states += execute(instructions, s, stack)

@@ -36,10 +36,10 @@ def _dump_memory(s: State) -> str:
 
 
 def test_STOP() -> None:
-    s = State(returndata=b"1234")
+    s = State(returndata=[BW(0x12), BW(0x34)])
     STOP(s)
     assert s.success == True
-    assert s.returndata == b""
+    assert s.returndata == []
 
 
 def test_ADD() -> None:
@@ -426,13 +426,16 @@ def test_EXTCODECOPY() -> None:
 
 
 def test_RETURNDATASIZE() -> None:
-    s = State(returndata=b"abcdefghijklmnopqrstuvwxyz")
+    s = State(returndata=[z3.BitVecVal(b, 8) for b in b"abcdefghijklmnopqrstuvwxyz"])
     assert z3.simplify(RETURNDATASIZE(s)) == 26
 
 
 def test_RETURNDATACOPY() -> None:
     s = State(
-        returndata=b"\x7d\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\x7f"
+        returndata=[
+            z3.BitVecVal(b, 8)
+            for b in b"\x7d\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\x7f"
+        ]
     )
 
     RETURNDATACOPY(s, BW(0), BW(0), BW(32))
@@ -556,22 +559,21 @@ def test_MSTORE8() -> None:
 
 
 def test_SLOAD() -> None:
-    s = State(storage={0: BW(46)})
+    s = State()
+    s.storage = z3.Store(s.storage, BW(0), BW(46))
     assert z3.simplify(SLOAD(s, BW(0))) == 46
-    assert z3.simplify(SLOAD(s, BW(1))) == 0
+    assert not z3.is_bv_value(z3.simplify(SLOAD(s, BW(1))))
 
 
 def test_SSTORE() -> None:
     s = State()
 
     SSTORE(s, BW(0), BW(0xFFFF))
-    assert len(s.storage) == 1
-    assert s.storage[0] == 0xFFFF
+    assert z3.simplify(s.storage[0]) == 0xFFFF
 
     SSTORE(s, BW(8965), BW(0xFF))
-    assert len(s.storage) == 2
-    assert s.storage[0] == 0xFFFF
-    assert s.storage[8965] == 0xFF
+    assert z3.simplify(s.storage[0]) == 0xFFFF
+    assert z3.simplify(s.storage[8965]) == 0xFF
 
 
 def test_JUMP() -> None:
@@ -597,26 +599,26 @@ def test_MSIZE() -> None:
 
 def test_RETURN() -> None:
     s = State(
-        returndata=b"1234",
+        returndata=[BW(0x12), BW(0x34)],
         memory={0: BY(0xFF), 1: BY(0x01)},
     )
     RETURN(s, BW(0), BW(2))
     assert s.success == True
-    assert s.returndata == b"\xff\x01"
+    assert [z3.simplify(b) for b in s.returndata] == [0xFF, 0x01]
 
 
 def test_REVERT() -> None:
     s = State(
-        returndata=b"1234",
+        returndata=[BW(0x12), BW(0x34)],
         memory={0: BY(0xFF), 1: BY(0x01)},
     )
     REVERT(s, BW(0), BW(2))
     assert s.success == False
-    assert s.returndata == b"\xff\x01"
+    assert [z3.simplify(b) for b in s.returndata] == [0xFF, 0x01]
 
 
 def test_INVALID() -> None:
-    s = State(returndata=b"1234")
+    s = State(returndata=[BW(0x12), BW(0x34)])
     INVALID(s)
     assert s.success == False
-    assert s.returndata == b""
+    assert s.returndata == []
