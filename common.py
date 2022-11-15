@@ -50,8 +50,16 @@ class Opcode:
 
 @dataclass
 class Instruction:
+    # Start index of this instruction in the code, in bytes
+    offset: int
+
+    # Simplified instruction name, e.g. DUP1 -> DUP
     name: str
+
+    # Numeric suffix, e.g. 1 for DUP1
     suffix: Optional[int] = None
+
+    # Operand (PUSH only)
     operand: Optional[uint256] = None
 
 

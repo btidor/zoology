@@ -466,6 +466,11 @@ def JUMPI(s: State, counter: uint256, b: uint256) -> None:
         s.pc = s.jumps[counter]
 
 
+# 5B - Marks a valid destination for jumps
+def JUMPDEST() -> None:
+    pass
+
+
 # 59 - Get the size of active memory in bytes
 def MSIZE(s: State) -> uint256:
     return BW(max(s.memory.keys()) + 1)

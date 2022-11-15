@@ -16,13 +16,22 @@ def execute(
     value: int,
     data: ByteArray,
 ) -> Tuple[bool, bytes]:
-    s = State(jumps=jumps, callvalue=value, calldata=data)
+    s = State(
+        jumps=jumps,
+        address=BW(0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA),
+        origin=BW(0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB),
+        caller=BW(0xCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC),
+        callvalue=value,
+        calldata=data,
+        gasprice=BW(0x12),
+        storage=z3.K(z3.BitVecSort(256), BW(0)),
+    )
     stack: List[uint256] = []
     while s.success is None:
         ins = instructions[s.pc]
         s.pc += 1
 
-        msg = f"{(s.pc-1):04} {ins.name}"
+        msg = f"{(ins.offset):04x}  {ins.name}"
         if ins.suffix is not None:
             msg += str(ins.suffix)
         if ins.operand is not None:
@@ -68,7 +77,10 @@ def execute(
                 print(" ", x)
         print()
 
-    return (s.success, s.returndata)
+    result = bytes(
+        ops.require_concrete(d, "return data must be concrete") for d in s.returndata
+    )
+    return (s.success, result)
 
 
 if __name__ == "__main__":
