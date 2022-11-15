@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import inspect
-from typing import Dict, List, Tuple, cast
+from typing import Dict, List, Optional, Tuple
 
 import z3
 
@@ -26,7 +26,6 @@ def execute(
         gasprice=BW(0x12),
         storage=z3.K(z3.BitVecSort(256), BW(0)),
     )
-    stack: List[uint256] = []
     while s.success is None:
         ins = instructions[s.pc]
         s.pc += 1
@@ -38,38 +37,30 @@ def execute(
             msg += "\t" + hex(ins.operand.as_long())
         print(msg)
 
-        if ins.name == "PUSH":
-            stack.append(ins.operand)
-        elif ins.name == "DUP":
-            # TODO: handle out-of-range
-            n = cast(int, ins.suffix)
-            stack.append(stack[-n])
-        elif ins.name == "SWAP":
-            # TODO: handle out-of-range
-            n = cast(int, ins.suffix) + 1
-            stack[-1], stack[-n] = stack[-n], stack[-1]
-        elif ins.name == "PC":
-            stack.append(ins.operand)
-        elif hasattr(ops, ins.name):
-            fn = getattr(ops, ins.name)
-            sig = inspect.signature(fn)
-            args: List[object] = []
-            for name in sig.parameters:
-                kls = sig.parameters[name].annotation
-                if kls == uint256:
-                    # TODO: handle pop from empty list
-                    args.append(stack.pop())
-                elif kls == State:
-                    args.append(s)
-                else:
-                    raise TypeError(f"unknown arg class: {kls}")
-            r = fn(*args)
-            if r is not None:
-                stack.append(r)
-        else:
+        if not hasattr(ops, ins.name):
             raise ValueError(f"unimplemented opcode: {ins.name}")
 
-        for x in stack:
+        fn = getattr(ops, ins.name)
+        sig = inspect.signature(fn)
+        args: List[object] = []
+        for name in sig.parameters:
+            kls = sig.parameters[name].annotation
+            if kls == uint256:
+                # TODO: handle pop from empty list
+                args.append(s.stack.pop())
+            elif kls == State:
+                args.append(s)
+            elif kls == Instruction:
+                args.append(ins)
+            else:
+                raise TypeError(f"unknown arg class: {kls}")
+
+        result: Optional[uint256] = fn(*args)
+        if result is not None:
+            # TODO: check for stack overflow
+            s.stack.append(result)
+
+        for x in s.stack:
             x = z3.simplify(x)
             if z3.is_bv_value(x):
                 print(" ", x.as_long().to_bytes(32, "big").hex())

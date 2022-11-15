@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 
 import inspect
-from typing import Dict, List, Tuple, cast
+from typing import Dict, List, Tuple
 
 import z3
 
 import ops
-from common import BW, Address, Instruction, State, uint256
+from common import BW, Address, ByteArray, Instruction, State, uint256
 from disassembler import disassemble
 
 SOLVER = z3.Solver()
 
 
-class ZeroWorld(ops.World):
+class ZeroWorld(ops.World):  # TODO
     def balance(self, address: Address) -> uint256:
         return BW(0)
 
@@ -30,12 +30,20 @@ def analyze(
     instructions: List[Instruction],
     jumps: Dict[int, int],
 ) -> None:
-    s = State(jumps=jumps)
-    stack: List[uint256] = []
-    states = [(s, stack)]
+    start = State(
+        jumps=jumps,
+        address=z3.BitVec("ADDRESS", 256),
+        origin=z3.BitVec("ADDRESS", 256),
+        caller=z3.BitVec("CALLER", 256),
+        callvalue=z3.BitVec("CALLVALUE", 256),
+        calldata=ByteArray("CALLDATA"),
+        gasprice=z3.BitVec("GASPRICE", 256),
+        storage=z3.Array("STORAGE", z3.BitVecSort(256), z3.BitVecSort(256)),
+    )
 
+    states = [start]
     while len(states) > 0:
-        s, stack = states.pop()
+        s = states.pop()
         if s.success is False:
             pass
         elif s.success is True:
@@ -71,57 +79,40 @@ def analyze(
             print(f"Storage\t{s.storage}")
             print()
         else:
-            states += execute(instructions, s, stack)
+            states += execute(instructions, s)
 
 
 def execute(
     instructions: List[Instruction],
     s: State,
-    stack: List[uint256],
-) -> List[Tuple[State, List[uint256]]]:
+) -> List[State]:
     while s.success is None:
         ins = instructions[s.pc]
         s.pc += 1
 
-        if ins.name == "PUSH":
-            stack.append(ins.operand)
-        elif ins.name == "DUP":
-            # TODO: handle out-of-range
-            n = cast(int, ins.suffix)
-            stack.append(stack[-n])
-        elif ins.name == "SWAP":
-            # TODO: handle out-of-range
-            n = cast(int, ins.suffix) + 1
-            stack[-1], stack[-n] = stack[-n], stack[-1]
-        elif ins.name == "JUMPI":
+        if ins.name == "JUMPI":
             counter = ops.require_concrete(
-                stack.pop(), "JUMPI(counter, b) requires concrete counter"
+                s.stack.pop(), "JUMPI(counter, b) requires concrete counter"
             )
-            b = z3.simplify(stack.pop())
+            b = z3.simplify(s.stack.pop())
 
             next = []
             constraints1 = z3.And(s.constraints, b == 0)
             if SOLVER.check(constraints1) == z3.sat:
-                s1, stack1 = s.copy(), stack.copy()
+                s1 = s.copy()
                 s1.constraints = constraints1
-                next.append((s1, stack1))
+                next.append(s1)
             constraints2 = z3.And(s.constraints, b != 0)
             if SOLVER.check(constraints2) == z3.sat:
-                s2, stack2 = s.copy(), stack.copy()
+                s2 = s.copy()
                 s2.pc = s2.jumps[counter]
                 s2.constraints = constraints2
-                next.append((s2, stack2))
+                next.append(s2)
             return next
-        elif ins.name == "PC":
-            stack.append(ins.operand)
-        elif ins.name == "CALL":
-            for i in range(7):
-                stack.pop()
-            stack.append(BW(1))  # TODO
         elif ins.name == "SHA3":
-            stack.pop()
-            stack.pop()
-            stack.append(BW(0x1234))  # TODO
+            s.stack.pop()
+            s.stack.pop()
+            s.stack.append(BW(0x1234))  # TODO
         elif hasattr(ops, ins.name):
             fn = getattr(ops, ins.name)
             sig = inspect.signature(fn)
@@ -130,20 +121,22 @@ def execute(
                 kls = sig.parameters[name].annotation
                 if kls == uint256:
                     # TODO: handle pop from empty list
-                    args.append(stack.pop())
+                    args.append(s.stack.pop())
                 elif kls == State:
                     args.append(s)
+                elif kls == Instruction:
+                    args.append(ins)
                 elif kls == ops.World:
                     args.append(WORLD)
                 else:
                     raise TypeError(f"unknown arg class: {kls}")
             r = fn(*args)
             if r is not None:
-                stack.append(r)
+                s.stack.append(r)
         else:
             raise ValueError(f"unimplemented opcode: {ins.name}")
 
-    return [(s, stack)]
+    return [s]
 
 
 if __name__ == "__main__":

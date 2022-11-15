@@ -3,7 +3,7 @@ from typing import Dict
 import pytest
 import z3
 
-from common import BW, BY, Address, ByteArray, State, uint256
+from common import BW, BY, Address, ByteArray, Instruction, State, uint256
 from ops import *
 
 
@@ -563,7 +563,6 @@ def test_SLOAD() -> None:
     s = State()
     s.storage = z3.Store(s.storage, BW(0), BW(46))
     assert z3.simplify(SLOAD(s, BW(0))) == 46
-    assert not z3.is_bv_value(z3.simplify(SLOAD(s, BW(1))))
 
 
 def test_SSTORE() -> None:
@@ -598,9 +597,47 @@ def test_JUMPI() -> None:
         JUMPI(s, BW(99), BW(1))
 
 
+def test_PC() -> None:
+    ins = Instruction(0x12, "PC")
+    assert z3.simplify(PC(ins)) == 0x12
+
+
 def test_MSIZE() -> None:
     s = State(memory={123: BY(0x01)})
     assert z3.simplify(MSIZE(s)) == 124
+
+
+def test_PUSH() -> None:
+    ins = Instruction(0x0, "PUSH", 1, BW(0x01))
+    assert z3.simplify(PUSH(ins)) == 0x01
+
+    ins = Instruction(0x1, "PUSH", 1)
+    with pytest.raises(ValueError):
+        PUSH(ins)
+
+
+def test_DUP() -> None:
+    s = State(stack=[BW(0x1234)])
+
+    ins = Instruction(0x0, "DUP", 1)
+    assert z3.simplify(DUP(ins, s)) == 0x1234
+
+    ins = Instruction(0x0, "DUP")
+    with pytest.raises(ValueError):
+        DUP(ins, s)
+
+
+def test_SWAP() -> None:
+    s = State(stack=[BW(0x1234), BW(0x5678)])
+
+    ins = Instruction(0x0, "SWAP", 1)
+    SWAP(ins, s)
+    stack = [z3.simplify(x) for x in s.stack]
+    assert stack == [0x5678, 0x1234]
+
+    ins = Instruction(0x0, "SWAP")
+    with pytest.raises(ValueError):
+        SWAP(ins, s)
 
 
 def test_RETURN() -> None:
@@ -628,6 +665,7 @@ def test_INVALID() -> None:
     INVALID(s)
     assert s.success == False
     assert s.returndata == []
+
 
 def test_SELFDESTRUCT() -> None:
     with pytest.raises(Exception):

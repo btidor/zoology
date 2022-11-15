@@ -17,40 +17,34 @@ def disassemble(code: bytes) -> Tuple[List[Instruction], Dict[int, int]]:
         idx += 1
 
         opref = REFERENCE.get(opcode)
+        operand = None
+        suffix = None
+
         if opref is None:
             raise ValueError(f"unknown opcode: 0x{opcode:02x}")
         elif opref.name == "PUSH":
-            # PUSH is the only opcode that takes an operand.
-            n = opref.code - 0x5F
+            # PUSH is the only opcode that takes an operand
+            suffix = opref.code - 0x5F
             operand = 0
-            for i in range(n):
+            for _ in range(suffix):
                 operand = (operand << 8) | code[idx]
                 idx += 1
-            parsed.append(Instruction(offset, opref.name, operand=BW(operand)))
+            operand = BW(operand)
         elif opref.name == "DUP":
-            n = opref.code - 0x7F
-            parsed.append(Instruction(offset, opref.name, suffix=n))
+            suffix = opref.code - 0x7F
         elif opref.name == "SWAP":
-            n = opref.code - 0x8F
-            parsed.append(Instruction(offset, opref.name, suffix=n))
-        elif opref.name == "PC":
-            # 58 - Get the value of the program counter prior to the increment
-            # corresponding to this instruction
-            parsed.append(Instruction(offset, opref.name))
+            suffix = opref.code - 0x8F
         elif opref.name == "JUMPDEST":
-            # 5B - Marks a valid destination for jumps
             jumps[idx - 1] = len(parsed)
-            parsed.append(Instruction(offset, opref.name))
-        elif opref.name == "INVALID":
-            # If we encounter the reserved opcode INVALID (0xFE), assume the
-            # remaining data is a non-code trailer, e.g. contract metadata.
-            parsed.append(Instruction(offset, opref.name))
+        elif not hasattr(ops, opref.fullName):
+            raise ValueError(f"unimplemented opcode: {opref.fullName}")
+
+        parsed.append(Instruction(offset, opref.name, suffix, operand))
+
+        # If we encounter the reserved opcode INVALID (0xFE), assume the
+        # remaining data is a non-code trailer, e.g. contract metadata.
+        if opref.name == "INVALID":
             break
-        elif hasattr(ops, opref.fullName):
-            parsed.append(Instruction(offset, opref.name))
-        else:
-            # TODO: raise ValueError(f"unimplemented opcode: {opref.fullName}")
-            parsed.append(Instruction(offset, opref.name))
 
     return (parsed, jumps)
 

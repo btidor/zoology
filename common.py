@@ -67,24 +67,32 @@ class Instruction:
 class State:
     pc: int = 0
     jumps: Dict[int, int] = field(default_factory=dict)
+    stack: List[uint256] = field(default_factory=list)
     memory: Dict[int, uint8] = field(
         default_factory=dict
     )  # concrete index -> 1-byte value
-    address: Address = z3.BitVec("ADDRESS", 256)
-    origin: Address = z3.BitVec("ORIGIN", 256)
-    caller: Address = z3.BitVec("CALLER", 256)
-    callvalue: uint256 = z3.BitVec("CALLVALUE", 256)
-    calldata: ByteArray = ByteArray("CALLDATA")
-    gasprice: uint256 = z3.BitVec("GASPRICE", 256)
+    address: Address = (
+        BW(0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA),
+    )
+    origin: Address = (
+        BW(0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB),
+    )
+    caller: Address = (
+        BW(0xCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC),
+    )
+    callvalue: uint256 = BW(0)
+    calldata: ByteArray = ByteArray("CALLDATA", b"")
+    gasprice: uint256 = BW(0x20)
     returndata: List[z3.BitVecRef] = field(default_factory=list)
     success: Optional[bool] = None
-    storage: z3.Array = z3.Array("STORAGE", z3.BitVecSort(256), z3.BitVecSort(256))
+    storage: z3.Array = z3.K(z3.BitVecSort(256), BW(0))
     constraints: z3.ExprRef = z3.BoolVal(True)
 
     def copy(self) -> "State":
         return State(
             pc=self.pc,
             jumps=self.jumps,
+            stack=self.stack.copy(),
             memory=self.memory.copy(),
             address=self.address,
             origin=self.origin,

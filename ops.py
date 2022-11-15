@@ -5,7 +5,7 @@ from typing import cast
 import z3
 from Crypto.Hash import keccak
 
-from common import BW, BY, Address, State, uint8, uint256
+from common import BW, BY, Address, Instruction, State, uint8, uint256
 
 
 def require_concrete(var: uint256, msg: str) -> int:
@@ -466,14 +466,44 @@ def JUMPI(s: State, counter: uint256, b: uint256) -> None:
         s.pc = s.jumps[counter]
 
 
-# 5B - Marks a valid destination for jumps
-def JUMPDEST() -> None:
-    pass
+# 58 - Get the value of the program counter prior to the increment corresponding
+# to this instruction
+def PC(ins: Instruction) -> uint256:
+    return BW(ins.offset)
 
 
 # 59 - Get the size of active memory in bytes
 def MSIZE(s: State) -> uint256:
     return BW(max(s.memory.keys()) + 1)
+
+
+# 5B - Marks a valid destination for jumps
+def JUMPDEST() -> None:
+    pass
+
+
+# 6X/7X - Place N byte item on stack
+def PUSH(ins: Instruction) -> uint256:
+    if ins.operand is None:
+        raise ValueError("somehow got a PUSH without an operand")
+    return ins.operand
+
+
+# 8X - Duplicate Nth stack item
+def DUP(ins: Instruction, s: State) -> uint256:
+    if ins.suffix is None:
+        raise ValueError("somehow got a DUP without a suffix")
+    # TODO: handle stack underflow
+    return s.stack[-ins.suffix]
+
+
+# 9X - Exchange 1st and (N+1)th stack items
+def SWAP(ins: Instruction, s: State) -> None:
+    if ins.suffix is None:
+        raise ValueError("somehow got a SWAP without a suffix")
+    # TODO: handle stack underflow
+    m = ins.suffix + 1
+    s.stack[-1], s.stack[-m] = s.stack[-m], s.stack[-1]
 
 
 # A0 - Append log record with no topics
@@ -511,10 +541,30 @@ def LOG4(
     pass
 
 
-# TODO: F1 - CALL - Message-call into an account
+# F1 - Message-call into an account
+def CALL(
+    gas: uint256,
+    address: uint256,
+    value: uint256,
+    argsOffset: uint256,
+    argsSize: uint256,
+    retOffset: uint256,
+    retSize: uint256,
+) -> uint256:
+    return BW(1)  # TODO
 
-# TODO: F2 - CALLCODE - Message-call into this account with alternative
-# account's code
+
+# F2 - Message-call into this account with alternative account's code
+def CALLCODE(
+    gas: uint256,
+    address: uint256,
+    value: uint256,
+    argsOffset: uint256,
+    argsSize: uint256,
+    retOffset: uint256,
+    retSize: uint256,
+) -> uint256:
+    raise Exception("reachable CALLCODE detected!")
 
 
 # F3 - Halts execution returning output data
@@ -528,10 +578,29 @@ def RETURN(s: State, offset: uint256, size: uint256) -> None:
     s.success = True
 
 
-# TODO: F4 - DELEGATECALL - Message-call into this account with an alternative
-# account’s code, but persisting the current values for sender and value
+# F4 - Message-call into this account with an alternative account’s code, but
+# persisting the current values for sender and value
+def DELEGATECALL(
+    gas: uint256,
+    address: uint256,
+    argsOffset: uint256,
+    argsSize: uint256,
+    retOffset: uint256,
+    retSize: uint256,
+) -> uint256:
+    raise Exception("reachable DELEGATECALL detected!")
 
-# TODO: FA - STATICCALL - Static message-call into an account
+
+# FA - Static message-call into an account
+def STATICCALL(
+    gas: uint256,
+    address: uint256,
+    argsOffset: uint256,
+    argsSize: uint256,
+    retOffset: uint256,
+    retSize: uint256,
+) -> uint256:
+    return BW(1)  # TODO
 
 
 # FD - Halt execution reverting state changes but returning data and remaining
@@ -552,6 +621,11 @@ def INVALID(s: State) -> None:
     s.success = False
 
 
+# FF - Halt execution and register account for later deletion
+def SELFDESTRUCT() -> None:
+    raise Exception("reachable SELFDESTRUCT detected!")
+
+
 # TODO: 5A - GAS - Get the amount of available gas, including the corresponding
 # reduction for the cost of this instruction
 
@@ -559,7 +633,3 @@ def INVALID(s: State) -> None:
 
 # TODO: F5 - CREATE2 - Create a new account with associated code at a
 # predictable address
-
-# FF - Halt execution and register account for later deletion
-def SELFDESTRUCT() -> None:
-    raise Exception("reachable SELFDESTRUCT detected!")
