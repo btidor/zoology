@@ -628,3 +628,7 @@ def test_INVALID() -> None:
     INVALID(s)
     assert s.success == False
     assert s.returndata == []
+
+def test_SELFDESTRUCT() -> None:
+    with pytest.raises(Exception):
+        SELFDESTRUCT()

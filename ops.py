@@ -560,5 +560,6 @@ def INVALID(s: State) -> None:
 # TODO: F5 - CREATE2 - Create a new account with associated code at a
 # predictable address
 
-# TODO: FF - SELFDESTRUCT - Halt execution and register account for later
-# deletion
+# FF - Halt execution and register account for later deletion
+def SELFDESTRUCT() -> None:
+    raise Exception("reachable SELFDESTRUCT detected!")
