@@ -89,12 +89,12 @@ class State:
 
     # It's difficult to extract the list of set keys when Z3 solves for the
     # storage array. Instead, we track which keys have been accessed here.
-    storagekeys: List[z3.ExprRef] = field(default_factory=list)
+    storagekeys: List[z3.BitVec] = field(default_factory=list)
 
     # Maps the length of the input data to a Z3 Array which maps symbolic inputs
     # to symbolic hash digests.
     sha3hash: Dict[int, z3.Array] = field(default_factory=dict)
-    sha3keys: List[z3.ExprRef] = field(default_factory=list)
+    sha3keys: List[z3.BitVec] = field(default_factory=list)
 
     # List of Z3 expressions that must be satisfied in order for the program to
     # reach this state. Based on the JUMPI instructions (if statements) seen so
@@ -121,3 +121,22 @@ class State:
             sha3keys=self.sha3keys.copy(),
             constraints=self.constraints.copy(),
         )
+
+    def sha3constrain(self, v: z3.Optimize) -> None:
+        for i, k1 in enumerate(self.sha3keys):
+            # TODO: this can still leave hash digests implausibly close to one
+            # another, e.g. causing two arrays to overlap.
+            v.assert_and_track(
+                z3.Extract(255, 128, self.sha3hash[k1.size()][k1]) != 0,
+                f"SHA3.NLZ({i})",
+            )
+            for j, k2 in enumerate(self.sha3keys):
+                if k1.size() != k2.size():
+                    continue
+                v.assert_and_track(
+                    z3.Implies(
+                        k1 != k2,
+                        self.sha3hash[k1.size()][k1] != self.sha3hash[k2.size()][k2],
+                    ),
+                    f"SHA3.DISTINCT({i},{j})",
+                )

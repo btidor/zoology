@@ -49,7 +49,8 @@ def analyze(
             pass
         elif s.success is True:
             v = z3.Optimize()
-            v.add(z3.And(*s.constraints))
+            v.assert_and_track(z3.And(*s.constraints), "PC")
+            s.sha3constrain(v)
             v.minimize(s.callvalue)
             v.minimize(s.calldata.length())
             assert v.check() == z3.sat
@@ -71,10 +72,11 @@ def analyze(
                 data = key.as_long().to_bytes(key.size() // 8, "big")
                 hash = keccak.new(data=data, digest_bits=256)
                 digest = int.from_bytes(hash.digest(), "big")
-                v.add(s.sha3hash[key.size()][key] == BW(digest))
-                if v.check() != z3.sat:
-                    raise NotImplementedError("strange dependent SHA3 usage!")
-                # TODO: does this make us use inconsistent models?
+                v.assert_and_track(skey == key, "SHAKEY")
+                v.assert_and_track(
+                    s.sha3hash[skey.size()][skey] == BW(digest), "SHAVAL"
+                )
+                assert v.check() == z3.sat
                 m = v.model()
 
             value = m.eval(s.callvalue).as_long()
@@ -116,7 +118,10 @@ def analyze(
             if len(storage) > 0:
                 print("Storage", end="")
                 for key in sorted(storage.keys()):
-                    print(f"\t{key} -> 0x{storage[key]:x}")
+                    print(f"\t{key} ", end="")
+                    if len(key) > 16:
+                        print("\n\t", end="")
+                    print(f"-> 0x{storage[key]:x}")
             print()
         else:
             states += execute(instructions, s)
@@ -137,15 +142,19 @@ def execute(
             b = z3.simplify(s.stack.pop())
 
             next = []
-            if SOLVER.check(z3.And(*s.constraints, b == 0)) == z3.sat:
+            SOLVER.push()
+            SOLVER.assert_and_track(z3.And(*s.constraints), "PC")
+            s.sha3constrain(SOLVER)
+            if SOLVER.check(b == 0) == z3.sat:
                 s1 = s.copy()
                 s1.constraints.append(b == 0)
                 next.append(s1)
-            if SOLVER.check(z3.And(*s.constraints, b != 0)) == z3.sat:
+            if SOLVER.check(b != 0) == z3.sat:
                 s2 = s.copy()
                 s2.pc = s2.jumps[counter]
                 s2.constraints.append(b != 0)
                 next.append(s2)
+            SOLVER.pop()
             return next
         elif hasattr(ops, ins.name):
             fn = getattr(ops, ins.name)
