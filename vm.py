@@ -46,7 +46,6 @@ def execute(
         for name in sig.parameters:
             kls = sig.parameters[name].annotation
             if kls == uint256:
-                # TODO: handle pop from empty list
                 args.append(s.stack.pop())
             elif kls == State:
                 args.append(s)
@@ -57,8 +56,9 @@ def execute(
 
         result: Optional[uint256] = fn(*args)
         if result is not None:
-            # TODO: check for stack overflow
             s.stack.append(result)
+            if len(s.stack) > 1024:
+                raise Exception("evm stack overflow")
 
         for x in s.stack:
             x = z3.simplify(x)

@@ -154,7 +154,6 @@ def execute(
             for name in sig.parameters:
                 kls = sig.parameters[name].annotation
                 if kls == uint256:
-                    # TODO: handle pop from empty list
                     args.append(s.stack.pop())
                 elif kls == State:
                     args.append(s)
@@ -167,6 +166,8 @@ def execute(
             r = fn(*args)
             if r is not None:
                 s.stack.append(r)
+                if len(s.stack) > 1024:
+                    raise Exception("evm stack overflow")
         else:
             raise ValueError(f"unimplemented opcode: {ins.name}")
 
