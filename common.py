@@ -88,6 +88,10 @@ class State:
     storage: z3.Array = z3.K(z3.BitVecSort(256), BW(0))
     constraints: z3.ExprRef = z3.BoolVal(True)
 
+    # It's difficult to extract the list of set keys when Z3 solves for the
+    # storage array. Instead, we track which keys have been accessed here.
+    storagekeys: List[z3.ExprRef] = field(default_factory=list)
+
     def copy(self) -> "State":
         return State(
             pc=self.pc,
@@ -104,4 +108,5 @@ class State:
             success=self.success,
             storage=self.storage,
             constraints=self.constraints,
+            storagekeys=self.storagekeys.copy(),
         )

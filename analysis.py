@@ -76,7 +76,17 @@ def analyze(
                 )
             if z3.is_bv_value(m.eval(s.gasprice)):
                 print(f"Gas\tETH {m.eval(s.gasprice).as_long():09,}")
-            print(f"Storage\t{s.storage}")
+
+            storage = {}
+            for symkey in s.storagekeys:
+                key = m.eval(symkey).as_long()
+                val = m.eval(s.storage[key])
+                if z3.is_bv_value(val):
+                    storage[key] = val.as_long()
+            if len(storage) > 0:
+                print("Storage", end="")
+                for key in sorted(storage.keys()):
+                    print(f"\t0x{key:x} -> 0x{storage[key]:x}")
             print()
         else:
             states += execute(instructions, s)

@@ -440,6 +440,7 @@ def MSTORE8(s: State, offset: uint256, value: uint8) -> None:
 
 # 54 - Load word from storage
 def SLOAD(s: State, key: uint256) -> uint256:
+    s.storagekeys.append(key)
     return s.storage[key]
 
 

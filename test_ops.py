@@ -1,3 +1,4 @@
+#!/usr/bin/env pytest
 from typing import Dict
 
 import pytest
@@ -563,6 +564,8 @@ def test_SLOAD() -> None:
     s = State()
     s.storage = z3.Store(s.storage, BW(0), BW(46))
     assert z3.simplify(SLOAD(s, BW(0))) == 46
+    assert len(s.storagekeys) == 1
+    assert z3.simplify(s.storagekeys[0]) == 0
 
 
 def test_SSTORE() -> None:
