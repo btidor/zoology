@@ -86,11 +86,19 @@ class State:
     returndata: List[z3.BitVecRef] = field(default_factory=list)
     success: Optional[bool] = None
     storage: z3.Array = z3.K(z3.BitVecSort(256), BW(0))
-    constraints: z3.ExprRef = z3.BoolVal(True)
 
     # It's difficult to extract the list of set keys when Z3 solves for the
     # storage array. Instead, we track which keys have been accessed here.
     storagekeys: List[z3.ExprRef] = field(default_factory=list)
+
+    # Maps the length of the input data to a Z3 Array which maps symbolic inputs
+    # to symbolic hash digests.
+    sha3hash: Dict[int, z3.Array] = field(default_factory=dict)
+
+    # List of Z3 expressions that must be satisfied in order for the program to
+    # reach this state. Based on the JUMPI instructions (if statements) seen so
+    # far.
+    constraints: List[z3.ExprRef] = field(default_factory=list)
 
     def copy(self) -> "State":
         return State(
@@ -107,6 +115,7 @@ class State:
             returndata=self.returndata,
             success=self.success,
             storage=self.storage,
-            constraints=self.constraints,
             storagekeys=self.storagekeys.copy(),
+            sha3hash=self.sha3hash.copy(),
+            constraints=self.constraints.copy(),
         )

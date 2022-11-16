@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 
 import inspect
-from typing import Dict, List, Tuple
+from typing import Dict, List
 
 import z3
+from Crypto.Hash import keccak
 
 import ops
 from common import BW, Address, ByteArray, Instruction, State, uint256
@@ -48,7 +49,7 @@ def analyze(
             pass
         elif s.success is True:
             v = z3.Optimize()
-            v.add(s.constraints)
+            v.add(z3.And(*s.constraints))
             v.minimize(s.callvalue)
             v.minimize(s.calldata.length())
             assert v.check() == z3.sat
@@ -85,14 +86,15 @@ def analyze(
 
             storage = {}
             for symkey in s.storagekeys:
-                key = m.eval(symkey).as_long()
+                key = m.eval(symkey)
+                skey = f"0x{key.as_long():x}" if z3.is_bv_value(key) else str(key)
                 val = m.eval(s.storage[key])
                 if z3.is_bv_value(val):
-                    storage[key] = val.as_long()
+                    storage[skey] = val.as_long()
             if len(storage) > 0:
                 print("Storage", end="")
-                for key in sorted(storage.keys()):
-                    print(f"\t0x{key:x} -> 0x{storage[key]:x}")
+                for key in storage.keys():  # TODO: sort, ish
+                    print(f"\t{key} -> 0x{storage[key]}")
             print()
         else:
             states += execute(instructions, s)
@@ -113,22 +115,16 @@ def execute(
             b = z3.simplify(s.stack.pop())
 
             next = []
-            constraints1 = z3.And(s.constraints, b == 0)
-            if SOLVER.check(constraints1) == z3.sat:
+            if SOLVER.check(z3.And(*s.constraints, b == 0)) == z3.sat:
                 s1 = s.copy()
-                s1.constraints = constraints1
+                s1.constraints.append(b == 0)
                 next.append(s1)
-            constraints2 = z3.And(s.constraints, b != 0)
-            if SOLVER.check(constraints2) == z3.sat:
+            if SOLVER.check(z3.And(*s.constraints, b != 0)) == z3.sat:
                 s2 = s.copy()
                 s2.pc = s2.jumps[counter]
-                s2.constraints = constraints2
+                s2.constraints.append(b != 0)
                 next.append(s2)
             return next
-        elif ins.name == "SHA3":
-            s.stack.pop()
-            s.stack.pop()
-            s.stack.append(BW(0x1234))  # TODO
         elif hasattr(ops, ins.name):
             fn = getattr(ops, ins.name)
             sig = inspect.signature(fn)

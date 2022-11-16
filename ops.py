@@ -191,12 +191,26 @@ def SHA3(s: State, offset: uint256, size: uint256) -> uint256:
     offset = require_concrete(offset, "SHA3(offset, size) requires concrete offset")
     size = require_concrete(size, "SHA3(offset, size) requires concrete size")
 
-    hash = keccak.new(digest_bits=256)
-    for idx in range(offset, offset + size):
-        data = s.memory.get(idx, 0)
-        data = require_concrete(data, "SHA3(offset, size) requires concrete data")
-        hash.update(data.to_bytes(1, "big"))
-    return BW(int.from_bytes(hash.digest(), "big"))
+    data = z3.simplify(
+        z3.Concat(*[s.memory.get(i, BW(0)) for i in range(offset, offset + size)])
+    )
+    size = data.size()
+
+    if size not in s.sha3hash:
+        s.sha3hash[size] = z3.Array(
+            f"SHA3!{size}", z3.BitVecSort(size), z3.BitVecSort(256)
+        )
+
+    if z3.is_bv_value(data):
+        hash = keccak.new(digest_bits=256)
+        hash.update(data.as_long().to_bytes(size // 8, "big"))
+        # TODO: this is incorrect because it places no constraints on the
+        # values. In reality, hash outputs are random (not up to us) and need to
+        # be unique also.
+        s.sha3hash[size] = z3.Store(
+            s.sha3hash[size], data, BW(int.from_bytes(hash.digest(), "big"))
+        )
+    return s.sha3hash[size][data]
 
 
 # 30 - Get address of currently executing account
