@@ -53,7 +53,11 @@ def analyze(
             v.minimize(s.calldata.length())
             assert v.check() == z3.sat
             m = v.model()
-            print(f"Value\tETH {(m.eval(s.callvalue).as_long()):011,}")
+
+            value = m.eval(s.callvalue).as_long()
+            if value:
+                print(f"Value\tETH {(value):011,}")
+
             print(f"Data\t({m.eval(s.calldata.length())}) 0x", end="")
             for i in range(m.eval(s.calldata.length()).as_long()):
                 b = m.eval(s.calldata.get(i))
@@ -61,6 +65,8 @@ def analyze(
                     print(b.as_long().to_bytes(1, "big").hex(), end="")
                 else:
                     print("??", end="")
+                if i == 3:
+                    print(" ", end="")
             print()
             if z3.is_bv_value(m.eval(s.address)):
                 print(
