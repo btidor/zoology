@@ -196,6 +196,7 @@ def SHA3(s: State, offset: uint256, size: uint256) -> uint256:
     )
     size = data.size()
 
+    s.sha3keys.append(data)
     if size not in s.sha3hash:
         s.sha3hash[size] = z3.Array(
             f"SHA3!{size}", z3.BitVecSort(size), z3.BitVecSort(256)

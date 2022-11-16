@@ -94,6 +94,7 @@ class State:
     # Maps the length of the input data to a Z3 Array which maps symbolic inputs
     # to symbolic hash digests.
     sha3hash: Dict[int, z3.Array] = field(default_factory=dict)
+    sha3keys: List[z3.ExprRef] = field(default_factory=list)
 
     # List of Z3 expressions that must be satisfied in order for the program to
     # reach this state. Based on the JUMPI instructions (if statements) seen so
@@ -117,5 +118,6 @@ class State:
             storage=self.storage,
             storagekeys=self.storagekeys.copy(),
             sha3hash=self.sha3hash.copy(),
+            sha3keys=self.sha3keys.copy(),
             constraints=self.constraints.copy(),
         )

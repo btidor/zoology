@@ -55,6 +55,21 @@ def analyze(
             assert v.check() == z3.sat
             m = v.model()
 
+            print(
+                f"{'RETURN' if s.success else 'REVERT'}\t0x{''.join(m.eval(b, True).as_long().to_bytes(1, 'big').hex() for b in s.returndata)}"
+            )
+
+            for skey in s.sha3keys:
+                key = m.eval(skey, True)
+                data = key.as_long().to_bytes(key.size() // 8, "big")
+                hash = keccak.new(data=data, digest_bits=256)
+                digest = int.from_bytes(hash.digest(), "big")
+                v.add(s.sha3hash[key.size()][key] == BW(digest))
+                if v.check() != z3.sat:
+                    raise NotImplementedError("strange dependent SHA3 usage!")
+                # TODO: does this make us use inconsistent models?
+                m = v.model()
+
             value = m.eval(s.callvalue).as_long()
             if value:
                 print(f"Value\tETH {(value):011,}")
@@ -84,6 +99,9 @@ def analyze(
             if z3.is_bv_value(m.eval(s.gasprice)):
                 print(f"Gas\tETH {m.eval(s.gasprice).as_long():09,}")
 
+            # TODO: this isn't quite right --- it prints the values in storage
+            # *after* the program executes, rather than the required
+            # preconditions.
             storage = {}
             for symkey in s.storagekeys:
                 key = m.eval(symkey)
@@ -94,7 +112,7 @@ def analyze(
             if len(storage) > 0:
                 print("Storage", end="")
                 for key in storage.keys():  # TODO: sort, ish
-                    print(f"\t{key} -> 0x{storage[key]}")
+                    print(f"\t{key} -> 0x{storage[key]:x}")
             print()
         else:
             states += execute(instructions, s)
