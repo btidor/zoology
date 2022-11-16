@@ -211,6 +211,7 @@ def SHA3(s: State, offset: uint256, size: uint256) -> uint256:
         s.sha3hash[size] = z3.Store(
             s.sha3hash[size], data, BW(int.from_bytes(hash.digest(), "big"))
         )
+        s.constraints.append(z3.Extract(255, 128, s.sha3hash[size][data]) == 0)
     return s.sha3hash[size][data]
 
 

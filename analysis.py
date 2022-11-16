@@ -55,9 +55,16 @@ def analyze(
             assert v.check() == z3.sat
             m = v.model()
 
-            print(
-                f"{'RETURN' if s.success else 'REVERT'}\t0x{''.join(m.eval(b, True).as_long().to_bytes(1, 'big').hex() for b in s.returndata)}"
-            )
+            print("RETURN" if s.success else "REVERT", end="")
+            if len(s.returndata) > 0:
+                rdata = [
+                    m.eval(b, True).as_long().to_bytes(1, "big").hex()
+                    for b in s.returndata
+                ]
+                print(f"\t0x{''.join(rdata)}", end="")
+            else:
+                print("\t-", end="")
+            print()
 
             for skey in s.sha3keys:
                 key = m.eval(skey, True)
@@ -99,19 +106,16 @@ def analyze(
             if z3.is_bv_value(m.eval(s.gasprice)):
                 print(f"Gas\tETH {m.eval(s.gasprice).as_long():09,}")
 
-            # TODO: this isn't quite right --- it prints the values in storage
-            # *after* the program executes, rather than the required
-            # preconditions.
             storage = {}
             for symkey in s.storagekeys:
                 key = m.eval(symkey)
                 skey = f"0x{key.as_long():x}" if z3.is_bv_value(key) else str(key)
-                val = m.eval(s.storage[key])
+                val = m.eval(start.storage[key])
                 if z3.is_bv_value(val):
                     storage[skey] = val.as_long()
             if len(storage) > 0:
                 print("Storage", end="")
-                for key in storage.keys():  # TODO: sort, ish
+                for key in sorted(storage.keys()):
                     print(f"\t{key} -> 0x{storage[key]:x}")
             print()
         else:
