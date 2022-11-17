@@ -7,24 +7,10 @@ import z3
 from Crypto.Hash import keccak
 
 import ops
-from common import BW, Address, ByteArray, Instruction, State, uint256
+from common import BW, Block, ByteArray, Instruction, State, uint256
 from disassembler import disassemble
 
 SOLVER = z3.Solver()
-
-
-class ZeroWorld(ops.World):  # TODO
-    def balance(self, address: Address) -> uint256:
-        return BW(0)
-
-    def code(self, address: Address) -> bytes:
-        return b""
-
-    def blockhash(self, blockNumber: int) -> int:
-        return 123456
-
-
-WORLD = ZeroWorld()
 
 
 def analyze(
@@ -41,6 +27,7 @@ def analyze(
         gasprice=z3.BitVec("GASPRICE", 256),
         storage=z3.Array("STORAGE", z3.BitVecSort(256), z3.BitVecSort(256)),
     )
+    block = Block()
 
     states = [start]
     while len(states) > 0:
@@ -124,11 +111,12 @@ def analyze(
                     print(f"-> 0x{storage[key]:x}")
             print()
         else:
-            states += execute(instructions, s)
+            states += execute(instructions, block, s)
 
 
 def execute(
     instructions: List[Instruction],
+    block: Block,
     s: State,
 ) -> List[State]:
     while s.success is None:
@@ -166,10 +154,10 @@ def execute(
                     args.append(s.stack.pop())
                 elif kls == State:
                     args.append(s)
+                elif kls == Block:
+                    args.append(block)
                 elif kls == Instruction:
                     args.append(ins)
-                elif kls == ops.World:
-                    args.append(WORLD)
                 else:
                     raise TypeError(f"unknown arg class: {kls}")
             r = fn(*args)

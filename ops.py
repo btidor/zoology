@@ -1,11 +1,9 @@
-from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from typing import cast
 
 import z3
 from Crypto.Hash import keccak
 
-from common import BW, BY, Address, Instruction, State, uint8, uint256
+from common import BW, BY, Address, Block, Instruction, State, uint8, uint256
 
 
 def require_concrete(var: uint256, msg: str) -> int:
@@ -13,31 +11,6 @@ def require_concrete(var: uint256, msg: str) -> int:
     if not z3.is_bv_value(var):
         raise ValueError(msg)
     return cast(int, var.as_long())
-
-
-@dataclass
-class Block:
-    number: uint256 = 0
-    coinbase: Address = 0
-    timestamp: uint256 = 0
-    prevrandao: uint256 = 0
-    gaslimit: uint256 = 0
-    chainid: uint256 = 1
-    basefee: uint256 = 0
-
-
-class World(ABC):
-    @abstractmethod
-    def balance(self, address: Address) -> uint256:
-        pass
-
-    @abstractmethod
-    def code(self, address: Address) -> bytes:
-        pass
-
-    @abstractmethod
-    def blockhash(self, blockNumber: int) -> int:
-        pass
 
 
 # 00 - Halts execution
@@ -217,8 +190,8 @@ def ADDRESS(s: State) -> Address:
 
 
 # 31 - Get balance of the given account
-def BALANCE(w: World, address: Address) -> uint256:
-    return w.balance(address)
+def BALANCE(s: State, address: Address) -> uint256:
+    return s.balances[address]
 
 
 # 32 - Get execution origination address
@@ -261,32 +234,13 @@ def CALLDATACOPY(s: State, destOffset: uint256, offset: uint256, size: uint256) 
 
 
 # 38 - Get size of code running in current environment
-def CODESIZE(s: State, w: World) -> uint256:
-    address = require_concrete(s.address, "CODESIZE() requires concrete address")
-    return BW(len(w.code(address)))
+def CODESIZE() -> uint256:
+    raise NotImplementedError("CODESIZE")
 
 
 # 39 - Copy code running in current environment to memory
-def CODECOPY(
-    s: State, w: World, destOffset: uint256, offset: uint256, size: uint256
-) -> None:
-    destOffset = require_concrete(
-        destOffset,
-        "CODECOPY(destOffset, offset, size) requires concrete destOffset",
-    )
-    offset = require_concrete(
-        offset, "CODECOPY(destOffset, offset, size) requires concrete offset"
-    )
-    size = require_concrete(
-        size, "CODECOPY(destOffset, offset, size) requires concrete size"
-    )
-    address = require_concrete(
-        s.address, "CODECOPY(destOffset, offset, size) requires concrete address"
-    )
-    code = w.code(address)
-    for i in range(size):
-        val = code[offset + i] if offset + i < len(code) else 0
-        s.memory[destOffset + i] = BW(val)
+def CODECOPY(destOffset: uint256, offset: uint256, size: uint256) -> None:
+    raise NotImplementedError("CODECOPY")
 
 
 # 3A - Get price of gas in current environment
@@ -295,41 +249,18 @@ def GASPRICE(s: State) -> uint256:
 
 
 # 3B - Get size of an account's code
-def EXTCODESIZE(w: World, address: Address) -> uint256:
-    address = require_concrete(
-        address, "EXTCODESIZE(address) requires concrete address"
-    )
-    return BW(len(w.code(address)))
+def EXTCODESIZE(address: Address) -> uint256:
+    raise NotImplementedError("EXTCODESIZE")
 
 
 # 3C - Copy an account's code to memory
 def EXTCODECOPY(
-    s: State,
-    w: World,
     address: Address,
     destOffset: uint256,
     offset: uint256,
     size: uint256,
 ) -> None:
-    destOffset = require_concrete(
-        destOffset,
-        "EXTCODECOPY(address, destOffset, offset, size) requires concrete destOffset",
-    )
-    offset = require_concrete(
-        offset,
-        "EXTCODECOPY(address, destOffset, offset, size) requires concrete offset",
-    )
-    size = require_concrete(
-        size, "EXTCODECOPY(address, destOffset, offset, size) requires concrete size"
-    )
-    address = require_concrete(
-        address,
-        "EXTCODECOPY(address, destOffset, offset, size) requires concrete address",
-    )
-    code = w.code(address)
-    for i in range(size):
-        val = code[offset + i] if offset + i < len(code) else 0
-        s.memory[destOffset + i] = BW(val)
+    raise NotImplementedError("EXTCODECOPY")
 
 
 # 3D - Get size of output data from the previous call from the current
@@ -359,30 +290,13 @@ def RETURNDATACOPY(
 
 
 # 3F - Get hash of an account's code
-def EXTCODEHASH(w: World, address: Address) -> uint256:
-    address = require_concrete(
-        address,
-        "EXTCODEHASH(address) requires concrete address",
-    )
-    code = w.code(address)
-    if code == b"":
-        return BW(0)
-
-    hash = keccak.new(digest_bits=256)
-    hash.update(code)
-    return BW(int.from_bytes(hash.digest(), "big"))
+def EXTCODEHASH(address: Address) -> uint256:
+    raise NotImplementedError("EXTCODEHASH")
 
 
 # 40 - Get the hash of one of the 256 most recent complete blocks
-def BLOCKHASH(b: Block, w: World, blockNumber: uint256) -> uint256:
-    blockNumber = require_concrete(
-        blockNumber, "BLOCKHASH(blockNumber) requires concrete blockNumber"
-    )
-    return z3.If(
-        z3.Or(blockNumber >= b.number, blockNumber < b.number - 256),
-        BW(0),
-        BW(w.blockhash(blockNumber)),
-    )
+def BLOCKHASH(blockNumber: uint256) -> uint256:
+    raise NotImplementedError("BLOCKHASH")
 
 
 # 41 - Get the block's beneficiary address
@@ -416,8 +330,8 @@ def CHAINID(b: Block) -> uint256:
 
 
 # 47 - Get balance of currently executing account
-def SELFBALANCE(s: State, w: World) -> uint256:
-    return w.balance(s.address)
+def SELFBALANCE(s: State) -> uint256:
+    return s.balances[s.address]
 
 
 # 48 - Get the base fee
@@ -577,7 +491,7 @@ def CALLCODE(
     retOffset: uint256,
     retSize: uint256,
 ) -> uint256:
-    raise Exception("reachable CALLCODE detected!")
+    raise NotImplementedError("CALLCODE")
 
 
 # F3 - Halts execution returning output data
@@ -601,7 +515,7 @@ def DELEGATECALL(
     retOffset: uint256,
     retSize: uint256,
 ) -> uint256:
-    raise Exception("reachable DELEGATECALL detected!")
+    raise NotImplementedError("DELEGATECALL")
 
 
 # FA - Static message-call into an account
@@ -636,7 +550,7 @@ def INVALID(s: State) -> None:
 
 # FF - Halt execution and register account for later deletion
 def SELFDESTRUCT() -> None:
-    raise Exception("reachable SELFDESTRUCT detected!")
+    raise NotImplementedError("SELFDESTRUCT")
 
 
 # TODO: 5A - GAS - Get the amount of available gas, including the corresponding

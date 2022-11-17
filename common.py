@@ -1,4 +1,3 @@
-from abc import ABC, abstractmethod, abstractproperty
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, TypeAlias
 
@@ -96,6 +95,9 @@ class State:
     sha3hash: Dict[int, z3.Array] = field(default_factory=dict)
     sha3keys: List[z3.BitVec] = field(default_factory=list)
 
+    # Global map of all account balances.
+    balances: z3.Array = z3.K(z3.BitVecSort(256), BW(0))
+
     # List of Z3 expressions that must be satisfied in order for the program to
     # reach this state. Based on the JUMPI instructions (if statements) seen so
     # far.
@@ -140,3 +142,14 @@ class State:
                     ),
                     f"SHA3.DISTINCT({i},{j})",
                 )
+
+
+@dataclass
+class Block:
+    number: uint256 = 0
+    coinbase: Address = 0
+    timestamp: uint256 = 0
+    prevrandao: uint256 = 0
+    gaslimit: uint256 = 0
+    chainid: uint256 = 1
+    basefee: uint256 = 0

@@ -1,32 +1,10 @@
 #!/usr/bin/env pytest
-from typing import Dict
 
 import pytest
 import z3
 
-from common import BW, BY, Address, ByteArray, Instruction, State, uint256
+from common import BW, BY, ByteArray, Instruction, State
 from ops import *
-
-
-class DummyWorld(World):
-    def __init__(
-        self,
-        balances: Dict[Address, uint256] = {},
-        codes: Dict[Address, bytes] = {},
-        blockhashes: Dict[uint256, uint256] = {},
-    ):
-        self.balances = balances
-        self.codes = codes
-        self.blockhashes = blockhashes
-
-    def balance(self, address: Address) -> uint256:
-        return self.balances.get(address, 0)
-
-    def code(self, address: Address) -> bytes:
-        return self.codes.get(address, b"")
-
-    def blockhash(self, blockNumber: uint256) -> uint256:
-        return self.blockhashes.get(blockNumber, 0)
 
 
 def _dump_memory(s: State) -> str:
@@ -286,11 +264,12 @@ def test_ADDRESS() -> None:
 
 
 def test_BALANCE() -> None:
-    w = DummyWorld(
-        balances={BW(0x9BBFED6889322E016E0A02EE459D306FC19545D8): BW(125985)}
+    s = State()
+    s.balances = z3.Store(
+        s.balances, BW(0x9BBFED6889322E016E0A02EE459D306FC19545D8), BW(125985)
     )
     assert (
-        z3.simplify(BALANCE(w, BW(0x9BBFED6889322E016E0A02EE459D306FC19545D8)))
+        z3.simplify(BALANCE(s, BW(0x9BBFED6889322E016E0A02EE459D306FC19545D8)))
         == 125985
     )
 
@@ -354,77 +333,9 @@ def test_CALLDATACOPY() -> None:
     )
 
 
-def test_CODESIZE() -> None:
-    s = State(address=BW(0x9BBFED6889322E016E0A02EE459D306FC19545D8))
-    w = DummyWorld(
-        codes={
-            0x9BBFED6889322E016E0A02EE459D306FC19545D8: b"\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff"
-        }
-    )
-    assert CODESIZE(s, w) == 32
-
-
-def test_CODECOPY() -> None:
-    s = State(address=BW(0x9BBFED6889322E016E0A02EE459D306FC19545D8))
-    w = DummyWorld(
-        codes={
-            0x9BBFED6889322E016E0A02EE459D306FC19545D8: b"\x7d\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\x7f"
-        }
-    )
-
-    CODECOPY(s, w, BW(0), BW(0), BW(32))
-    assert (
-        _dump_memory(s)
-        == "0x7DFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF7F"
-    )
-
-    CODECOPY(s, w, BW(0), BW(31), BW(8))
-    assert (
-        _dump_memory(s)
-        == "0x7F00000000000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF7F"
-    )
-
-
 def test_GASPRICE() -> None:
     s = State(gasprice=BW(10))
     assert z3.simplify(GASPRICE(s)) == 10
-
-
-def test_EXTCODESIZE() -> None:
-    w = DummyWorld(
-        codes={
-            0x9BBFED6889322E016E0A02EE459D306FC19545D8: b"\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff",
-        }
-    )
-    assert (
-        z3.simplify(EXTCODESIZE(w, BW(0x9BBFED6889322E016E0A02EE459D306FC19545D8)))
-        == 32
-    )
-
-
-def test_EXTCODECOPY() -> None:
-    w = DummyWorld(
-        codes={
-            0x9BBFED6889322E016E0A02EE459D306FC19545D8: b"\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff",
-        }
-    )
-    s = State()
-
-    EXTCODECOPY(
-        s, w, BW(0x9BBFED6889322E016E0A02EE459D306FC19545D8), BW(0), BW(0), BW(32)
-    )
-    assert (
-        _dump_memory(s)
-        == "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
-    )
-
-    EXTCODECOPY(
-        s, w, BW(0x9BBFED6889322E016E0A02EE459D306FC19545D8), BW(0), BW(31), BW(8)
-    )
-    assert (
-        _dump_memory(s)
-        == "0xFF00000000000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
-    )
 
 
 def test_RETURNDATASIZE() -> None:
@@ -451,37 +362,6 @@ def test_RETURNDATACOPY() -> None:
         _dump_memory(s)
         == "0x7F00000000000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF7F"
     )
-
-
-def test_EXTCODEHASH() -> None:
-    # The example on evm.codes is wrong: 0xc5d2... is the hash of the empty
-    # string, which shouldn't be possible to observe.
-    w = DummyWorld(
-        codes={0x9BBFED6889322E016E0A02EE459D306FC19545D8: b"\xff\xff\xff\xff"}
-    )
-    assert (
-        z3.simplify(EXTCODEHASH(w, BW(0x9BBFED6889322E016E0A02EE459D306FC19545D8)))
-        == 0x29045A592007D0C246EF02C2223570DA9522D0CF0F73282C79A1BC8F0BB2C238
-    )
-    assert EXTCODEHASH(w, BW(0x123)) == 0
-
-
-def test_BLOCKHASH() -> None:
-    w = DummyWorld(
-        blockhashes={
-            100000123: 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF,
-            599423545: 0x29045A592007D0C246EF02C2223570DA9522D0CF0F73282C79A1BC8F0BB2C238,
-            599423546: 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF,
-            599423547: 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF,
-        }
-    )
-    b = Block(number=BW(599423546))
-    assert (
-        z3.simplify(BLOCKHASH(b, w, BW(599423545)))
-        == 0x29045A592007D0C246EF02C2223570DA9522D0CF0F73282C79A1BC8F0BB2C238
-    )
-    assert z3.simplify(BLOCKHASH(b, w, BW(599423546))) == 0
-    assert z3.simplify(BLOCKHASH(b, w, BW(599423547))) == 0
 
 
 def test_COINBASE() -> None:
@@ -519,12 +399,6 @@ def test_GASLIMIT() -> None:
 def test_CHAINID() -> None:
     b = Block()
     assert CHAINID(b) == 1
-
-
-def test_SELFBALANCE() -> None:
-    s = State(address=BW(0x9BBFED6889322E016E0A02EE459D306FC19545D8))
-    w = DummyWorld(balances={BW(0x9BBFED6889322E016E0A02EE459D306FC19545D8): BW(8)})
-    assert z3.simplify(SELFBALANCE(s, w)) == BW(8)
 
 
 def test_BASEFEE() -> None:
