@@ -404,6 +404,12 @@ def MSIZE(s: State) -> uint256:
     return BW(max(s.memory.keys()) + 1)
 
 
+# 5A - Get the amount of available gas, including the corresponding reduction
+# for the cost of this instruction)
+def GAS() -> uint256:
+    raise NotImplementedError("GAS")
+
+
 # 5B - Marks a valid destination for jumps
 def JUMPDEST() -> None:
     pass
@@ -468,6 +474,11 @@ def LOG4(
     pass
 
 
+# F0 - Create a new account with associated code
+def CREATE(value: uint256, offset: uint256, size: uint256) -> uint256:
+    raise NotImplementedError("CREATE")
+
+
 # F1 - Message-call into an account
 def CALL(
     gas: uint256,
@@ -518,6 +529,11 @@ def DELEGATECALL(
     raise NotImplementedError("DELEGATECALL")
 
 
+# F5 - Create a new account with associated code at a predictable address
+def CREATE2(value: uint256, offset: uint256, size: uint256, salt: uint256) -> uint256:
+    raise NotImplementedError("CREATE2")
+
+
 # FA - Static message-call into an account
 def STATICCALL(
     gas: uint256,
@@ -551,12 +567,3 @@ def INVALID(s: State) -> None:
 # FF - Halt execution and register account for later deletion
 def SELFDESTRUCT() -> None:
     raise NotImplementedError("SELFDESTRUCT")
-
-
-# TODO: 5A - GAS - Get the amount of available gas, including the corresponding
-# reduction for the cost of this instruction
-
-# TODO: F0 - CREATE - Create a new account with associated code
-
-# TODO: F5 - CREATE2 - Create a new account with associated code at a
-# predictable address
