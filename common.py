@@ -124,18 +124,19 @@ class State:
             constraints=self.constraints.copy(),
         )
 
-    def sha3constrain(self, v: z3.Optimize) -> None:
+    def constrain(self, solver: z3.Optimize) -> None:
+        solver.assert_and_track(z3.And(*self.constraints), "PC")
         for i, k1 in enumerate(self.sha3keys):
             # TODO: this can still leave hash digests implausibly close to one
             # another, e.g. causing two arrays to overlap.
-            v.assert_and_track(
+            solver.assert_and_track(
                 z3.Extract(255, 128, self.sha3hash[k1.size()][k1]) != 0,
                 f"SHA3.NLZ({i})",
             )
             for j, k2 in enumerate(self.sha3keys):
                 if k1.size() != k2.size():
                     continue
-                v.assert_and_track(
+                solver.assert_and_track(
                     z3.Implies(
                         k1 != k2,
                         self.sha3hash[k1.size()][k1] != self.sha3hash[k2.size()][k2],

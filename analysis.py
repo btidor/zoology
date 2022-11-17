@@ -1,16 +1,13 @@
 #!/usr/bin/env python3
 
-import inspect
 from typing import Dict, List
 
 import z3
 from Crypto.Hash import keccak
 
-import ops
-from common import BW, Block, ByteArray, Instruction, State, uint256
+from common import BW, Block, ByteArray, Instruction, State
 from disassembler import disassemble
-
-SOLVER = z3.Solver()
+from vm import execute
 
 
 def analyze(
@@ -28,147 +25,102 @@ def analyze(
         storage=z3.Array("STORAGE", z3.BitVecSort(256), z3.BitVecSort(256)),
     )
     block = Block()
+    solver = z3.Optimize()
 
     states = [start]
     while len(states) > 0:
         s = states.pop()
-        if s.success is False:
-            pass
-        elif s.success is True:
-            v = z3.Optimize()
-            v.assert_and_track(z3.And(*s.constraints), "PC")
-            s.sha3constrain(v)
-            v.minimize(s.callvalue)
-            v.minimize(s.calldata.length())
-            assert v.check() == z3.sat
-            m = v.model()
 
-            print("RETURN" if s.success else "REVERT", end="")
-            if len(s.returndata) > 0:
-                rdata = [
-                    m.eval(b, True).as_long().to_bytes(1, "big").hex()
-                    for b in s.returndata
-                ]
-                print(f"\t0x{''.join(rdata)}", end="")
+        solver.push()
+        s.constrain(solver)
+        check = solver.check()
+
+        if check == z3.sat:  # OK
+            if s.success is False:
+                # Ignore executions that REVERT, since they have no effect on
+                # permanent storage.
+                pass
+            elif s.success is True:
+                # Success! Print this execution and continue analyzing the other
+                # branches.
+                handle_return(start, s, solver)
             else:
-                print("\t-", end="")
-            print()
-
-            for skey in s.sha3keys:
-                key = m.eval(skey, True)
-                data = key.as_long().to_bytes(key.size() // 8, "big")
-                hash = keccak.new(data=data, digest_bits=256)
-                digest = int.from_bytes(hash.digest(), "big")
-                v.assert_and_track(skey == key, "SHAKEY")
-                v.assert_and_track(
-                    s.sha3hash[skey.size()][skey] == BW(digest), "SHAVAL"
-                )
-                assert v.check() == z3.sat
-                m = v.model()
-
-            value = m.eval(s.callvalue).as_long()
-            if value:
-                print(f"Value\tETH {(value):011,}")
-
-            print(f"Data\t({m.eval(s.calldata.length())}) 0x", end="")
-            for i in range(m.eval(s.calldata.length()).as_long()):
-                b = m.eval(s.calldata.get(i))
-                if z3.is_bv_value(b):
-                    print(b.as_long().to_bytes(1, "big").hex(), end="")
-                else:
-                    print("??", end="")
-                if i == 3:
-                    print(" ", end="")
-            print()
-            if z3.is_bv_value(m.eval(s.address)):
-                print(
-                    f"Address\t0x{m.eval(s.address).as_long().to_bytes(20, 'big').hex()}"
-                )
-            if z3.is_bv_value(m.eval(s.origin)):
-                print(
-                    f"Origin\t0x{m.eval(s.origin).as_long().to_bytes(20, 'big').hex()}"
-                )
-            if z3.is_bv_value(m.eval(s.caller)):
-                print(
-                    f"Caller\t0x{m.eval(s.caller).as_long().to_bytes(20, 'big').hex()}"
-                )
-            if z3.is_bv_value(m.eval(s.gasprice)):
-                print(f"Gas\tETH {m.eval(s.gasprice).as_long():09,}")
-
-            storage = {}
-            for symkey in s.storagekeys:
-                key = m.eval(symkey)
-                skey = f"0x{key.as_long():x}" if z3.is_bv_value(key) else str(key)
-                val = m.eval(start.storage[key])
-                if z3.is_bv_value(val):
-                    storage[skey] = val.as_long()
-            if len(storage) > 0:
-                print("Storage", end="")
-                for key in sorted(storage.keys()):
-                    print(f"\t{key} ", end="")
-                    if len(key) > 16:
-                        print("\n\t", end="")
-                    print(f"-> 0x{storage[key]:x}")
-            print()
+                # Ordinary fork in execution, keep going...
+                states += execute(instructions, block, s)
+        elif check == z3.unsat:
+            # We took an illegal turn at the last JUMPI. This branch is
+            # unreachable, ignore it.
+            pass
         else:
-            states += execute(instructions, block, s)
+            raise Exception("z3 evaluation timed out")
+
+        solver.pop()
 
 
-def execute(
-    instructions: List[Instruction],
-    block: Block,
-    s: State,
-) -> List[State]:
-    while s.success is None:
-        ins = instructions[s.pc]
-        s.pc += 1
+def handle_return(start: State, end: State, solver: z3.Solver) -> None:
+    solver.minimize(end.callvalue)
+    solver.minimize(end.calldata.length())
+    assert solver.check() == z3.sat
+    m = solver.model()
 
-        if ins.name == "JUMPI":
-            counter = ops.require_concrete(
-                s.stack.pop(), "JUMPI(counter, b) requires concrete counter"
-            )
-            b = z3.simplify(s.stack.pop())
+    print("RETURN" if end.success else "REVERT", end="")
+    if len(end.returndata) > 0:
+        rdata = [
+            m.eval(b, True).as_long().to_bytes(1, "big").hex() for b in end.returndata
+        ]
+        print(f"\t0x{''.join(rdata)}", end="")
+    else:
+        print("\t-", end="")
+    print()
 
-            next = []
-            SOLVER.push()
-            SOLVER.assert_and_track(z3.And(*s.constraints), "PC")
-            s.sha3constrain(SOLVER)
-            if SOLVER.check(b == 0) == z3.sat:
-                s1 = s.copy()
-                s1.constraints.append(b == 0)
-                next.append(s1)
-            if SOLVER.check(b != 0) == z3.sat:
-                s2 = s.copy()
-                s2.pc = s2.jumps[counter]
-                s2.constraints.append(b != 0)
-                next.append(s2)
-            SOLVER.pop()
-            return next
-        elif hasattr(ops, ins.name):
-            fn = getattr(ops, ins.name)
-            sig = inspect.signature(fn)
-            args: List[object] = []
-            for name in sig.parameters:
-                kls = sig.parameters[name].annotation
-                if kls == uint256:
-                    args.append(s.stack.pop())
-                elif kls == State:
-                    args.append(s)
-                elif kls == Block:
-                    args.append(block)
-                elif kls == Instruction:
-                    args.append(ins)
-                else:
-                    raise TypeError(f"unknown arg class: {kls}")
-            r = fn(*args)
-            if r is not None:
-                s.stack.append(r)
-                if len(s.stack) > 1024:
-                    raise Exception("evm stack overflow")
+    for skey in end.sha3keys:
+        key = m.eval(skey, True)
+        data = key.as_long().to_bytes(key.size() // 8, "big")
+        hash = keccak.new(data=data, digest_bits=256)
+        digest = int.from_bytes(hash.digest(), "big")
+        solver.assert_and_track(skey == key, "SHAKEY")
+        solver.assert_and_track(end.sha3hash[skey.size()][skey] == BW(digest), "SHAVAL")
+        assert solver.check() == z3.sat
+        m = solver.model()
+
+    value = m.eval(end.callvalue).as_long()
+    if value:
+        print(f"Value\tETH {(value):011,}")
+
+    print(f"Data\t({m.eval(end.calldata.length())}) 0x", end="")
+    for i in range(m.eval(end.calldata.length()).as_long()):
+        b = m.eval(end.calldata.get(i))
+        if z3.is_bv_value(b):
+            print(b.as_long().to_bytes(1, "big").hex(), end="")
         else:
-            raise ValueError(f"unimplemented opcode: {ins.name}")
+            print("??", end="")
+        if i == 3:
+            print(" ", end="")
+    print()
+    if z3.is_bv_value(m.eval(end.address)):
+        print(f"Address\t0x{m.eval(end.address).as_long().to_bytes(20, 'big').hex()}")
+    if z3.is_bv_value(m.eval(end.origin)):
+        print(f"Origin\t0x{m.eval(end.origin).as_long().to_bytes(20, 'big').hex()}")
+    if z3.is_bv_value(m.eval(end.caller)):
+        print(f"Caller\t0x{m.eval(end.caller).as_long().to_bytes(20, 'big').hex()}")
+    if z3.is_bv_value(m.eval(end.gasprice)):
+        print(f"Gas\tETH {m.eval(end.gasprice).as_long():09,}")
 
-    return [s]
+    storage = {}
+    for symkey in end.storagekeys:
+        key = m.eval(symkey)
+        skey = f"0x{key.as_long():x}" if z3.is_bv_value(key) else str(key)
+        val = m.eval(start.storage[key])
+        if z3.is_bv_value(val):
+            storage[skey] = val.as_long()
+    if len(storage) > 0:
+        print("Storage", end="")
+        for key in sorted(storage.keys()):
+            print(f"\t{key} ", end="")
+            if len(key) > 16:
+                print("\n\t", end="")
+            print(f"-> 0x{storage[key]:x}")
+    print()
 
 
 if __name__ == "__main__":

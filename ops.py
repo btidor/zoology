@@ -387,10 +387,9 @@ def JUMP(s: State, counter: uint256) -> None:
 
 # 57 - Conditionally alter the program counter
 def JUMPI(s: State, counter: uint256, b: uint256) -> None:
-    counter = require_concrete(counter, "JUMPI(counter, b) requires concrete counter")
-    b = require_concrete(b, "JUMPI(counter, b) requires concrete b")
-    if b != 0:
-        s.pc = s.jumps[counter]
+    # This opcode should be implemented by the VM, since we may need to fork
+    # execution.
+    raise NotImplementedError("JUMPI")
 
 
 # 58 - Get the value of the program counter prior to the increment corresponding

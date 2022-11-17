@@ -461,19 +461,6 @@ def test_JUMP() -> None:
         JUMP(s, BW(99))
 
 
-def test_JUMPI() -> None:
-    s = State(jumps={8: 90})
-
-    JUMPI(s, BW(8), BW(0))
-    assert s.pc == 0
-
-    JUMPI(s, BW(8), BW(1))
-    assert s.pc == 90
-
-    with pytest.raises(KeyError):
-        JUMPI(s, BW(99), BW(1))
-
-
 def test_PC() -> None:
     ins = Instruction(0x12, "PC")
     assert z3.simplify(PC(ins)) == 0x12
