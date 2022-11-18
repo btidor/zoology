@@ -52,7 +52,9 @@ def handle_JUMPI(s: State) -> List[State]:
 
     s2 = s.copy()
     s.constraints.append(b == 0)
+    s.path = s.path << 1
     s2.constraints.append(b != 0)
+    s2.path = (s.path << 1) | 1
     s2.pc = s.jumps[counter]
     return [s, s2]
 

@@ -131,6 +131,10 @@ class State:
     # far.
     constraints: List[z3.ExprRef] = field(default_factory=list)
 
+    # Tracks the path of the program's execution. Each JUMPI is a bit, 1 if
+    # taken, 0 if not. MSB-first with a leading 1 prepended.
+    path: int = 1
+
     def copy(self) -> "State":
         return State(
             pc=self.pc,

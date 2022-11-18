@@ -92,15 +92,13 @@ def handle_solution(start: State, end: State, solver: z3.Solver) -> None:
     assert solver.check() == z3.sat
     m = solver.model()
 
-    print("RETURN" if end.success else "REVERT", end="")
     if len(end.returndata) > 0:
-        rdata = [
+        rdata = "0x" + "".join(
             m.eval(b, True).as_long().to_bytes(1, "big").hex() for b in end.returndata
-        ]
-        print(f"\t0x{''.join(rdata)}", end="")
+        )
     else:
-        print("\t-", end="")
-    print()
+        rdata = "-"
+    print(f"{hex(end.path)}\t{'RETURN' if end.success else 'REVERT'}\t{rdata}")
 
     for skey in end.sha3keys:
         key = m.eval(skey, True)
