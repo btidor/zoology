@@ -53,17 +53,20 @@ class IntrospectableArray:
         else:
             self.array = z3.K(key, val)
         self.accessed: List[z3.BitVecRef] = []
+        self.written: List[z3.BitVecRef] = []
 
     def __getitem__(self, key: z3.BitVecRef) -> z3.BitVecRef:
         self.accessed.append(key)
         return self.array[key]
 
     def __setitem__(self, key: z3.BitVecRef, val: z3.BitVecRef) -> None:
+        self.written.append(key)
         self.array = z3.Store(self.array, key, val)
 
     def copy(self) -> "IntrospectableArray":
         other = copy.copy(self)
         other.accessed = other.accessed.copy()
+        other.written = other.written.copy()
         return other
 
 
