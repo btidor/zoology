@@ -1,7 +1,7 @@
 import contextlib
 import copy
 from dataclasses import dataclass, field
-from typing import Dict, Iterator, List, Optional, TypeAlias
+from typing import Any, Dict, Iterator, List, Optional, TypeAlias
 
 import z3
 
@@ -198,3 +198,13 @@ def solver_stack(solver: z3.Solver) -> Iterator[None]:
         yield
     finally:
         solver.pop()
+
+
+def do_check(solver: z3.Solver, *assumptions: Any) -> bool:
+    check = solver.check(*assumptions)
+    if check == z3.sat:
+        return True
+    elif check == z3.unsat:
+        return False
+    else:
+        raise Exception("z3 evaluation timed out")
