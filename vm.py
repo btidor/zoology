@@ -6,7 +6,7 @@ from typing import Any, List, Optional
 import z3
 
 import ops
-from common import BW, Block, ByteArray, Instruction, State, uint256
+from common import BA, BW, Block, ByteArray, Instruction, State, uint256
 from disassembler import disassemble
 
 
@@ -106,9 +106,9 @@ if __name__ == "__main__":
     block = Block()
     state = State(
         jumps=jumps,
-        address=BW(0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA),
-        origin=BW(0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB),
-        caller=BW(0xCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC),
+        address=BA(0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA),
+        origin=BA(0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB),
+        caller=BA(0xCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC),
         callvalue=BW(0),
         calldata=ByteArray("CALLDATA", b"\x6f\xab\x5d\xdf"),
         gasprice=BW(0x12),
