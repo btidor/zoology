@@ -5,7 +5,7 @@ from typing import Dict, List
 import z3
 from Crypto.Hash import keccak
 
-from common import BW, Block, ByteArray, Instruction, State
+from common import BW, Block, ByteArray, Instruction, IntrospectableArray, State
 from disassembler import disassemble
 from vm import execute
 
@@ -22,7 +22,10 @@ def analyze(
         callvalue=z3.BitVec("CALLVALUE", 256),
         calldata=ByteArray("CALLDATA"),
         gasprice=z3.BitVec("GASPRICE", 256),
-        storage=z3.Array("STORAGE", z3.BitVecSort(256), z3.BitVecSort(256)),
+        storage=IntrospectableArray("STORAGE", z3.BitVecSort(256), z3.BitVecSort(256)),
+        balances=IntrospectableArray(
+            "BALANCES", z3.BitVecSort(256), z3.BitVecSort(256)
+        ),
     )
     block = Block()
     solver = z3.Optimize()
@@ -106,21 +109,28 @@ def handle_return(start: State, end: State, solver: z3.Solver) -> None:
     if z3.is_bv_value(m.eval(end.gasprice)):
         print(f"Gas\tETH {m.eval(end.gasprice).as_long():09,}")
 
-    storage = {}
-    for symkey in end.storagekeys:
-        key = m.eval(symkey)
-        skey = f"0x{key.as_long():x}" if z3.is_bv_value(key) else str(key)
-        val = m.eval(start.storage[key])
-        if z3.is_bv_value(val):
-            storage[skey] = val.as_long()
-    if len(storage) > 0:
-        print("Storage", end="")
-        for key in sorted(storage.keys()):
+    print_array("Balancej", m, start.balances, end.balances)
+    print_array("Storage", m, start.storage, end.storage)
+    print()
+
+
+def print_array(
+    name: str, m: z3.Model, start: IntrospectableArray, end: IntrospectableArray
+) -> None:
+    concrete = {}
+    for sym in end.accessed:
+        key = m.eval(sym)
+        concrete[
+            f"0x{key.as_long():x}" if z3.is_bv_value(key) else str(key)
+        ] = f"0x{m.eval(start.array[sym], True).as_long():x}"
+
+    if len(concrete) > 0:
+        print(name, end="")
+        for key in sorted(concrete.keys()):
             print(f"\t{key} ", end="")
             if len(key) > 16:
                 print("\n\t", end="")
-            print(f"-> 0x{storage[key]:x}")
-    print()
+            print(f"-> {concrete[key]}")
 
 
 if __name__ == "__main__":
@@ -129,3 +139,4 @@ if __name__ == "__main__":
     )
     instructions, jumps = disassemble(code)
     analyze(instructions, jumps)
+    print("Analysis Complete")

@@ -366,13 +366,12 @@ def MSTORE8(s: State, offset: uint256, value: uint8) -> None:
 
 # 54 - Load word from storage
 def SLOAD(s: State, key: uint256) -> uint256:
-    s.storagekeys.append(key)
     return s.storage[key]
 
 
 # 55 - Save word to storage
 def SSTORE(s: State, key: uint256, value: uint256) -> None:
-    s.storage = z3.Store(s.storage, key, value)
+    s.storage[key] = value
 
 
 # 56 - Alter the program counter
@@ -425,7 +424,6 @@ def PUSH(ins: Instruction) -> uint256:
 def DUP(ins: Instruction, s: State) -> uint256:
     if ins.suffix is None:
         raise ValueError("somehow got a DUP without a suffix")
-    # TODO: handle stack underflow
     return s.stack[-ins.suffix]
 
 
@@ -433,7 +431,6 @@ def DUP(ins: Instruction, s: State) -> uint256:
 def SWAP(ins: Instruction, s: State) -> None:
     if ins.suffix is None:
         raise ValueError("somehow got a SWAP without a suffix")
-    # TODO: handle stack underflow
     m = ins.suffix + 1
     s.stack[-1], s.stack[-m] = s.stack[-m], s.stack[-1]
 
@@ -480,6 +477,7 @@ def CREATE(value: uint256, offset: uint256, size: uint256) -> uint256:
 
 # F1 - Message-call into an account
 def CALL(
+    s: State,
     gas: uint256,
     address: uint256,
     value: uint256,
@@ -488,7 +486,11 @@ def CALL(
     retOffset: uint256,
     retSize: uint256,
 ) -> uint256:
-    return BW(1)  # TODO
+    # TODO: we assume the address is an externally-owned account (i.e. contains
+    # no code). How should we handle CALLs to contracts?
+    s.returndata = []
+    s.balances[address] += value
+    return BW(1)
 
 
 # F2 - Message-call into this account with alternative account's code
@@ -542,7 +544,7 @@ def STATICCALL(
     retOffset: uint256,
     retSize: uint256,
 ) -> uint256:
-    return BW(1)  # TODO
+    raise NotImplementedError("STATICCALL")
 
 
 # FD - Halt execution reverting state changes but returning data and remaining

@@ -112,7 +112,6 @@ if __name__ == "__main__":
         callvalue=BW(0),
         calldata=ByteArray("CALLDATA", b"\x6f\xab\x5d\xdf"),
         gasprice=BW(0x12),
-        storage=z3.K(z3.BitVecSort(256), BW(0)),
     )
     while state.success is None:
         states = execute(instructions, block, state, True)

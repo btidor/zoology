@@ -1,3 +1,4 @@
+import copy
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, TypeAlias
 
@@ -35,6 +36,29 @@ class ByteArray:
 
     def get(self, i: uint256) -> uint8:
         return z3.If(i >= self.len, BY(0), self.arr[i])
+
+
+class IntrospectableArray:
+    def __init__(
+        self, name: str, key: z3.BitVecSort, val: z3.Sort | z3.BitVecRef
+    ) -> None:
+        if isinstance(val, z3.SortRef):
+            self.array = z3.Array(name, key, val)
+        else:
+            self.array = z3.K(key, val)
+        self.accessed: List[z3.BitVecRef] = []
+
+    def __getitem__(self, key: z3.BitVecRef) -> z3.BitVecRef:
+        self.accessed.append(key)
+        return self.array[key]
+
+    def __setitem__(self, key: z3.BitVecRef, val: z3.BitVecRef) -> None:
+        self.array = z3.Store(self.array, key, val)
+
+    def copy(self) -> "IntrospectableArray":
+        other = copy.copy(self)
+        other.accessed = other.accessed.copy()
+        return other
 
 
 @dataclass
@@ -84,11 +108,10 @@ class State:
     gasprice: uint256 = BW(0x20)
     returndata: List[z3.BitVecRef] = field(default_factory=list)
     success: Optional[bool] = None
-    storage: z3.Array = z3.K(z3.BitVecSort(256), BW(0))
 
-    # It's difficult to extract the list of set keys when Z3 solves for the
-    # storage array. Instead, we track which keys have been accessed here.
-    storagekeys: List[z3.BitVec] = field(default_factory=list)
+    storage: IntrospectableArray = IntrospectableArray(
+        "STORAGE", z3.BitVecSort(256), BW(0)
+    )
 
     # Maps the length of the input data to a Z3 Array which maps symbolic inputs
     # to symbolic hash digests.
@@ -96,7 +119,9 @@ class State:
     sha3keys: List[z3.BitVec] = field(default_factory=list)
 
     # Global map of all account balances.
-    balances: z3.Array = z3.K(z3.BitVecSort(256), BW(0))
+    balances: IntrospectableArray = IntrospectableArray(
+        "BALANCES", z3.BitVecSort(256), BW(0)
+    )
 
     # List of Z3 expressions that must be satisfied in order for the program to
     # reach this state. Based on the JUMPI instructions (if statements) seen so
@@ -117,10 +142,10 @@ class State:
             gasprice=self.gasprice,
             returndata=self.returndata,
             success=self.success,
-            storage=self.storage,
-            storagekeys=self.storagekeys.copy(),
+            storage=self.storage.copy(),
             sha3hash=self.sha3hash.copy(),
             sha3keys=self.sha3keys.copy(),
+            balances=self.balances.copy(),
             constraints=self.constraints.copy(),
         )
 

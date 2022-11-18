@@ -3,7 +3,7 @@
 import pytest
 import z3
 
-from common import BW, BY, ByteArray, Instruction, State
+from common import BW, BY, Block, ByteArray, Instruction, State
 from ops import *
 
 
@@ -265,9 +265,7 @@ def test_ADDRESS() -> None:
 
 def test_BALANCE() -> None:
     s = State()
-    s.balances = z3.Store(
-        s.balances, BW(0x9BBFED6889322E016E0A02EE459D306FC19545D8), BW(125985)
-    )
+    s.balances[BW(0x9BBFED6889322E016E0A02EE459D306FC19545D8)] = BW(125985)
     assert (
         z3.simplify(BALANCE(s, BW(0x9BBFED6889322E016E0A02EE459D306FC19545D8)))
         == 125985
@@ -436,10 +434,10 @@ def test_MSTORE8() -> None:
 
 def test_SLOAD() -> None:
     s = State()
-    s.storage = z3.Store(s.storage, BW(0), BW(46))
+    s.storage[BW(0)] = BW(46)
     assert z3.simplify(SLOAD(s, BW(0))) == 46
-    assert len(s.storagekeys) == 1
-    assert z3.simplify(s.storagekeys[0]) == 0
+    assert len(s.storage.accessed) == 1
+    assert z3.simplify(s.storage.accessed[0]) == 0
 
 
 def test_SSTORE() -> None:
@@ -502,6 +500,14 @@ def test_SWAP() -> None:
     ins = Instruction(0x0, "SWAP")
     with pytest.raises(ValueError):
         SWAP(ins, s)
+
+
+def test_CALL() -> None:
+    s = State(returndata=[BY(1)])
+    res = CALL(s, BW(0), BW(0x1234), BW(123), BW(0), BW(0), BW(0), BW(0))
+    assert z3.simplify(res) == 1
+    assert len(s.returndata) == 0
+    assert z3.simplify(s.balances[BW(0x1234)]) == 123
 
 
 def test_RETURN() -> None:
