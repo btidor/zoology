@@ -3,7 +3,7 @@
 import pytest
 import z3
 
-from common import BW, BY, Block, ByteArray, Instruction, State
+from common import BA, BW, BY, Block, ByteArray, Instruction, State
 from ops import *
 
 
@@ -265,7 +265,7 @@ def test_ADDRESS() -> None:
 
 def test_BALANCE() -> None:
     s = State()
-    s.balances[BW(0x9BBFED6889322E016E0A02EE459D306FC19545D8)] = BW(125985)
+    s.balances[BA(0x9BBFED6889322E016E0A02EE459D306FC19545D8)] = BW(125985)
     assert (
         z3.simplify(BALANCE(s, BW(0x9BBFED6889322E016E0A02EE459D306FC19545D8)))
         == 125985
@@ -507,7 +507,7 @@ def test_CALL() -> None:
     res = CALL(s, BW(0), BW(0x1234), BW(123), BW(0), BW(0), BW(0), BW(0))
     assert z3.simplify(res) == 1
     assert len(s.returndata) == 0
-    assert z3.simplify(s.balances[BW(0x1234)]) == 123
+    assert z3.simplify(s.balances[BA(0x1234)]) == 123
 
 
 def test_RETURN() -> None:

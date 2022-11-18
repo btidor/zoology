@@ -3,7 +3,7 @@ from typing import cast
 import z3
 from Crypto.Hash import keccak
 
-from common import BW, BY, Address, Block, Instruction, State, uint8, uint256
+from common import BW, BY, Block, Instruction, State, uint8, uint256
 
 
 def require_concrete(var: uint256, msg: str) -> int:
@@ -185,23 +185,23 @@ def SHA3(s: State, offset: uint256, size: uint256) -> uint256:
 
 
 # 30 - Get address of currently executing account
-def ADDRESS(s: State) -> Address:
-    return s.address
+def ADDRESS(s: State) -> uint256:
+    return z3.ZeroExt(96, s.address)
 
 
 # 31 - Get balance of the given account
-def BALANCE(s: State, address: Address) -> uint256:
-    return s.balances[address]
+def BALANCE(s: State, address: uint256) -> uint256:
+    return s.balances[z3.Extract(159, 0, address)]
 
 
 # 32 - Get execution origination address
-def ORIGIN(s: State) -> Address:
-    return s.origin
+def ORIGIN(s: State) -> uint256:
+    return z3.ZeroExt(96, s.origin)
 
 
 # 33 - Get caller address
-def CALLER(s: State) -> Address:
-    return s.caller
+def CALLER(s: State) -> uint256:
+    return z3.ZeroExt(96, s.caller)
 
 
 # 34 - Get deposited value by the instruction/transaction responsible for this
@@ -249,13 +249,13 @@ def GASPRICE(s: State) -> uint256:
 
 
 # 3B - Get size of an account's code
-def EXTCODESIZE(address: Address) -> uint256:
+def EXTCODESIZE(address: uint256) -> uint256:
     raise NotImplementedError("EXTCODESIZE")
 
 
 # 3C - Copy an account's code to memory
 def EXTCODECOPY(
-    address: Address,
+    address: uint256,
     destOffset: uint256,
     offset: uint256,
     size: uint256,
@@ -290,7 +290,7 @@ def RETURNDATACOPY(
 
 
 # 3F - Get hash of an account's code
-def EXTCODEHASH(address: Address) -> uint256:
+def EXTCODEHASH(address: uint256) -> uint256:
     raise NotImplementedError("EXTCODEHASH")
 
 
@@ -300,7 +300,7 @@ def BLOCKHASH(blockNumber: uint256) -> uint256:
 
 
 # 41 - Get the block's beneficiary address
-def COINBASE(b: Block) -> Address:
+def COINBASE(b: Block) -> uint256:
     return b.coinbase
 
 
@@ -489,7 +489,9 @@ def CALL(
     # TODO: we assume the address is an externally-owned account (i.e. contains
     # no code). How should we handle CALLs to contracts?
     s.returndata = []
-    s.balances[address] += value
+    # TODO: prevent balances from going negative
+    s.balances[z3.Extract(159, 0, s.address)] -= value
+    s.balances[z3.Extract(159, 0, address)] += value
     return BW(1)
 
 

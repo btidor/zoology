@@ -1,18 +1,24 @@
+import contextlib
 import copy
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, TypeAlias
+from typing import Dict, Iterator, List, Optional, TypeAlias
 
 import z3
 
 uint8: TypeAlias = z3.BitVecRef
 uint256: TypeAlias = z3.BitVecRef
-Address: TypeAlias = z3.BitVecRef
 
 
 def BW(i: int) -> uint256:
     if i >= (1 << 256) or i < 0:
         raise ValueError(f"invalid word: {i}")
     return z3.BitVecVal(i, 256)
+
+
+def BA(i: int) -> z3.BitVecRef:
+    if i >= (1 << 160) or i < 0:
+        raise ValueError(f"invalid address: {i}")
+    return z3.BitVecVal(i, 160)
 
 
 def BY(i: int) -> uint8:
@@ -94,15 +100,9 @@ class State:
     memory: Dict[int, uint8] = field(
         default_factory=dict
     )  # concrete index -> 1-byte value
-    address: Address = (
-        BW(0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA),
-    )
-    origin: Address = (
-        BW(0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB),
-    )
-    caller: Address = (
-        BW(0xCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC),
-    )
+    address: uint256 = BW(0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA)
+    origin: uint256 = BW(0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB)
+    caller: uint256 = BW(0xCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC)
     callvalue: uint256 = BW(0)
     calldata: ByteArray = ByteArray("CALLDATA", b"")
     gasprice: uint256 = BW(0x20)
@@ -120,7 +120,7 @@ class State:
 
     # Global map of all account balances.
     balances: IntrospectableArray = IntrospectableArray(
-        "BALANCES", z3.BitVecSort(256), BW(0)
+        "BALANCES", z3.BitVecSort(160), BW(0)
     )
 
     # List of Z3 expressions that must be satisfied in order for the program to
@@ -150,6 +150,9 @@ class State:
         )
 
     def constrain(self, solver: z3.Optimize) -> None:
+        solver.assert_and_track(self.address != self.origin, "ADDROR")
+        # TODO: a contract could, in theory, call itself...
+        solver.assert_and_track(self.address != self.caller, "ADDRCL")
         solver.assert_and_track(z3.And(*self.constraints), "PC")
         for i, k1 in enumerate(self.sha3keys):
             # TODO: this can still leave hash digests implausibly close to one
@@ -173,9 +176,18 @@ class State:
 @dataclass
 class Block:
     number: uint256 = 0
-    coinbase: Address = 0
+    coinbase: uint256 = 0
     timestamp: uint256 = 0
     prevrandao: uint256 = 0
     gaslimit: uint256 = 0
     chainid: uint256 = 1
     basefee: uint256 = 0
+
+
+@contextlib.contextmanager
+def solver_stack(solver: z3.Solver) -> Iterator[None]:
+    solver.push()
+    try:
+        yield
+    finally:
+        solver.pop()

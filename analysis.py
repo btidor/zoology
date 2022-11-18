@@ -5,7 +5,15 @@ from typing import Dict, List
 import z3
 from Crypto.Hash import keccak
 
-from common import BW, Block, ByteArray, Instruction, IntrospectableArray, State
+from common import (
+    BW,
+    Block,
+    ByteArray,
+    Instruction,
+    IntrospectableArray,
+    State,
+    solver_stack,
+)
 from disassembler import disassemble
 from vm import execute
 
@@ -16,15 +24,15 @@ def analyze(
 ) -> None:
     start = State(
         jumps=jumps,
-        address=z3.BitVec("ADDRESS", 256),
-        origin=z3.BitVec("ADDRESS", 256),
-        caller=z3.BitVec("CALLER", 256),
+        address=z3.BitVec("ADDRESS", 160),
+        origin=z3.BitVec("ORIGIN", 160),
+        caller=z3.BitVec("CALLER", 160),
         callvalue=z3.BitVec("CALLVALUE", 256),
         calldata=ByteArray("CALLDATA"),
         gasprice=z3.BitVec("GASPRICE", 256),
         storage=IntrospectableArray("STORAGE", z3.BitVecSort(256), z3.BitVecSort(256)),
         balances=IntrospectableArray(
-            "BALANCES", z3.BitVecSort(256), z3.BitVecSort(256)
+            "BALANCES", z3.BitVecSort(160), z3.BitVecSort(256)
         ),
     )
     block = Block()
@@ -34,33 +42,51 @@ def analyze(
     while len(states) > 0:
         s = states.pop()
 
-        solver.push()
-        s.constrain(solver)
-        check = solver.check()
+        with solver_stack(solver):
+            s.constrain(solver)
+            check = solver.check()
 
-        if check == z3.sat:  # OK
-            if s.success is False:
-                # Ignore executions that REVERT, since they have no effect on
-                # permanent storage.
+            if check == z3.sat:  # OK
+                if s.success is False:
+                    # Ignore executions that REVERT, since they have no effect
+                    # on permanent storage.
+                    pass
+                elif s.success is True:
+                    # Success! This execution RETURNs. Now check whether any
+                    # goal was met.
+                    if check_solution(start, s, solver):
+                        handle_solution(start, s, solver)
+                    else:
+                        pass
+                else:
+                    # Ordinary fork in execution, keep going...
+                    states += execute(instructions, block, s)
+            elif check == z3.unsat:
+                # We took an illegal turn at the last JUMPI. This branch is
+                # unreachable, ignore it.
                 pass
-            elif s.success is True:
-                # Success! Print this execution and continue analyzing the other
-                # branches.
-                handle_return(start, s, solver)
             else:
-                # Ordinary fork in execution, keep going...
-                states += execute(instructions, block, s)
-        elif check == z3.unsat:
-            # We took an illegal turn at the last JUMPI. This branch is
-            # unreachable, ignore it.
-            pass
-        else:
-            raise Exception("z3 evaluation timed out")
-
-        solver.pop()
+                raise Exception("z3 evaluation timed out")
 
 
-def handle_return(start: State, end: State, solver: z3.Solver) -> None:
+def check_solution(start: State, end: State, solver: z3.Solver) -> bool:
+    solver.assert_and_track(
+        z3.Or(
+            start.balances[end.origin] > end.balances[end.origin],
+            start.balances[end.caller] > end.balances[end.caller],
+        ),
+        "GOAL:BALANCE",
+    )
+    check = solver.check()
+    if check == z3.sat:
+        return True
+    elif check == z3.unsat:
+        return False
+    else:
+        raise Exception("z3 evaluation timed out")
+
+
+def handle_solution(start: State, end: State, solver: z3.Solver) -> None:
     solver.minimize(end.callvalue)
     solver.minimize(end.calldata.length())
     assert solver.check() == z3.sat
@@ -109,7 +135,7 @@ def handle_return(start: State, end: State, solver: z3.Solver) -> None:
     if z3.is_bv_value(m.eval(end.gasprice)):
         print(f"Gas\tETH {m.eval(end.gasprice).as_long():09,}")
 
-    print_array("Balancej", m, start.balances, end.balances)
+    print_array("Balance", m, start.balances, end.balances)
     print_array("Storage", m, start.storage, end.storage)
     print()
 
