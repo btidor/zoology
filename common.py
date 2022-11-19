@@ -69,6 +69,12 @@ class IntrospectableArray:
         other.written = other.written.copy()
         return other
 
+    def copyreset(self) -> "IntrospectableArray":
+        other = copy.copy(self)
+        other.accessed = []
+        other.written = []
+        return other
+
 
 @dataclass
 class Opcode:
@@ -131,6 +137,9 @@ class State:
     # far.
     constraints: List[z3.ExprRef] = field(default_factory=list)
 
+    # Additional constraints imposed by the multi-transaction solver.
+    extra: List[z3.ExprRef] = field(default_factory=list)
+
     # Tracks the path of the program's execution. Each JUMPI is a bit, 1 if
     # taken, 0 if not. MSB-first with a leading 1 prepended.
     path: int = 1
@@ -154,6 +163,8 @@ class State:
             sha3keys=self.sha3keys.copy(),
             balances=self.balances.copy(),
             constraints=self.constraints.copy(),
+            extra=self.extra.copy(),
+            path=self.path,
         )
 
     def constrain(self, solver: z3.Optimize) -> None:
@@ -161,6 +172,7 @@ class State:
         # TODO: a contract could, in theory, call itself...
         solver.assert_and_track(self.address != self.caller, "ADDRCL")
         solver.assert_and_track(z3.And(*self.constraints), "PC")
+        solver.assert_and_track(z3.And(*self.extra), "EXTRA")
         for i, k1 in enumerate(self.sha3keys):
             # TODO: this can still leave hash digests implausibly close to one
             # another, e.g. causing two arrays to overlap.
@@ -178,6 +190,19 @@ class State:
                     ),
                     f"SHA3.DISTINCT({i},{j})",
                 )
+
+    def is_changed(self) -> bool:
+        assert self.success is not None
+        if self.success == False:
+            # Ignore executions that REVERT, since they can't affect permanent
+            # state.
+            return False
+        elif len(self.storage.written) > 0:
+            # TODO: constrain further to eliminate no-op writes?
+            return True
+        elif len(self.balances.written) > 0:
+            return True
+        return False
 
 
 @dataclass

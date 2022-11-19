@@ -31,12 +31,17 @@ def simulate_transaction(
 
         with solver_stack(solver):
             s.constrain(solver)
-            if do_check(solver):  # OK
-                if s.success is None:
+            if do_check(solver):
+                if s.success == True:
+                    # Potential match!
+                    yield s
+                elif s.success == False:
+                    # Ignore executions that REVERT, since they can't affect
+                    # permanent state.
+                    pass
+                else:
                     # Ordinary fork in execution, keep going...
                     states += execute(instructions, block, s)
-                else:
-                    yield s
             else:
                 # We took an illegal turn at the last JUMPI. This branch is
                 # unreachable, ignore it.
@@ -67,7 +72,9 @@ def handle_solution(solver: z3.Solver, start: State, end: State) -> None:
         )
     else:
         rdata = "-"
-    print(f"{hex(end.path)}\t{'RETURN' if end.success else 'REVERT'}\t{rdata}")
+    print(
+        f"{hex(end.path).replace('0x', 'Px')}\t{'RETURN' if end.success else 'REVERT'}\t{rdata}"
+    )
 
     for skey in end.sha3keys:
         key = m.eval(skey, True)
