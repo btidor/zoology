@@ -259,7 +259,7 @@ def test_SHA3() -> None:
 
 
 def test_ADDRESS() -> None:
-    s = State(address=BW(0x9BBFED6889322E016E0A02EE459D306FC19545D8))
+    s = State(address=BA(0x9BBFED6889322E016E0A02EE459D306FC19545D8))
     assert z3.simplify(ADDRESS(s)) == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
 
 
@@ -273,12 +273,12 @@ def test_BALANCE() -> None:
 
 
 def test_ORIGIN() -> None:
-    s = State(origin=BW(0x9BBFED6889322E016E0A02EE459D306FC19545D8))
+    s = State(origin=BA(0x9BBFED6889322E016E0A02EE459D306FC19545D8))
     assert z3.simplify(ORIGIN(s)) == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
 
 
 def test_CALLER() -> None:
-    s = State(caller=BW(0x9BBFED6889322E016E0A02EE459D306FC19545D8))
+    s = State(caller=BA(0x9BBFED6889322E016E0A02EE459D306FC19545D8))
     assert z3.simplify(CALLER(s)) == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
 
 
@@ -504,10 +504,12 @@ def test_SWAP() -> None:
 
 def test_CALL() -> None:
     s = State(returndata=[BY(1)])
+    s.balances[s.address] = 125
     res = CALL(s, BW(0), BW(0x1234), BW(123), BW(0), BW(0), BW(0), BW(0))
     assert z3.simplify(res) == 1
     assert len(s.returndata) == 0
     assert z3.simplify(s.balances[BA(0x1234)]) == 123
+    assert z3.simplify(s.balances[s.address]) == 2
 
 
 def test_RETURN() -> None:

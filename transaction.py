@@ -25,6 +25,8 @@ def simulate_transaction(
     instructions: List[Instruction],
     start: State,
 ) -> Iterator[State]:
+    start.transfer(start.caller, start.address, start.callvalue)
+
     states = [start]
     while len(states) > 0:
         s = states.pop()

@@ -6,6 +6,7 @@ from typing import Any, Dict, Iterator, List, Optional, TypeAlias
 import z3
 
 uint8: TypeAlias = z3.BitVecRef
+uint160: TypeAlias = z3.BitVecRef
 uint256: TypeAlias = z3.BitVecRef
 
 
@@ -15,7 +16,7 @@ def BW(i: int) -> uint256:
     return z3.BitVecVal(i, 256)
 
 
-def BA(i: int) -> z3.BitVecRef:
+def BA(i: int) -> uint160:
     if i >= (1 << 160) or i < 0:
         raise ValueError(f"invalid address: {i}")
     return z3.BitVecVal(i, 160)
@@ -109,9 +110,9 @@ class State:
     memory: Dict[int, uint8] = field(
         default_factory=dict
     )  # concrete index -> 1-byte value
-    address: uint256 = BW(0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA)
-    origin: uint256 = BW(0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB)
-    caller: uint256 = BW(0xCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC)
+    address: uint160 = BA(0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA)
+    origin: uint160 = BA(0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB)
+    caller: uint160 = BA(0xCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC)
     callvalue: uint256 = BW(0)
     calldata: ByteArray = ByteArray("CALLDATA", b"")
     gasprice: uint256 = BW(0x20)
@@ -143,6 +144,11 @@ class State:
     # Tracks the path of the program's execution. Each JUMPI is a bit, 1 if
     # taken, 0 if not. MSB-first with a leading 1 prepended.
     path: int = 1
+
+    def transfer(self, src: uint160, dst: uint160, val: uint256) -> None:
+        self.balances[src] -= val
+        self.balances[dst] += val
+        self.constraints.append(self.balances[src] >= 0)
 
     def copy(self) -> "State":
         return State(
