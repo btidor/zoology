@@ -1,7 +1,7 @@
 import contextlib
 import copy
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterator, List, Optional, TypeAlias
+from typing import Any, Callable, Dict, Iterator, List, Optional, TypeAlias
 
 import z3
 
@@ -248,3 +248,17 @@ def do_check(solver: z3.Solver, *assumptions: Any) -> bool:
         return False
     else:
         raise Exception("z3 evaluation timed out")
+
+
+class Predicate:
+    def __init__(
+        self, expression: Callable[[State], z3.ExprRef], description: str
+    ) -> None:
+        self.expression = expression
+        self.description = description
+
+    def apply(self, state: State) -> z3.ExprRef:
+        return self.expression(state)
+
+    def __repr__(self) -> str:
+        return self.description

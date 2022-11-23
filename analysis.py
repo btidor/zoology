@@ -1,28 +1,57 @@
 #!/usr/bin/env python3
 
-from typing import Dict, List, Optional
+from typing import Dict, Iterator, List
 
 import z3
 
-from common import Instruction, State, do_check, solver_stack
+from common import Instruction, Predicate, State, do_check, solver_stack
 from disassembler import disassemble
 from universal import universal_transaction
 
 
 def analyze(instructions: List[Instruction], jumps: Dict[int, int]) -> None:
     solver = z3.Optimize()
+
+    goals: Dict[str, List[Predicate]] = {}
     for start, end in universal_transaction(solver, instructions, jumps):
         if check_goal(solver, start, end):
-            cond = is_conditional(solver, end)
-            if cond is None:
-                print("BAD\t", end="")
-            else:
-                print("CND\t", end="")
-        elif end.is_changed(solver, start):
-            print(f"...\t", end="")
+            candidates = []
+            for candidate in candidate_safety_predicates(end):
+                if do_check(solver, candidate.apply(end)) == False:
+                    # (1) In order to be a valid safety predicate, it must *not*
+                    # hold in the goal state
+                    candidates.append(candidate)
+
+            description = describe_state(solver, end)
+            goals[description] = candidates
+
+    for start, end in universal_transaction(solver, instructions, jumps):
+        if check_goal(solver, start, end) or not end.is_changed(solver, start):
+            # We only want to analyze STEP transitions, so ignore GOAL
+            # transitions and no-ops
+            continue
+
+        for description, candidates in goals.items():
+            # (2) In order to be a valid safety predicate, there must be no STEP
+            # transition from P -> ~P
+            filtered = list(
+                filter(
+                    lambda c: do_check(solver, c.apply(start), z3.Not(c.apply(end)))
+                    == False,
+                    candidates,
+                )
+            )
+            goals[description] = filtered
+
+    for description, candidates in goals.items():
+        if len(candidates) > 0:
+            # Successfully constrained goal with safety predicate!
+            print("    ✨\t", end="")
         else:
-            print(f"   \t", end="")
-        print_history(solver, end)
+            # Goal is unconstrained [TODO: consider safety predicates that
+            # require a chain of transactions to apply]
+            print("    💥\t", end="")
+        print(description)
 
 
 def check_goal(solver: z3.Solver, start: State, end: State) -> bool:
@@ -33,39 +62,25 @@ def check_goal(solver: z3.Solver, start: State, end: State) -> bool:
         return do_check(solver)
 
 
-def is_conditional(solver: z3.Solver, state: State) -> Optional[z3.ExprRef]:
-    # First, check the owner hypothesis: that an address in a storage slot
-    # matches the caller or origin.
-    #
-    # TODO: handle cases where the owner is packed with other variables in the
-    # slot (taint tracking? brute force?)
-    state.constrain(solver)
-    solver.minimize(state.callvalue)
-    solver.minimize(state.calldata.length())
-    assert solver.check() == z3.sat
-    m = solver.model()
-
-    origin = m.eval(state.origin, True).as_long()
-    caller = m.eval(state.caller, True).as_long()
+def candidate_safety_predicates(state: State) -> Iterator[Predicate]:
+    # Ownership Predicate
     for key in state.storage.accessed:
-        val = m.eval(state.storage.array[key], True).as_long()
-        if val != origin and val != caller:
-            continue
-        cond = z3.And(
-            state.origin != z3.Extract(159, 0, state.storage.array[key]),
-            state.caller != z3.Extract(159, 0, state.storage.array[key]),
-        )
-        if do_check(solver, [cond]) == False:
-            return cond
+        k = z3.simplify(key)
+        if z3.is_bv_value(k):
+            yield Predicate(
+                lambda state: z3.And(
+                    state.origin
+                    != z3.Extract(159, 0, state.storage.array[k.as_long()]),
+                    state.caller
+                    != z3.Extract(159, 0, state.storage.array[k.as_long()]),
+                ),
+                f"ownership[{hex(k.as_long())}",
+            )
 
-    # TODO: the owner hypothesis eliminates the first degenerate case (Px1255),
-    # a call to collectAllocations() by the owner. We now need to eliminate the
-    # second degenerate case (Px1155), a call to sendAllocation(address) using
-    # an address that has preexisting balance.
-    return z3.BoolRef(False)
+    # TODO: Balance Predicate
 
 
-def print_history(solver: z3.Solver, state: State) -> None:
+def describe_state(solver: z3.Solver, state: State) -> str:
     state.constrain(solver)
     solver.minimize(state.callvalue)
     solver.minimize(state.calldata.length())
@@ -78,7 +93,7 @@ def print_history(solver: z3.Solver, state: State) -> None:
         )
     else:
         rdata = "-"
-    print(f"Px{state.path:x}\t{'RETURN' if state.success else 'REVERT'}\t{rdata}")
+    return f"Px{state.path:x}\t{'RETURN' if state.success else 'REVERT'}\t{rdata}"
 
 
 if __name__ == "__main__":
