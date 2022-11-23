@@ -78,33 +78,34 @@ def universal_transaction(
                 pass
 
 
-def check_solution(solver: z3.Solver, start: State, end: State) -> bool:
-    solver.assert_and_track(
-        z3.Or(
-            start.balances[end.origin] > end.balances[end.origin],
-            start.balances[end.caller] > end.balances[end.caller],
-        ),
-        "GOAL:BALANCE",
-    )
-    return do_check(solver)
-
-
-def handle_solution(solver: z3.Solver, start: State, end: State) -> None:
+def print_solution(solver: z3.Solver, start: State, end: State) -> None:
     end.constrain(solver)
     solver.minimize(end.callvalue)
     solver.minimize(end.calldata.length())
     assert solver.check() == z3.sat
     m = solver.model()
 
+    if do_check(
+        solver,
+        z3.Or(
+            start.balances[end.origin] > end.balances[end.origin],
+            start.balances[end.caller] > end.balances[end.caller],
+        ),
+    ):
+        kind = "🚩 GOAL"
+    elif len(end.storage.written) > 0:
+        kind = "📒 WRIT"
+    else:
+        return
+
+    assert end.success == True
     if len(end.returndata) > 0:
         rdata = "0x" + "".join(
             m.eval(b, True).as_long().to_bytes(1, "big").hex() for b in end.returndata
         )
     else:
         rdata = "-"
-    print(
-        f"{hex(end.path).replace('0x', 'Px')}\t{'RETURN' if end.success else 'REVERT'}\t{rdata}"
-    )
+    print(f"{kind}\t{hex(end.path).replace('0x', 'Px')}\t{rdata}")
 
     for skey in end.sha3keys:
         key = m.eval(skey, True)
@@ -174,7 +175,6 @@ if __name__ == "__main__":
     instructions, jumps = disassemble(code)
     solver = z3.Optimize()
     for start, end in universal_transaction(solver, instructions, jumps):
-        if check_solution(solver, start, end):
-            handle_solution(solver, start, end)
+        print_solution(solver, start, end)
 
     print("Analysis Complete")
