@@ -197,17 +197,24 @@ class State:
                     f"SHA3.DISTINCT({i},{j})",
                 )
 
-    def is_changed(self) -> bool:
-        assert self.success is not None
-        if self.success == False:
-            # Ignore executions that REVERT, since they can't affect permanent
-            # state.
-            return False
-        elif len(self.storage.written) > 0:
-            # TODO: constrain further to eliminate no-op writes?
+    def is_changed(self, solver: z3.Solver, since: "State") -> bool:
+        assert self.success == True
+
+        # TODO: constrain further to eliminate no-op writes?
+        if len(self.storage.written) > 0:
             return True
-        elif len(self.balances.written) > 0:
-            return True
+
+        # Check if any address other than the contract itself has increased
+        for addr in self.balances.written:
+            if do_check(
+                solver,
+                z3.And(
+                    addr != self.address,
+                    self.balances.array[addr] > since.balances.array[addr],
+                ),
+            ):
+                return True
+
         return False
 
 

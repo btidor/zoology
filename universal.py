@@ -93,8 +93,8 @@ def print_solution(solver: z3.Solver, start: State, end: State) -> None:
         ),
     ):
         kind = "🚩 GOAL"
-    elif len(end.storage.written) > 0:
-        kind = "📒 WRIT"
+    elif end.is_changed(solver, start):
+        kind = "📒 STEP"
     else:
         return
 

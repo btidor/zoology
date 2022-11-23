@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from typing import Dict, List, Optional, Tuple, TypeAlias, cast
+from typing import Dict, List, Optional
 
 import z3
 
@@ -18,7 +18,7 @@ def analyze(instructions: List[Instruction], jumps: Dict[int, int]) -> None:
                 print("BAD\t", end="")
             else:
                 print("CND\t", end="")
-        elif end.is_changed():
+        elif end.is_changed(solver, start):
             print(f"...\t", end="")
         else:
             print(f"   \t", end="")
