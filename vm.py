@@ -108,12 +108,8 @@ if __name__ == "__main__":
     block = Block()
     state = State(
         jumps=jumps,
-        address=BA(0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA),
-        origin=BA(0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB),
-        caller=BA(0xCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC),
         callvalue=BW(0),
         calldata=ByteArray("CALLDATA", b"\x6f\xab\x5d\xdf"),
-        gasprice=BW(0x12),
     )
     while state.success is None:
         states = execute(instructions, block, state, True)

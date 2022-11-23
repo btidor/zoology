@@ -301,7 +301,7 @@ def BLOCKHASH(blockNumber: uint256) -> uint256:
 
 # 41 - Get the block's beneficiary address
 def COINBASE(b: Block) -> uint256:
-    return b.coinbase
+    return z3.ZeroExt(96, b.coinbase)
 
 
 # 42 - Get the block's timestamp

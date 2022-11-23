@@ -115,7 +115,7 @@ class State:
     caller: uint160 = BA(0xCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC)
     callvalue: uint256 = BW(0)
     calldata: ByteArray = ByteArray("CALLDATA", b"")
-    gasprice: uint256 = BW(0x20)
+    gasprice: uint256 = BW(0x12)
     returndata: List[z3.BitVecRef] = field(default_factory=list)
     success: Optional[bool] = None
 
@@ -213,13 +213,15 @@ class State:
 
 @dataclass
 class Block:
-    number: uint256 = 0
-    coinbase: uint256 = 0
-    timestamp: uint256 = 0
-    prevrandao: uint256 = 0
-    gaslimit: uint256 = 0
-    chainid: uint256 = 1
-    basefee: uint256 = 0
+    number: uint256 = BW(16030969)
+    coinbase: uint160 = BA(0xDAFEA492D9C6733AE3D56B7ED1ADB60692C98BC5)
+    timestamp: uint256 = BW(1669214471)
+    prevrandao: uint256 = BW(
+        0xCC7E0A66B3B9E3F54B7FDB9DCF98D57C03226D73BFFBB4E0BA7B08F92CE00D19
+    )
+    gaslimit: uint256 = BW(30000000000000000)
+    chainid: uint256 = BW(1)
+    basefee: uint256 = BW(12267131109)
 
 
 @contextlib.contextmanager

@@ -4,94 +4,25 @@ from typing import Dict, List, Optional, Tuple, TypeAlias, cast
 
 import z3
 
-from common import (
-    BA,
-    Block,
-    ByteArray,
-    Instruction,
-    IntrospectableArray,
-    State,
-    do_check,
-    solver_stack,
-)
+from common import Instruction, State, do_check, solver_stack
 from disassembler import disassemble
-from transaction import simulate_transaction
-
-Transition: TypeAlias = Tuple[int, Optional[State], Optional[State]]
-History: TypeAlias = List[Transition]
+from universal import universal_transaction
 
 
 def analyze(instructions: List[Instruction], jumps: Dict[int, int]) -> None:
-    # TODO: transactions may span multiple blocks
-    block = Block()
     solver = z3.Optimize()
-
-    # TODO: support transaction chains from multiple addresses
-    origin = z3.BitVec("ORIGIN", 160)
-    address: z3.BitVec = z3.BitVec("ADDRESS", 160)
-    start = State(
-        jumps=jumps,
-        address=address,
-        # TODO: properly constrain ORIGIN to be an EOA and CALLER to either be
-        # equal to ORIGIN or else be a non-EOA.
-        origin=origin,
-        caller=origin,
-        callvalue=z3.BitVec("CALLVALUE#0", 256),
-        calldata=ByteArray("CALLDATA#0"),
-        gasprice=z3.BitVec("GASPRICE#0", 256),
-        # TODO: the balances of other accounts can change between transactions
-        # (and the balance of this contract account too, via SELFDESTRUCT). How
-        # do we model this?
-        balances=IntrospectableArray(
-            "BALANCES", z3.BitVecSort(160), z3.BitVecSort(256)
-        ),
-        storage=IntrospectableArray("STORAGE", z3.BitVecSort(256), z3.BitVecSort(256)),
-    )
-
-    histories: List[History] = [[(-1, None, None)]]
-    while len(histories) > 0:
-        history = histories.pop()
-        ptx, _, previous = history[-1]
-        if previous is None:
-            start = State(
-                jumps=jumps,
-                address=address,
-                # TODO: properly constrain ORIGIN to be an EOA and CALLER to
-                # either be equal to ORIGIN or else be a non-EOA.
-                origin=origin,
-                caller=origin,
-                # TODO: the balances of other accounts can change between
-                # transactions (and the balance of this contract account too,
-                # via SELFDESTRUCT). How do we model this?
-                balances=IntrospectableArray(
-                    "BALANCES", z3.BitVecSort(160), z3.BitVecSort(256)
-                ),
-                storage=IntrospectableArray(
-                    "STORAGE", z3.BitVecSort(256), z3.BitVecSort(256)
-                ),
-            )
-        else:
-            start = previous.copy()
-
-        start.callvalue = z3.BitVec(f"CALLVALUE#{ptx+1}", 256)
-        start.calldata = ByteArray(f"CALLDATA#{ptx+1}")
-        start.gasprice = z3.BitVec(f"GASPRICE#{ptx+1}", 256)
-
-        for end in simulate_transaction(solver, block, instructions, start):
-            history.append((ptx + 1, start, end))
-            if check_goal(solver, start, end):
-                cond = is_conditional(solver, end)
-                if cond is None:
-                    print("TRM\t", end="")
-                    print_history(solver, history)
-                    return
-                print("CND\t", end="")
-                print_history(solver, history)
-                cast(State, history[-1][2]).constraints.append(cond)
-            elif end.is_changed():
-                histories.append(history)
+    for start, end in universal_transaction(solver, instructions, jumps):
+        if check_goal(solver, start, end):
+            cond = is_conditional(solver, end)
+            if cond is None:
+                print("BAD\t", end="")
             else:
-                pass
+                print("CND\t", end="")
+        elif end.is_changed():
+            print(f"...\t", end="")
+        else:
+            print(f"   \t", end="")
+        print_history(solver, end)
 
 
 def check_goal(solver: z3.Solver, start: State, end: State) -> bool:
@@ -134,24 +65,20 @@ def is_conditional(solver: z3.Solver, state: State) -> Optional[z3.ExprRef]:
     return z3.BoolRef(False)
 
 
-def print_history(solver: z3.Solver, history: History) -> None:
-    tx = history[-1][0]
-    end = cast(State, history[-1][2])
-    end.constrain(solver)
-    solver.minimize(end.callvalue)
-    solver.minimize(end.calldata.length())
+def print_history(solver: z3.Solver, state: State) -> None:
+    state.constrain(solver)
+    solver.minimize(state.callvalue)
+    solver.minimize(state.calldata.length())
     assert solver.check() == z3.sat
     m = solver.model()
 
-    if len(end.returndata) > 0:
+    if len(state.returndata) > 0:
         rdata = "0x" + "".join(
-            m.eval(b, True).as_long().to_bytes(1, "big").hex() for b in end.returndata
+            m.eval(b, True).as_long().to_bytes(1, "big").hex() for b in state.returndata
         )
     else:
         rdata = "-"
-    print(
-        f"TX{tx:02}\t{hex(end.path)}\t{'RETURN' if end.success else 'REVERT'}\t{rdata}"
-    )
+    print(f"Px{state.path:x}\t{'RETURN' if state.success else 'REVERT'}\t{rdata}")
 
 
 if __name__ == "__main__":
@@ -160,4 +87,3 @@ if __name__ == "__main__":
     )
     instructions, jumps = disassemble(code)
     analyze(instructions, jumps)
-    print("Analysis Complete")
