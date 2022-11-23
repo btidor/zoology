@@ -111,20 +111,24 @@ def handle_solution(solver: z3.Solver, start: State, end: State) -> None:
     if z3.is_bv_value(m.eval(end.gasprice)):
         print(f"Gas\tETH {m.eval(end.gasprice).as_long():09,}")
 
-    print_array("Balance", m, start.balances, end.balances)
-    print_array("Storage", m, start.storage, end.storage)
+    print_array("Balance", m, end.balances.accessed, start.balances.array)
+    print_array("Storage", m, end.storage.accessed, start.storage.array)
+    print_array("Writes", m, end.storage.written, end.storage.array)
     print()
 
 
 def print_array(
-    name: str, m: z3.Model, start: IntrospectableArray, end: IntrospectableArray
+    name: str,
+    m: z3.Model,
+    keys: List[z3.BitVecRef],
+    array: z3.Array,
 ) -> None:
     concrete = {}
-    for sym in end.accessed:
+    for sym in keys:
         key = m.eval(sym)
         concrete[
             f"0x{key.as_long():x}" if z3.is_bv_value(key) else str(key)
-        ] = f"0x{m.eval(start.array[sym], True).as_long():x}"
+        ] = f"0x{m.eval(array[sym], True).as_long():x}"
 
     if len(concrete) > 0:
         print(name, end="")
