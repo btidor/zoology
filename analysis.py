@@ -87,13 +87,15 @@ def describe_state(solver: z3.Solver, state: State) -> str:
     assert solver.check() == z3.sat
     m = solver.model()
 
-    if len(state.returndata) > 0:
-        rdata = "0x" + "".join(
-            m.eval(b, True).as_long().to_bytes(1, "big").hex() for b in state.returndata
-        )
-    else:
-        rdata = "-"
-    return f"Px{state.path:x}\t{'RETURN' if state.success else 'REVERT'}\t{rdata}"
+    calldata = "0x"
+    for i in range(m.eval(state.calldata.length()).as_long()):
+        b = m.eval(state.calldata.get(i))
+        calldata += f"{b.as_long():02x}" if z3.is_bv_value(b) else "??"
+        if i == 3:
+            calldata += " "
+
+    assert state.success == True
+    return f"Px{state.path:x}\t{calldata}"
 
 
 if __name__ == "__main__":
