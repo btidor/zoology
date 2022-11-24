@@ -34,6 +34,7 @@ def universal_transaction(
         basefee=z3.BitVec("BASEFEE", 256),
     )
 
+    # TODO: start is mutated by vm.execute!
     start = State(
         jumps=jumps,
         address=z3.BitVec("ADDRESS", 160),
@@ -51,9 +52,9 @@ def universal_transaction(
             "BALANCES", z3.BitVecSort(160), z3.BitVecSort(256)
         ),
         storage=IntrospectableArray("STORAGE", z3.BitVecSort(256), z3.BitVecSort(256)),
+        contribution=z3.BitVec("CONTRIBUTION", 256),
     )
-
-    start.transfer(start.caller, start.address, start.callvalue)
+    start.transfer_initial()
 
     states = [start]
     while len(states) > 0:

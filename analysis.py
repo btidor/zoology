@@ -6,7 +6,7 @@ import z3
 
 from common import Instruction, Predicate, State, do_check, solver_stack
 from disassembler import disassemble
-from universal import universal_transaction
+from universal import print_solution, universal_transaction
 
 
 def analyze(instructions: List[Instruction], jumps: Dict[int, int]) -> None:
@@ -17,10 +17,14 @@ def analyze(instructions: List[Instruction], jumps: Dict[int, int]) -> None:
         if check_goal(solver, start, end):
             candidates = []
             for candidate in candidate_safety_predicates(end):
-                if do_check(solver, candidate.apply(end)) == False:
-                    # (1) In order to be a valid safety predicate, it must *not*
-                    # hold in the goal state
-                    candidates.append(candidate)
+                with solver_stack(solver):
+                    solver.assert_and_track(
+                        candidate.apply(start), f"SAFETY:{candidate}"
+                    )
+                    if not check_goal(solver, start, end):
+                        # (1) In order to be a valid safety predicate, it must
+                        # *not* hold in the goal transition start state
+                        candidates.append(candidate)
 
             description = describe_state(solver, end)
             goals[description] = candidates
@@ -34,13 +38,21 @@ def analyze(instructions: List[Instruction], jumps: Dict[int, int]) -> None:
         for description, candidates in goals.items():
             # (2) In order to be a valid safety predicate, there must be no STEP
             # transition from P -> ~P
-            filtered = list(
-                filter(
-                    lambda c: do_check(solver, c.apply(start), z3.Not(c.apply(end)))
-                    == False,
-                    candidates,
+            filtered = []
+            for candidate in candidates:
+                check = do_check(
+                    solver, candidate.apply(start), z3.Not(candidate.apply(end))
                 )
-            )
+                # TODO: debug this!
+                print(description.split("\t")[0], hex(end.path), candidate, check)
+                print_solution(solver, start, end)
+                m = solver.model()
+                print(
+                    z3.simplify(m.eval(end.contribution)),
+                    z3.simplify(m.eval(start.callvalue)),
+                )
+                if check == False:
+                    filtered.append(candidate)
             goals[description] = filtered
 
     for description, candidates in goals.items():
@@ -57,7 +69,12 @@ def analyze(instructions: List[Instruction], jumps: Dict[int, int]) -> None:
 def check_goal(solver: z3.Solver, start: State, end: State) -> bool:
     with solver_stack(solver):
         solver.assert_and_track(
-            end.balances[end.origin] > start.balances[end.origin], "GOAL:BALANCE"
+            z3.And(
+                end.balances[end.origin] > start.balances[end.origin],
+                end.balances[end.origin] - start.balances[end.origin]
+                > start.contribution,
+            ),
+            "GOAL:BALANCE",
         )
         return do_check(solver)
 
@@ -74,10 +91,14 @@ def candidate_safety_predicates(state: State) -> Iterator[Predicate]:
                     state.caller
                     != z3.Extract(159, 0, state.storage.array[k.as_long()]),
                 ),
-                f"ownership[{hex(k.as_long())}",
+                f"ownership[{hex(k.as_long())}]",
             )
 
-    # TODO: Balance Predicate
+    # Balance Predicate
+    for key in state.storage.accessed:
+        yield Predicate(
+            lambda state: state.contribution >= state.storage.array[key], f"balance*"
+        )
 
 
 def describe_state(solver: z3.Solver, state: State) -> str:

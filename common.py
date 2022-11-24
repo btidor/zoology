@@ -145,10 +145,18 @@ class State:
     # taken, 0 if not. MSB-first with a leading 1 prepended.
     path: int = 1
 
+    # Tracks how much value has been sent into the contract by our agent in
+    # total across all transactions.
+    contribution: uint256 = BW(0)
+
     def transfer(self, src: uint160, dst: uint160, val: uint256) -> None:
         self.balances[src] -= val
         self.balances[dst] += val
         self.constraints.append(self.balances[src] >= 0)
+
+    def transfer_initial(self) -> None:
+        self.transfer(self.caller, self.address, self.callvalue)
+        self.contribution += self.callvalue
 
     def copy(self) -> "State":
         return State(
@@ -171,6 +179,7 @@ class State:
             constraints=self.constraints.copy(),
             extra=self.extra.copy(),
             path=self.path,
+            contribution=self.contribution,
         )
 
     def constrain(self, solver: z3.Optimize) -> None:
