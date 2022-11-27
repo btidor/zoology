@@ -297,7 +297,7 @@ class Predicate:
         self.expression = expression
         self.description = description
 
-    def apply(self, state: State) -> z3.ExprRef:
+    def eval(self, state: State) -> z3.ExprRef:
         return self.expression(state)
 
     def __repr__(self) -> str:

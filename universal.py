@@ -195,4 +195,4 @@ if __name__ == "__main__":
     for solver, start, end in universal_transaction(instructions, jumps):
         print_solution(solver, start, end)
 
-    print("Analysis Complete")
+    print("End Universal Transaction")

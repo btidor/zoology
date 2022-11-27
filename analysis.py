@@ -19,7 +19,7 @@ def analyze(instructions: List[Instruction], jumps: Dict[int, int]) -> None:
 
         candidates = []
         for candidate in candidate_safety_predicates(end):
-            if not do_check(solver, *goal(start, end), candidate.apply(start)):
+            if not do_check(solver, *goal(start, end), candidate.eval(start)):
                 # (1) In order to be a valid safety predicate, it must preclude
                 # this transaction when applied to the start state
                 candidates.append(candidate)
@@ -37,8 +37,8 @@ def analyze(instructions: List[Instruction], jumps: Dict[int, int]) -> None:
             for candidate in candidates:
                 # TODO: some of these solutions are incorrect!
                 constraints = [
-                    candidate.apply(start),
-                    z3.Not(candidate.apply(end)),
+                    candidate.eval(start),
+                    z3.Not(candidate.eval(end)),
                 ]
                 check = do_check(solver, *constraints)
                 print(description, candidate, check)
