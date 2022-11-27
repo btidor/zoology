@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from typing import Dict, Iterator, List, Tuple
+from typing import Callable, Dict, Iterator, List, Tuple
 
 import z3
 from Crypto.Hash import keccak
@@ -13,17 +13,14 @@ from common import (
     IntrospectableArray,
     State,
     do_check,
-    solver_stack,
 )
 from disassembler import disassemble
 from vm import execute
 
 
 def universal_transaction(
-    solver: z3.Solver,
-    instructions: List[Instruction],
-    jumps: Dict[int, int],
-) -> Iterator[Tuple[State, State]]:
+    instructions: List[Instruction], jumps: Dict[int, int]
+) -> Iterator[Tuple[z3.Solver, State, State]]:
     block = Block(
         number=z3.BitVec("NUMBER", 256),
         coinbase=z3.BitVec("COINBASE", 160),
@@ -34,7 +31,6 @@ def universal_transaction(
         basefee=z3.BitVec("BASEFEE", 256),
     )
 
-    # TODO: start is mutated by vm.execute!
     start = State(
         jumps=jumps,
         address=z3.BitVec("ADDRESS", 160),
@@ -54,35 +50,36 @@ def universal_transaction(
         storage=IntrospectableArray("STORAGE", z3.BitVecSort(256), z3.BitVecSort(256)),
         contribution=z3.BitVec("CONTRIBUTION", 256),
     )
-    start.transfer_initial()
 
-    states = [start]
+    init = start.copy()
+    init.transfer_initial()
+    states = execute(instructions, block, init)
     while len(states) > 0:
         s = states.pop()
 
-        with solver_stack(solver):
-            s.constrain(solver)
-            if do_check(solver):
-                if s.success == True:
-                    # Potential match!
-                    yield start, s
-                elif s.success == False:
-                    # Ignore executions that REVERT, since they can't affect
-                    # permanent state.
-                    pass
-                else:
-                    # Ordinary fork in execution, keep going...
-                    states += execute(instructions, block, s)
-            else:
-                # We took an illegal turn at the last JUMPI. This branch is
-                # unreachable, ignore it.
+        solver = z3.Optimize()
+        s.constrain(solver)
+        solver.minimize(s.contribution)
+        solver.minimize(s.callvalue)
+        solver.minimize(s.calldata.length())
+        if do_check(solver):
+            if s.success == True:
+                # Potential match!
+                yield solver, start, s
+            elif s.success == False:
+                # Ignore executions that REVERT, since they can't affect
+                # permanent state.
                 pass
+            else:
+                # Ordinary fork in execution, keep going...
+                states += execute(instructions, block, s)
+        else:
+            # We took an illegal turn at the last JUMPI. This branch is
+            # unreachable, ignore it.
+            pass
 
 
 def print_solution(solver: z3.Solver, start: State, end: State) -> None:
-    end.constrain(solver)
-    solver.minimize(end.callvalue)
-    solver.minimize(end.calldata.length())
     assert solver.check() == z3.sat
     m = solver.model()
 
@@ -140,33 +137,49 @@ def print_solution(solver: z3.Solver, start: State, end: State) -> None:
         print(f"Caller\t0x{m.eval(end.caller).as_long().to_bytes(20, 'big').hex()}")
     if z3.is_bv_value(m.eval(end.gasprice)):
         print(f"Gas\tETH {m.eval(end.gasprice).as_long():09,}")
+    if z3.is_bv_value(m.eval(end.contribution)):
+        print(f"Contrib\tETH {m.eval(end.contribution).as_long():09,}")
 
-    print_array("Balance", m, end.balances.accessed, start.balances.array)
-    print_array("Storage", m, end.storage.accessed, start.storage.array)
-    print_array("Writes", m, end.storage.written, end.storage.array)
+    print_array("Balance", m, start.balances, end.balances)
+    print_array("Storage", m, start.storage, end.storage)
     print()
 
 
 def print_array(
     name: str,
     m: z3.Model,
-    keys: List[z3.BitVecRef],
-    array: z3.Array,
+    start: IntrospectableArray,
+    end: IntrospectableArray,
 ) -> None:
-    concrete = {}
-    for sym in keys:
-        key = m.eval(sym)
-        concrete[
-            f"0x{key.as_long():x}" if z3.is_bv_value(key) else str(key)
-        ] = f"0x{m.eval(array[sym], True).as_long():x}"
+    indexify: Callable[[z3.ExprRef], str] = (
+        lambda key: f"0x{key.as_long():x}" if z3.is_bv_value(key) else str(key)
+    )
+    valueify: Callable[[z3.ExprRef], str] = lambda val: f"0x{val.as_long():x}"
 
-    if len(concrete) > 0:
+    accesses = {}
+    for sym in end.accessed:
+        key = indexify(m.eval(sym))
+        val = valueify(m.eval(start.array[sym], True))
+        accesses[key] = val
+
+    writes = {}
+    for sym in end.written:
+        key = indexify(m.eval(sym))
+        val = valueify(m.eval(end.array[sym], True))
+        writes[key] = val
+
+    if len(accesses) > 0 or len(writes) > 0:
         print(name, end="")
-        for key in sorted(concrete.keys()):
-            print(f"\t{key} ", end="")
+        for key in sorted(accesses.keys()):
+            print(f"\tR: {key} ", end="")
             if len(key) > 16:
                 print("\n\t", end="")
-            print(f"-> {concrete[key]}")
+            print(f"-> {accesses[key]}")
+        for key in sorted(writes.keys()):
+            print(f"\tW: {key} ", end="")
+            if len(key) > 16:
+                print("\n\t", end="")
+            print(f"-> {writes[key]}")
 
 
 if __name__ == "__main__":
@@ -174,8 +187,7 @@ if __name__ == "__main__":
         "6080604052600436106100655760003560e01c8063a2dea26f11610043578063a2dea26f146100ba578063abaa9916146100ed578063ffd40b56146100f557610065565b80636fab5ddf1461006a5780638aa96f38146100745780638da5cb5b14610089575b600080fd5b61007261013a565b005b34801561008057600080fd5b50610072610182565b34801561009557600080fd5b5061009e610210565b604080516001600160a01b039092168252519081900360200190f35b3480156100c657600080fd5b50610072600480360360208110156100dd57600080fd5b50356001600160a01b031661021f565b610072610285565b34801561010157600080fd5b506101286004803603602081101561011857600080fd5b50356001600160a01b03166102b1565b60408051918252519081900360200190f35b600180547fffffffffffffffffffffffff0000000000000000000000000000000000000000163317908190556001600160a01b03166000908152602081905260409020349055565b6001546001600160a01b031633146101e1576040805162461bcd60e51b815260206004820152601760248201527f63616c6c6572206973206e6f7420746865206f776e6572000000000000000000604482015290519081900360640190fd5b60405133904780156108fc02916000818181858888f1935050505015801561020d573d6000803e3d6000fd5b50565b6001546001600160a01b031681565b6001600160a01b03811660009081526020819052604090205461024157600080fd5b6001600160a01b03811660008181526020819052604080822054905181156108fc0292818181858888f19350505050158015610281573d6000803e3d6000fd5b5050565b3360009081526020819052604090205461029f90346102cc565b33600090815260208190526040902055565b6001600160a01b031660009081526020819052604090205490565b600082820183811015610326576040805162461bcd60e51b815260206004820152601b60248201527f536166654d6174683a206164646974696f6e206f766572666c6f770000000000604482015290519081900360640190fd5b939250505056fea264697066735822122008472e24693cfb431a0cbec77ce1c2c19216911e421de2df4e138648a9ce11c764736f6c634300060c0033"
     )
     instructions, jumps = disassemble(code)
-    solver = z3.Optimize()
-    for start, end in universal_transaction(solver, instructions, jumps):
+    for solver, start, end in universal_transaction(instructions, jumps):
         print_solution(solver, start, end)
 
     print("Analysis Complete")

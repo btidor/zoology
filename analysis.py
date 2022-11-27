@@ -10,10 +10,8 @@ from universal import print_solution, universal_transaction
 
 
 def analyze(instructions: List[Instruction], jumps: Dict[int, int]) -> None:
-    solver = z3.Optimize()
-
     goals: Dict[str, List[Predicate]] = {}
-    for start, end in universal_transaction(solver, instructions, jumps):
+    for solver, start, end in universal_transaction(instructions, jumps):
         if check_goal(solver, start, end):
             candidates = []
             for candidate in candidate_safety_predicates(end):
@@ -29,7 +27,7 @@ def analyze(instructions: List[Instruction], jumps: Dict[int, int]) -> None:
             description = describe_state(solver, end)
             goals[description] = candidates
 
-    for start, end in universal_transaction(solver, instructions, jumps):
+    for solver, start, end in universal_transaction(instructions, jumps):
         if check_goal(solver, start, end) or not end.is_changed(solver, start):
             # We only want to analyze STEP transitions, so ignore GOAL
             # transitions and no-ops
