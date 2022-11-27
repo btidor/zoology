@@ -28,6 +28,9 @@ def BY(i: int) -> uint8:
     return z3.BitVecVal(i, 8)
 
 
+MAX_AMOUNT = BW(1 << 200)
+
+
 class ByteArray:
     def __init__(self, name: str, data: bytes | None = None) -> None:
         self.arr = z3.Array(f"{name}", z3.BitVecSort(256), z3.BitVecSort(8))
@@ -145,18 +148,24 @@ class State:
     # taken, 0 if not. MSB-first with a leading 1 prepended.
     path: int = 1
 
-    # Tracks how much value has been sent into the contract by our agent in
-    # total across all transactions.
-    contribution: uint256 = BW(0)
+    # Tracks how much net value has been extracted from the contract by our
+    # agent across all transactions. *Signed* integer, positive means value has
+    # been net-received.
+    extraction: uint256 = BW(0)
 
     def transfer(self, src: uint160, dst: uint160, val: uint256) -> None:
-        self.balances[src] -= val
-        self.balances[dst] += val
-        self.constraints.append(self.balances[src] >= 0)
+        self._transfer(src, dst, val)
+        self.extraction += z3.If(dst == self.address, BW(0), val)
 
     def transfer_initial(self) -> None:
-        self.transfer(self.caller, self.address, self.callvalue)
-        self.contribution += self.callvalue
+        self._transfer(self.caller, self.address, self.callvalue)
+        self.extraction -= self.callvalue
+
+    def _transfer(self, src: uint160, dst: uint160, val: uint256) -> None:
+        self.balances[src] -= val
+        self.balances[dst] += val
+        self.extra.append(self.balances[src] >= 0)
+        self.extra.append(z3.ULT(val, MAX_AMOUNT))
 
     def copy(self) -> "State":
         return State(
@@ -179,15 +188,20 @@ class State:
             constraints=self.constraints.copy(),
             extra=self.extra.copy(),
             path=self.path,
-            contribution=self.contribution,
+            extraction=self.extraction,
         )
 
     def constrain(self, solver: z3.Optimize) -> None:
-        solver.assert_and_track(self.address != self.origin, "ADDROR")
         # TODO: a contract could, in theory, call itself...
+        solver.assert_and_track(self.address != self.origin, "ADDROR")
         solver.assert_and_track(self.address != self.caller, "ADDRCL")
-        solver.assert_and_track(z3.And(*self.constraints), "PC")
-        solver.assert_and_track(z3.And(*self.extra), "EXTRA")
+
+        for i, constraint in enumerate(self.constraints):
+            solver.assert_and_track(constraint, f"PC{i}")
+
+        for i, constraint in enumerate(self.extra):
+            solver.assert_and_track(constraint, f"EXTRA{i}")
+
         for i, k1 in enumerate(self.sha3keys):
             # TODO: this can still leave hash digests implausibly close to one
             # another, e.g. causing two arrays to overlap.
@@ -257,6 +271,15 @@ def do_check(solver: z3.Solver, *assumptions: Any) -> bool:
         return False
     else:
         raise Exception("z3 evaluation timed out")
+
+
+def goal(start: State, end: State) -> List[z3.ExprRef]:
+    return [
+        start.extraction < BW(1),
+        start.extraction > -MAX_AMOUNT,
+        end.extraction > BW(0),
+        end.extraction < MAX_AMOUNT,
+    ]
 
 
 class Predicate:

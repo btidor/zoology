@@ -4,51 +4,45 @@ from typing import Dict, Iterator, List
 
 import z3
 
-from common import Instruction, Predicate, State, do_check, solver_stack
+from common import Instruction, Predicate, State, do_check, goal
 from disassembler import disassemble
-from universal import print_solution, universal_transaction
+from universal import universal_transaction
 
 
 def analyze(instructions: List[Instruction], jumps: Dict[int, int]) -> None:
     goals: Dict[str, List[Predicate]] = {}
     for solver, start, end in universal_transaction(instructions, jumps):
-        if check_goal(solver, start, end):
-            candidates = []
-            for candidate in candidate_safety_predicates(end):
-                with solver_stack(solver):
-                    solver.assert_and_track(
-                        candidate.apply(start), f"SAFETY:{candidate}"
-                    )
-                    if not check_goal(solver, start, end):
-                        # (1) In order to be a valid safety predicate, it must
-                        # *not* hold in the goal transition start state
-                        candidates.append(candidate)
+        description = describe_state(solver, end)
 
-            description = describe_state(solver, end)
-            goals[description] = candidates
-
-    for solver, start, end in universal_transaction(instructions, jumps):
-        if check_goal(solver, start, end) or not end.is_changed(solver, start):
-            # We only want to analyze STEP transitions, so ignore GOAL
-            # transitions and no-ops
+        if not do_check(solver, *goal(start, end)):
             continue
+
+        candidates = []
+        for candidate in candidate_safety_predicates(end):
+            if not do_check(solver, *goal(start, end), candidate.apply(start)):
+                # (1) In order to be a valid safety predicate, it must preclude
+                # this transaction when applied to the start state
+                candidates.append(candidate)
+        goals[description] = candidates
+
+    print("UNIVERSAL", goals)
+    for solver, start, end in universal_transaction(instructions, jumps):
+        if not end.is_changed(solver, start):
+            continue  # ignore no-ops
 
         for description, candidates in goals.items():
             # (2) In order to be a valid safety predicate, there must be no STEP
             # transition from P -> ~P
             filtered = []
             for candidate in candidates:
+                # TODO: this is buggy?
                 check = do_check(
-                    solver, candidate.apply(start), z3.Not(candidate.apply(end))
+                    solver,
+                    *goal(start, end),
+                    candidate.apply(start),
+                    z3.Not(candidate.apply(end)),
                 )
-                # TODO: debug this!
-                print(description.split("\t")[0], hex(end.path), candidate, check)
-                print_solution(solver, start, end)
-                m = solver.model()
-                print(
-                    z3.simplify(m.eval(end.contribution)),
-                    z3.simplify(m.eval(start.callvalue)),
-                )
+                print(description, candidate, check)
                 if check == False:
                     filtered.append(candidate)
             goals[description] = filtered
@@ -62,19 +56,6 @@ def analyze(instructions: List[Instruction], jumps: Dict[int, int]) -> None:
             # require a chain of transactions to apply]
             print("    💥\t", end="")
         print(description)
-
-
-def check_goal(solver: z3.Solver, start: State, end: State) -> bool:
-    with solver_stack(solver):
-        solver.assert_and_track(
-            z3.And(
-                end.balances[end.origin] > start.balances[end.origin],
-                end.balances[end.origin] - start.balances[end.origin]
-                > start.contribution,
-            ),
-            "GOAL:BALANCE",
-        )
-        return do_check(solver)
 
 
 def candidate_safety_predicates(state: State) -> Iterator[Predicate]:
@@ -93,9 +74,9 @@ def candidate_safety_predicates(state: State) -> Iterator[Predicate]:
             )
 
     # Balance Predicate
-    for key in state.storage.accessed:
+    for i, key in enumerate(state.storage.accessed):
         yield Predicate(
-            lambda state: state.contribution >= state.storage.array[key], f"balance*"
+            lambda state: state.extraction >= state.storage.array[key], f"balance{i}"
         )
 
 
@@ -103,7 +84,7 @@ def describe_state(solver: z3.Solver, state: State) -> str:
     state.constrain(solver)
     solver.minimize(state.callvalue)
     solver.minimize(state.calldata.length())
-    assert solver.check() == z3.sat
+    assert do_check(solver)
     m = solver.model()
 
     calldata = "0x"

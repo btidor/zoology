@@ -13,6 +13,7 @@ from common import (
     IntrospectableArray,
     State,
     do_check,
+    goal,
 )
 from disassembler import disassemble
 from vm import execute
@@ -48,7 +49,7 @@ def universal_transaction(
             "BALANCES", z3.BitVecSort(160), z3.BitVecSort(256)
         ),
         storage=IntrospectableArray("STORAGE", z3.BitVecSort(256), z3.BitVecSort(256)),
-        contribution=z3.BitVec("CONTRIBUTION", 256),
+        extraction=z3.BitVec("EXTRACTION", 256),
     )
 
     init = start.copy()
@@ -59,7 +60,7 @@ def universal_transaction(
 
         solver = z3.Optimize()
         s.constrain(solver)
-        solver.minimize(s.contribution)
+        solver.minimize(s.extraction)
         solver.minimize(s.callvalue)
         solver.minimize(s.calldata.length())
         if do_check(solver):
@@ -80,21 +81,18 @@ def universal_transaction(
 
 
 def print_solution(solver: z3.Solver, start: State, end: State) -> None:
-    assert solver.check() == z3.sat
-    m = solver.model()
+    assert do_check(solver)
 
-    if do_check(
-        solver,
-        z3.Or(
-            start.balances[end.origin] > end.balances[end.origin],
-            start.balances[end.caller] > end.balances[end.caller],
-        ),
-    ):
+    if do_check(solver, *goal(start, end)):
         kind = "🚩 GOAL"
     elif end.is_changed(solver, start):
+        assert len(solver.unsat_core()) > 0
+        do_check(solver)  # reset so we can extract the model
         kind = "📒 STEP"
     else:
         return
+
+    m = solver.model()
 
     assert end.success == True
     if len(end.returndata) > 0:
@@ -112,7 +110,10 @@ def print_solution(solver: z3.Solver, start: State, end: State) -> None:
         digest = int.from_bytes(hash.digest(), "big")
         solver.assert_and_track(skey == key, "SHAKEY")
         solver.assert_and_track(end.sha3hash[skey.size()][skey] == BW(digest), "SHAVAL")
-        assert solver.check() == z3.sat
+        if "GOAL" in kind:
+            assert do_check(solver, *goal(start, end))
+        else:
+            assert do_check(solver)
         m = solver.model()
 
     value = m.eval(end.callvalue).as_long()
@@ -136,9 +137,9 @@ def print_solution(solver: z3.Solver, start: State, end: State) -> None:
     if z3.is_bv_value(m.eval(end.caller)):
         print(f"Caller\t0x{m.eval(end.caller).as_long().to_bytes(20, 'big').hex()}")
     if z3.is_bv_value(m.eval(end.gasprice)):
-        print(f"Gas\tETH {m.eval(end.gasprice).as_long():09,}")
-    if z3.is_bv_value(m.eval(end.contribution)):
-        print(f"Contrib\tETH {m.eval(end.contribution).as_long():09,}")
+        print(f"Gas\tETH {m.eval(end.gasprice).as_long():011,}")
+    if z3.is_bv_value(m.eval(end.extraction)):
+        print(f"Extract\tETH {m.eval(end.extraction).as_signed_long():011,}")
 
     print_array("Balance", m, start.balances, end.balances)
     print_array("Storage", m, start.storage, end.storage)
