@@ -148,28 +148,32 @@ class State:
     # taken, 0 if not. MSB-first with a leading 1 prepended.
     path: int = 1
 
-    # Tracks how much net value has been extracted from the contract by our
-    # agent across all transactions. *Signed* integer, positive means value has
-    # been net-received.
+    # Tracks how much value has been sent to and received from the contract,
+    # respectively, from accounts under the control of our agent. To avoid
+    # overflow errors, we track these as two separate unsigned (nonnegative)
+    # integers. When doing math to them, we assert that operations never
+    # overflow, since there isn't enough ETH in existence to overflow a uint256.
+    contribution: uint256 = BW(0)
     extraction: uint256 = BW(0)
 
     def transfer(self, dst: uint160, val: uint256) -> None:
         self._transfer(self.address, dst, val)
         delta = z3.If(z3.Or(dst == self.caller, dst == self.origin), val, BW(0))
+        self.extra.append(z3.BVAddNoOverflow(self.extraction, delta, False))
         self.extraction += delta
-        self.extra.append(z3.BVAddNoOverflow(self.extraction, delta, True))
 
     def transfer_initial(self) -> None:
         self._transfer(self.caller, self.address, self.callvalue)
-        self.extraction -= self.callvalue
-        self.extra.append(z3.BVSubNoOverflow(self.extraction, self.callvalue))
-        self.extra.append(z3.BVSubNoUnderflow(self.extraction, self.callvalue, True))
+        self.extra.append(z3.BVAddNoOverflow(self.contribution, self.callvalue, False))
+        self.contribution += self.callvalue
 
     def _transfer(self, src: uint160, dst: uint160, val: uint256) -> None:
+        # We know this must be true because if `self.balances[src]` goes
+        # negative from the transfer, the transaction will revert.
+        self.extra.append(z3.BVSubNoUnderflow(self.balances[src], val, False))
+        self.extra.append(z3.BVAddNoOverflow(self.balances[dst], val, False))
         self.balances[src] -= val
         self.balances[dst] += val
-        self.extra.append(self.balances[src] >= 0)
-        self.extra.append(z3.ULT(val, MAX_AMOUNT))
 
     def copy(self) -> "State":
         return State(
@@ -192,14 +196,11 @@ class State:
             constraints=self.constraints.copy(),
             extra=self.extra.copy(),
             path=self.path,
+            contribution=self.contribution,
             extraction=self.extraction,
         )
 
     def constrain(self, solver: z3.Optimize) -> None:
-        # TODO: these are redundant with the above
-        solver.assert_and_track(self.extraction < MAX_AMOUNT, "EXTRAHI")
-        solver.assert_and_track(self.extraction > -MAX_AMOUNT, "EXTRALO")
-
         # TODO: a contract could, in theory, call itself...
         solver.assert_and_track(self.address != self.origin, "ADDROR")
         solver.assert_and_track(self.address != self.caller, "ADDRCL")
@@ -283,10 +284,8 @@ def do_check(solver: z3.Solver, *assumptions: Any) -> bool:
 
 def goal(start: State, end: State) -> List[z3.ExprRef]:
     return [
-        start.extraction < BW(1),
-        start.extraction > -MAX_AMOUNT,
-        end.extraction > BW(0),
-        end.extraction < MAX_AMOUNT,
+        z3.ULT(start.extraction, start.contribution),
+        z3.UGT(end.extraction, end.contribution),
     ]
 
 

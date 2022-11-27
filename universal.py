@@ -49,6 +49,7 @@ def universal_transaction(
             "BALANCES", z3.BitVecSort(160), z3.BitVecSort(256)
         ),
         storage=IntrospectableArray("STORAGE", z3.BitVecSort(256), z3.BitVecSort(256)),
+        contribution=z3.BitVec("CONTRIBUTION", 256),
         extraction=z3.BitVec("EXTRACTION", 256),
     )
 
@@ -60,7 +61,6 @@ def universal_transaction(
 
         solver = z3.Optimize()
         s.constrain(solver)
-        solver.minimize(s.extraction)
         solver.minimize(s.callvalue)
         solver.minimize(s.calldata.length())
         if do_check(solver):
@@ -140,6 +140,10 @@ def print_solution(
         print(f"Caller\t0x{m.eval(end.caller).as_long().to_bytes(20, 'big').hex()}")
     if z3.is_bv_value(m.eval(end.gasprice)):
         print(f"Gas\tETH {m.eval(end.gasprice).as_long():011,}")
+    if z3.is_bv_value(m.eval(end.contribution)):
+        print(
+            f"Contrib\tETH 0x{m.eval(end.contribution).as_long().to_bytes(32, 'big').hex()}"
+        )
     if z3.is_bv_value(m.eval(end.extraction)):
         print(
             f"Extract\tETH 0x{m.eval(end.extraction).as_long().to_bytes(32, 'big').hex()}"
