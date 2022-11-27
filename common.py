@@ -153,13 +153,17 @@ class State:
     # been net-received.
     extraction: uint256 = BW(0)
 
-    def transfer(self, src: uint160, dst: uint160, val: uint256) -> None:
-        self._transfer(src, dst, val)
-        self.extraction += z3.If(dst == self.address, BW(0), val)
+    def transfer(self, dst: uint160, val: uint256) -> None:
+        self._transfer(self.address, dst, val)
+        delta = z3.If(z3.Or(dst == self.caller, dst == self.origin), val, BW(0))
+        self.extraction += delta
+        self.extra.append(z3.BVAddNoOverflow(self.extraction, delta, True))
 
     def transfer_initial(self) -> None:
         self._transfer(self.caller, self.address, self.callvalue)
         self.extraction -= self.callvalue
+        self.extra.append(z3.BVSubNoOverflow(self.extraction, self.callvalue))
+        self.extra.append(z3.BVSubNoUnderflow(self.extraction, self.callvalue, True))
 
     def _transfer(self, src: uint160, dst: uint160, val: uint256) -> None:
         self.balances[src] -= val
@@ -192,6 +196,10 @@ class State:
         )
 
     def constrain(self, solver: z3.Optimize) -> None:
+        # TODO: these are redundant with the above
+        solver.assert_and_track(self.extraction < MAX_AMOUNT, "EXTRAHI")
+        solver.assert_and_track(self.extraction > -MAX_AMOUNT, "EXTRALO")
+
         # TODO: a contract could, in theory, call itself...
         solver.assert_and_track(self.address != self.origin, "ADDROR")
         solver.assert_and_track(self.address != self.caller, "ADDRCL")

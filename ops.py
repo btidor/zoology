@@ -489,7 +489,7 @@ def CALL(
     # TODO: we assume the address is an externally-owned account (i.e. contains
     # no code). How should we handle CALLs to contracts?
     s.returndata = []
-    s.transfer(s.address, z3.Extract(159, 0, address), value)
+    s.transfer(z3.Extract(159, 0, address), value)
     return BW(1)
 
 

@@ -6,7 +6,7 @@ import z3
 
 from common import Instruction, Predicate, State, do_check, goal
 from disassembler import disassemble
-from universal import universal_transaction
+from universal import print_solution, universal_transaction
 
 
 def analyze(instructions: List[Instruction], jumps: Dict[int, int]) -> None:
@@ -25,7 +25,7 @@ def analyze(instructions: List[Instruction], jumps: Dict[int, int]) -> None:
                 candidates.append(candidate)
         goals[description] = candidates
 
-    print("UNIVERSAL", goals)
+    print("UNIVERSAL", goals)  # TODO
     for solver, start, end in universal_transaction(instructions, jumps):
         if not end.is_changed(solver, start):
             continue  # ignore no-ops
@@ -35,16 +35,17 @@ def analyze(instructions: List[Instruction], jumps: Dict[int, int]) -> None:
             # transition from P -> ~P
             filtered = []
             for candidate in candidates:
-                # TODO: this is buggy?
-                check = do_check(
-                    solver,
-                    *goal(start, end),
+                # TODO: some of these solutions are incorrect!
+                constraints = [
                     candidate.apply(start),
                     z3.Not(candidate.apply(end)),
-                )
+                ]
+                check = do_check(solver, *constraints)
                 print(description, candidate, check)
                 if check == False:
                     filtered.append(candidate)
+                else:
+                    print_solution(solver, start, end, *constraints)
             goals[description] = filtered
 
     for description, candidates in goals.items():
@@ -76,7 +77,11 @@ def candidate_safety_predicates(state: State) -> Iterator[Predicate]:
     # Balance Predicate
     for i, key in enumerate(state.storage.accessed):
         yield Predicate(
-            lambda state: state.extraction >= state.storage.array[key], f"balance{i}"
+            lambda state: z3.And(
+                state.extraction < 0,
+                z3.UGE(-state.extraction, state.storage.array[key]),
+            ),
+            f"balance{i}",
         )
 
 

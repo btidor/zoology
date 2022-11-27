@@ -80,14 +80,19 @@ def universal_transaction(
             pass
 
 
-def print_solution(solver: z3.Solver, start: State, end: State) -> None:
-    assert do_check(solver)
+def print_solution(
+    solver: z3.Solver, start: State, end: State, *extra: z3.ExprRef
+) -> None:
+    assert do_check(solver, *extra)
 
-    if do_check(solver, *goal(start, end)):
+    if do_check(solver, *goal(start, end), *extra):
         kind = "🚩 GOAL"
+        extra = (*extra, *goal(start, end))
     elif end.is_changed(solver, start):
+        # This assertion can fail if we give Z3 obviously contradictory
+        # constraints :(
         assert len(solver.unsat_core()) > 0
-        do_check(solver)  # reset so we can extract the model
+        do_check(solver, *extra)  # reset so we can extract the model
         kind = "📒 STEP"
     else:
         return
@@ -110,15 +115,12 @@ def print_solution(solver: z3.Solver, start: State, end: State) -> None:
         digest = int.from_bytes(hash.digest(), "big")
         solver.assert_and_track(skey == key, "SHAKEY")
         solver.assert_and_track(end.sha3hash[skey.size()][skey] == BW(digest), "SHAVAL")
-        if "GOAL" in kind:
-            assert do_check(solver, *goal(start, end))
-        else:
-            assert do_check(solver)
+        assert do_check(solver, *extra)
         m = solver.model()
 
     value = m.eval(end.callvalue).as_long()
     if value:
-        print(f"Value\tETH {(value):011,}")
+        print(f"Value\tETH 0x{value.to_bytes(32, 'big').hex()}")
 
     print(f"Data\t({m.eval(end.calldata.length())}) 0x", end="")
     for i in range(m.eval(end.calldata.length()).as_long()):
@@ -139,7 +141,9 @@ def print_solution(solver: z3.Solver, start: State, end: State) -> None:
     if z3.is_bv_value(m.eval(end.gasprice)):
         print(f"Gas\tETH {m.eval(end.gasprice).as_long():011,}")
     if z3.is_bv_value(m.eval(end.extraction)):
-        print(f"Extract\tETH {m.eval(end.extraction).as_signed_long():011,}")
+        print(
+            f"Extract\tETH 0x{m.eval(end.extraction).as_long().to_bytes(32, 'big').hex()}"
+        )
 
     print_array("Balance", m, start.balances, end.balances)
     print_array("Storage", m, start.storage, end.storage)
