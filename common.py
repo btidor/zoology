@@ -279,7 +279,7 @@ def do_check(solver: z3.Solver, *assumptions: Any) -> bool:
     elif check == z3.unsat:
         return False
     else:
-        raise Exception("z3 evaluation timed out")
+        raise Exception(f"z3 failure: {solver.reason_unknown()}")
 
 
 def goal(start: State, end: State) -> List[z3.ExprRef]:
@@ -291,10 +291,14 @@ def goal(start: State, end: State) -> List[z3.ExprRef]:
 
 class Predicate:
     def __init__(
-        self, expression: Callable[[State], z3.ExprRef], description: str
+        self,
+        expression: Callable[[State], z3.ExprRef],
+        description: str,
+        storage_key: Optional[z3.ExprRef] = None,
     ) -> None:
         self.expression = expression
         self.description = description
+        self.storage_key = storage_key
 
     def eval(self, state: State) -> z3.ExprRef:
         return self.expression(state)

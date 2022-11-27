@@ -25,7 +25,6 @@ def analyze(instructions: List[Instruction], jumps: Dict[int, int]) -> None:
                 candidates.append(candidate)
         goals[description] = candidates
 
-    print("UNIVERSAL", goals)  # TODO
     for solver, start, end in universal_transaction(instructions, jumps):
         if not end.is_changed(solver, start):
             continue  # ignore no-ops
@@ -45,7 +44,13 @@ def analyze(instructions: List[Instruction], jumps: Dict[int, int]) -> None:
                 if check == False:
                     filtered.append(candidate)
                 else:
-                    print_solution(solver, start, end, *constraints)
+                    print_solution(
+                        solver,
+                        start,
+                        end,
+                        *constraints,
+                        debug_key=candidate.storage_key,
+                    )
             goals[description] = filtered
 
     for description, candidates in goals.items():
@@ -78,10 +83,11 @@ def candidate_safety_predicates(state: State) -> Iterator[Predicate]:
     for i, key in enumerate(state.storage.accessed):
         yield Predicate(
             lambda state: z3.And(
-                state.extraction < 0,
-                z3.UGE(-state.extraction, state.storage.array[key]),
+                z3.UGE(state.contribution, state.extraction),
+                z3.UGE(state.contribution - state.extraction, state.storage.array[key]),
             ),
             f"balance{i}",
+            key,
         )
 
 

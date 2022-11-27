@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from typing import Callable, Dict, Iterator, List, Tuple
+from typing import Any, Callable, Dict, Iterator, List, Tuple
 
 import z3
 from Crypto.Hash import keccak
@@ -81,7 +81,11 @@ def universal_transaction(
 
 
 def print_solution(
-    solver: z3.Solver, start: State, end: State, *extra: z3.ExprRef
+    solver: z3.Solver,
+    start: State,
+    end: State,
+    *extra: z3.ExprRef,
+    debug_key: z3.ExprRef = None,
 ) -> None:
     assert do_check(solver, *extra)
 
@@ -140,18 +144,33 @@ def print_solution(
         print(f"Caller\t0x{m.eval(end.caller).as_long().to_bytes(20, 'big').hex()}")
     if z3.is_bv_value(m.eval(end.gasprice)):
         print(f"Gas\tETH {m.eval(end.gasprice).as_long():011,}")
-    if z3.is_bv_value(m.eval(end.contribution)):
-        print(
-            f"Contrib\tETH 0x{m.eval(end.contribution).as_long().to_bytes(32, 'big').hex()}"
-        )
-    if z3.is_bv_value(m.eval(end.extraction)):
-        print(
-            f"Extract\tETH 0x{m.eval(end.extraction).as_long().to_bytes(32, 'big').hex()}"
-        )
+
+    print(
+        f"Contrib\tETH 0x{m.eval(start.contribution, True).as_long().to_bytes(32, 'big').hex()}"
+    )
+    print(
+        f"\t-> ETH 0x{m.eval(end.contribution, True).as_long().to_bytes(32, 'big').hex()}"
+    )
+    print(
+        f"Extract\tETH 0x{m.eval(start.extraction, True).as_long().to_bytes(32, 'big').hex()}"
+    )
+    print(
+        f"\t-> ETH 0x{m.eval(end.extraction, True).as_long().to_bytes(32, 'big').hex()}"
+    )
 
     print_array("Balance", m, start.balances, end.balances)
     print_array("Storage", m, start.storage, end.storage)
     print()
+
+    if debug_key is not None:
+        print(f"Key\t0x{m.eval(debug_key, True).as_long().to_bytes(32, 'big').hex()}")
+        print(
+            f"Value\t0x{m.eval(start.storage.array[debug_key], True).as_long().to_bytes(32, 'big').hex()}"
+        )
+        print(
+            f"\t-> 0x{m.eval(end.storage.array[debug_key], True).as_long().to_bytes(32, 'big').hex()}"
+        )
+        print()
 
 
 def print_array(
@@ -174,8 +193,9 @@ def print_array(
     writes = {}
     for sym in end.written:
         key = indexify(m.eval(sym))
-        val = valueify(m.eval(end.array[sym], True))
-        writes[key] = val
+        pre = valueify(m.eval(start.array[sym], True))
+        post = valueify(m.eval(end.array[sym], True))
+        writes[key] = (pre, post)
 
     if len(accesses) > 0 or len(writes) > 0:
         print(name, end="")
@@ -188,7 +208,14 @@ def print_array(
             print(f"\tW: {key} ", end="")
             if len(key) > 16:
                 print("\n\t", end="")
-            print(f"-> {writes[key]}")
+            pre, post = writes[key]
+            print(f"-> {post} ", end="")
+            if len(post) > 16:
+                print("\n\t   ", end="")
+            if pre == post:
+                print(f"(no change)")
+            else:
+                print(f"(from {pre})")
 
 
 if __name__ == "__main__":
