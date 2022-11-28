@@ -3,7 +3,7 @@
 import pytest
 import z3
 
-from common import BA, BW, BY, Block, ByteArray, Instruction, State
+from common import BA, BW, BY, Block, ByteArray, Instruction, State, hexify
 from ops import *
 
 
@@ -11,7 +11,7 @@ def _dump_memory(s: State) -> str:
     v = ""
     lim = max(s.memory.keys())
     for i in range(lim + 1):
-        v += z3.simplify(s.memory[i]).as_long().to_bytes(1, "big").hex()
+        v += hexify(z3.simplify(s.memory[i]), 1)
     return "0x" + v.upper()
 
 

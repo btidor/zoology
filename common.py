@@ -1,7 +1,7 @@
 import contextlib
 import copy
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Iterator, List, Optional, TypeAlias
+from typing import Any, Callable, Dict, Iterator, List, Optional, TypeAlias, cast
 
 import z3
 
@@ -107,6 +107,7 @@ class Instruction:
 
 @dataclass
 class State:
+    suffix: str = ""
     pc: int = 0
     jumps: Dict[int, int] = field(default_factory=dict)
     stack: List[uint256] = field(default_factory=list)
@@ -177,6 +178,7 @@ class State:
 
     def copy(self) -> "State":
         return State(
+            suffix=self.suffix,
             pc=self.pc,
             jumps=self.jumps,
             stack=self.stack.copy(),
@@ -202,21 +204,22 @@ class State:
 
     def constrain(self, solver: z3.Optimize) -> None:
         # TODO: a contract could, in theory, call itself...
-        solver.assert_and_track(self.address != self.origin, "ADDROR")
-        solver.assert_and_track(self.address != self.caller, "ADDRCL")
+        solver.assert_and_track(self.address != self.origin, f"ADDROR{self.suffix}")
+        solver.assert_and_track(self.address != self.caller, f"ADDRCL{self.suffix}")
 
         for i, constraint in enumerate(self.constraints):
-            solver.assert_and_track(constraint, f"PC{i}")
+            solver.assert_and_track(constraint, f"PC{i}{self.suffix}")
 
         for i, constraint in enumerate(self.extra):
-            solver.assert_and_track(constraint, f"EXTRA{i}")
+            solver.assert_and_track(constraint, f"EXTRA{i}{self.suffix}")
 
         for i, k1 in enumerate(self.sha3keys):
             # TODO: this can still leave hash digests implausibly close to one
-            # another, e.g. causing two arrays to overlap.
+            # another, e.g. causing two arrays to overlap; and we don't
+            # propagate constraints between transactions correctly
             solver.assert_and_track(
                 z3.Extract(255, 128, self.sha3hash[k1.size()][k1]) != 0,
-                f"SHA3.NLZ({i})",
+                f"SHA3.NLZ({i}){self.suffix}",
             )
             for j, k2 in enumerate(self.sha3keys):
                 if k1.size() != k2.size():
@@ -226,7 +229,7 @@ class State:
                         k1 != k2,
                         self.sha3hash[k1.size()][k1] != self.sha3hash[k2.size()][k2],
                     ),
-                    f"SHA3.DISTINCT({i},{j})",
+                    f"SHA3.DISTINCT({i},{j}){self.suffix}",
                 )
 
     def is_changed(self, solver: z3.Solver, since: "State") -> bool:
@@ -289,15 +292,21 @@ def goal(start: State, end: State) -> List[z3.ExprRef]:
     ]
 
 
+def hexify(value: z3.BitVecVal, length: int) -> str:
+    return cast(int, value.as_long()).to_bytes(length, "big").hex()
+
+
 class Predicate:
     def __init__(
         self,
         expression: Callable[[State], z3.ExprRef],
         description: str,
+        state: State,
         storage_key: Optional[z3.ExprRef] = None,
     ) -> None:
         self.expression = expression
         self.description = description
+        self.state = state
         self.storage_key = storage_key
 
     def eval(self, state: State) -> z3.ExprRef:

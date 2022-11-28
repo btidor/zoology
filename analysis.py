@@ -1,31 +1,39 @@
 #!/usr/bin/env python3
 
-from typing import Dict, Iterator, List
+from typing import Dict, Iterator, List, Set
 
 import z3
+from Crypto.Hash import keccak
 
-from common import Instruction, Predicate, State, do_check, goal
+from common import Instruction, Predicate, State, do_check, goal, solver_stack
 from disassembler import disassemble
-from universal import print_solution, universal_transaction
+from universal import make_start, print_solution, universal_transaction
 
 
 def analyze(instructions: List[Instruction], jumps: Dict[int, int]) -> None:
+    print("Candidates")
     goals: Dict[str, List[Predicate]] = {}
-    for solver, start, end in universal_transaction(instructions, jumps):
+    block, start = make_start(jumps)
+    for solver, end in universal_transaction(block, start, instructions):
         description = describe_state(solver, end)
 
         if not do_check(solver, *goal(start, end)):
             continue
 
         candidates = []
+        print(f" - {description}")
         for candidate in candidate_safety_predicates(end):
             if not do_check(solver, *goal(start, end), candidate.eval(start)):
                 # (1) In order to be a valid safety predicate, it must preclude
                 # this transaction when applied to the start state
                 candidates.append(candidate)
+                print(f"   {candidate}")
         goals[description] = candidates
 
-    for solver, start, end in universal_transaction(instructions, jumps):
+    print()
+    print("Elimination")
+    block, start = make_start(jumps, "^")
+    for solver, end in universal_transaction(block, start, instructions):
         if not end.is_changed(solver, start):
             continue  # ignore no-ops
 
@@ -34,25 +42,23 @@ def analyze(instructions: List[Instruction], jumps: Dict[int, int]) -> None:
             # transition from P -> ~P
             filtered = []
             for candidate in candidates:
-                # TODO: some of these solutions are incorrect!
-                constraints = [
-                    candidate.eval(start),
-                    z3.Not(candidate.eval(end)),
-                ]
-                check = do_check(solver, *constraints)
-                print(description, candidate, check)
-                if check == False:
-                    filtered.append(candidate)
-                else:
-                    print_solution(
-                        solver,
-                        start,
-                        end,
-                        *constraints,
-                        debug_key=candidate.storage_key,
-                    )
+                with solver_stack(solver):
+                    candidate.state.constrain(solver)
+                    constraints = [
+                        candidate.eval(start),
+                        z3.Not(candidate.eval(end)),
+                    ]
+                    print(f" - {description} ({candidate})")
+                    if do_check(solver, *constraints):
+                        # STEP transition found: constraint is eliminated
+                        print(f"   {describe_state(solver, end)}")
+                    else:
+                        # Constraint remains alive
+                        filtered.append(candidate)
             goals[description] = filtered
 
+    print()
+    print("Results")
     for description, candidates in goals.items():
         if len(candidates) > 0:
             # Successfully constrained goal with safety predicate!
@@ -76,23 +82,33 @@ def candidate_safety_predicates(state: State) -> Iterator[Predicate]:
                     state.caller
                     != z3.Extract(159, 0, state.storage.array[k.as_long()]),
                 ),
-                f"ownership[{hex(k.as_long())}]",
+                f"$OWNER[{hex(k.as_long())[2:]}]",
+                state,
             )
 
     # Balance Predicate
-    for i, key in enumerate(state.storage.accessed):
+    used: Set[str] = set()
+    for key in state.storage.accessed:
+        if z3.is_bv_value(key):
+            index = hex(key.as_long())[2:]
+        else:
+            hash = keccak.new(data=str(key).encode(), digest_bits=256).hexdigest()
+            if hash in used:
+                continue
+            used.add(hash)
+            index = hash[:8] + "?"
         yield Predicate(
             lambda state: z3.And(
                 z3.UGE(state.contribution, state.extraction),
                 z3.UGE(state.contribution - state.extraction, state.storage.array[key]),
             ),
-            f"balance{i}",
+            f"$BALANCE[{index}]",
+            state,
             key,
         )
 
 
 def describe_state(solver: z3.Solver, state: State) -> str:
-    state.constrain(solver)
     solver.minimize(state.callvalue)
     solver.minimize(state.calldata.length())
     assert do_check(solver)
@@ -106,7 +122,7 @@ def describe_state(solver: z3.Solver, state: State) -> str:
             calldata += " "
 
     assert state.success == True
-    return f"Px{state.path:x}\t{calldata}"
+    return calldata
 
 
 if __name__ == "__main__":

@@ -6,7 +6,7 @@ from typing import Any, List, Optional
 import z3
 
 import ops
-from common import BA, BW, Block, ByteArray, Instruction, State, uint256
+from common import BW, Block, ByteArray, Instruction, State, hexify, uint256
 from disassembler import disassemble
 
 
@@ -95,7 +95,7 @@ def print_stack(stack: List[uint256]) -> None:
     for x in stack:
         x = z3.simplify(x)
         if z3.is_bv_value(x):
-            print(" ", x.as_long().to_bytes(32, "big").hex())
+            print(" ", hexify(x, 32))
         else:
             print(" ", x)
 
