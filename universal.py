@@ -16,6 +16,7 @@ from common import (
     do_check,
     goal,
     hexify,
+    solver_stack,
 )
 from disassembler import disassemble
 from vm import execute
@@ -93,23 +94,34 @@ def print_solution(
     solver: z3.Solver,
     start: State,
     end: State,
-    *extra: z3.ExprRef,
     predicate: Optional[Predicate] = None,
 ) -> None:
-    assert do_check(solver, *extra)
+    assert do_check(solver)
 
-    if do_check(solver, *goal(start, end), *extra):
-        kind = "🚩 GOAL"
-        extra = (*extra, *goal(start, end))
-    elif end.is_changed(solver, start):
-        # This assertion can fail if we give Z3 obviously contradictory
-        # constraints :(
+    with solver_stack(solver):
+        for i, constraint in enumerate(goal(start, end)):
+            solver.assert_and_track(constraint, f"GOAL{i}")
+
+        if do_check(solver):
+            _print_solution("🚩 GOAL", solver, start, end, predicate)
+            return
+
+        # `do_check()` can incorrectly return false if we give Z3 obviously
+        # contradictory constraints :(
         assert len(solver.unsat_core()) > 0
-        do_check(solver, *extra)  # reset so we can extract the model
-        kind = "📒 STEP"
-    else:
-        return
 
+    if end.is_changed(solver, start):
+        do_check(solver)  # reset so we can extract the model
+        _print_solution("📒 STEP", solver, start, end, predicate)
+
+
+def _print_solution(
+    kind: str,
+    solver: z3.Solver,
+    start: State,
+    end: State,
+    predicate: Optional[Predicate] = None,
+) -> None:
     m = solver.model()
 
     assert end.success == True
@@ -119,9 +131,9 @@ def print_solution(
         rdata = "-"
     print(f"{kind}\t{hex(end.path).replace('0x', 'Px')}\t{rdata}")
 
-    m = narrow_sha3(solver, m, end, extra)
+    m = narrow_sha3(solver, m, end)
     if predicate is not None:
-        m = narrow_sha3(solver, m, predicate.state, extra)
+        m = narrow_sha3(solver, m, predicate.state)
 
     if m.eval(end.callvalue).as_long():
         print(f"Value\tETH 0x{hexify(m.eval(end.callvalue), 32)}")
@@ -167,9 +179,7 @@ def print_solution(
         print()
 
 
-def narrow_sha3(
-    solver: z3.Solver, model: z3.Model, state: State, extra: Tuple[z3.ExprRef, ...]
-) -> z3.Model:
+def narrow_sha3(solver: z3.Solver, model: z3.Model, state: State) -> z3.Model:
     hashes: Dict[bytes, bytes] = {}
     for i, skey in enumerate(state.sha3keys):
         ckey = model.eval(skey, True)
@@ -182,7 +192,7 @@ def narrow_sha3(
             state.sha3hash[skey.size()][skey] == BW(digest),
             f"SHAVAL{i}{state.suffix}",
         )
-        assert do_check(solver, *extra)
+        assert do_check(solver)
         model = solver.model()
 
     if len(hashes) > 0:
