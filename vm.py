@@ -1,12 +1,21 @@
 #!/usr/bin/env python3
 
 import inspect
-from typing import Any, List, Optional
+from typing import Any, List, Optional, cast
 
 import z3
 
 import ops
-from common import BW, Block, ByteArray, Instruction, State, hexify, uint256
+from common import (
+    BW,
+    Block,
+    ByteArray,
+    Instruction,
+    State,
+    hexify,
+    require_concrete,
+    uint256,
+)
 from disassembler import disassemble
 
 
@@ -43,17 +52,17 @@ def execute(
 
 
 def handle_JUMPI(s: State) -> List[State]:
-    counter = ops.require_concrete(
+    counter = require_concrete(
         s.stack.pop(), "JUMPI(counter, b) requires concrete counter"
     )
     if counter not in s.jumps:
         raise ValueError(f"illegal JUMPI target: 0x{counter:x}")
-    b = z3.simplify(s.stack.pop())
+    b = cast(uint256, z3.simplify(s.stack.pop()))
 
     s2 = s.copy()
-    s.constraints.append(b == 0)
+    s.constraints.append(b == BW(0))
     s.path = s.path << 1
-    s2.constraints.append(b != 0)
+    s2.constraints.append(b != BW(0))
     s2.path = (s.path << 1) | 1
     s2.pc = s.jumps[counter]
     return [s, s2]
@@ -87,7 +96,7 @@ def print_instruction(ins: Instruction) -> None:
     if ins.suffix is not None:
         msg += str(ins.suffix)
     if ins.operand is not None:
-        msg += "\t" + hex(ins.operand.as_long())
+        msg += "\t" + hex(require_concrete(ins.operand))
     print(msg)
 
 
@@ -128,7 +137,6 @@ if __name__ == "__main__":
             raise ValueError("ambiguous JUMPI, did we accidentally symbolize?")
 
     result = bytes(
-        ops.require_concrete(d, "return data must be concrete")
-        for d in state.returndata
+        require_concrete(d, "return data must be concrete") for d in state.returndata
     )
     print("RETURN" if state.success else "REVERT", result)

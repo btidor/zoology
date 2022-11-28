@@ -16,6 +16,7 @@ from common import (
     constrain_to_goal,
     do_check,
     hexify,
+    require_concrete,
     solver_stack,
 )
 from disassembler import disassemble
@@ -133,12 +134,12 @@ def _print_solution(
     if predicate is not None:
         m = narrow_sha3(solver, m, predicate.state)
 
-    if m.eval(end.callvalue).as_long():
+    if require_concrete(m.eval(end.callvalue)):
         print(f"Value\tETH 0x{hexify(m.eval(end.callvalue), 32)}")
 
     print(f"Data\t({m.eval(end.calldata.length())}) 0x", end="")
-    for i in range(m.eval(end.calldata.length()).as_long()):
-        b = m.eval(end.calldata.get(i))
+    for i in range(require_concrete(m.eval(end.calldata.length()))):
+        b = m.eval(end.calldata.get(BW(i)))
         if z3.is_bv_value(b):
             print(hexify(b, 1), end="")
         else:
@@ -151,16 +152,18 @@ def _print_solution(
     if z3.is_bv_value(m.eval(end.caller)):
         print(f"Caller\t0x{hexify(m.eval(end.caller), 20)}")
     if z3.is_bv_value(m.eval(end.gasprice)):
-        print(f"Gas\tETH {m.eval(end.gasprice).as_long():011,}")
+        print(f"Gas\tETH {require_concrete(m.eval(end.gasprice)):011,}")
 
-    cs, ce = m.eval(start.contribution, True), m.eval(end.contribution, True)
-    es, ee = m.eval(start.extraction, True), m.eval(end.extraction, True)
-    if cs.as_long() != ce.as_long():
-        print(f"Contrib\tETH 0x{hexify(cs, 32)}")
-        print(f"\t-> ETH 0x{hexify(ce, 32)}")
-    if es.as_long() != ee.as_long():
-        print(f"Extract\tETH 0x{hexify(es, 32)}")
-        print(f"\t-> ETH 0x{hexify(ee, 32)}")
+    cs = require_concrete(m.eval(start.contribution, True))
+    ce = require_concrete(m.eval(end.contribution, True))
+    es = require_concrete(m.eval(start.extraction, True))
+    ee = require_concrete(m.eval(end.extraction, True))
+    if cs != ce:
+        print(f"Contrib\tETH 0x{hexify(BW(cs), 32)}")
+        print(f"\t-> ETH 0x{hexify(BW(ce), 32)}")
+    if es != ee:
+        print(f"Extract\tETH 0x{hexify(BW(es), 32)}")
+        print(f"\t-> ETH 0x{hexify(BW(ee), 32)}")
 
     print_array("Balance", m, start.balances, end.balances)
     print_array("Storage", m, start.storage, end.storage)
@@ -177,11 +180,11 @@ def _print_solution(
         print()
 
 
-def narrow_sha3(solver: z3.Optimize, model: z3.Model, state: State) -> z3.Model:
+def narrow_sha3(solver: z3.Optimize, model: z3.ModelRef, state: State) -> z3.ModelRef:
     hashes: Dict[bytes, bytes] = {}
     for i, skey in enumerate(state.sha3keys):
-        ckey = model.eval(skey, True)
-        data = ckey.as_long().to_bytes(ckey.size() // 8, "big")
+        ckey = require_concrete(model.eval(skey, True))
+        data = ckey.to_bytes(skey.size() // 8, "big")
         hash = keccak.new(data=data, digest_bits=256)
         digest = int.from_bytes(hash.digest(), "big")
         hashes[data] = hash.digest()
@@ -213,14 +216,14 @@ def narrow_sha3(solver: z3.Optimize, model: z3.Model, state: State) -> z3.Model:
 
 def print_array(
     name: str,
-    m: z3.Model,
+    m: z3.ModelRef,
     start: IntrospectableArray,
     end: IntrospectableArray,
 ) -> None:
     indexify: Callable[[z3.ExprRef], str] = (
-        lambda key: f"0x{key.as_long():x}" if z3.is_bv_value(key) else str(key)
+        lambda key: f"0x{require_concrete(key):x}" if z3.is_bv_value(key) else str(key)
     )
-    valueify: Callable[[z3.ExprRef], str] = lambda val: f"0x{val.as_long():x}"
+    valueify: Callable[[z3.ExprRef], str] = lambda val: f"0x{require_concrete(val):x}"
 
     accesses = {}
     for sym in end.accessed:

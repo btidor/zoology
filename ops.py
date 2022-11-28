@@ -3,14 +3,17 @@ from typing import cast
 import z3
 from Crypto.Hash import keccak
 
-from common import BW, BY, Block, Instruction, State, uint8, uint256
-
-
-def require_concrete(var: uint256, msg: str) -> int:
-    var = z3.simplify(var)
-    if not z3.is_bv_value(var):
-        raise ValueError(msg)
-    return cast(int, var.as_long())
+from common import (
+    BW,
+    BY,
+    Block,
+    Instruction,
+    State,
+    require_concrete,
+    uint8,
+    uint160,
+    uint256,
+)
 
 
 # 00 - Halts execution
@@ -36,39 +39,41 @@ def SUB(a: uint256, b: uint256) -> uint256:
 
 # 04 - Integer division operation
 def DIV(a: uint256, b: uint256) -> uint256:
-    return z3.If(b == 0, BW(0), z3.UDiv(a, b))
+    return cast(uint256, z3.If(b == 0, BW(0), z3.UDiv(a, b)))
 
 
 # 05 - Signed integer division operation (truncated)
 def SDIV(a: uint256, b: uint256) -> uint256:
-    return z3.If(b == 0, BW(0), a / b)
+    return cast(uint256, z3.If(b == 0, BW(0), a / b))
 
 
 # 06 - Modulo remainder operation
 def MOD(a: uint256, b: uint256) -> uint256:
-    return z3.If(b == 0, BW(0), z3.URem(a, b))
+    return cast(uint256, z3.If(b == 0, BW(0), z3.URem(a, b)))
 
 
 # 07 - Signed modulo remainder operation
 def SMOD(a: uint256, b: uint256) -> uint256:
-    return z3.If(b == 0, BW(0), a % b)
+    return cast(uint256, z3.If(b == 0, BW(0), a % b))
 
 
 # 08 - Modulo addition operation
 def ADDMOD(a: uint256, b: uint256, N: uint256) -> uint256:
     a, b, N = z3.ZeroExt(1, a), z3.ZeroExt(1, b), z3.ZeroExt(1, N)
-    return z3.If(N == 0, BW(0), z3.Extract(255, 0, z3.URem(a + b, N)))
+    return cast(uint256, z3.If(N == 0, BW(0), z3.Extract(255, 0, z3.URem(a + b, N))))
 
 
 # 09 - Modulo multiplication operation
 def MULMOD(a: uint256, b: uint256, N: uint256) -> uint256:
     a, b, N = z3.ZeroExt(256, a), z3.ZeroExt(256, b), z3.ZeroExt(256, N)
-    return z3.If(N == 0, BW(0), z3.Extract(255, 0, z3.URem(a * b, N)))
+    return cast(uint256, z3.If(N == 0, BW(0), z3.Extract(255, 0, z3.URem(a * b, N))))
 
 
 # 0A - Exponential operation
-def EXP(a: uint256, exponent: uint256) -> uint256:
-    exponent = require_concrete(exponent, "EXP(a, exponent) requires concrete exponent")
+def EXP(a: uint256, _exponent: uint256) -> uint256:
+    exponent = require_concrete(
+        _exponent, "EXP(a, exponent) requires concrete exponent"
+    )
     if exponent == 0:
         return BW(1)
     for i in range(exponent - 1):
@@ -77,8 +82,8 @@ def EXP(a: uint256, exponent: uint256) -> uint256:
 
 
 # 0B - Extend length of two's complement signed integer
-def SIGNEXTEND(b: uint256, x: uint256) -> uint256:
-    b = require_concrete(b, "SIGNEXTEND(b, x) requires concrete b")
+def SIGNEXTEND(_b: uint256, x: uint256) -> uint256:
+    b = require_concrete(_b, "SIGNEXTEND(b, x) requires concrete b")
     if b > 30:
         return x
     bits = (b + 1) * 8
@@ -87,32 +92,32 @@ def SIGNEXTEND(b: uint256, x: uint256) -> uint256:
 
 # 10 - Less-than comparison
 def LT(a: uint256, b: uint256) -> uint256:
-    return z3.If(z3.ULT(a, b), BW(1), BW(0))
+    return cast(uint256, z3.If(z3.ULT(a, b), BW(1), BW(0)))
 
 
 # 11 - Greater-than comparison
 def GT(a: uint256, b: uint256) -> uint256:
-    return z3.If(z3.UGT(a, b), BW(1), BW(0))
+    return cast(uint256, z3.If(z3.UGT(a, b), BW(1), BW(0)))
 
 
 # 12 - Signed less-than comparison
 def SLT(a: uint256, b: uint256) -> uint256:
-    return z3.If(a < b, BW(1), BW(0))
+    return cast(uint256, z3.If(a < b, BW(1), BW(0)))
 
 
 # 13 - Signed greater-than comparison
 def SGT(a: uint256, b: uint256) -> uint256:
-    return z3.If(a > b, BW(1), BW(0))
+    return cast(uint256, z3.If(a > b, BW(1), BW(0)))
 
 
 # 14 - Equality comparison
 def EQ(a: uint256, b: uint256) -> uint256:
-    return z3.If(a == b, BW(1), BW(0))
+    return cast(uint256, z3.If(a == b, BW(1), BW(0)))
 
 
 # 15 - Simple not operator
 def ISZERO(a: uint256) -> uint256:
-    return z3.If(a == 0, BW(1), BW(0))
+    return cast(uint256, z3.If(a == 0, BW(1), BW(0)))
 
 
 # 16 - Bitwise AND operation
@@ -136,12 +141,12 @@ def NOT(a: uint256) -> uint256:
 
 
 # 1A - Retrieve single bytes from word
-def BYTE(i: uint256, x: uint256) -> uint256:
-    i = require_concrete(i, "BYTE(i, x) requires concrete i")
+def BYTE(_i: uint256, x: uint256) -> uint256:
+    i = require_concrete(_i, "BYTE(i, x) requires concrete i")
     if i > 31:
         return BW(0)
     start = 256 - (8 * i)
-    return z3.Extract(start - 1, start - 8, x)
+    return cast(uint256, z3.Extract(start - 1, start - 8, x))
 
 
 # 1B - Left shift operation
@@ -160,12 +165,15 @@ def SAR(shift: uint256, value: uint256) -> uint256:
 
 
 # 20 - Compute Keccak-256 hash
-def SHA3(s: State, offset: uint256, size: uint256) -> uint256:
-    offset = require_concrete(offset, "SHA3(offset, size) requires concrete offset")
-    size = require_concrete(size, "SHA3(offset, size) requires concrete size")
+def SHA3(s: State, _offset: uint256, _size: uint256) -> uint256:
+    offset = require_concrete(_offset, "SHA3(offset, size) requires concrete offset")
+    size = require_concrete(_size, "SHA3(offset, size) requires concrete size")
 
-    data = z3.simplify(
-        z3.Concat(*[s.memory.get(i, BW(0)) for i in range(offset, offset + size)])
+    data = cast(
+        z3.BitVecRef,
+        z3.simplify(
+            z3.Concat(*[s.memory.get(i, BW(0)) for i in range(offset, offset + size)])
+        ),
     )
 
     bits = size * 8
@@ -177,11 +185,12 @@ def SHA3(s: State, offset: uint256, size: uint256) -> uint256:
 
     if z3.is_bv_value(data):
         hash = keccak.new(digest_bits=256)
-        hash.update(data.as_long().to_bytes(size, "big"))
-        s.sha3hash[bits] = z3.Store(
-            s.sha3hash[bits], data, BW(int.from_bytes(hash.digest(), "big"))
+        hash.update(require_concrete(data).to_bytes(size, "big"))
+        s.sha3hash[bits] = cast(
+            z3.ArrayRef,
+            z3.Store(s.sha3hash[bits], data, BW(int.from_bytes(hash.digest(), "big"))),
         )
-    return s.sha3hash[bits][data]
+    return cast(uint256, s.sha3hash[bits][data])
 
 
 # 30 - Get address of currently executing account
@@ -191,7 +200,7 @@ def ADDRESS(s: State) -> uint256:
 
 # 31 - Get balance of the given account
 def BALANCE(s: State, address: uint256) -> uint256:
-    return s.balances[z3.Extract(159, 0, address)]
+    return s.balances[cast(uint160, z3.Extract(159, 0, address))]
 
 
 # 32 - Get execution origination address
@@ -212,7 +221,7 @@ def CALLVALUE(s: State) -> uint256:
 
 # 35 - Get input data of current environment
 def CALLDATALOAD(s: State, i: uint256) -> uint256:
-    return z3.Concat(*[s.calldata.get(i + j) for j in range(32)])
+    return cast(uint256, z3.Concat(*[s.calldata.get(i + j) for j in range(32)]))
 
 
 # 36 - Get size of input data in current environment
@@ -221,13 +230,15 @@ def CALLDATASIZE(s: State) -> uint256:
 
 
 # 37 - Copy input data in current environment to memory
-def CALLDATACOPY(s: State, destOffset: uint256, offset: uint256, size: uint256) -> None:
+def CALLDATACOPY(
+    s: State, _destOffset: uint256, offset: uint256, _size: uint256
+) -> None:
     destOffset = require_concrete(
-        destOffset,
+        _destOffset,
         "CALLDATACOPY(destOffset, offset, size) requires concrete destOffset",
     )
     size = require_concrete(
-        size, "CALLDATACOPY(destOffset, offset, size) requires concrete size"
+        _size, "CALLDATACOPY(destOffset, offset, size) requires concrete size"
     )
     for i in range(size):
         s.memory[destOffset + i] = s.calldata.get(offset + i)
@@ -271,17 +282,17 @@ def RETURNDATASIZE(s: State) -> uint256:
 
 # 3E - Copy output data from the previous call to memory
 def RETURNDATACOPY(
-    s: State, destOffset: uint256, offset: uint256, size: uint256
+    s: State, _destOffset: uint256, _offset: uint256, _size: uint256
 ) -> None:
     destOffset = require_concrete(
-        destOffset,
+        _destOffset,
         "RETURNDATACOPY(destOffset, offset, size) requires concrete destOffset",
     )
     offset = require_concrete(
-        offset, "RETURNDATACOPY(destOffset, offset, size) requires concrete offset"
+        _offset, "RETURNDATACOPY(destOffset, offset, size) requires concrete offset"
     )
     size = require_concrete(
-        size, "RETURNDATACOPY(destOffset, offset, size) requires concrete size"
+        _size, "RETURNDATACOPY(destOffset, offset, size) requires concrete size"
     )
     for i in range(size):
         s.memory[destOffset + i] = (
@@ -345,22 +356,26 @@ def POP(y: uint256) -> None:
 
 
 # 51 - Load word from memory
-def MLOAD(s: State, offset: uint256) -> uint256:
-    offset = require_concrete(offset, "MLOAD(offset) requires concrete offset")
-    return z3.Concat(*[s.memory.get(offset + i, BY(0)) for i in range(32)])
+def MLOAD(s: State, _offset: uint256) -> uint256:
+    offset = require_concrete(_offset, "MLOAD(offset) requires concrete offset")
+    return cast(
+        uint256, z3.Concat(*[s.memory.get(offset + i, BY(0)) for i in range(32)])
+    )
 
 
 # 52 - Save word to memory
-def MSTORE(s: State, offset: uint256, value: uint256) -> None:
-    offset = require_concrete(offset, "MSTORE(offset, value) requires concrete offset")
+def MSTORE(s: State, _offset: uint256, value: uint256) -> None:
+    offset = require_concrete(_offset, "MSTORE(offset, value) requires concrete offset")
     for i in range(31, -1, -1):
-        s.memory[offset + i] = z3.Extract(7, 0, value)
+        s.memory[offset + i] = cast(uint8, z3.Extract(7, 0, value))
         value = value >> 8
 
 
 # 53 - Save byte to memory
-def MSTORE8(s: State, offset: uint256, value: uint8) -> None:
-    offset = require_concrete(offset, "MSTORE8(offset, value) requires concrete offset")
+def MSTORE8(s: State, _offset: uint256, value: uint8) -> None:
+    offset = require_concrete(
+        _offset, "MSTORE8(offset, value) requires concrete offset"
+    )
     s.memory[offset] = value & 0xFF
 
 
@@ -375,8 +390,8 @@ def SSTORE(s: State, key: uint256, value: uint256) -> None:
 
 
 # 56 - Alter the program counter
-def JUMP(s: State, counter: uint256) -> None:
-    counter = require_concrete(counter, "JUMP(counter) requires concrete counter")
+def JUMP(s: State, _counter: uint256) -> None:
+    counter = require_concrete(_counter, "JUMP(counter) requires concrete counter")
     # In theory, JUMP should revert if counter is not a valid jump target.
     # Instead, raise an error and fail the whole analysis. This lets us prove
     # that all jump targets are valid and within the body of the code, which is
@@ -489,7 +504,7 @@ def CALL(
     # TODO: we assume the address is an externally-owned account (i.e. contains
     # no code). How should we handle CALLs to contracts?
     s.returndata = []
-    s.transfer(z3.Extract(159, 0, address), value)
+    s.transfer(cast(uint160, z3.Extract(159, 0, address)), value)
     return BW(1)
 
 
@@ -507,12 +522,12 @@ def CALLCODE(
 
 
 # F3 - Halts execution returning output data
-def RETURN(s: State, offset: uint256, size: uint256) -> None:
+def RETURN(s: State, _offset: uint256, _size: uint256) -> None:
     offset = require_concrete(
-        offset,
+        _offset,
         "RETURN(offset, size) requires concrete offset",
     )
-    size = require_concrete(size, "RETURN(offset, size) requires concrete size")
+    size = require_concrete(_size, "RETURN(offset, size) requires concrete size")
     s.returndata = [s.memory.get(i, BW(0)) for i in range(offset, offset + size)]
     s.success = True
 
@@ -549,12 +564,12 @@ def STATICCALL(
 
 # FD - Halt execution reverting state changes but returning data and remaining
 # gas
-def REVERT(s: State, offset: uint256, size: uint256) -> None:
+def REVERT(s: State, _offset: uint256, _size: uint256) -> None:
     offset = require_concrete(
-        offset,
+        _offset,
         "REVERT(offset, size) requires concrete offset",
     )
-    size = require_concrete(size, "REVERT(offset, size) requires concrete size")
+    size = require_concrete(_size, "REVERT(offset, size) requires concrete size")
     s.returndata = [s.memory.get(i, BW(0)) for i in range(offset, offset + size)]
     s.success = False
 

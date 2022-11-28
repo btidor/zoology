@@ -3,7 +3,7 @@
 from typing import Dict, List, Tuple
 
 import ops
-from common import BW, Instruction
+from common import BW, Instruction, require_concrete
 from opcodes import REFERENCE
 
 
@@ -59,5 +59,5 @@ if __name__ == "__main__":
         if ins.suffix is not None:
             msg += str(ins.suffix)
         if ins.operand is not None:
-            msg += "\t" + hex(ins.operand.as_long())
+            msg += "\t" + hex(require_concrete(ins.operand))
         print(msg)

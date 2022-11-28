@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
 
-from typing import Dict, Iterator, List, Set
+from typing import Dict, Iterator, List, Set, cast
 
 import z3
 from Crypto.Hash import keccak
 
 from common import (
+    BW,
     Instruction,
     Predicate,
     State,
     constrain_to_goal,
     do_check,
+    require_concrete,
     solver_stack,
 )
 from disassembler import disassemble
@@ -79,16 +81,18 @@ def analyze(instructions: List[Instruction], jumps: Dict[int, int]) -> None:
 def candidate_safety_predicates(state: State) -> Iterator[Predicate]:
     # Ownership Predicate
     for key in state.storage.accessed:
-        k = z3.simplify(key)
+        k = cast(z3.BitVecRef, z3.simplify(key))
         if z3.is_bv_value(k):
+            ck = require_concrete(k)
             yield Predicate(
-                lambda state: z3.And(
-                    state.origin
-                    != z3.Extract(159, 0, state.storage.array[k.as_long()]),
-                    state.caller
-                    != z3.Extract(159, 0, state.storage.array[k.as_long()]),
+                lambda state: cast(
+                    z3.BoolRef,
+                    z3.And(
+                        state.origin != z3.Extract(159, 0, state.storage.array[ck]),
+                        state.caller != z3.Extract(159, 0, state.storage.array[ck]),
+                    ),
                 ),
-                f"$OWNER[{hex(k.as_long())[2:]}]",
+                f"$OWNER[{hex(ck)[2:]}]",
                 state,
             )
 
@@ -96,7 +100,7 @@ def candidate_safety_predicates(state: State) -> Iterator[Predicate]:
     used: Set[str] = set()
     for key in state.storage.accessed:
         if z3.is_bv_value(key):
-            index = hex(key.as_long())[2:]
+            index = hex(require_concrete(key))[2:]
         else:
             hash = keccak.new(data=str(key).encode(), digest_bits=256).hexdigest()
             if hash in used:
@@ -104,9 +108,14 @@ def candidate_safety_predicates(state: State) -> Iterator[Predicate]:
             used.add(hash)
             index = hash[:8] + "?"
         yield Predicate(
-            lambda state: z3.And(
-                z3.UGE(state.contribution, state.extraction),
-                z3.UGE(state.contribution - state.extraction, state.storage.array[key]),
+            lambda state: cast(
+                z3.BoolRef,
+                z3.And(
+                    z3.UGE(state.contribution, state.extraction),
+                    z3.UGE(
+                        state.contribution - state.extraction, state.storage.array[key]
+                    ),
+                ),
             ),
             f"$BALANCE[{index}]",
             state,
@@ -122,9 +131,10 @@ def describe_state(solver: z3.Optimize, state: State) -> str:
     m = solver.model()
 
     calldata = "0x"
-    for i in range(m.eval(state.calldata.length()).as_long()):
-        b = m.eval(state.calldata.get(i))
-        calldata += f"{b.as_long():02x}" if z3.is_bv_value(b) else "??"
+    cdl = require_concrete(m.eval(state.calldata.length()))
+    for i in range(cdl):
+        b = m.eval(state.calldata.get(BW(i)))
+        calldata += f"{require_concrete(b):02x}" if z3.is_bv_value(b) else "??"
         if i == 3:
             calldata += " "
 

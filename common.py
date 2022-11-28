@@ -1,7 +1,18 @@
 import contextlib
 import copy
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Iterator, List, Optional, TypeAlias, cast
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterator,
+    List,
+    Literal,
+    Optional,
+    TypeAlias,
+    Union,
+    cast,
+)
 
 import z3
 
@@ -28,6 +39,15 @@ def BY(i: int) -> uint8:
     return z3.BitVecVal(i, 8)
 
 
+def require_concrete(var: z3.ExprRef, msg: Optional[str] = None) -> int:
+    s = z3.simplify(var)
+    if not z3.is_bv(s):
+        raise ValueError("unexpected non-bitvector")
+    if not z3.is_bv_value(s):
+        raise ValueError(msg or "unexpected symbolic value")
+    return cast(int, cast(z3.BitVecNumRef, s).as_long())
+
+
 MAX_AMOUNT = BW(1 << 200)
 
 
@@ -39,18 +59,18 @@ class ByteArray:
         else:
             self.len = BW(len(data))
             for i, b in enumerate(data):
-                self.arr = z3.Store(self.arr, i, b)
+                self.arr = cast(z3.ArrayRef, z3.Store(self.arr, i, b))
 
     def length(self) -> uint256:
         return self.len
 
     def get(self, i: uint256) -> uint8:
-        return z3.If(i >= self.len, BY(0), self.arr[i])
+        return cast(uint8, z3.If(i >= self.len, BY(0), self.arr[i]))
 
 
 class IntrospectableArray:
     def __init__(
-        self, name: str, key: z3.BitVecSort, val: z3.Sort | z3.BitVecRef
+        self, name: str, key: z3.BitVecSortRef, val: z3.SortRef | z3.BitVecRef
     ) -> None:
         if isinstance(val, z3.SortRef):
             self.array = z3.Array(name, key, val)
@@ -61,11 +81,11 @@ class IntrospectableArray:
 
     def __getitem__(self, key: z3.BitVecRef) -> z3.BitVecRef:
         self.accessed.append(key)
-        return self.array[key]
+        return cast(z3.BitVecRef, self.array[key])
 
     def __setitem__(self, key: z3.BitVecRef, val: z3.BitVecRef) -> None:
         self.written.append(key)
-        self.array = z3.Store(self.array, key, val)
+        self.array = cast(z3.ArrayRef, z3.Store(self.array, key, val))
 
     def copy(self) -> "IntrospectableArray":
         other = copy.copy(self)
@@ -129,8 +149,8 @@ class State:
 
     # Maps the length of the input data to a Z3 Array which maps symbolic inputs
     # to symbolic hash digests.
-    sha3hash: Dict[int, z3.Array] = field(default_factory=dict)
-    sha3keys: List[z3.BitVec] = field(default_factory=list)
+    sha3hash: Dict[int, z3.ArrayRef] = field(default_factory=dict)
+    sha3keys: List[z3.BitVecRef] = field(default_factory=list)
 
     # Global map of all account balances.
     balances: IntrospectableArray = IntrospectableArray(
@@ -140,7 +160,9 @@ class State:
     # List of Z3 expressions that must be satisfied in order for the program to
     # reach this state. Based on the JUMPI instructions (if statements) seen so
     # far.
-    constraints: List[z3.ExprRef] = field(default_factory=list)
+    constraints: List[Union[z3.ExprRef, Literal[True], Literal[False]]] = field(
+        default_factory=list
+    )
 
     # Additional constraints imposed by the multi-transaction solver.
     extra: List[z3.ExprRef] = field(default_factory=list)
@@ -245,7 +267,8 @@ class State:
                 solver,
                 z3.And(
                     addr != self.address,
-                    self.balances.array[addr] > since.balances.array[addr],
+                    cast(z3.BitVecRef, self.balances.array[addr])
+                    > cast(z3.BitVecRef, since.balances.array[addr]),
                 ),
             ):
                 return True
@@ -290,8 +313,14 @@ def constrain_to_goal(solver: z3.Optimize, start: State, end: State) -> None:
     solver.assert_and_track(z3.UGT(end.extraction, end.contribution), "GOAL.POST")
 
 
-def hexify(value: z3.BitVecVal, length: int) -> str:
-    return cast(int, value.as_long()).to_bytes(length, "big").hex()
+def hexify(value: z3.ExprRef, length: int) -> str:
+    if not z3.is_bv(value):
+        raise ValueError("unexpected non-bitvector")
+    if not z3.is_bv_value(value):
+        raise ValueError("unexpected symbolic value")
+    return (
+        cast(int, cast(z3.BitVecNumRef, value).as_long()).to_bytes(length, "big").hex()
+    )
 
 
 class Predicate:

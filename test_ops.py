@@ -1,5 +1,7 @@
 #!/usr/bin/env pytest
 
+from typing import cast
+
 import pytest
 import z3
 
@@ -11,6 +13,7 @@ def _dump_memory(s: State) -> str:
     v = ""
     lim = max(s.memory.keys())
     for i in range(lim + 1):
+        cast(z3.BitVecRef, z3.simplify(s.memory[i]))
         v += hexify(z3.simplify(s.memory[i]), 1)
     return "0x" + v.upper()
 
@@ -41,7 +44,7 @@ def test_MUL() -> None:
         z3.simplify(
             MUL(
                 BW(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF),
-                2,
+                BW(2),
             )
         )
         == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE
@@ -444,11 +447,11 @@ def test_SSTORE() -> None:
     s = State()
 
     SSTORE(s, BW(0), BW(0xFFFF))
-    assert z3.simplify(s.storage[0]) == 0xFFFF
+    assert z3.simplify(s.storage[BW(0)]) == 0xFFFF
 
     SSTORE(s, BW(8965), BW(0xFF))
-    assert z3.simplify(s.storage[0]) == 0xFFFF
-    assert z3.simplify(s.storage[8965]) == 0xFF
+    assert z3.simplify(s.storage[BW(0)]) == 0xFFFF
+    assert z3.simplify(s.storage[BW(8965)]) == 0xFF
 
 
 def test_JUMP() -> None:
@@ -504,7 +507,7 @@ def test_SWAP() -> None:
 
 def test_CALL() -> None:
     s = State(returndata=[BY(1)])
-    s.balances[s.address] = 125
+    s.balances[s.address] = BW(125)
     res = CALL(s, BW(0), BW(0x1234), BW(123), BW(0), BW(0), BW(0), BW(0))
     assert z3.simplify(res) == 1
     assert len(s.returndata) == 0
