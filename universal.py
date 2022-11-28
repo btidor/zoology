@@ -13,8 +13,8 @@ from common import (
     IntrospectableArray,
     Predicate,
     State,
+    constrain_to_goal,
     do_check,
-    goal,
     hexify,
     solver_stack,
 )
@@ -61,7 +61,7 @@ def make_start(jumps: Dict[int, int], suffix: str = "") -> Tuple[Block, State]:
 
 def universal_transaction(
     block: Block, start: State, instructions: List[Instruction]
-) -> Iterator[Tuple[z3.Solver, State]]:
+) -> Iterator[Tuple[z3.Optimize, State]]:
 
     init = start.copy()
     init.transfer_initial()
@@ -91,7 +91,7 @@ def universal_transaction(
 
 
 def print_solution(
-    solver: z3.Solver,
+    solver: z3.Optimize,
     start: State,
     end: State,
     predicate: Optional[Predicate] = None,
@@ -99,9 +99,7 @@ def print_solution(
     assert do_check(solver)
 
     with solver_stack(solver):
-        for i, constraint in enumerate(goal(start, end)):
-            solver.assert_and_track(constraint, f"GOAL{i}")
-
+        constrain_to_goal(solver, start, end)
         if do_check(solver):
             _print_solution("🚩 GOAL", solver, start, end, predicate)
             return
@@ -117,7 +115,7 @@ def print_solution(
 
 def _print_solution(
     kind: str,
-    solver: z3.Solver,
+    solver: z3.Optimize,
     start: State,
     end: State,
     predicate: Optional[Predicate] = None,
@@ -179,7 +177,7 @@ def _print_solution(
         print()
 
 
-def narrow_sha3(solver: z3.Solver, model: z3.Model, state: State) -> z3.Model:
+def narrow_sha3(solver: z3.Optimize, model: z3.Model, state: State) -> z3.Model:
     hashes: Dict[bytes, bytes] = {}
     for i, skey in enumerate(state.sha3keys):
         ckey = model.eval(skey, True)

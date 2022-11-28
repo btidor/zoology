@@ -5,9 +5,16 @@ from typing import Dict, Iterator, List, Set
 import z3
 from Crypto.Hash import keccak
 
-from common import Instruction, Predicate, State, do_check, goal, solver_stack
+from common import (
+    Instruction,
+    Predicate,
+    State,
+    constrain_to_goal,
+    do_check,
+    solver_stack,
+)
 from disassembler import disassemble
-from universal import make_start, print_solution, universal_transaction
+from universal import make_start, universal_transaction
 
 
 def analyze(instructions: List[Instruction], jumps: Dict[int, int]) -> None:
@@ -17,13 +24,14 @@ def analyze(instructions: List[Instruction], jumps: Dict[int, int]) -> None:
     for solver, end in universal_transaction(block, start, instructions):
         description = describe_state(solver, end)
 
-        if not do_check(solver, *goal(start, end)):
+        constrain_to_goal(solver, start, end)
+        if not do_check(solver):
             continue
 
         candidates = []
         print(f" - {description}")
         for candidate in candidate_safety_predicates(end):
-            if not do_check(solver, *goal(start, end), candidate.eval(start)):
+            if not do_check(solver, candidate.eval(start)):
                 # (1) In order to be a valid safety predicate, it must preclude
                 # this transaction when applied to the start state
                 candidates.append(candidate)
@@ -44,12 +52,10 @@ def analyze(instructions: List[Instruction], jumps: Dict[int, int]) -> None:
             for candidate in candidates:
                 with solver_stack(solver):
                     candidate.state.constrain(solver)
-                    constraints = [
-                        candidate.eval(start),
-                        z3.Not(candidate.eval(end)),
-                    ]
+                    solver.assert_and_track(candidate.eval(start), "SAFE.PRE")
+                    solver.assert_and_track(z3.Not(candidate.eval(end)), "UNSAFE.POST")
                     print(f" - {description} ({candidate})")
-                    if do_check(solver, *constraints):
+                    if do_check(solver):
                         # STEP transition found: constraint is eliminated
                         print(f"   {describe_state(solver, end)}")
                     else:
@@ -108,7 +114,8 @@ def candidate_safety_predicates(state: State) -> Iterator[Predicate]:
         )
 
 
-def describe_state(solver: z3.Solver, state: State) -> str:
+def describe_state(solver: z3.Optimize, state: State) -> str:
+    # Re-adding these objectives increases performance by 2x?!
     solver.minimize(state.callvalue)
     solver.minimize(state.calldata.length())
     assert do_check(solver)

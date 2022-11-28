@@ -232,7 +232,7 @@ class State:
                     f"SHA3.DISTINCT({i},{j}){self.suffix}",
                 )
 
-    def is_changed(self, solver: z3.Solver, since: "State") -> bool:
+    def is_changed(self, solver: z3.Optimize, since: "State") -> bool:
         assert self.success == True
 
         # TODO: constrain further to eliminate no-op writes?
@@ -267,7 +267,7 @@ class Block:
 
 
 @contextlib.contextmanager
-def solver_stack(solver: z3.Solver) -> Iterator[None]:
+def solver_stack(solver: z3.Optimize) -> Iterator[None]:
     solver.push()
     try:
         yield
@@ -275,7 +275,7 @@ def solver_stack(solver: z3.Solver) -> Iterator[None]:
         solver.pop()
 
 
-def do_check(solver: z3.Solver, *assumptions: Any) -> bool:
+def do_check(solver: z3.Optimize, *assumptions: Any) -> bool:
     check = solver.check(*assumptions)
     if check == z3.sat:
         return True
@@ -285,11 +285,9 @@ def do_check(solver: z3.Solver, *assumptions: Any) -> bool:
         raise Exception(f"z3 failure: {solver.reason_unknown()}")
 
 
-def goal(start: State, end: State) -> List[z3.ExprRef]:
-    return [
-        z3.ULT(start.extraction, start.contribution),
-        z3.UGT(end.extraction, end.contribution),
-    ]
+def constrain_to_goal(solver: z3.Optimize, start: State, end: State) -> None:
+    solver.assert_and_track(z3.ULT(start.extraction, start.contribution), "GOAL.PRE")
+    solver.assert_and_track(z3.UGT(end.extraction, end.contribution), "GOAL.POST")
 
 
 def hexify(value: z3.BitVecVal, length: int) -> str:
