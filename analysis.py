@@ -20,8 +20,8 @@ from universal import make_start, universal_transaction
 
 
 def analyze(instructions: List[Instruction], jumps: Dict[int, int]) -> None:
-    print("Candidates")
-    goals: Dict[str, List[Predicate]] = {}
+    print("Ownership: Universal Analysis")
+    ownership: List[Predicate] = []
     block, start = make_start(jumps)
     for solver, end in universal_transaction(block, start, instructions):
         description = describe_state(solver, end)
@@ -30,56 +30,80 @@ def analyze(instructions: List[Instruction], jumps: Dict[int, int]) -> None:
         if not do_check(solver):
             continue
 
-        candidates = []
         print(f" - {description}")
-        for candidate in candidate_safety_predicates(end):
+        for candidate in ownership_safety_predicates(end):
             if not do_check(solver, candidate.eval(start)):
                 # (1) In order to be a valid safety predicate, it must preclude
                 # this transaction when applied to the start state
-                candidates.append(candidate)
                 print(f"   {candidate}")
-        goals[description] = candidates
+                ownership.append(candidate)
 
     print()
-    print("Elimination")
+    print("Ownership: Elimination")
     block, start = make_start(jumps, "^")
     for solver, end in universal_transaction(block, start, instructions):
         if not end.is_changed(solver, start):
             continue  # ignore no-ops
 
-        for description, candidates in goals.items():
-            # (2) In order to be a valid safety predicate, there must be no STEP
-            # transition from P -> ~P
-            filtered = []
-            for candidate in candidates:
-                with solver_stack(solver):
-                    candidate.state.constrain(solver)
-                    solver.assert_and_track(candidate.eval(start), "SAFE.PRE")
-                    solver.assert_and_track(z3.Not(candidate.eval(end)), "UNSAFE.POST")
-                    print(f" - {description} ({candidate})")
-                    if do_check(solver):
-                        # STEP transition found: constraint is eliminated
-                        print(f"   {describe_state(solver, end)}")
-                    else:
-                        # Constraint remains alive
-                        filtered.append(candidate)
-            goals[description] = filtered
+        # (2) In order to be a valid safety predicate, there must be no STEP
+        # transition from P -> ~P
+        for candidate in ownership:
+            with solver_stack(solver):
+                candidate.state.constrain(solver)
+                solver.assert_and_track(candidate.eval(start), "SAFE.PRE")
+                solver.assert_and_track(z3.Not(candidate.eval(end)), "UNSAFE.POST")
+                if do_check(solver):
+                    # STEP transition found: constraint is eliminated
+                    print(f" - {candidate}")
+                    print(f"   {describe_state(solver, end)}")
 
     print()
-    print("Results")
-    for description, candidates in goals.items():
-        if len(candidates) > 0:
-            # Successfully constrained goal with safety predicate!
-            print("    ✨\t", end="")
-        else:
-            # Goal is unconstrained [TODO: consider safety predicates that
-            # require a chain of transactions to apply]
-            print("    💥\t", end="")
-        print(description)
+    print("Balance: Universal Analysis")
+    additional: List[str] = []
+    balance: List[Predicate] = []
+    block, start = make_start(jumps, "^")
+    for solver, end in universal_transaction(block, start, instructions):
+        description = describe_state(solver, end)
+
+        constrain_to_goal(solver, start, end)
+        for predicate in ownership:
+            solver.assert_and_track(predicate.eval(start), f"SAFE{predicate}")
+        if not do_check(solver):
+            continue
+
+        print(f" - {description}")
+        additional.append(description)
+        for candidate in balance_safety_predicates(end):
+            if not do_check(solver, candidate.eval(start)):
+                # (1) In order to be a valid safety predicate, it must preclude
+                # this transaction when applied to the start state
+                print(f"   {candidate}")
+                balance.append(candidate)
+
+    print()
+    print("Balance: Elimination")
+    block, start = make_start(jumps, "^")
+    for solver, end in universal_transaction(block, start, instructions):
+        if not end.is_changed(solver, start):
+            continue  # ignore no-ops
+
+        for predicate in ownership:
+            solver.assert_and_track(predicate.eval(start), f"SAFE{predicate}")
+
+        # (2) In order to be a valid safety predicate, there must be no STEP
+        # transition from P -> ~P
+        for candidate in balance:
+            with solver_stack(solver):
+                candidate.state.constrain(solver)
+                solver.assert_and_track(candidate.eval(start), "SAFE.PRE")
+                solver.assert_and_track(z3.Not(candidate.eval(end)), "UNSAFE.POST")
+                if do_check(solver):
+                    # STEP transition found: constraint is eliminated
+                    print(f" - {candidate}")
+                    print(f"   {describe_state(solver, end)}")
 
 
-def candidate_safety_predicates(state: State) -> Iterator[Predicate]:
-    # Ownership Predicate
+def ownership_safety_predicates(state: State) -> Iterator[Predicate]:
     for key in state.storage.accessed:
         k = cast(z3.BitVecRef, z3.simplify(key))
         if z3.is_bv_value(k):
@@ -96,7 +120,8 @@ def candidate_safety_predicates(state: State) -> Iterator[Predicate]:
                 state,
             )
 
-    # Balance Predicate
+
+def balance_safety_predicates(state: State) -> Iterator[Predicate]:
     used: Set[str] = set()
     for key in state.storage.accessed:
         if z3.is_bv_value(key):
