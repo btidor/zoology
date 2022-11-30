@@ -5,7 +5,7 @@ from typing import cast
 import pytest
 import z3
 
-from common import BA, BW, BY, Block, ByteArray, Instruction, State, hexify
+from common import BA, BW, BY, Block, ByteArray, Instruction, Program, State, hexify
 from ops import *
 
 
@@ -455,11 +455,12 @@ def test_SSTORE() -> None:
 
 
 def test_JUMP() -> None:
-    s = State(jumps={8: 90})
-    JUMP(s, BW(8))
+    p = Program(jumps={8: 90})
+    s = State()
+    JUMP(p, s, BW(8))
     assert s.pc == 90
     with pytest.raises(KeyError):
-        JUMP(s, BW(99))
+        JUMP(p, s, BW(99))
 
 
 def test_PC() -> None:

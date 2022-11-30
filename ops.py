@@ -8,6 +8,7 @@ from common import (
     BY,
     Block,
     Instruction,
+    Program,
     State,
     require_concrete,
     uint8,
@@ -390,13 +391,13 @@ def SSTORE(s: State, key: uint256, value: uint256) -> None:
 
 
 # 56 - Alter the program counter
-def JUMP(s: State, _counter: uint256) -> None:
+def JUMP(p: Program, s: State, _counter: uint256) -> None:
     counter = require_concrete(_counter, "JUMP(counter) requires concrete counter")
     # In theory, JUMP should revert if counter is not a valid jump target.
     # Instead, raise an error and fail the whole analysis. This lets us prove
     # that all jump targets are valid and within the body of the code, which is
     # why it's safe to strip the metadata trailer.
-    s.pc = s.jumps[counter]
+    s.pc = p.jumps[counter]
 
 
 # 57 - Conditionally alter the program counter

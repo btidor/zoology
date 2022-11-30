@@ -126,10 +126,15 @@ class Instruction:
 
 
 @dataclass
+class Program:
+    instructions: List[Instruction] = field(default_factory=list)
+    jumps: Dict[int, int] = field(default_factory=dict)
+
+
+@dataclass
 class State:
     suffix: str = ""
     pc: int = 0
-    jumps: Dict[int, int] = field(default_factory=dict)
     stack: List[uint256] = field(default_factory=list)
     memory: Dict[int, uint8] = field(
         default_factory=dict
@@ -202,7 +207,6 @@ class State:
         return State(
             suffix=self.suffix,
             pc=self.pc,
-            jumps=self.jumps,
             stack=self.stack.copy(),
             memory=self.memory.copy(),
             address=self.address,
