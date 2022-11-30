@@ -101,16 +101,6 @@ class IntrospectableArray:
 
 
 @dataclass
-class Opcode:
-    code: int
-    name: str
-    fullName: str
-    fee: int
-    isAsync: bool
-    dynamicGas: bool
-
-
-@dataclass
 class Instruction:
     # Start index of this instruction in the code, in bytes
     offset: int

@@ -2,9 +2,8 @@
 
 from typing import Iterable, Tuple, cast
 
-import ops
 from common import BW, Instruction, Program, require_concrete
-from opcodes import REFERENCE
+from opcodes import REFERENCE, UNIMPLEMENTED
 
 
 def disassemble(code: bytes) -> Program:
@@ -73,10 +72,10 @@ def decode_instruction(code: bytes) -> Tuple[Instruction, int, bool]:
         return Instruction(-1, opref.name, suffix), 1, False
     elif opref.name == "JUMPDEST":
         return Instruction(-1, opref.name), 1, True
-    elif hasattr(ops, opref.fullName):
-        return Instruction(-1, opref.name), 1, False
-    else:
+    elif opref.name in UNIMPLEMENTED:
         raise ValueError(f"unimplemented opcode: {opref.fullName}")
+    else:
+        return Instruction(-1, opref.name), 1, False
 
 
 if __name__ == "__main__":
