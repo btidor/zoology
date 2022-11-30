@@ -1,16 +1,35 @@
 #!/usr/bin/env python3
+"""An EVM bytecode disassembler."""
+
+from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, List, Optional, Tuple, cast
+from typing import Dict, Iterable, List, Optional, cast
 
 from common import BW, require_concrete, uint256
 from opcodes import REFERENCE, UNIMPLEMENTED
 
 
 @dataclass
+class Program:
+    """The disassembled code of an EVM contract."""
+
+    instructions: List[Instruction] = field(default_factory=list)
+
+    # Maps byte offsets in the contract, as used by JUMP/JUMPI, to an index into
+    # `instructions`.
+    jumps: Dict[int, int] = field(default_factory=dict)
+
+
+@dataclass
 class Instruction:
-    # Start index of this instruction in the code, in bytes
+    """A single disassembled EVM instruction."""
+
+    # Starting index of the instruction in the code, in bytes
     offset: int
+
+    # Size of the instruction in the code, in bytes
+    size: int
 
     # Simplified instruction name, e.g. DUP1 -> DUP
     name: str
@@ -22,25 +41,19 @@ class Instruction:
     operand: Optional[uint256] = None
 
 
-@dataclass
-class Program:
-    instructions: List[Instruction] = field(default_factory=list)
-    jumps: Dict[int, int] = field(default_factory=dict)
-
-
 def disassemble(code: bytes) -> Program:
+    """Parse and validate an EVM contract's code."""
     program = Program()
 
     offset = 0
     while offset < len(code):
-        instruction, size, jumpdest = decode_instruction(code[offset:])
-        instruction.offset = offset
+        instruction = _decode_instruction(code, offset)
 
         program.instructions.append(instruction)
-        if jumpdest:
+        if instruction.name == "JUMPDEST":
             program.jumps[offset] = len(program.instructions) - 1
 
-        offset += size
+        offset += instruction.size
 
         # If we encounter the reserved opcode INVALID (0xFE), assume the
         # remaining data is a non-code trailer, e.g. contract metadata.
@@ -51,10 +64,14 @@ def disassemble(code: bytes) -> Program:
 
 
 def printable_output(code: bytes) -> Iterable[str]:
+    """
+    Parse and validate an EVM contract's code.
+
+    Yields a human-readable string for each instruction.
+    """
     offset = 0
     while offset < len(code):
-        ins, size, _ = decode_instruction(code[offset:])
-        ins.offset = offset
+        ins = _decode_instruction(code, offset)
 
         msg = f"{ins.offset:04x}  {ins.name}"
         if ins.suffix is not None:
@@ -66,15 +83,19 @@ def printable_output(code: bytes) -> Iterable[str]:
             msg += "\t0x" + operand.hex()
         yield msg
 
-        offset += size
+        offset += ins.size
 
         if ins.name == "INVALID":
             break
 
 
-def decode_instruction(code: bytes) -> Tuple[Instruction, int, bool]:
-    opcode = code[0]
+def _decode_instruction(code: bytes, offset: int) -> Instruction:
+    """Decode a single instruction from the given offset within `code`."""
+    opcode = code[offset]
     opref = REFERENCE.get(opcode)
+    size = 1
+    suffix = None
+    operand = None
 
     if opref is None:
         raise ValueError(f"unknown opcode: 0x{opcode:02x}")
@@ -83,21 +104,17 @@ def decode_instruction(code: bytes) -> Tuple[Instruction, int, bool]:
         suffix = opref.code - 0x5F
         operand = 0
         for i in range(suffix):
-            operand = (operand << 8) | code[i + 1]
+            operand = (operand << 8) | code[offset + i + 1]
         operand = BW(operand)
-        return Instruction(-1, opref.name, suffix, operand), suffix + 1, False
+        size = suffix + 1
     elif opref.name == "DUP":
         suffix = opref.code - 0x7F
-        return Instruction(-1, opref.name, suffix), 1, False
     elif opref.name == "SWAP":
         suffix = opref.code - 0x8F
-        return Instruction(-1, opref.name, suffix), 1, False
-    elif opref.name == "JUMPDEST":
-        return Instruction(-1, opref.name), 1, True
     elif opref.name in UNIMPLEMENTED:
         raise ValueError(f"unimplemented opcode: {opref.fullName}")
-    else:
-        return Instruction(-1, opref.name), 1, False
+
+    return Instruction(offset, size, opref.name, suffix, operand)
 
 
 if __name__ == "__main__":

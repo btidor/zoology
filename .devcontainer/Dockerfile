@@ -7,4 +7,4 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     && apt-get -y upgrade \
     && apt-get -y install --no-install-recommends nodejs python3-pip yices2
 
-RUN pip install black mypy pytest
+RUN pip install black mypy pydocstyle pytest

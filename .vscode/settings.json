@@ -13,13 +13,17 @@
         "--profile",
         "black"
     ],
+    "python.analysis.diagnosticMode": "workspace",
+    "python.analysis.typeCheckingMode": "basic",
     "python.formatting.provider": "black",
     "python.linting.mypyEnabled": true,
+    "python.linting.pydocstyleArgs": [
+        "--match=^((?!test).)*\\.py$"
+    ],
+    "python.linting.pydocstyleEnabled": true,
     "python.testing.pytestArgs": [
         "."
     ],
-    "python.testing.unittestEnabled": false,
     "python.testing.pytestEnabled": true,
-    "python.analysis.typeCheckingMode": "basic",
-    "python.analysis.diagnosticMode": "workspace"
+    "python.testing.unittestEnabled": false,
 }

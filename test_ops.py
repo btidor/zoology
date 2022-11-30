@@ -465,7 +465,7 @@ def test_JUMP() -> None:
 
 
 def test_PC() -> None:
-    ins = Instruction(0x12, "PC")
+    ins = Instruction(0x12, 1, "PC")
     assert z3.simplify(PC(ins)) == 0x12
 
 
@@ -475,10 +475,10 @@ def test_MSIZE() -> None:
 
 
 def test_PUSH() -> None:
-    ins = Instruction(0x0, "PUSH", 1, BW(0x01))
+    ins = Instruction(0x0, 2, "PUSH", 1, BW(0x01))
     assert z3.simplify(PUSH(ins)) == 0x01
 
-    ins = Instruction(0x1, "PUSH", 1)
+    ins = Instruction(0x1, 2, "PUSH", 1)
     with pytest.raises(ValueError):
         PUSH(ins)
 
@@ -486,10 +486,10 @@ def test_PUSH() -> None:
 def test_DUP() -> None:
     s = State(stack=[BW(0x1234)])
 
-    ins = Instruction(0x0, "DUP", 1)
+    ins = Instruction(0x0, 1, "DUP", 1)
     assert z3.simplify(DUP(ins, s)) == 0x1234
 
-    ins = Instruction(0x0, "DUP")
+    ins = Instruction(0x0, 1, "DUP")
     with pytest.raises(ValueError):
         DUP(ins, s)
 
@@ -497,12 +497,12 @@ def test_DUP() -> None:
 def test_SWAP() -> None:
     s = State(stack=[BW(0x1234), BW(0x5678)])
 
-    ins = Instruction(0x0, "SWAP", 1)
+    ins = Instruction(0x0, 1, "SWAP", 1)
     SWAP(ins, s)
     stack = [z3.simplify(x) for x in s.stack]
     assert stack == [0x5678, 0x1234]
 
-    ins = Instruction(0x0, "SWAP")
+    ins = Instruction(0x0, 1, "SWAP")
     with pytest.raises(ValueError):
         SWAP(ins, s)
 
