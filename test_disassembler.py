@@ -67,10 +67,7 @@ def test_disassemble_invalid() -> None:
 
 def test_output_basic() -> None:
     code = bytes.fromhex("60AA605601600957005B60006000FD")
-    p = disassemble(code)
-    output = printable_output(p)
-
-    fixture = """
+    raw = """
         0000  PUSH1\t0xaa
         0002  PUSH1\t0x56
         0004  ADD
@@ -80,9 +77,9 @@ def test_output_basic() -> None:
         0009  JUMPDEST
         000a  PUSH1\t0x00
         000c  PUSH1\t0x00
-        000e  REVERT\n"""
-    fixture = fixture.replace("\n        ", "\n")[1:]
+        000e  REVERT""".splitlines()
+    fixture = map(lambda x: x.strip(), raw[1:])
 
-    print(fixture)
-    print(output)
-    assert output == fixture
+    for actual, expected in zip(printable_output(code), fixture):
+        print(actual, expected)
+        assert actual == expected
