@@ -3,18 +3,8 @@ from typing import cast
 import z3
 from Crypto.Hash import keccak
 
-from common import (
-    BW,
-    BY,
-    Block,
-    Instruction,
-    Program,
-    State,
-    require_concrete,
-    uint8,
-    uint160,
-    uint256,
-)
+from common import BW, BY, Block, State, require_concrete, uint8, uint160, uint256
+from disassembler import Instruction, Program
 
 
 # 00 - Halts execution

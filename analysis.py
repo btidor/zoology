@@ -8,14 +8,13 @@ from Crypto.Hash import keccak
 from common import (
     BW,
     Predicate,
-    Program,
     State,
     constrain_to_goal,
     do_check,
     require_concrete,
     solver_stack,
 )
-from disassembler import disassemble
+from disassembler import Program, disassemble
 from universal import universal_transaction
 
 

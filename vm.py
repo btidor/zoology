@@ -6,18 +6,8 @@ from typing import Any, List, Optional, cast
 import z3
 
 import ops
-from common import (
-    BW,
-    Block,
-    ByteArray,
-    Instruction,
-    Program,
-    State,
-    hexify,
-    require_concrete,
-    uint256,
-)
-from disassembler import disassemble
+from common import BW, Block, ByteArray, State, hexify, require_concrete, uint256
+from disassembler import Instruction, Program, disassemble
 
 
 def execute(

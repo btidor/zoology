@@ -1,9 +1,31 @@
 #!/usr/bin/env python3
 
-from typing import Iterable, Tuple, cast
+from dataclasses import dataclass, field
+from typing import Dict, Iterable, List, Optional, Tuple, cast
 
-from common import BW, Instruction, Program, require_concrete
+from common import BW, require_concrete, uint256
 from opcodes import REFERENCE, UNIMPLEMENTED
+
+
+@dataclass
+class Instruction:
+    # Start index of this instruction in the code, in bytes
+    offset: int
+
+    # Simplified instruction name, e.g. DUP1 -> DUP
+    name: str
+
+    # Numeric suffix, e.g. 1 for DUP1
+    suffix: Optional[int] = None
+
+    # Operand (PUSH only)
+    operand: Optional[uint256] = None
+
+
+@dataclass
+class Program:
+    instructions: List[Instruction] = field(default_factory=list)
+    jumps: Dict[int, int] = field(default_factory=dict)
 
 
 def disassemble(code: bytes) -> Program:

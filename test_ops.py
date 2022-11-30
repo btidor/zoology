@@ -5,7 +5,8 @@ from typing import cast
 import pytest
 import z3
 
-from common import BA, BW, BY, Block, ByteArray, Instruction, Program, State, hexify
+from common import BA, BW, BY, Block, ByteArray, State, hexify
+from disassembler import Instruction, Program
 from ops import *
 
 

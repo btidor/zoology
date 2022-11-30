@@ -11,7 +11,6 @@ from common import (
     ByteArray,
     IntrospectableArray,
     Predicate,
-    Program,
     State,
     constrain_to_goal,
     do_check,
@@ -19,7 +18,7 @@ from common import (
     require_concrete,
     solver_stack,
 )
-from disassembler import disassemble
+from disassembler import Program, disassemble
 from vm import execute
 
 
