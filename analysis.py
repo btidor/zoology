@@ -16,14 +16,13 @@ from common import (
     solver_stack,
 )
 from disassembler import disassemble
-from universal import make_start, universal_transaction
+from universal import universal_transaction
 
 
 def analyze(program: Program) -> None:
     print("Ownership: Universal Analysis")
     ownership: List[Predicate] = []
-    block, start = make_start()
-    for solver, end in universal_transaction(block, start, program):
+    for solver, start, end in universal_transaction(program, ""):
         description = describe_state(solver, end)
 
         constrain_to_goal(solver, start, end)
@@ -40,8 +39,7 @@ def analyze(program: Program) -> None:
 
     print()
     print("Ownership: Elimination")
-    block, start = make_start("^")
-    for solver, end in universal_transaction(block, start, program):
+    for solver, start, end in universal_transaction(program, "^"):
         if not end.is_changed(solver, start):
             continue  # ignore no-ops
 
@@ -61,8 +59,7 @@ def analyze(program: Program) -> None:
     print("Balance: Universal Analysis")
     additional: List[str] = []
     balance: List[Predicate] = []
-    block, start = make_start("^")
-    for solver, end in universal_transaction(block, start, program):
+    for solver, start, end in universal_transaction(program, "^"):
         description = describe_state(solver, end)
 
         constrain_to_goal(solver, start, end)
@@ -82,8 +79,7 @@ def analyze(program: Program) -> None:
 
     print()
     print("Balance: Elimination")
-    block, start = make_start("^")
-    for solver, end in universal_transaction(block, start, program):
+    for solver, start, end in universal_transaction(program, "^"):
         if not end.is_changed(solver, start):
             continue  # ignore no-ops
 
