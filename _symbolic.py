@@ -1,8 +1,18 @@
+from __future__ import annotations
+
 import contextlib
 import copy
-from typing import Any, Iterator, List, Optional, TypeAlias, cast
+from typing import Any, Iterator, List, Literal, Optional, TypeAlias, Union, cast
 
 import z3
+from Crypto.Hash import keccak
+
+
+def simplify_bv(value: z3.ExprRef) -> z3.BitVecRef:
+    value = z3.simplify(value)
+    if not z3.is_bv(value):
+        raise ValueError("unexpected non-bitvector")
+    return cast(z3.BitVecRef, value)
 
 
 def require_concrete(var: z3.ExprRef, msg: Optional[str] = None) -> int:
@@ -24,6 +34,23 @@ def hexify(value: z3.ExprRef, length: int) -> str:
         cast(int, cast(z3.BitVecNumRef, value).as_long()).to_bytes(length, "big").hex()
     )
 
+
+def describe_bv(value: z3.ExprRef) -> str:
+    value = simplify_bv(value)
+    if z3.is_bv_value(value):
+        v: int = require_concrete(value)
+        p = []
+        while v > 0:
+            b = v & ((1 << 256) - 1)
+            p.append(b.to_bytes(32, "big").hex())
+            v >>= 256
+        return "0x" + ".".join(reversed(p))
+    else:
+        digest = keccak.new(data=str(value).encode(), digest_bits=256).digest()
+        return "#" + digest[:3].hex()
+
+
+Constraint: TypeAlias = Union[z3.ExprRef, Literal[True], Literal[False]]
 
 uint8: TypeAlias = z3.BitVecRef
 uint160: TypeAlias = z3.BitVecRef
@@ -84,16 +111,10 @@ class IntrospectableArray:
         self.written.append(key)
         self.array = cast(z3.ArrayRef, z3.Store(self.array, key, val))
 
-    def copy(self) -> "IntrospectableArray":
+    def copy(self) -> IntrospectableArray:
         other = copy.copy(self)
         other.accessed = other.accessed.copy()
         other.written = other.written.copy()
-        return other
-
-    def copyreset(self) -> "IntrospectableArray":
-        other = copy.copy(self)
-        other.accessed = []
-        other.written = []
         return other
 
 

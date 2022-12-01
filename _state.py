@@ -1,29 +1,34 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Literal, Optional, Union, cast
+from typing import Dict, List, Optional, cast
 
 import z3
 
+from _hash import SHA3
 from _symbolic import (
     BA,
     BW,
     ByteArray,
+    Constraint,
     IntrospectableArray,
     do_check,
     uint8,
     uint160,
     uint256,
 )
+from disassembler import Program
 
 
-def constrain_to_goal(solver: z3.Optimize, start: State, end: State) -> None:
+def constrain_to_goal(solver: z3.Optimize, start: Universe, end: Universe) -> None:
     solver.assert_and_track(z3.ULT(start.extraction, start.contribution), "GOAL.PRE")
     solver.assert_and_track(z3.UGT(end.extraction, end.contribution), "GOAL.POST")
 
 
 @dataclass
 class Block:
+    """A block in the Ethereum blockchain."""
+
     number: uint256 = BW(16030969)
     coinbase: uint160 = BA(0xDAFEA492D9C6733AE3D56B7ED1ADB60692C98BC5)
     timestamp: uint256 = BW(1669214471)
@@ -36,78 +41,100 @@ class Block:
 
 
 @dataclass
-class State:
+class Contract:
+    """A deployed contract account with code and symbolic storage."""
+
+    program: Program
+    storage: IntrospectableArray = IntrospectableArray(
+        "STORAGE", z3.BitVecSort(256), BW(0)
+    )
+
+
+@dataclass
+class Universe:
+    """The state of the entire blockchain and our interactions with it."""
+
     suffix: str = ""
+
+    balances: IntrospectableArray = IntrospectableArray(
+        "BALANCES", z3.BitVecSort(160), BW(0)
+    )
+    transfer_constraints: List[Constraint] = field(default_factory=list)
+
+    # These variables track how much value has been moved from the contracts
+    # under test to our agent's accounts. To avoid overflow errors, we track
+    # value contributed to and value extracted from the contracts under test as
+    # two separate unsigned (nonnegative) integers.
+    agents: List[uint160] = field(default_factory=list)
+    contribution: uint256 = BW(0)
+    extraction: uint256 = BW(0)
+
+    def transfer(self, src: uint160, dst: uint160, val: uint256) -> None:
+        """Transfer value from one account to another."""
+        self.transfer_constraints.append(
+            # If `balances[src]` drops below zero, execution will revert.
+            # Therefore, `balances[src] >= 0`.
+            z3.BVSubNoUnderflow(self.balances[src], val, False)
+        )
+        self.transfer_constraints.append(
+            # There isn't enough ETH in existence to overflow an account's
+            # balance.
+            z3.BVAddNoOverflow(self.balances[dst], val, False)
+        )
+        self.balances[src] -= val
+        self.balances[dst] += val
+
+        ext = z3.If(z3.Or(False, *[dst == agent for agent in self.agents]), val, BW(0))
+        self.transfer_constraints.append(
+            z3.BVAddNoOverflow(self.extraction, ext, False)
+        )
+        self.extraction += ext
+        cont = z3.If(z3.Or(False, *[src == agent for agent in self.agents]), val, BW(0))
+        self.transfer_constraints.append(
+            z3.BVAddNoOverflow(self.contribution, cont, False)
+        )
+        self.extraction += cont
+
+    def constrain(self, solver: z3.Optimize) -> None:
+        """Apply accumulated constraints to the given solver instance."""
+        for i, constraint in enumerate(self.transfer_constraints):
+            solver.assert_and_track(constraint, f"XFER{i}{self.suffix}")
+
+
+@dataclass
+class State:
+    """Transient context state associated with a contract invocation."""
+
+    suffix: str = ""
+
+    sha3: SHA3 = field(default_factory=SHA3)
+
     pc: int = 0
     stack: List[uint256] = field(default_factory=list)
     memory: Dict[int, uint8] = field(
         default_factory=dict
     )  # concrete index -> 1-byte value
+
     address: uint160 = BA(0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA)
     origin: uint160 = BA(0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB)
     caller: uint160 = BA(0xCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC)
     callvalue: uint256 = BW(0)
     calldata: ByteArray = ByteArray("CALLDATA", b"")
     gasprice: uint256 = BW(0x12)
+
     returndata: List[z3.BitVecRef] = field(default_factory=list)
     success: Optional[bool] = None
-
-    storage: IntrospectableArray = IntrospectableArray(
-        "STORAGE", z3.BitVecSort(256), BW(0)
-    )
-
-    # Maps the length of the input data to a Z3 Array which maps symbolic inputs
-    # to symbolic hash digests.
-    sha3hash: Dict[int, z3.ArrayRef] = field(default_factory=dict)
-    sha3keys: List[z3.BitVecRef] = field(default_factory=list)
-
-    # Global map of all account balances.
-    balances: IntrospectableArray = IntrospectableArray(
-        "BALANCES", z3.BitVecSort(160), BW(0)
-    )
 
     # List of Z3 expressions that must be satisfied in order for the program to
     # reach this state. Based on the JUMPI instructions (if statements) seen so
     # far.
-    constraints: List[Union[z3.ExprRef, Literal[True], Literal[False]]] = field(
-        default_factory=list
-    )
-
-    # Additional constraints imposed by the multi-transaction solver.
-    extra: List[z3.ExprRef] = field(default_factory=list)
+    path_constraints: List[Constraint] = field(default_factory=list)
 
     # Tracks the path of the program's execution. Each JUMPI is a bit, 1 if
     # taken, 0 if not. MSB-first with a leading 1 prepended.
     path: int = 1
 
-    # Tracks how much value has been sent to and received from the contract,
-    # respectively, from accounts under the control of our agent. To avoid
-    # overflow errors, we track these as two separate unsigned (nonnegative)
-    # integers. When doing math to them, we assert that operations never
-    # overflow, since there isn't enough ETH in existence to overflow a uint256.
-    contribution: uint256 = BW(0)
-    extraction: uint256 = BW(0)
-
-    def transfer(self, dst: uint160, val: uint256) -> None:
-        self._transfer(self.address, dst, val)
-        delta = z3.If(z3.Or(dst == self.caller, dst == self.origin), val, BW(0))
-        self.extra.append(z3.BVAddNoOverflow(self.extraction, delta, False))
-        self.extraction += delta
-
-    def transfer_initial(self) -> None:
-        self._transfer(self.caller, self.address, self.callvalue)
-        self.extra.append(z3.BVAddNoOverflow(self.contribution, self.callvalue, False))
-        self.contribution += self.callvalue
-
-    def _transfer(self, src: uint160, dst: uint160, val: uint256) -> None:
-        # We know this must be true because if `self.balances[src]` goes
-        # negative from the transfer, the transaction will revert.
-        self.extra.append(z3.BVSubNoUnderflow(self.balances[src], val, False))
-        self.extra.append(z3.BVAddNoOverflow(self.balances[dst], val, False))
-        self.balances[src] -= val
-        self.balances[dst] += val
-
-    def copy(self) -> "State":
+    def copy(self) -> State:
         return State(
             suffix=self.suffix,
             pc=self.pc,
@@ -121,15 +148,8 @@ class State:
             gasprice=self.gasprice,
             returndata=self.returndata,
             success=self.success,
-            storage=self.storage.copy(),
-            sha3hash=self.sha3hash.copy(),
-            sha3keys=self.sha3keys.copy(),
-            balances=self.balances.copy(),
-            constraints=self.constraints.copy(),
-            extra=self.extra.copy(),
+            path_constraints=self.path_constraints.copy(),
             path=self.path,
-            contribution=self.contribution,
-            extraction=self.extraction,
         )
 
     def constrain(self, solver: z3.Optimize, minimize: bool = False) -> None:
@@ -141,48 +161,26 @@ class State:
         solver.assert_and_track(self.address != self.origin, f"ADDROR{self.suffix}")
         solver.assert_and_track(self.address != self.caller, f"ADDRCL{self.suffix}")
 
-        for i, constraint in enumerate(self.constraints):
+        for i, constraint in enumerate(self.path_constraints):
             solver.assert_and_track(constraint, f"PC{i}{self.suffix}")
 
-        for i, constraint in enumerate(self.extra):
-            solver.assert_and_track(constraint, f"EXTRA{i}{self.suffix}")
+    # def is_changed(self, solver: z3.Optimize, since: State) -> bool:
+    #     assert self.success is True
 
-        for i, k1 in enumerate(self.sha3keys):
-            # TODO: this can still leave hash digests implausibly close to one
-            # another, e.g. causing two arrays to overlap; and we don't
-            # propagate constraints between transactions correctly
-            solver.assert_and_track(
-                z3.Extract(255, 128, self.sha3hash[k1.size()][k1]) != 0,
-                f"SHA3.NLZ({i}){self.suffix}",
-            )
-            for j, k2 in enumerate(self.sha3keys):
-                if k1.size() != k2.size():
-                    continue
-                solver.assert_and_track(
-                    z3.Implies(
-                        k1 != k2,
-                        self.sha3hash[k1.size()][k1] != self.sha3hash[k2.size()][k2],
-                    ),
-                    f"SHA3.DISTINCT({i},{j}){self.suffix}",
-                )
+    #     # TODO: constrain further to eliminate no-op writes?
+    #     if len(self.storage.written) > 0:
+    #         return True
 
-    def is_changed(self, solver: z3.Optimize, since: "State") -> bool:
-        assert self.success is True
+    #     # Check if any address other than the contract itself has increased
+    #     for addr in self.balances.written:
+    #         if do_check(
+    #             solver,
+    #             z3.And(
+    #                 addr != self.address,
+    #                 cast(z3.BitVecRef, self.balances.array[addr])
+    #                 > cast(z3.BitVecRef, since.balances.array[addr]),
+    #             ),
+    #         ):
+    #             return True
 
-        # TODO: constrain further to eliminate no-op writes?
-        if len(self.storage.written) > 0:
-            return True
-
-        # Check if any address other than the contract itself has increased
-        for addr in self.balances.written:
-            if do_check(
-                solver,
-                z3.And(
-                    addr != self.address,
-                    cast(z3.BitVecRef, self.balances.array[addr])
-                    > cast(z3.BitVecRef, since.balances.array[addr]),
-                ),
-            ):
-                return True
-
-        return False
+    #     return False
