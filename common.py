@@ -204,7 +204,11 @@ class State:
             extraction=self.extraction,
         )
 
-    def constrain(self, solver: z3.Optimize) -> None:
+    def constrain(self, solver: z3.Optimize, minimize: bool = False) -> None:
+        if minimize:
+            solver.minimize(self.callvalue)
+            solver.minimize(self.calldata.length())
+
         # TODO: a contract could, in theory, call itself...
         solver.assert_and_track(self.address != self.origin, f"ADDROR{self.suffix}")
         solver.assert_and_track(self.address != self.caller, f"ADDRCL{self.suffix}")

@@ -21,7 +21,10 @@ from universal import universal_transaction
 def analyze(program: Program) -> None:
     print("Ownership: Universal Analysis")
     ownership: List[Predicate] = []
-    for solver, start, end in universal_transaction(program, ""):
+    for start, end in universal_transaction(program, ""):
+        solver = z3.Optimize()
+        end.constrain(solver, minimize=True)
+
         description = describe_state(solver, end)
 
         constrain_to_goal(solver, start, end)
@@ -38,7 +41,10 @@ def analyze(program: Program) -> None:
 
     print()
     print("Ownership: Elimination")
-    for solver, start, end in universal_transaction(program, "^"):
+    for start, end in universal_transaction(program, "^"):
+        solver = z3.Optimize()
+        end.constrain(solver, minimize=True)
+
         if not end.is_changed(solver, start):
             continue  # ignore no-ops
 
@@ -58,7 +64,10 @@ def analyze(program: Program) -> None:
     print("Balance: Universal Analysis")
     additional: List[str] = []
     balance: List[Predicate] = []
-    for solver, start, end in universal_transaction(program, "^"):
+    for start, end in universal_transaction(program, "^"):
+        solver = z3.Optimize()
+        end.constrain(solver, minimize=True)
+
         description = describe_state(solver, end)
 
         constrain_to_goal(solver, start, end)
@@ -78,7 +87,10 @@ def analyze(program: Program) -> None:
 
     print()
     print("Balance: Elimination")
-    for solver, start, end in universal_transaction(program, "^"):
+    for start, end in universal_transaction(program, "^"):
+        solver = z3.Optimize()
+        end.constrain(solver, minimize=True)
+
         if not end.is_changed(solver, start):
             continue  # ignore no-ops
 
