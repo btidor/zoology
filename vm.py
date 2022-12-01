@@ -88,18 +88,7 @@ def printable_execution(program: Program, block: Block, state: State) -> Iterato
         if action == "CONTINUE" or action == "TERMINATE":
             pass
         elif action == "JUMPI":
-            counter = require_concrete(
-                state.stack.pop(), "JUMPI(counter, b) requires concrete counter"
-            )
-            b = require_concrete(
-                state.stack.pop(), "JUMPI(counter, b) requires concrete b"
-            )
-            if counter not in program.jumps:
-                raise ValueError(f"illegal JUMPI target: 0x{counter:x}")
-            if b == 0:
-                state.pc += 1
-            else:
-                state.pc = program.jumps[counter]
+            _handle_concrete_JUMPI(program, state)
         else:
             assert_never(action)
 
@@ -115,6 +104,19 @@ def printable_execution(program: Program, block: Block, state: State) -> Iterato
         require_concrete(d, "return data must be concrete") for d in state.returndata
     )
     yield ("RETURN" if state.success else "REVERT") + " " + str(result)
+
+
+def _handle_concrete_JUMPI(program: Program, state: State) -> None:
+    counter = require_concrete(
+        state.stack.pop(), "JUMPI(counter, b) requires concrete counter"
+    )
+    b = require_concrete(state.stack.pop(), "JUMPI(counter, b) requires concrete b")
+    if counter not in program.jumps:
+        raise ValueError(f"illegal JUMPI target: 0x{counter:x}")
+    if b == 0:
+        state.pc += 1
+    else:
+        state.pc = program.jumps[counter]
 
 
 if __name__ == "__main__":

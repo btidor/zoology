@@ -19,7 +19,7 @@ def _dump_memory(s: State) -> str:
 def test_STOP() -> None:
     s = State(returndata=[BW(0x12), BW(0x34)])
     STOP(s)
-    assert s.success == True
+    assert s.success is True
     assert s.returndata == []
 
 
@@ -520,7 +520,7 @@ def test_RETURN() -> None:
         memory={0: BY(0xFF), 1: BY(0x01)},
     )
     RETURN(s, BW(0), BW(2))
-    assert s.success == True
+    assert s.success is True
     assert [z3.simplify(b) for b in s.returndata] == [0xFF, 0x01]
 
 
@@ -530,14 +530,14 @@ def test_REVERT() -> None:
         memory={0: BY(0xFF), 1: BY(0x01)},
     )
     REVERT(s, BW(0), BW(2))
-    assert s.success == False
+    assert s.success is False
     assert [z3.simplify(b) for b in s.returndata] == [0xFF, 0x01]
 
 
 def test_INVALID() -> None:
     s = State(returndata=[BW(0x12), BW(0x34)])
     INVALID(s)
-    assert s.success == False
+    assert s.success is False
     assert s.returndata == []
 
 

@@ -170,7 +170,7 @@ def describe_state(solver: z3.Optimize, state: State) -> str:
         if i == 3:
             calldata += " "
 
-    assert state.success == True
+    assert state.success is True
     return calldata
 
 

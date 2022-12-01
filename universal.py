@@ -158,7 +158,7 @@ def _print_solution(
 ) -> None:
     m = solver.model()
 
-    assert end.success == True
+    assert end.success is True
     if len(end.returndata) > 0:
         rdata = "0x" + "".join(hexify(m.eval(b, True), 1) for b in end.returndata)
     else:

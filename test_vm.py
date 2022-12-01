@@ -3,12 +3,28 @@
 from typing import List
 
 from common import BW, Block, ByteArray, State, require_concrete
-from disassembler import disassemble
-from vm import printable_execution, step
+from disassembler import Program, disassemble
+from testlib import abiencode, compile_solidity
+from vm import _handle_concrete_JUMPI, printable_execution, step
 
 
 def concretize_stack(state: State) -> List[int]:
     return [require_concrete(x) for x in state.stack]
+
+
+def concretize_returndata(state: State) -> bytes:
+    return bytes(require_concrete(x) for x in state.returndata)
+
+
+def execute(program: Program, block: Block, state: State) -> None:
+    while True:
+        action = step(program, block, state)
+        if action == "CONTINUE":
+            continue
+        elif action == "JUMPI":
+            _handle_concrete_JUMPI(program, state)
+        elif action == "TERMINATE":
+            return
 
 
 def test_execute_basic() -> None:
@@ -74,8 +90,94 @@ def test_execute_basic() -> None:
 
     action = step(program, block, state)
     assert action == "TERMINATE"
-    assert state.success == False
+    assert state.success is False
+    assert state.returndata == []
     assert concretize_stack(state) == []
+
+
+def test_execute_solidity() -> None:
+    # https://ethernaut.openzeppelin.com/level/0x80934BE6B8B872B364b470Ca30EaAd8AEAC4f63F
+    source = """
+        // SPDX-License-Identifier: MIT
+        pragma solidity ^0.8.0;
+
+        contract Fallback {
+            mapping(address => uint) public contributions;
+            address public owner;
+
+            constructor() {
+                owner = msg.sender;
+                contributions[msg.sender] = 1000 * (1 ether);
+            }
+
+            modifier onlyOwner {
+                        require(
+                                msg.sender == owner,
+                                "caller is not the owner"
+                        );
+                        _;
+                }
+
+            function contribute() public payable {
+                require(msg.value < 0.001 ether);
+                contributions[msg.sender] += msg.value;
+                if(contributions[msg.sender] > contributions[owner]) {
+                    owner = msg.sender;
+                }
+            }
+
+            function getContribution() public view returns (uint) {
+                return contributions[msg.sender];
+            }
+
+            function withdraw() public onlyOwner {
+                payable(owner).transfer(address(this).balance);
+            }
+
+            receive() external payable {
+                require(msg.value > 0 && contributions[msg.sender] > 0);
+                owner = msg.sender;
+            }
+        }
+    """
+    code = compile_solidity(source, "0.8.17")
+    program = disassemble(code)
+    block = Block()
+
+    state = State(
+        callvalue=BW(0),
+        calldata=ByteArray("CALLDATA", abiencode("owner()")),
+    )
+    execute(program, block, state)
+    assert state.success is True
+    assert concretize_returndata(state) == b"\x00" * 32
+
+    state = State(
+        storage=state.storage,
+        callvalue=BW(0),
+        calldata=ByteArray("CALLDATA", abiencode("withdraw()")),
+    )
+    execute(program, block, state)
+    assert state.success is False
+    assert concretize_returndata(state)[68:91] == b"caller is not the owner"
+
+    state = State(
+        storage=state.storage,
+        callvalue=BW(123456),
+        calldata=ByteArray("CALLDATA", abiencode("contribute()")),
+    )
+    execute(program, block, state)
+    assert state.success is True
+    assert concretize_returndata(state) == b""
+
+    state = State(
+        storage=state.storage,
+        callvalue=BW(0),
+        calldata=ByteArray("CALLDATA", abiencode("owner()")),
+    )
+    execute(program, block, state)
+    assert state.success is True
+    assert concretize_returndata(state)[-20:] == b"\xcc" * 20
 
 
 def test_output_basic() -> None:

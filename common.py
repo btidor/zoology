@@ -239,7 +239,7 @@ class State:
                 )
 
     def is_changed(self, solver: z3.Optimize, since: "State") -> bool:
-        assert self.success == True
+        assert self.success is True
 
         # TODO: constrain further to eliminate no-op writes?
         if len(self.storage.written) > 0:
