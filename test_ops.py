@@ -3,10 +3,10 @@
 import pytest
 import z3
 
-from _state import Block, State
+from _ops import *
+from _state import Block, Contract, State, Universe
 from _symbolic import BA, BW, BY, ByteArray, hexify
 from disassembler import Instruction, Program
-from ops import *
 
 
 def _dump_memory(s: State) -> str:
@@ -254,8 +254,13 @@ def test_SAR() -> None:
 
 def test_SHA3() -> None:
     s = State(memory={0: BY(0xFF), 1: BY(0xFF), 2: BY(0xFF), 3: BY(0xFF)})
+    digest = SHA3(s, BW(0), BW(4))
+
+    solver = z3.Optimize()
+    s.sha3.constrain(solver)
+    assert solver.check() == z3.sat
     assert (
-        z3.simplify(SHA3(s, BW(0), BW(4)))
+        solver.model().eval(digest)
         == 0x29045A592007D0C246EF02C2223570DA9522D0CF0F73282C79A1BC8F0BB2C238
     )
 
@@ -266,10 +271,11 @@ def test_ADDRESS() -> None:
 
 
 def test_BALANCE() -> None:
+    u = Universe()
     s = State()
-    s.balances[BA(0x9BBFED6889322E016E0A02EE459D306FC19545D8)] = BW(125985)
+    u.balances[BA(0x9BBFED6889322E016E0A02EE459D306FC19545D8)] = BW(125985)
     assert (
-        z3.simplify(BALANCE(s, BW(0x9BBFED6889322E016E0A02EE459D306FC19545D8)))
+        z3.simplify(BALANCE(u, s, BW(0x9BBFED6889322E016E0A02EE459D306FC19545D8)))
         == 125985
     )
 
@@ -435,22 +441,22 @@ def test_MSTORE8() -> None:
 
 
 def test_SLOAD() -> None:
-    s = State()
-    s.storage[BW(0)] = BW(46)
-    assert z3.simplify(SLOAD(s, BW(0))) == 46
-    assert len(s.storage.accessed) == 1
-    assert z3.simplify(s.storage.accessed[0]) == 0
+    c = Contract(Program())
+    c.storage[BW(0)] = BW(46)
+    assert z3.simplify(SLOAD(c, BW(0))) == 46
+    assert len(c.storage.accessed) == 1
+    assert z3.simplify(c.storage.accessed[0]) == 0
 
 
 def test_SSTORE() -> None:
-    s = State()
+    c = Contract(Program())
 
-    SSTORE(s, BW(0), BW(0xFFFF))
-    assert z3.simplify(s.storage[BW(0)]) == 0xFFFF
+    SSTORE(c, BW(0), BW(0xFFFF))
+    assert z3.simplify(c.storage[BW(0)]) == 0xFFFF
 
-    SSTORE(s, BW(8965), BW(0xFF))
-    assert z3.simplify(s.storage[BW(0)]) == 0xFFFF
-    assert z3.simplify(s.storage[BW(8965)]) == 0xFF
+    SSTORE(c, BW(8965), BW(0xFF))
+    assert z3.simplify(c.storage[BW(0)]) == 0xFFFF
+    assert z3.simplify(c.storage[BW(8965)]) == 0xFF
 
 
 def test_JUMP() -> None:
@@ -506,13 +512,14 @@ def test_SWAP() -> None:
 
 
 def test_CALL() -> None:
+    u = Universe()
     s = State(returndata=[BY(1)])
-    s.balances[s.address] = BW(125)
-    res = CALL(s, BW(0), BW(0x1234), BW(123), BW(0), BW(0), BW(0), BW(0))
+    u.balances[s.address] = BW(125)
+    res = CALL(u, s, BW(0), BW(0x1234), BW(123), BW(0), BW(0), BW(0), BW(0))
     assert z3.simplify(res) == 1
     assert len(s.returndata) == 0
-    assert z3.simplify(s.balances[BA(0x1234)]) == 123
-    assert z3.simplify(s.balances[s.address]) == 2
+    assert z3.simplify(u.balances[BA(0x1234)]) == 123
+    assert z3.simplify(u.balances[s.address]) == 2
 
 
 def test_RETURN() -> None:

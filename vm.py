@@ -4,7 +4,7 @@
 import inspect
 from typing import Iterator, List, Literal, Optional, assert_never
 
-import ops
+import _ops
 from _state import Block, State
 from _symbolic import BW, ByteArray, hexify, require_concrete, uint256
 from disassembler import Instruction, Program, disassemble
@@ -28,8 +28,8 @@ def step(
 
     if ins.name == "JUMPI":
         return "JUMPI"
-    elif hasattr(ops, ins.name):
-        fn = getattr(ops, ins.name)
+    elif hasattr(_ops, ins.name):
+        fn = getattr(_ops, ins.name)
         sig = inspect.signature(fn)
         args: List[object] = []
         for name in sig.parameters:

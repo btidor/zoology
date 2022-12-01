@@ -5,6 +5,8 @@ from typing import Dict
 
 @dataclass
 class Opcode:
+    """An EVM operation."""
+
     code: int
     name: str
     fullName: str
