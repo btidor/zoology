@@ -3,7 +3,8 @@
 import pytest
 import z3
 
-from common import BA, BW, BY, Block, ByteArray, State, hexify
+from _state import Block, State
+from _symbolic import BA, BW, BY, ByteArray, hexify
 from disassembler import Instruction, Program
 from ops import *
 

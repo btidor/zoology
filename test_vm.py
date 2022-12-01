@@ -2,10 +2,12 @@
 
 from typing import List
 
-from common import BW, Block, ByteArray, State, require_concrete
+from _common import assert_never
+from _state import Block, State
+from _symbolic import BW, ByteArray, require_concrete
 from disassembler import Program, disassemble
 from testlib import abiencode, compile_solidity
-from vm import _handle_concrete_JUMPI, printable_execution, step
+from vm import _concrete_JUMPI, printable_execution, step
 
 
 def concretize_stack(state: State) -> List[int]:
@@ -22,9 +24,11 @@ def execute(program: Program, block: Block, state: State) -> None:
         if action == "CONTINUE":
             continue
         elif action == "JUMPI":
-            _handle_concrete_JUMPI(program, state)
+            _concrete_JUMPI(program, state)
         elif action == "TERMINATE":
             return
+        else:
+            assert_never(action)
 
 
 def test_execute_basic() -> None:

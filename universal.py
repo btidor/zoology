@@ -6,15 +6,12 @@ from typing import Callable, Dict, Iterator, Optional, Tuple
 import z3
 from Crypto.Hash import keccak
 
-from common import (
+from _common import Predicate, assert_never
+from _state import Block, State, constrain_to_goal
+from _symbolic import (
     BW,
-    Block,
     ByteArray,
     IntrospectableArray,
-    Predicate,
-    State,
-    assert_never,
-    constrain_to_goal,
     do_check,
     hexify,
     require_concrete,
@@ -52,7 +49,7 @@ def universal_transaction(
             if action == "CONTINUE":
                 continue
             elif action == "JUMPI":
-                states.extend(_handle_JUMPI(program, state))
+                states.extend(_symbolic_JUMPI(program, state))
                 break
             elif action == "TERMINATE":
                 assert state.success is not None
@@ -99,7 +96,7 @@ def _make_start(suffix: str) -> Tuple[Block, State]:
     return block, start
 
 
-def _handle_JUMPI(program: Program, state: State) -> Iterator[State]:
+def _symbolic_JUMPI(program: Program, state: State) -> Iterator[State]:
     solver = z3.Optimize()
     state.constrain(solver)
 

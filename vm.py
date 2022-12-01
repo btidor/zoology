@@ -5,16 +5,9 @@ import inspect
 from typing import Iterator, List, Literal, Optional
 
 import ops
-from common import (
-    BW,
-    Block,
-    ByteArray,
-    State,
-    assert_never,
-    hexify,
-    require_concrete,
-    uint256,
-)
+from _common import assert_never
+from _state import Block, State
+from _symbolic import BW, ByteArray, hexify, require_concrete, uint256
 from disassembler import Instruction, Program, disassemble
 
 
@@ -88,7 +81,7 @@ def printable_execution(program: Program, block: Block, state: State) -> Iterato
         if action == "CONTINUE" or action == "TERMINATE":
             pass
         elif action == "JUMPI":
-            _handle_concrete_JUMPI(program, state)
+            _concrete_JUMPI(program, state)
         else:
             assert_never(action)
 
@@ -106,7 +99,7 @@ def printable_execution(program: Program, block: Block, state: State) -> Iterato
     yield ("RETURN" if state.success else "REVERT") + " " + str(result)
 
 
-def _handle_concrete_JUMPI(program: Program, state: State) -> None:
+def _concrete_JUMPI(program: Program, state: State) -> None:
     counter = require_concrete(
         state.stack.pop(), "JUMPI(counter, b) requires concrete counter"
     )

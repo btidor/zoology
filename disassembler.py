@@ -6,7 +6,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Optional, cast
 
-from common import BW, require_concrete, uint256
+from _symbolic import BW, require_concrete, uint256
 from opcodes import REFERENCE, UNIMPLEMENTED
 
 

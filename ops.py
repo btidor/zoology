@@ -3,7 +3,8 @@ from typing import cast
 import z3
 from Crypto.Hash import keccak
 
-from common import BW, BY, Block, State, require_concrete, uint8, uint160, uint256
+from _state import Block, State
+from _symbolic import BW, BY, require_concrete, uint8, uint160, uint256
 from disassembler import Instruction, Program
 
 
