@@ -2,10 +2,9 @@
 """An implementation of the Ethereum virtual machine."""
 
 import inspect
-from typing import Iterator, List, Literal, Optional
+from typing import Iterator, List, Literal, Optional, assert_never
 
 import ops
-from _common import assert_never
 from _state import Block, State
 from _symbolic import BW, ByteArray, hexify, require_concrete, uint256
 from disassembler import Instruction, Program, disassemble

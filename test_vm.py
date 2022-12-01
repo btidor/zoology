@@ -1,8 +1,7 @@
 #!/usr/bin/env pytest
 
-from typing import List
+from typing import List, assert_never
 
-from _common import assert_never
 from _state import Block, State
 from _symbolic import BW, ByteArray, require_concrete
 from disassembler import Program, disassemble

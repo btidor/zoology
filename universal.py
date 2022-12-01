@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """A universal transaction solver."""
 
-from typing import Callable, Dict, Iterator, Optional, Tuple
+from typing import Callable, Dict, Iterator, Optional, Tuple, assert_never
 
 import z3
 from Crypto.Hash import keccak
 
-from _common import Predicate, assert_never
+from _common import Predicate
 from _state import Block, State, constrain_to_goal
 from _symbolic import (
     BW,

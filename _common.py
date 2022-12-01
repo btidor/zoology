@@ -1,14 +1,8 @@
-from typing import Callable, NoReturn, Optional, cast
+from typing import Callable, Optional
 
 import z3
 
 from _state import State
-from _symbolic import BW
-
-
-def assert_never(value: NoReturn) -> NoReturn:
-    # TODO: remove me in Python 3.11
-    assert False, f"unknown enum value: {value}"
 
 
 class Predicate:
