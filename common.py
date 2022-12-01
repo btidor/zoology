@@ -8,6 +8,7 @@ from typing import (
     Iterator,
     List,
     Literal,
+    NoReturn,
     Optional,
     TypeAlias,
     Union,
@@ -15,6 +16,12 @@ from typing import (
 )
 
 import z3
+
+
+def assert_never(value: NoReturn) -> NoReturn:
+    # TODO: remove me in Python 3.11
+    assert False, f"unknown enum value: {value}"
+
 
 uint8: TypeAlias = z3.BitVecRef
 uint160: TypeAlias = z3.BitVecRef
@@ -287,6 +294,7 @@ def constrain_to_goal(solver: z3.Optimize, start: State, end: State) -> None:
 
 
 def hexify(value: z3.ExprRef, length: int) -> str:
+    value = z3.simplify(value)
     if not z3.is_bv(value):
         raise ValueError("unexpected non-bitvector")
     if not z3.is_bv_value(value):

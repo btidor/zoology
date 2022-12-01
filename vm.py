@@ -1,107 +1,120 @@
 #!/usr/bin/env python3
+"""An implementation of the Ethereum virtual machine."""
 
 import inspect
-from typing import Any, List, Optional, cast
-
-import z3
+from typing import Iterator, List, Literal, Optional
 
 import ops
-from common import BW, Block, ByteArray, State, hexify, require_concrete, uint256
+from common import (
+    BW,
+    Block,
+    ByteArray,
+    State,
+    assert_never,
+    hexify,
+    require_concrete,
+    uint256,
+)
 from disassembler import Instruction, Program, disassemble
 
 
-def execute(
-    program: Program,
-    block: Block,
-    s: State,
-    output: bool = False,
-) -> List[State]:
-    jumps = None
+def step(
+    program: Program, block: Block, state: State
+) -> Literal["CONTINUE", "JUMPI", "TERMINATE"]:
+    """
+    Execute a single instruction.
+
+    Mutates state. The caller must handle the return value, which indicates
+    whether the program (a) continues normally, or (b) hits a conditional jump
+    (JUMPI), or (c) terminates
+
+    In the case of a JUMPI, state is not modified. The caller must evaluate
+    whether or not the jump should be taken, update the program counter, and
+    optionally add symbolic constraints.
+    """
+    ins = program.instructions[state.pc]
+
+    if ins.name == "JUMPI":
+        return "JUMPI"
+    elif hasattr(ops, ins.name):
+        fn = getattr(ops, ins.name)
+        sig = inspect.signature(fn)
+        args: List[object] = []
+        for name in sig.parameters:
+            kls = sig.parameters[name].annotation
+            if kls == uint256:
+                args.append(state.stack.pop())
+            elif kls == State:
+                args.append(state)
+            elif kls == Block:
+                args.append(block)
+            elif kls == Instruction:
+                args.append(ins)
+            elif kls == Program:
+                args.append(program)
+            else:
+                raise TypeError(f"unknown arg class: {kls}")
+
+        result: Optional[uint256] = fn(*args)
+        if result is not None:
+            state.stack.append(result)
+            if len(state.stack) > 1024:
+                raise Exception("evm stack overflow")
+
+        state.pc += 1
+
+        if state.success is None:
+            return "CONTINUE"
+        else:
+            return "TERMINATE"
+    else:
+        raise ValueError(f"unimplemented opcode: {ins.name}")
+
+
+def printable_execution(program: Program, block: Block, state: State) -> Iterator[str]:
+    """
+    Invoke a contract with concrete inputs and state.
+
+    Yields a human-readable string at each step of the program.
+    """
     while True:
-        ins = program.instructions[s.pc]
-        s.pc += 1
+        # Print next instruction
+        ins = program.instructions[state.pc]
+        yield str(ins)
 
-        if output:
-            print_instruction(ins)
+        # Execute a single instruction with concrete jumps
+        action = step(program, block, state)
 
-        if ins.name == "JUMPI":
-            jumps = handle_JUMPI(program, s)
-        elif hasattr(ops, ins.name):
-            fn = getattr(ops, ins.name)
-            dispatch_opcode(program, block, s, ins, fn)
+        if action == "CONTINUE" or action == "TERMINATE":
+            pass
+        elif action == "JUMPI":
+            counter = require_concrete(
+                state.stack.pop(), "JUMPI(counter, b) requires concrete counter"
+            )
+            b = require_concrete(
+                state.stack.pop(), "JUMPI(counter, b) requires concrete b"
+            )
+            if counter not in program.jumps:
+                raise ValueError(f"illegal JUMPI target: 0x{counter:x}")
+            if b == 0:
+                state.pc += 1
+            else:
+                state.pc = program.jumps[counter]
         else:
-            raise ValueError(f"unimplemented opcode: {ins.name}")
+            assert_never(action)
 
-        if output:
-            print_stack(s.stack)
-            print()
+        # Print stack
+        for x in state.stack:
+            yield "  " + hexify(x, 32)
+        yield ""
 
-        if jumps:
-            return jumps
-        elif s.success is not None:
-            return [s]
+        if action == "TERMINATE":
+            break
 
-
-def handle_JUMPI(p: Program, s: State) -> List[State]:
-    counter = require_concrete(
-        s.stack.pop(), "JUMPI(counter, b) requires concrete counter"
+    result = bytes(
+        require_concrete(d, "return data must be concrete") for d in state.returndata
     )
-    if counter not in p.jumps:
-        raise ValueError(f"illegal JUMPI target: 0x{counter:x}")
-    b = cast(uint256, z3.simplify(s.stack.pop()))
-
-    s2 = s.copy()
-    s.constraints.append(b == BW(0))
-    s.path = s.path << 1
-    s2.constraints.append(b != BW(0))
-    s2.path = (s.path << 1) | 1
-    s2.pc = p.jumps[counter]
-    return [s, s2]
-
-
-def dispatch_opcode(
-    program: Program, block: Block, s: State, ins: Instruction, fn: Any
-) -> None:
-    sig = inspect.signature(fn)
-    args: List[object] = []
-    for name in sig.parameters:
-        kls = sig.parameters[name].annotation
-        if kls == uint256:
-            args.append(s.stack.pop())
-        elif kls == State:
-            args.append(s)
-        elif kls == Block:
-            args.append(block)
-        elif kls == Instruction:
-            args.append(ins)
-        elif kls == Program:
-            args.append(program)
-        else:
-            raise TypeError(f"unknown arg class: {kls}")
-
-    result: Optional[uint256] = fn(*args)
-    if result is not None:
-        s.stack.append(result)
-        if len(s.stack) > 1024:
-            raise Exception("evm stack overflow")
-
-
-def print_instruction(ins: Instruction) -> None:
-    msg = f"{(ins.offset):04x}  {ins.name}"
-    if ins.suffix is not None:
-        msg += str(ins.suffix)
-    if ins.operand is not None:
-        msg += "\t" + hex(require_concrete(ins.operand))
-    print(msg)
-
-
-def print_stack(stack: List[uint256]) -> None:
-    for x in stack:
-        x = z3.simplify(x)
-        if z3.is_bv_value(x):
-            print(" ", hexify(x, 32))
-        else:
-            print(" ", x)
+    yield ("RETURN" if state.success else "REVERT") + " " + str(result)
 
 
 if __name__ == "__main__":
@@ -114,23 +127,5 @@ if __name__ == "__main__":
         callvalue=BW(0),
         calldata=ByteArray("CALLDATA", b"\x6f\xab\x5d\xdf"),
     )
-    while state.success is None:
-        states = execute(program, block, state, True)
-        if len(states) < 2:
-            continue
-
-        a, b = states
-        p = z3.simplify(z3.And(*a.constraints))
-        q = z3.simplify(z3.And(*b.constraints))
-
-        if p == True and q == False:
-            state = a
-        elif p == False and q == True:
-            state = b
-        else:
-            raise ValueError("ambiguous JUMPI, did we accidentally symbolize?")
-
-    result = bytes(
-        require_concrete(d, "return data must be concrete") for d in state.returndata
-    )
-    print("RETURN" if state.success else "REVERT", result)
+    for line in printable_execution(program, block, state):
+        print(line)

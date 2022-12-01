@@ -1,7 +1,5 @@
 #!/usr/bin/env pytest
 
-from typing import cast
-
 import pytest
 import z3
 
@@ -14,8 +12,7 @@ def _dump_memory(s: State) -> str:
     v = ""
     lim = max(s.memory.keys())
     for i in range(lim + 1):
-        cast(z3.BitVecRef, z3.simplify(s.memory[i]))
-        v += hexify(z3.simplify(s.memory[i]), 1)
+        v += hexify(s.memory[i], 1)
     return "0x" + v.upper()
 
 

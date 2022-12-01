@@ -2,7 +2,7 @@
 
 import pytest
 
-from disassembler import disassemble, printable_output
+from disassembler import disassemble, printable_disassembly
 
 
 def test_disassemble_basic() -> None:
@@ -78,8 +78,7 @@ def test_output_basic() -> None:
         000a  PUSH1\t0x00
         000c  PUSH1\t0x00
         000e  REVERT""".splitlines()
-    fixture = map(lambda x: x.strip(), raw[1:])
+    fixture = map(lambda x: x[8:], raw[1:])
 
-    for actual, expected in zip(printable_output(code), fixture):
-        print(actual, expected)
+    for actual, expected in zip(printable_disassembly(code), fixture, strict=True):
         assert actual == expected

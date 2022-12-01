@@ -18,7 +18,8 @@
     "python.formatting.provider": "black",
     "python.linting.mypyEnabled": true,
     "python.linting.pydocstyleArgs": [
-        "--match=^((?!test).)*\\.py$"
+        "--match=^((?!test).)*\\.py$",
+        "--add-ignore=D105"
     ],
     "python.linting.pydocstyleEnabled": true,
     "python.testing.pytestArgs": [
