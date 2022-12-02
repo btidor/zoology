@@ -80,23 +80,23 @@ class State:
         for i, constraint in enumerate(self.path_constraints):
             solver.assert_and_track(constraint, f"PC{i}{self.suffix}")
 
-    # def is_changed(self, solver: z3.Optimize, since: State) -> bool:
-    #     assert self.success is True
+    def is_changed(self, solver: z3.Optimize, since: State) -> bool:
+        assert self.success is True
 
-    #     # TODO: constrain further to eliminate no-op writes?
-    #     if len(self.storage.written) > 0:
-    #         return True
+        # TODO: constrain further to eliminate no-op writes?
+        if len(self.contract.storage.written) > 0:
+            return True
 
-    #     # Check if any address other than the contract itself has increased
-    #     for addr in self.balances.written:
-    #         if do_check(
-    #             solver,
-    #             z3.And(
-    #                 addr != self.address,
-    #                 cast(z3.BitVecRef, self.balances.array[addr])
-    #                 > cast(z3.BitVecRef, since.balances.array[addr]),
-    #             ),
-    #         ):
-    #             return True
+        # Check if any address other than the contract itself has increased
+        for addr in self.universe.balances.written:
+            if do_check(
+                solver,
+                z3.And(
+                    addr != self.address,
+                    cast(z3.BitVecRef, self.universe.balances.array[addr])
+                    > cast(z3.BitVecRef, since.universe.balances.array[addr]),
+                ),
+            ):
+                return True
 
-    #     return False
+        return False

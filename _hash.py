@@ -11,6 +11,7 @@ from _symbolic import (
     Constraint,
     IntrospectableArray,
     describe_bv,
+    do_check,
     require_concrete,
     simplify_bv,
 )
@@ -59,6 +60,7 @@ class SHA3:
             ).digest()
             symbolic = BW(int.from_bytes(digest, "big"))
             self.digest_constraints.append(self.hashes[size][key] == symbolic)
+            return symbolic
 
         return self.hashes[size][key]
 
@@ -94,3 +96,37 @@ class SHA3:
         for i, constraint in enumerate(self.digest_constraints):
             solver.assert_and_track(constraint, f"SHA3.DIGEST{i}{self.suffix}")
             pass
+
+    def concretize(self, solver: z3.Optimize, model: z3.ModelRef) -> z3.ModelRef:
+        """Apply concrete SHA3 constraints to a given model instance."""
+        hashes: Dict[bytes, bytes] = {}
+        for n, key, val in self.items():
+            ckey = require_concrete(model.eval(key, True))
+            data = ckey.to_bytes(n, "big")
+            hash = keccak.new(data=data, digest_bits=256)
+            digest = int.from_bytes(hash.digest(), "big")
+            hashes[data] = hash.digest()
+            solver.assert_and_track(key == ckey, f"SHAKEY{n}{self.suffix}")
+            solver.assert_and_track(
+                val == BW(digest),
+                f"SHAVAL{n}{self.suffix}",
+            )
+            assert do_check(solver)
+            model = solver.model()
+
+        if len(hashes) > 0:
+            print(f"SHA3", end="")
+            keys = sorted(hashes.keys())
+            for k in keys:
+                if len(k) == 64:
+                    a = hex(int.from_bytes(k[:32], "big"))
+                    b = hex(int.from_bytes(k[32:], "big"))
+                    sk = f"0x[{a[2:]}.{b[2:]}]"
+                else:
+                    sk = hex(int.from_bytes(k, "big"))
+                print(f"\t{sk} ", end="")
+                if len(sk) > 34:
+                    print("\n\t", end="")
+                print(f"-> 0x{hashes[k].hex()}")
+
+        return model

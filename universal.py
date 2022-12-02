@@ -7,7 +7,8 @@ import z3
 from Crypto.Hash import keccak
 
 from _common import Predicate
-from _state import Block, State, constrain_to_goal
+from _hash import SHA3
+from _state import State
 from _symbolic import (
     BW,
     ByteArray,
@@ -17,12 +18,13 @@ from _symbolic import (
     require_concrete,
     solver_stack,
 )
+from _universe import Block, Contract, Universe
 from disassembler import Program, disassemble
 from vm import step
 
 
 def universal_transaction(
-    program: Program, suffix: str = ""
+    program: Program, sha3: SHA3, suffix: str = ""
 ) -> Iterator[Tuple[State, State]]:
     """
     Compute the "universal transaction" over a fully symbolic input.
@@ -35,17 +37,17 @@ def universal_transaction(
     prior execution of `universal_transaction()`, the two executions should have
     a different suffix.
     """
-    block, start = _make_start(suffix)
+    start = _make_start(program, sha3, suffix)
 
     init = start.copy()
-    init.transfer_initial()
+    init.universe.transfer(init.caller, init.address, init.callvalue)
     states = [init]
 
     while len(states) > 0:
         state = states.pop()
 
         while True:
-            action = step(program, block, state)
+            action = step(state)
             if action == "CONTINUE":
                 continue
             elif action == "JUMPI":
@@ -60,7 +62,7 @@ def universal_transaction(
                 assert_never(action)
 
 
-def _make_start(suffix: str) -> Tuple[Block, State]:
+def _make_start(program: Program, sha3: SHA3, suffix: str) -> State:
     block = Block(
         number=z3.BitVec(f"NUMBER{suffix}", 256),
         coinbase=z3.BitVec(f"COINBASE{suffix}", 160),
@@ -70,30 +72,49 @@ def _make_start(suffix: str) -> Tuple[Block, State]:
         chainid=z3.BitVec(f"CHAINID", 256),
         basefee=z3.BitVec(f"BASEFEE{suffix}", 256),
     )
-    start = State(
-        suffix=suffix,
-        address=z3.BitVec("ADDRESS", 160),
-        # TODO: properly constrain ORIGIN to be an EOA and CALLER to either be
-        # equal to ORIGIN or else be a non-EOA; handle the case where ORIGIN and
-        # CALLER vary across transactions.
-        origin=z3.BitVec(f"CALLER", 160),
-        caller=z3.BitVec(f"CALLER", 160),
-        callvalue=z3.BitVec(f"CALLVALUE{suffix}", 256),
-        calldata=ByteArray(f"CALLDATA{suffix}"),
-        gasprice=z3.BitVec(f"GASPRICE{suffix}", 256),
+    contract = Contract(
+        program=program,
         storage=IntrospectableArray(
             f"STORAGE{suffix}", z3.BitVecSort(256), z3.BitVecSort(256)
         ),
+    )
+    caller = z3.BitVec(f"CALLER", 160)
+    universe = Universe(
+        suffix=suffix,
         # TODO: the balances of other accounts can change between transactions
         # (and the balance of this contract account too, via SELFDESTRUCT). How
         # do we model this?
         balances=IntrospectableArray(
             f"BALANCES{suffix}", z3.BitVecSort(160), z3.BitVecSort(256)
         ),
+        transfer_constraints=[],
+        agents=[caller],
         contribution=z3.BitVec(f"CONTRIBUTION{suffix}", 256),
         extraction=z3.BitVec(f"EXTRACTION{suffix}", 256),
     )
-    return block, start
+    return State(
+        suffix=suffix,
+        block=block,
+        contract=contract,
+        universe=universe,
+        sha3=sha3,
+        pc=0,
+        stack=[],
+        memory={},
+        address=z3.BitVec("ADDRESS", 160),
+        # TODO: properly constrain ORIGIN to be an EOA and CALLER to either be
+        # equal to ORIGIN or else be a non-EOA; handle the case where ORIGIN and
+        # CALLER vary across transactions.
+        origin=caller,
+        caller=caller,
+        callvalue=z3.BitVec(f"CALLVALUE{suffix}", 256),
+        calldata=ByteArray(f"CALLDATA{suffix}"),
+        gasprice=z3.BitVec(f"GASPRICE{suffix}", 256),
+        returndata=[],
+        success=None,
+        path_constraints=[],
+        path=1,
+    )
 
 
 def _symbolic_JUMPI(program: Program, state: State) -> Iterator[State]:
@@ -111,14 +132,14 @@ def _symbolic_JUMPI(program: Program, state: State) -> Iterator[State]:
         next = state.copy()
         next.pc += 1
         next.path = (next.path << 1) | 0
-        next.constraints.append(b == 0)
+        next.path_constraints.append(b == 0)
         yield next
 
     if do_check(solver, b != 0):
         next = state.copy()
         next.pc = program.jumps[counter]
         next.path = (next.path << 1) | 1
-        next.constraints.append(b != 0)
+        next.path_constraints.append(b != 0)
         yield next
 
 
@@ -162,9 +183,10 @@ def _print_solution(
         rdata = "-"
     print(f"{kind}\t{hex(end.path).replace('0x', 'Px')}\t{rdata}")
 
-    m = _narrow_sha3(solver, m, end)
+    m = end.sha3.concretize(solver, m)
     if predicate is not None:
-        m = _narrow_sha3(solver, m, predicate.state)
+        # TODO: this should be redundant now
+        m = predicate.state.sha3.concretize(solver, m)
 
     if require_concrete(m.eval(end.callvalue)):
         print(f"Value\tETH 0x{hexify(m.eval(end.callvalue), 32)}")
@@ -186,10 +208,10 @@ def _print_solution(
     if z3.is_bv_value(m.eval(end.gasprice)):
         print(f"Gas\tETH {require_concrete(m.eval(end.gasprice)):011,}")
 
-    cs = require_concrete(m.eval(start.contribution, True))
-    ce = require_concrete(m.eval(end.contribution, True))
-    es = require_concrete(m.eval(start.extraction, True))
-    ee = require_concrete(m.eval(end.extraction, True))
+    cs = require_concrete(m.eval(start.universe.contribution, True))
+    ce = require_concrete(m.eval(end.universe.contribution, True))
+    es = require_concrete(m.eval(start.universe.extraction, True))
+    ee = require_concrete(m.eval(end.universe.extraction, True))
     if cs != ce:
         print(f"Contrib\tETH 0x{hexify(BW(cs), 32)}")
         print(f"\t-> ETH 0x{hexify(BW(ce), 32)}")
@@ -197,53 +219,19 @@ def _print_solution(
         print(f"Extract\tETH 0x{hexify(BW(es), 32)}")
         print(f"\t-> ETH 0x{hexify(BW(ee), 32)}")
 
-    _print_array("Balance", m, start.balances, end.balances)
-    _print_array("Storage", m, start.storage, end.storage)
+    _print_array("Balance", m, start.universe.balances, end.universe.balances)
+    _print_array("Storage", m, start.contract.storage, end.contract.storage)
     print()
 
     if predicate is not None and predicate.storage_key is not None:
         print(f"Key\t0x{hexify(m.eval(predicate.storage_key, True),32)}")
         print(
-            f"Value\t0x{hexify(m.eval(start.storage.array[predicate.storage_key], True),32)}"
+            f"Value\t0x{hexify(m.eval(start.contract.storage.array[predicate.storage_key], True),32)}"
         )
         print(
-            f"\t-> 0x{hexify(m.eval(end.storage.array[predicate.storage_key], True),32)}"
+            f"\t-> 0x{hexify(m.eval(end.contract.storage.array[predicate.storage_key], True),32)}"
         )
         print()
-
-
-def _narrow_sha3(solver: z3.Optimize, model: z3.ModelRef, state: State) -> z3.ModelRef:
-    hashes: Dict[bytes, bytes] = {}
-    for i, skey in enumerate(state.sha3keys):
-        ckey = require_concrete(model.eval(skey, True))
-        data = ckey.to_bytes(skey.size() // 8, "big")
-        hash = keccak.new(data=data, digest_bits=256)
-        digest = int.from_bytes(hash.digest(), "big")
-        hashes[data] = hash.digest()
-        solver.assert_and_track(skey == ckey, f"SHAKEY{i}{state.suffix}")
-        solver.assert_and_track(
-            state.sha3hash[skey.size()][skey] == BW(digest),
-            f"SHAVAL{i}{state.suffix}",
-        )
-        assert do_check(solver)
-        model = solver.model()
-
-    if len(hashes) > 0:
-        print(f"SHA3{state.suffix}", end="")
-        keys = sorted(hashes.keys())
-        for k in keys:
-            if len(k) == 64:
-                a = hex(int.from_bytes(k[:32], "big"))
-                b = hex(int.from_bytes(k[32:], "big"))
-                sk = f"0x[{a[2:]}.{b[2:]}]"
-            else:
-                sk = hex(int.from_bytes(k, "big"))
-            print(f"\t{sk} ", end="")
-            if len(sk) > 34:
-                print("\n\t", end="")
-            print(f"-> 0x{hashes[k].hex()}")
-
-    return model
 
 
 def _print_array(
@@ -288,12 +276,21 @@ def _print_array(
             print(f"(no change)" if pre == post else f"(from {pre})")
 
 
+def constrain_to_goal(solver: z3.Optimize, start: State, end: State) -> None:
+    solver.assert_and_track(
+        z3.ULT(start.universe.extraction, start.universe.contribution), "GOAL.PRE"
+    )
+    solver.assert_and_track(
+        z3.UGT(end.universe.extraction, end.universe.contribution), "GOAL.POST"
+    )
+
+
 if __name__ == "__main__":
     code = bytes.fromhex(
         "6080604052600436106100655760003560e01c8063a2dea26f11610043578063a2dea26f146100ba578063abaa9916146100ed578063ffd40b56146100f557610065565b80636fab5ddf1461006a5780638aa96f38146100745780638da5cb5b14610089575b600080fd5b61007261013a565b005b34801561008057600080fd5b50610072610182565b34801561009557600080fd5b5061009e610210565b604080516001600160a01b039092168252519081900360200190f35b3480156100c657600080fd5b50610072600480360360208110156100dd57600080fd5b50356001600160a01b031661021f565b610072610285565b34801561010157600080fd5b506101286004803603602081101561011857600080fd5b50356001600160a01b03166102b1565b60408051918252519081900360200190f35b600180547fffffffffffffffffffffffff0000000000000000000000000000000000000000163317908190556001600160a01b03166000908152602081905260409020349055565b6001546001600160a01b031633146101e1576040805162461bcd60e51b815260206004820152601760248201527f63616c6c6572206973206e6f7420746865206f776e6572000000000000000000604482015290519081900360640190fd5b60405133904780156108fc02916000818181858888f1935050505015801561020d573d6000803e3d6000fd5b50565b6001546001600160a01b031681565b6001600160a01b03811660009081526020819052604090205461024157600080fd5b6001600160a01b03811660008181526020819052604080822054905181156108fc0292818181858888f19350505050158015610281573d6000803e3d6000fd5b5050565b3360009081526020819052604090205461029f90346102cc565b33600090815260208190526040902055565b6001600160a01b031660009081526020819052604090205490565b600082820183811015610326576040805162461bcd60e51b815260206004820152601b60248201527f536166654d6174683a206164646974696f6e206f766572666c6f770000000000604482015290519081900360640190fd5b939250505056fea264697066735822122008472e24693cfb431a0cbec77ce1c2c19216911e421de2df4e138648a9ce11c764736f6c634300060c0033"
     )
     program = disassemble(code)
-    for start, end in universal_transaction(program, ""):
+    for start, end in universal_transaction(program, SHA3(), ""):
         print_solution(start, end)
 
     print("End Universal Transaction")
