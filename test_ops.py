@@ -4,9 +4,10 @@ import pytest
 import z3
 
 from _ops import *
-from _state import Block, Contract, State, Universe
+from _state import State
 from _symbolic import BA, BW, BY, ByteArray, hexify
 from disassembler import Instruction, Program
+from testlib import make_block, make_contract, make_state
 
 
 def _dump_memory(s: State) -> str:
@@ -18,7 +19,7 @@ def _dump_memory(s: State) -> str:
 
 
 def test_STOP() -> None:
-    s = State(returndata=[BW(0x12), BW(0x34)])
+    s = make_state(returndata=[BW(0x12), BW(0x34)])
     STOP(s)
     assert s.success is True
     assert s.returndata == []
@@ -253,7 +254,7 @@ def test_SAR() -> None:
 
 
 def test_SHA3() -> None:
-    s = State(memory={0: BY(0xFF), 1: BY(0xFF), 2: BY(0xFF), 3: BY(0xFF)})
+    s = make_state(memory={0: BY(0xFF), 1: BY(0xFF), 2: BY(0xFF), 3: BY(0xFF)})
     digest = SHA3(s, BW(0), BW(4))
 
     solver = z3.Optimize()
@@ -266,37 +267,38 @@ def test_SHA3() -> None:
 
 
 def test_ADDRESS() -> None:
-    s = State(address=BA(0x9BBFED6889322E016E0A02EE459D306FC19545D8))
+    s = make_state(address=BA(0x9BBFED6889322E016E0A02EE459D306FC19545D8))
     assert z3.simplify(ADDRESS(s)) == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
 
 
 def test_BALANCE() -> None:
-    u = Universe()
-    s = State()
-    u.balances[BA(0x9BBFED6889322E016E0A02EE459D306FC19545D8)] = BW(125985)
+    s = make_state()
+    s.universe.balances[BA(0x9BBFED6889322E016E0A02EE459D306FC19545D8)] = BW(125985)
     assert (
-        z3.simplify(BALANCE(u, s, BW(0x9BBFED6889322E016E0A02EE459D306FC19545D8)))
+        z3.simplify(
+            BALANCE(s.universe, s, BW(0x9BBFED6889322E016E0A02EE459D306FC19545D8))
+        )
         == 125985
     )
 
 
 def test_ORIGIN() -> None:
-    s = State(origin=BA(0x9BBFED6889322E016E0A02EE459D306FC19545D8))
+    s = make_state(origin=BA(0x9BBFED6889322E016E0A02EE459D306FC19545D8))
     assert z3.simplify(ORIGIN(s)) == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
 
 
 def test_CALLER() -> None:
-    s = State(caller=BA(0x9BBFED6889322E016E0A02EE459D306FC19545D8))
+    s = make_state(caller=BA(0x9BBFED6889322E016E0A02EE459D306FC19545D8))
     assert z3.simplify(CALLER(s)) == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
 
 
 def test_CALLVALUE() -> None:
-    s = State(callvalue=BW(123456789))
+    s = make_state(callvalue=BW(123456789))
     assert z3.simplify(CALLVALUE(s)) == 123456789
 
 
 def test_CALLDATALOAD() -> None:
-    s = State(
+    s = make_state(
         calldata=ByteArray(
             "CALLDATA",
             b"\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff",
@@ -314,12 +316,12 @@ def test_CALLDATALOAD() -> None:
 
 
 def test_CALLDATASIZE() -> None:
-    s = State(calldata=ByteArray("CALLDATA", b"\xff"))
+    s = make_state(calldata=ByteArray("CALLDATA", b"\xff"))
     assert CALLDATASIZE(s) == 1
 
 
 def test_CALLDATACOPY() -> None:
-    s = State(
+    s = make_state(
         calldata=ByteArray(
             "CALLDATA",
             b"\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff",
@@ -340,17 +342,19 @@ def test_CALLDATACOPY() -> None:
 
 
 def test_GASPRICE() -> None:
-    s = State(gasprice=BW(10))
+    s = make_state(gasprice=BW(10))
     assert z3.simplify(GASPRICE(s)) == 10
 
 
 def test_RETURNDATASIZE() -> None:
-    s = State(returndata=[z3.BitVecVal(b, 8) for b in b"abcdefghijklmnopqrstuvwxyz"])
+    s = make_state(
+        returndata=[z3.BitVecVal(b, 8) for b in b"abcdefghijklmnopqrstuvwxyz"]
+    )
     assert z3.simplify(RETURNDATASIZE(s)) == 26
 
 
 def test_RETURNDATACOPY() -> None:
-    s = State(
+    s = make_state(
         returndata=[
             z3.BitVecVal(b, 8)
             for b in b"\x7d\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\x7f"
@@ -371,22 +375,22 @@ def test_RETURNDATACOPY() -> None:
 
 
 def test_COINBASE() -> None:
-    b = Block(coinbase=BA(0x9BBFED6889322E016E0A02EE459D306FC19545D8))
+    b = make_block(coinbase=BA(0x9BBFED6889322E016E0A02EE459D306FC19545D8))
     assert z3.simplify(COINBASE(b)) == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
 
 
 def test_TIMESTAMP() -> None:
-    b = Block(timestamp=BW(1636704767))
+    b = make_block(timestamp=BW(1636704767))
     assert z3.simplify(TIMESTAMP(b)) == 1636704767
 
 
 def test_NUMBER() -> None:
-    b = Block(number=BW(1636704767))
+    b = make_block(number=BW(1636704767))
     assert z3.simplify(NUMBER(b)) == 1636704767
 
 
 def test_PREVRANDAO() -> None:
-    b = Block(
+    b = make_block(
         prevrandao=BW(
             0xCE124DEE50136F3F93F19667FB4198C6B94EECBACFA300469E5280012757BE94
         )
@@ -398,28 +402,28 @@ def test_PREVRANDAO() -> None:
 
 
 def test_GASLIMIT() -> None:
-    b = Block(gaslimit=BW(0xFFFFFFFFFFFF))
+    b = make_block(gaslimit=BW(0xFFFFFFFFFFFF))
     assert z3.simplify(GASLIMIT(b)) == 0xFFFFFFFFFFFF
 
 
 def test_CHAINID() -> None:
-    b = Block()
+    b = make_block()
     assert CHAINID(b) == 1
 
 
 def test_BASEFEE() -> None:
-    b = Block(basefee=BW(10))
+    b = make_block(basefee=BW(10))
     assert z3.simplify(BASEFEE(b)) == 10
 
 
 def test_MLOAD() -> None:
-    s = State(memory={31: BY(0xFF)})
+    s = make_state(memory={31: BY(0xFF)})
     assert z3.simplify(MLOAD(s, BW(0))) == 0xFF
     assert z3.simplify(MLOAD(s, BW(1))) == 0xFF00
 
 
 def test_MSTORE() -> None:
-    s = State()
+    s = make_state()
     MSTORE(s, BW(0), BW(0xFF))
     assert (
         _dump_memory(s)
@@ -433,7 +437,7 @@ def test_MSTORE() -> None:
 
 
 def test_MSTORE8() -> None:
-    s = State()
+    s = make_state()
     MSTORE8(s, BW(0), BW(0xFFFF))
     assert _dump_memory(s) == "0xFF"
     MSTORE8(s, BW(1), BW(0xAABBCCDDEE))
@@ -441,7 +445,7 @@ def test_MSTORE8() -> None:
 
 
 def test_SLOAD() -> None:
-    c = Contract(Program())
+    c = make_contract()
     c.storage[BW(0)] = BW(46)
     assert z3.simplify(SLOAD(c, BW(0))) == 46
     assert len(c.storage.accessed) == 1
@@ -449,7 +453,7 @@ def test_SLOAD() -> None:
 
 
 def test_SSTORE() -> None:
-    c = Contract(Program())
+    c = make_contract()
 
     SSTORE(c, BW(0), BW(0xFFFF))
     assert z3.simplify(c.storage[BW(0)]) == 0xFFFF
@@ -461,7 +465,7 @@ def test_SSTORE() -> None:
 
 def test_JUMP() -> None:
     p = Program(jumps={8: 90})
-    s = State()
+    s = make_state()
     JUMP(p, s, BW(8))
     assert s.pc == 90
     with pytest.raises(KeyError):
@@ -474,7 +478,7 @@ def test_PC() -> None:
 
 
 def test_MSIZE() -> None:
-    s = State(memory={123: BY(0x01)})
+    s = make_state(memory={123: BY(0x01)})
     assert z3.simplify(MSIZE(s)) == 124
 
 
@@ -488,7 +492,7 @@ def test_PUSH() -> None:
 
 
 def test_DUP() -> None:
-    s = State(stack=[BW(0x1234)])
+    s = make_state(stack=[BW(0x1234)])
 
     ins = Instruction(0x0, 1, "DUP", 1)
     assert z3.simplify(DUP(ins, s)) == 0x1234
@@ -499,7 +503,7 @@ def test_DUP() -> None:
 
 
 def test_SWAP() -> None:
-    s = State(stack=[BW(0x1234), BW(0x5678)])
+    s = make_state(stack=[BW(0x1234), BW(0x5678)])
 
     ins = Instruction(0x0, 1, "SWAP", 1)
     SWAP(ins, s)
@@ -512,18 +516,17 @@ def test_SWAP() -> None:
 
 
 def test_CALL() -> None:
-    u = Universe()
-    s = State(returndata=[BY(1)])
-    u.balances[s.address] = BW(125)
-    res = CALL(u, s, BW(0), BW(0x1234), BW(123), BW(0), BW(0), BW(0), BW(0))
+    s = make_state(returndata=[BY(1)])
+    s.universe.balances[s.address] = BW(125)
+    res = CALL(s.universe, s, BW(0), BW(0x1234), BW(123), BW(0), BW(0), BW(0), BW(0))
     assert z3.simplify(res) == 1
     assert len(s.returndata) == 0
-    assert z3.simplify(u.balances[BA(0x1234)]) == 123
-    assert z3.simplify(u.balances[s.address]) == 2
+    assert z3.simplify(s.universe.balances[BA(0x1234)]) == 123
+    assert z3.simplify(s.universe.balances[s.address]) == 2
 
 
 def test_RETURN() -> None:
-    s = State(
+    s = make_state(
         returndata=[BW(0x12), BW(0x34)],
         memory={0: BY(0xFF), 1: BY(0x01)},
     )
@@ -533,7 +536,7 @@ def test_RETURN() -> None:
 
 
 def test_REVERT() -> None:
-    s = State(
+    s = make_state(
         returndata=[BW(0x12), BW(0x34)],
         memory={0: BY(0xFF), 1: BY(0x01)},
     )
@@ -543,7 +546,7 @@ def test_REVERT() -> None:
 
 
 def test_INVALID() -> None:
-    s = State(returndata=[BW(0x12), BW(0x34)])
+    s = make_state(returndata=[BW(0x12), BW(0x34)])
     INVALID(s)
     assert s.success is False
     assert s.returndata == []

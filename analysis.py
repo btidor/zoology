@@ -6,7 +6,7 @@ import z3
 from Crypto.Hash import keccak
 
 from _common import Predicate
-from _state import State, constrain_to_goal
+from _state import State
 from _symbolic import BW, do_check, require_concrete, solver_stack
 from disassembler import Program, disassemble
 from universal import universal_transaction

@@ -2,10 +2,10 @@
 
 from typing import List, assert_never
 
-from _state import Block, State
+from _state import State
 from _symbolic import BW, ByteArray, require_concrete
-from disassembler import Program, disassemble
-from testlib import abiencode, compile_solidity
+from disassembler import disassemble
+from testlib import abiencode, compile_solidity, make_contract, make_state
 from vm import _concrete_JUMPI, printable_execution, step
 
 
@@ -17,13 +17,13 @@ def concretize_returndata(state: State) -> bytes:
     return bytes(require_concrete(x) for x in state.returndata)
 
 
-def execute(program: Program, block: Block, state: State) -> None:
+def execute(state: State) -> None:
     while True:
-        action = step(program, block, state)
+        action = step(state)
         if action == "CONTINUE":
             continue
         elif action == "JUMPI":
-            _concrete_JUMPI(program, state)
+            _concrete_JUMPI(state)
         elif action == "TERMINATE":
             return
         else:
@@ -33,37 +33,37 @@ def execute(program: Program, block: Block, state: State) -> None:
 def test_execute_basic() -> None:
     code = bytes.fromhex("60AA605601600957005B60006000FD")
     program = disassemble(code)
-    block = Block()
-    state = State(
+    state = make_state(
+        contract=make_contract(program=program),
         callvalue=BW(0),
         calldata=ByteArray("CALLDATA", b""),
     )
 
-    action = step(program, block, state)
+    action = step(state)
     assert action == "CONTINUE"
     assert state.pc == 1
     assert state.success is None
     assert concretize_stack(state) == [0xAA]
 
-    action = step(program, block, state)
+    action = step(state)
     assert action == "CONTINUE"
     assert state.pc == 2
     assert state.success is None
     assert concretize_stack(state) == [0xAA, 0x56]
 
-    action = step(program, block, state)
+    action = step(state)
     assert action == "CONTINUE"
     assert state.pc == 3
     assert state.success is None
     assert concretize_stack(state) == [0x100]
 
-    action = step(program, block, state)
+    action = step(state)
     assert action == "CONTINUE"
     assert state.pc == 4
     assert state.success is None
     assert concretize_stack(state) == [0x100, 0x09]
 
-    action = step(program, block, state)
+    action = step(state)
     assert action == "JUMPI"
     assert state.pc == 4
     assert state.success is None
@@ -73,25 +73,25 @@ def test_execute_basic() -> None:
     assert state.pc == 6
     state.stack = []
 
-    action = step(program, block, state)
+    action = step(state)
     assert action == "CONTINUE"
     assert state.pc == 7
     assert state.success is None
     assert concretize_stack(state) == []
 
-    action = step(program, block, state)
+    action = step(state)
     assert action == "CONTINUE"
     assert state.pc == 8
     assert state.success is None
     assert concretize_stack(state) == [0x00]
 
-    action = step(program, block, state)
+    action = step(state)
     assert action == "CONTINUE"
     assert state.pc == 9
     assert state.success is None
     assert concretize_stack(state) == [0x00, 0x00]
 
-    action = step(program, block, state)
+    action = step(state)
     assert action == "TERMINATE"
     assert state.success is False
     assert state.returndata == []
@@ -145,40 +145,43 @@ def test_execute_solidity() -> None:
     """
     code = compile_solidity(source, "0.8.17")
     program = disassemble(code)
-    block = Block()
 
-    state = State(
+    state = make_state(
+        contract=make_contract(program=program),
         callvalue=BW(0),
         calldata=ByteArray("CALLDATA", abiencode("owner()")),
     )
-    execute(program, block, state)
+    execute(state)
     assert state.success is True
     assert concretize_returndata(state) == b"\x00" * 32
 
-    state = State(
-        storage=state.storage,
+    state = make_state(
+        contract=state.contract,  # carries forward storage
+        universe=state.universe,
         callvalue=BW(0),
         calldata=ByteArray("CALLDATA", abiencode("withdraw()")),
     )
-    execute(program, block, state)
+    execute(state)
     assert state.success is False
     assert concretize_returndata(state)[68:91] == b"caller is not the owner"
 
-    state = State(
-        storage=state.storage,
+    state = make_state(
+        contract=state.contract,
+        universe=state.universe,
         callvalue=BW(123456),
         calldata=ByteArray("CALLDATA", abiencode("contribute()")),
     )
-    execute(program, block, state)
+    execute(state)
     assert state.success is True
     assert concretize_returndata(state) == b""
 
-    state = State(
-        storage=state.storage,
+    state = make_state(
+        contract=state.contract,
+        universe=state.universe,
         callvalue=BW(0),
         calldata=ByteArray("CALLDATA", abiencode("owner()")),
     )
-    execute(program, block, state)
+    execute(state)
     assert state.success is True
     assert concretize_returndata(state)[-20:] == b"\xcc" * 20
 
@@ -186,8 +189,8 @@ def test_execute_solidity() -> None:
 def test_output_basic() -> None:
     code = bytes.fromhex("60AA605601600957005B60006000FD")
     program = disassemble(code)
-    block = Block()
-    state = State(
+    state = make_state(
+        contract=make_contract(program=program),
         callvalue=BW(0),
         calldata=ByteArray("CALLDATA", b""),
     )
@@ -223,7 +226,5 @@ def test_output_basic() -> None:
         REVERT b''""".splitlines()
     fixture = map(lambda x: x[8:], raw[1:])
 
-    for actual, expected in zip(
-        printable_execution(program, block, state), fixture, strict=True
-    ):
+    for actual, expected in zip(printable_execution(state), fixture, strict=True):
         assert actual == expected
