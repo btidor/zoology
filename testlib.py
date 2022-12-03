@@ -6,7 +6,7 @@ import z3
 from Crypto.Hash import keccak
 
 from disassembler import Program
-from environment import Block, Contract, Universe
+from environment import Block, Contract, Transaction, Universe
 from sha3 import SHA3
 from state import State
 from symbolic import BA, BW, Array, Bytes
@@ -30,11 +30,24 @@ def make_block(**kwargs: Any) -> Block:
 
 def make_contract(**kwargs: Any) -> Contract:
     attrs: Dict[str, Any] = {
+        "address": BA(0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA),
         "program": Program(),
         "storage": Array("STORAGE", z3.BitVecSort(256), BW(0)),
     }
     attrs.update(**kwargs)
     return Contract(**attrs)
+
+
+def make_transaction(**kwargs: Any) -> Transaction:
+    attrs: Dict[str, Any] = {
+        "origin": BA(0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB),
+        "caller": BA(0xCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC),
+        "callvalue": BW(0),
+        "calldata": Bytes("", b""),
+        "gasprice": BW(0x12),
+    }
+    attrs.update(**kwargs)
+    return Transaction(**attrs)
 
 
 def make_universe(**kwargs: Any) -> Universe:
@@ -55,17 +68,12 @@ def make_state(**kwargs: Any) -> State:
         "suffix": "",
         "block": make_block(),
         "contract": make_contract(),
+        "transaction": make_transaction(),
         "universe": make_universe(),
         "sha3": SHA3(),
         "pc": 0,
         "stack": [],
         "memory": {},
-        "address": BA(0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA),
-        "origin": BA(0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB),
-        "caller": BA(0xCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC),
-        "callvalue": BW(0),
-        "calldata": Bytes("", b""),
-        "gasprice": BW(0x12),
         "returndata": Bytes("", b""),
         "success": None,
         "path_constraints": [],

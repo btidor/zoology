@@ -7,7 +7,7 @@ from disassembler import Instruction, Program
 from ops import *
 from state import State
 from symbolic import BA, BW, BY, Bytes, check, unwrap_bytes
-from testlib import make_block, make_state
+from testlib import make_block, make_contract, make_state, make_transaction
 
 
 def _dump_memory(s: State) -> str:
@@ -267,7 +267,8 @@ def test_SHA3() -> None:
 
 
 def test_ADDRESS() -> None:
-    s = make_state(address=BA(0x9BBFED6889322E016E0A02EE459D306FC19545D8))
+    contract = make_contract(address=BA(0x9BBFED6889322E016E0A02EE459D306FC19545D8))
+    s = make_state(contract=contract)
     assert z3.simplify(ADDRESS(s)) == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
 
 
@@ -281,27 +282,35 @@ def test_BALANCE() -> None:
 
 
 def test_ORIGIN() -> None:
-    s = make_state(origin=BA(0x9BBFED6889322E016E0A02EE459D306FC19545D8))
+    transaction = make_transaction(
+        origin=BA(0x9BBFED6889322E016E0A02EE459D306FC19545D8)
+    )
+    s = make_state(transaction=transaction)
     assert z3.simplify(ORIGIN(s)) == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
 
 
 def test_CALLER() -> None:
-    s = make_state(caller=BA(0x9BBFED6889322E016E0A02EE459D306FC19545D8))
+    transaction = make_transaction(
+        caller=BA(0x9BBFED6889322E016E0A02EE459D306FC19545D8)
+    )
+    s = make_state(transaction=transaction)
     assert z3.simplify(CALLER(s)) == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
 
 
 def test_CALLVALUE() -> None:
-    s = make_state(callvalue=BW(123456789))
+    transaction = make_transaction(callvalue=BW(123456789))
+    s = make_state(transaction=transaction)
     assert z3.simplify(CALLVALUE(s)) == 123456789
 
 
 def test_CALLDATALOAD() -> None:
-    s = make_state(
+    transaction = make_transaction(
         calldata=Bytes(
             "CALLDATA",
             b"\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff",
         )
     )
+    s = make_state(transaction=transaction)
     assert (
         z3.simplify(CALLDATALOAD(s, BW(0)))
         == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
@@ -314,17 +323,19 @@ def test_CALLDATALOAD() -> None:
 
 
 def test_CALLDATASIZE() -> None:
-    s = make_state(calldata=Bytes("CALLDATA", b"\xff"))
+    transaction = make_transaction(calldata=Bytes("CALLDATA", b"\xff"))
+    s = make_state(transaction=transaction)
     assert CALLDATASIZE(s) == 1
 
 
 def test_CALLDATACOPY() -> None:
-    s = make_state(
+    transaction = make_transaction(
         calldata=Bytes(
             "CALLDATA",
             b"\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff",
         )
     )
+    s = make_state(transaction=transaction)
 
     CALLDATACOPY(s, BW(0), BW(0), BW(32))
     assert (
@@ -340,7 +351,8 @@ def test_CALLDATACOPY() -> None:
 
 
 def test_GASPRICE() -> None:
-    s = make_state(gasprice=BW(10))
+    transaction = make_transaction(gasprice=BW(10))
+    s = make_state(transaction=transaction)
     assert z3.simplify(GASPRICE(s)) == 10
 
 
@@ -468,8 +480,9 @@ def test_SSTORE() -> None:
 
 
 def test_JUMP() -> None:
-    p = Program(jumps={8: 90})
-    s = make_state()
+    program = Program(jumps={8: 90})
+    contract = make_contract(program=program)
+    s = make_state(contract=contract)
     JUMP(s, BW(8))
     assert s.pc == 90
     with pytest.raises(KeyError):

@@ -5,7 +5,13 @@ from typing import List, assert_never
 from disassembler import disassemble
 from state import State
 from symbolic import BW, Bytes, unwrap
-from testlib import abiencode, compile_solidity, make_contract, make_state
+from testlib import (
+    abiencode,
+    compile_solidity,
+    make_contract,
+    make_state,
+    make_transaction,
+)
 from vm import concrete_JUMPI, printable_execution, step
 
 
@@ -31,8 +37,10 @@ def test_execute_basic() -> None:
     program = disassemble(code)
     state = make_state(
         contract=make_contract(program=program),
-        callvalue=BW(0),
-        calldata=Bytes("CALLDATA", b""),
+        transaction=make_transaction(
+            callvalue=BW(0),
+            calldata=Bytes("CALLDATA", b""),
+        ),
     )
 
     action = step(state)
@@ -144,8 +152,10 @@ def test_execute_solidity() -> None:
 
     state = make_state(
         contract=make_contract(program=program),
-        callvalue=BW(0),
-        calldata=Bytes("CALLDATA", abiencode("owner()")),
+        transaction=make_transaction(
+            callvalue=BW(0),
+            calldata=Bytes("CALLDATA", abiencode("owner()")),
+        ),
     )
     execute(state)
     assert state.success is True
@@ -153,9 +163,11 @@ def test_execute_solidity() -> None:
 
     state = make_state(
         contract=state.contract,  # carries forward storage
+        transaction=make_transaction(
+            callvalue=BW(0),
+            calldata=Bytes("CALLDATA", abiencode("withdraw()")),
+        ),
         universe=state.universe,
-        callvalue=BW(0),
-        calldata=Bytes("CALLDATA", abiencode("withdraw()")),
     )
     execute(state)
     assert state.success is False
@@ -163,9 +175,11 @@ def test_execute_solidity() -> None:
 
     state = make_state(
         contract=state.contract,
+        transaction=make_transaction(
+            callvalue=BW(123456),
+            calldata=Bytes("CALLDATA", abiencode("contribute()")),
+        ),
         universe=state.universe,
-        callvalue=BW(123456),
-        calldata=Bytes("CALLDATA", abiencode("contribute()")),
     )
     execute(state)
     assert state.success is True
@@ -173,9 +187,11 @@ def test_execute_solidity() -> None:
 
     state = make_state(
         contract=state.contract,
+        transaction=make_transaction(
+            callvalue=BW(0),
+            calldata=Bytes("CALLDATA", abiencode("owner()")),
+        ),
         universe=state.universe,
-        callvalue=BW(0),
-        calldata=Bytes("CALLDATA", abiencode("owner()")),
     )
     execute(state)
     assert state.success is True
@@ -187,8 +203,10 @@ def test_output_basic() -> None:
     program = disassemble(code)
     state = make_state(
         contract=make_contract(program=program),
-        callvalue=BW(0),
-        calldata=Bytes("CALLDATA", b""),
+        transaction=make_transaction(
+            callvalue=BW(0),
+            calldata=Bytes("CALLDATA", b""),
+        ),
     )
 
     raw = """

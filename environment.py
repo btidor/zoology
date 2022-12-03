@@ -23,7 +23,7 @@ from symbolic import (
 )
 
 
-@dataclass
+@dataclass(frozen=True)
 class Block:
     """A block in the blockchain."""
 
@@ -45,7 +45,7 @@ class Contract:
     storage: Array
 
 
-@dataclass
+@dataclass(frozen=True)
 class Transaction:
     """The inputs to a contract call."""
 
