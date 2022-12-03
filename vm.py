@@ -8,7 +8,7 @@ import z3
 
 import ops
 from disassembler import Instruction, Program, disassemble
-from environment import Block, Contract, Universe
+from environment import Block, Contract, Transaction, Universe
 from sha3 import SHA3
 from state import State
 from symbolic import BA, BW, Array, Bytes, uint256, unwrap, unwrap_bytes
@@ -41,16 +41,8 @@ def step(state: State) -> Literal["CONTINUE", "JUMPI", "TERMINATE"]:
                 args.append(state.stack.pop())
             elif kls == State:
                 args.append(state)
-            elif kls == Universe:
-                args.append(state.universe)
-            elif kls == Block:
-                args.append(state.block)
-            elif kls == Contract:
-                args.append(state.contract)
             elif kls == Instruction:
                 args.append(ins)
-            elif kls == Program:
-                args.append(program)
             else:
                 raise TypeError(f"unknown arg class: {kls}")
 
@@ -132,8 +124,16 @@ def concrete_start(program: Program, value: uint256, data: bytes) -> State:
         basefee=BW(12267131109),
     )
     contract = Contract(
+        address=BA(0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA),
         program=program,
         storage=Array("STORAGE", z3.BitVecSort(256), BW(0)),
+    )
+    transaction = Transaction(
+        origin=BA(0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB),
+        caller=BA(0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB),
+        callvalue=value,
+        calldata=Bytes("", data),
+        gasprice=BW(0x12),
     )
     universe = Universe(
         suffix="",
@@ -147,17 +147,12 @@ def concrete_start(program: Program, value: uint256, data: bytes) -> State:
         suffix="",
         block=block,
         contract=contract,
+        transaction=transaction,
         universe=universe,
         sha3=SHA3(),
         pc=0,
         stack=[],
         memory={},
-        address=BA(0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA),
-        origin=BA(0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB),
-        caller=BA(0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB),
-        callvalue=value,
-        calldata=Bytes("", data),
-        gasprice=BW(0x12),
         returndata=Bytes("", b""),
         success=None,
         path_constraints=[],

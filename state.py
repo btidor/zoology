@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 import z3
 
-from environment import Block, Contract, Universe
+from environment import Block, Contract, Transaction, Universe
 from sha3 import SHA3
 from symbolic import (
     Bytes,
@@ -32,19 +32,13 @@ class State:
 
     block: Block
     contract: Contract
+    transaction: Transaction
     universe: Universe
     sha3: SHA3
 
     pc: int
     stack: List[uint256]
     memory: Dict[int, uint8]  # concrete index -> 1-byte value
-
-    address: uint160
-    origin: uint160
-    caller: uint160
-    callvalue: uint256
-    calldata: Bytes
-    gasprice: uint256
 
     returndata: Bytes
     success: Optional[bool]
@@ -64,17 +58,12 @@ class State:
             suffix=self.suffix,
             block=self.block,
             contract=self.contract.copy(),
+            transaction=self.transaction,
             universe=self.universe.copy(),
             sha3=self.sha3.copy(),
             pc=self.pc,
             stack=self.stack.copy(),
             memory=self.memory.copy(),
-            address=self.address,
-            origin=self.origin,
-            caller=self.caller,
-            callvalue=self.callvalue,
-            calldata=self.calldata,
-            gasprice=self.gasprice,
             returndata=self.returndata,
             success=self.success,
             path_constraints=self.path_constraints.copy(),
@@ -84,12 +73,16 @@ class State:
     def constrain(self, solver: z3.Optimize, minimize: bool = False) -> None:
         """Apply accumulated constraints to the given solver instance."""
         if minimize:
-            solver.minimize(self.callvalue)
-            solver.minimize(self.calldata.length())
+            solver.minimize(self.transaction.callvalue)
+            solver.minimize(self.transaction.calldata.length())
 
         # TODO: a contract could, in theory, call itself...
-        solver.assert_and_track(self.address != self.origin, f"ADDROR{self.suffix}")
-        solver.assert_and_track(self.address != self.caller, f"ADDRCL{self.suffix}")
+        solver.assert_and_track(
+            self.contract.address != self.transaction.origin, f"ADDROR{self.suffix}"
+        )
+        solver.assert_and_track(
+            self.contract.address != self.transaction.caller, f"ADDRCL{self.suffix}"
+        )
 
         for i, constraint in enumerate(self.path_constraints):
             solver.assert_and_track(constraint, f"PC{i}{self.suffix}")
@@ -108,7 +101,7 @@ class State:
             if check(
                 solver,
                 z3.And(
-                    addr != self.address,
+                    addr != self.contract.address,
                     self.universe.balances.peek(addr)
                     > since.universe.balances.peek(addr),
                 ),
@@ -123,27 +116,11 @@ class State:
 
         Only attributes present in the model will be included.
         """
-        r: OrderedDict[str, Any] = OrderedDict()
-        calldata = self.calldata.evaluate(model, True)
-        r["Data"] = f"0x{calldata[:8]} {calldata[8:]}".strip() if calldata else None
-        r["Value"] = self.callvalue
-        r["Caller"] = self.caller
-        r["Address"] = self.address
-        r["Gas"] = self.gasprice
+        r: OrderedDict[str, str] = OrderedDict()
+        a = zeval(model, self.contract.address)
+        if is_concrete(a) and unwrap(a) > 0:
+            r["Address"] = "0x" + unwrap_bytes(a).hex()
         returndata = self.returndata.evaluate(model, True)
-        r["Return"] = "0x" + returndata if returndata else None
-
-        for k in list(r.keys()):
-            if r[k] is None:
-                del r[k]
-            elif z3.is_bv(r[k]):
-                v = zeval(model, r[k])
-                if is_concrete(v) and unwrap(v) > 0:
-                    r[k] = "0x" + unwrap_bytes(v).hex()
-                else:
-                    del r[k]
-            elif isinstance(r[k], str):
-                pass
-            else:
-                raise TypeError(f"unknown value type: {type(r[k])}")
+        if returndata:
+            r["Return"] = "0x" + returndata
         return r

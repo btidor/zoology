@@ -6,10 +6,19 @@ from typing import Iterable, Iterator, Tuple, assert_never
 import z3
 
 from disassembler import Program, disassemble
-from environment import Block, Contract, Universe
+from environment import Block, Contract, Transaction, Universe
 from sha3 import SHA3
 from state import State
-from symbolic import Array, Bytes, check, solver_stack, unwrap, unwrap_bytes, zeval
+from symbolic import (
+    Array,
+    Bytes,
+    check,
+    is_concrete,
+    solver_stack,
+    unwrap,
+    unwrap_bytes,
+    zeval,
+)
 from vm import step
 
 
@@ -30,7 +39,11 @@ def universal_transaction(
     start = symbolic_start(program, sha3, suffix)
 
     init = start.copy()
-    init.universe.transfer(init.caller, init.address, init.callvalue)
+    init.universe.transfer(
+        init.transaction.caller,
+        init.contract.address,
+        init.transaction.callvalue,
+    )
     states = [init]
 
     while len(states) > 0:
@@ -89,10 +102,21 @@ def symbolic_start(program: Program, sha3: SHA3, suffix: str) -> State:
         basefee=z3.BitVec(f"BASEFEE{suffix}", 256),
     )
     contract = Contract(
+        address=z3.BitVec("ADDRESS", 160),
         program=program,
         storage=Array(f"STORAGE{suffix}", z3.BitVecSort(256), z3.BitVecSort(256)),
     )
     caller = z3.BitVec(f"CALLER", 160)
+    transaction = Transaction(
+        # TODO: properly constrain ORIGIN to be an EOA and CALLER to either be
+        # equal to ORIGIN or else be a non-EOA; handle the case where ORIGIN and
+        # CALLER vary across transactions.
+        origin=caller,
+        caller=caller,
+        callvalue=z3.BitVec(f"CALLVALUE{suffix}", 256),
+        calldata=Bytes(f"CALLDATA{suffix}"),
+        gasprice=z3.BitVec(f"GASPRICE{suffix}", 256),
+    )
     universe = Universe(
         suffix=suffix,
         # TODO: the balances of other accounts can change between transactions
@@ -108,20 +132,12 @@ def symbolic_start(program: Program, sha3: SHA3, suffix: str) -> State:
         suffix=suffix,
         block=block,
         contract=contract,
+        transaction=transaction,
         universe=universe,
         sha3=sha3,
         pc=0,
         stack=[],
         memory={},
-        address=z3.BitVec("ADDRESS", 160),
-        # TODO: properly constrain ORIGIN to be an EOA and CALLER to either be
-        # equal to ORIGIN or else be a non-EOA; handle the case where ORIGIN and
-        # CALLER vary across transactions.
-        origin=caller,
-        caller=caller,
-        callvalue=z3.BitVec(f"CALLVALUE{suffix}", 256),
-        calldata=Bytes(f"CALLDATA{suffix}"),
-        gasprice=z3.BitVec(f"GASPRICE{suffix}", 256),
         returndata=Bytes("", b""),
         success=None,
         path_constraints=[],
@@ -187,6 +203,12 @@ def _printable_transition(
     yield f"---  {kind}\t{result}\tPx{hex(end.path)[2:].upper()}\t".ljust(80, "-")
     yield ""
 
+    values = end.transaction.evaluate(model)
+    for k, v in values.items():
+        yield f"{k}\t{v}"
+    if len(values) > 0:
+        yield ""
+
     values = end.evaluate(model)
     for k, v in values.items():
         yield f"{k}\t{v}"
@@ -197,14 +219,14 @@ def _printable_transition(
     b = unwrap_bytes(zeval(model, end.universe.contribution, True)).hex()
     if a != b:
         yield f"Contrib\tETH 0x{a}"
-        yield f"\t-> 0x{b}"
+        yield f"\t->  0x{b}"
         yield f""
 
     a = unwrap_bytes(zeval(model, start.universe.extraction, True)).hex()
     b = unwrap_bytes(zeval(model, end.universe.extraction, True)).hex()
     if a != b:
         yield f"Extract\tETH 0x{a}"
-        yield f"\t-> 0x{b}"
+        yield f"\t->  0x{b}"
         yield f""
 
     for line in end.universe.balances.printable_diff(

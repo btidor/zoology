@@ -7,7 +7,7 @@ from disassembler import Instruction, Program
 from ops import *
 from state import State
 from symbolic import BA, BW, BY, Bytes, check, unwrap_bytes
-from testlib import make_block, make_contract, make_state
+from testlib import make_block, make_state
 
 
 def _dump_memory(s: State) -> str:
@@ -275,9 +275,7 @@ def test_BALANCE() -> None:
     s = make_state()
     s.universe.balances[BA(0x9BBFED6889322E016E0A02EE459D306FC19545D8)] = BW(125985)
     assert (
-        z3.simplify(
-            BALANCE(s.universe, s, BW(0x9BBFED6889322E016E0A02EE459D306FC19545D8))
-        )
+        z3.simplify(BALANCE(s, BW(0x9BBFED6889322E016E0A02EE459D306FC19545D8)))
         == 125985
     )
 
@@ -375,45 +373,51 @@ def test_RETURNDATACOPY() -> None:
 
 
 def test_COINBASE() -> None:
-    b = make_block(coinbase=BA(0x9BBFED6889322E016E0A02EE459D306FC19545D8))
-    assert z3.simplify(COINBASE(b)) == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
+    block = make_block(coinbase=BA(0x9BBFED6889322E016E0A02EE459D306FC19545D8))
+    s = make_state(block=block)
+    assert z3.simplify(COINBASE(s)) == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
 
 
 def test_TIMESTAMP() -> None:
-    b = make_block(timestamp=BW(1636704767))
-    assert z3.simplify(TIMESTAMP(b)) == 1636704767
+    block = make_block(timestamp=BW(1636704767))
+    s = make_state(block=block)
+    assert z3.simplify(TIMESTAMP(s)) == 1636704767
 
 
 def test_NUMBER() -> None:
-    b = make_block(number=BW(1636704767))
-    assert z3.simplify(NUMBER(b)) == 1636704767
+    block = make_block(number=BW(1636704767))
+    s = make_state(block=block)
+    assert z3.simplify(NUMBER(s)) == 1636704767
 
 
 def test_PREVRANDAO() -> None:
-    b = make_block(
+    block = make_block(
         prevrandao=BW(
             0xCE124DEE50136F3F93F19667FB4198C6B94EECBACFA300469E5280012757BE94
         )
     )
+    s = make_state(block=block)
     assert (
-        z3.simplify(PREVRANDAO(b))
+        z3.simplify(PREVRANDAO(s))
         == 0xCE124DEE50136F3F93F19667FB4198C6B94EECBACFA300469E5280012757BE94
     )
 
 
 def test_GASLIMIT() -> None:
-    b = make_block(gaslimit=BW(0xFFFFFFFFFFFF))
-    assert z3.simplify(GASLIMIT(b)) == 0xFFFFFFFFFFFF
+    block = make_block(gaslimit=BW(0xFFFFFFFFFFFF))
+    s = make_state(block=block)
+    assert z3.simplify(GASLIMIT(s)) == 0xFFFFFFFFFFFF
 
 
 def test_CHAINID() -> None:
-    b = make_block()
-    assert CHAINID(b) == 1
+    s = make_state()
+    assert CHAINID(s) == 1
 
 
 def test_BASEFEE() -> None:
-    b = make_block(basefee=BW(10))
-    assert z3.simplify(BASEFEE(b)) == 10
+    block = make_block(basefee=BW(10))
+    s = make_state(block=block)
+    assert z3.simplify(BASEFEE(s)) == 10
 
 
 def test_MLOAD() -> None:
@@ -445,31 +449,31 @@ def test_MSTORE8() -> None:
 
 
 def test_SLOAD() -> None:
-    c = make_contract()
-    c.storage[BW(0)] = BW(46)
-    assert z3.simplify(SLOAD(c, BW(0))) == 46
-    assert len(c.storage.accessed) == 1
-    assert z3.simplify(c.storage.accessed[0]) == 0
+    s = make_state()
+    s.contract.storage[BW(0)] = BW(46)
+    assert z3.simplify(SLOAD(s, BW(0))) == 46
+    assert len(s.contract.storage.accessed) == 1
+    assert z3.simplify(s.contract.storage.accessed[0]) == 0
 
 
 def test_SSTORE() -> None:
-    c = make_contract()
+    s = make_state()
 
-    SSTORE(c, BW(0), BW(0xFFFF))
-    assert z3.simplify(c.storage[BW(0)]) == 0xFFFF
+    SSTORE(s, BW(0), BW(0xFFFF))
+    assert z3.simplify(s.contract.storage[BW(0)]) == 0xFFFF
 
-    SSTORE(c, BW(8965), BW(0xFF))
-    assert z3.simplify(c.storage[BW(0)]) == 0xFFFF
-    assert z3.simplify(c.storage[BW(8965)]) == 0xFF
+    SSTORE(s, BW(8965), BW(0xFF))
+    assert z3.simplify(s.contract.storage[BW(0)]) == 0xFFFF
+    assert z3.simplify(s.contract.storage[BW(8965)]) == 0xFF
 
 
 def test_JUMP() -> None:
     p = Program(jumps={8: 90})
     s = make_state()
-    JUMP(p, s, BW(8))
+    JUMP(s, BW(8))
     assert s.pc == 90
     with pytest.raises(KeyError):
-        JUMP(p, s, BW(99))
+        JUMP(s, BW(99))
 
 
 def test_PC() -> None:
@@ -517,12 +521,12 @@ def test_SWAP() -> None:
 
 def test_CALL() -> None:
     s = make_state(returndata=[BY(1)])
-    s.universe.balances[s.address] = BW(125)
-    res = CALL(s.universe, s, BW(0), BW(0x1234), BW(123), BW(0), BW(0), BW(0), BW(0))
+    s.universe.balances[s.contract.address] = BW(125)
+    res = CALL(s, BW(0), BW(0x1234), BW(123), BW(0), BW(0), BW(0), BW(0))
     assert z3.simplify(res) == 1
     assert s.returndata.require_concrete() == b""
     assert z3.simplify(s.universe.balances[BA(0x1234)]) == 123
-    assert z3.simplify(s.universe.balances[s.address]) == 2
+    assert z3.simplify(s.universe.balances[s.contract.address]) == 2
 
 
 def test_RETURN() -> None:

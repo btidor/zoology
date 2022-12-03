@@ -2,8 +2,7 @@
 
 import z3
 
-from disassembler import Instruction, Program
-from environment import Block, Contract, Universe
+from disassembler import Instruction
 from state import State
 from symbolic import BW, BY, Bytes, uint256, unwrap, zconcat, zextract, zget, zif
 
@@ -165,22 +164,22 @@ def SHA3(s: State, _offset: uint256, _size: uint256) -> uint256:
 
 def ADDRESS(s: State) -> uint256:
     """30 - Get address of currently executing account."""
-    return z3.ZeroExt(96, s.address)
+    return z3.ZeroExt(96, s.contract.address)
 
 
-def BALANCE(u: Universe, s: State, address: uint256) -> uint256:
+def BALANCE(s: State, address: uint256) -> uint256:
     """31 - Get balance of the given account."""
-    return u.balances[zextract(159, 0, address)]
+    return s.universe.balances[zextract(159, 0, address)]
 
 
 def ORIGIN(s: State) -> uint256:
     """32 - Get execution origination address."""
-    return z3.ZeroExt(96, s.origin)
+    return z3.ZeroExt(96, s.transaction.origin)
 
 
 def CALLER(s: State) -> uint256:
     """33 - Get caller address."""
-    return z3.ZeroExt(96, s.caller)
+    return z3.ZeroExt(96, s.transaction.caller)
 
 
 def CALLVALUE(s: State) -> uint256:
@@ -190,17 +189,17 @@ def CALLVALUE(s: State) -> uint256:
     Get deposited value by the instruction/transaction responsible for this
     execution.
     """
-    return s.callvalue
+    return s.transaction.callvalue
 
 
 def CALLDATALOAD(s: State, i: uint256) -> uint256:
     """35 - Get input data of current environment."""
-    return zconcat(*[s.calldata[i + BW(j)] for j in range(32)])
+    return zconcat(*[s.transaction.calldata[i + BW(j)] for j in range(32)])
 
 
 def CALLDATASIZE(s: State) -> uint256:
     """36 - Get size of input data in current environment."""
-    return s.calldata.length()
+    return s.transaction.calldata.length()
 
 
 def CALLDATACOPY(
@@ -215,7 +214,7 @@ def CALLDATACOPY(
         _size, "CALLDATACOPY(destOffset, offset, size) requires concrete size"
     )
     for i in range(size):
-        s.memory[destOffset + i] = s.calldata[offset + i]
+        s.memory[destOffset + i] = s.transaction.calldata[offset + i]
 
 
 def CODESIZE() -> uint256:
@@ -230,7 +229,7 @@ def CODECOPY(destOffset: uint256, offset: uint256, size: uint256) -> None:
 
 def GASPRICE(s: State) -> uint256:
     """3A - Get price of gas in current environment."""
-    return s.gasprice
+    return s.transaction.gasprice
 
 
 def EXTCODESIZE(address: uint256) -> uint256:
@@ -285,44 +284,44 @@ def BLOCKHASH(blockNumber: uint256) -> uint256:
     raise NotImplementedError("BLOCKHASH")
 
 
-def COINBASE(b: Block) -> uint256:
+def COINBASE(s: State) -> uint256:
     """41 - Get the block's beneficiary address."""
-    return z3.ZeroExt(96, b.coinbase)
+    return z3.ZeroExt(96, s.block.coinbase)
 
 
-def TIMESTAMP(b: Block) -> uint256:
+def TIMESTAMP(s: State) -> uint256:
     """42 - Get the block's timestamp."""
-    return b.timestamp
+    return s.block.timestamp
 
 
-def NUMBER(b: Block) -> uint256:
+def NUMBER(s: State) -> uint256:
     """43 - Get the block's number."""
-    return b.number
+    return s.block.number
 
 
-def PREVRANDAO(b: Block) -> uint256:
+def PREVRANDAO(s: State) -> uint256:
     """44 - Get the previous block's RANDAO mix."""
-    return b.prevrandao
+    return s.block.prevrandao
 
 
-def GASLIMIT(b: Block) -> uint256:
+def GASLIMIT(s: State) -> uint256:
     """45 - Get the block's gas limit."""
-    return b.gaslimit
+    return s.block.gaslimit
 
 
-def CHAINID(b: Block) -> uint256:
+def CHAINID(s: State) -> uint256:
     """46 - Get the chain ID."""
-    return b.chainid
+    return s.block.chainid
 
 
-def SELFBALANCE(u: Universe, s: State) -> uint256:
+def SELFBALANCE(s: State) -> uint256:
     """47 - Get balance of currently executing account."""
-    return u.balances[s.address]
+    return s.universe.balances[s.contract.address]
 
 
-def BASEFEE(b: Block) -> uint256:
+def BASEFEE(s: State) -> uint256:
     """48 - Get the base fee."""
-    return b.basefee
+    return s.block.basefee
 
 
 def POP(y: uint256) -> None:
@@ -350,29 +349,29 @@ def MSTORE8(s: State, _offset: uint256, value: uint256) -> None:
     s.memory[offset] = zextract(7, 0, value)
 
 
-def SLOAD(c: Contract, key: uint256) -> uint256:
+def SLOAD(s: State, key: uint256) -> uint256:
     """54 - Load word from storage."""
-    return c.storage[key]
+    return s.contract.storage[key]
 
 
-def SSTORE(c: Contract, key: uint256, value: uint256) -> None:
+def SSTORE(s: State, key: uint256, value: uint256) -> None:
     """55 - Save word to storage."""
-    c.storage[key] = value
+    s.contract.storage[key] = value
 
 
-def JUMP(p: Program, s: State, _counter: uint256) -> None:
+def JUMP(s: State, _counter: uint256) -> None:
     """56 - Alter the program counter."""
     counter = unwrap(_counter, "JUMP(counter) requires concrete counter")
     # In theory, JUMP should revert if counter is not a valid jump target.
     # Instead, raise an error and fail the whole analysis. This lets us prove
     # that all jump targets are valid and within the body of the code, which is
     # why it's safe to strip the metadata trailer.
-    s.pc = p.jumps[counter]
+    s.pc = s.contract.program.jumps[counter]
 
 
 def JUMPI(s: State, counter: uint256, b: uint256) -> None:
     """
-    57. - Conditionally alter the program counter.
+    57 - Conditionally alter the program counter.
 
     This opcode should be implemented by the VM, since we may need to fork
     execution.
@@ -473,7 +472,6 @@ def CREATE(value: uint256, offset: uint256, size: uint256) -> uint256:
 
 
 def CALL(
-    u: Universe,
     s: State,
     gas: uint256,
     address: uint256,
@@ -487,7 +485,7 @@ def CALL(
     # TODO: we assume the address is an externally-owned account (i.e. contains
     # no code). How should we handle CALLs to contracts?
     s.returndata = Bytes("", b"")
-    u.transfer(s.address, zextract(159, 0, address), value)
+    s.universe.transfer(s.contract.address, zextract(159, 0, address), value)
     return BW(1)
 
 

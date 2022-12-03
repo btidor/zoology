@@ -132,8 +132,10 @@ def ownership_safety_predicates(state: State) -> Iterator[Predicate]:
         if is_concrete(k):
             yield Predicate(
                 lambda state: zand(
-                    state.origin != z3.Extract(159, 0, state.contract.storage.peek(k)),
-                    state.caller != z3.Extract(159, 0, state.contract.storage.peek(k)),
+                    state.transaction.origin
+                    != z3.Extract(159, 0, state.contract.storage.peek(k)),
+                    state.transaction.caller
+                    != z3.Extract(159, 0, state.contract.storage.peek(k)),
                 ),
                 f"$OWNER[{describe(k)}]",
                 state,
@@ -167,13 +169,13 @@ def balance_safety_predicates(state: State) -> Iterator[Predicate]:
 
 def describe_state(solver: z3.Optimize, state: State) -> str:
     # Re-adding these objectives increases performance by 2x?!
-    solver.minimize(state.callvalue)
-    solver.minimize(state.calldata.length())
+    solver.minimize(state.transaction.callvalue)
+    solver.minimize(state.transaction.calldata.length())
     assert check(solver)
     assert state.success is True
 
     model = solver.model()
-    return "0x" + state.calldata.evaluate(model)
+    return "0x" + state.transaction.calldata.evaluate(model)
 
 
 if __name__ == "__main__":

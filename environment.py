@@ -2,13 +2,25 @@
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from dataclasses import dataclass
-from typing import List
+from typing import Any, List
 
 import z3
 
 from disassembler import Program
-from symbolic import BW, Array, Constraint, uint160, uint256
+from symbolic import (
+    BW,
+    Array,
+    Bytes,
+    Constraint,
+    is_concrete,
+    uint160,
+    uint256,
+    unwrap,
+    unwrap_bytes,
+    zeval,
+)
 
 
 @dataclass
@@ -28,6 +40,7 @@ class Block:
 class Contract:
     """A deployed contract account with code and symbolic storage."""
 
+    address: uint160
     program: Program
     storage: Array
 
@@ -35,9 +48,49 @@ class Contract:
         """Return a deep copy of this instance."""
         # TODO: investigate __deepcopy__()
         return Contract(
+            address=self.address,
             program=self.program,
             storage=self.storage.copy(),
         )
+
+
+@dataclass
+class Transaction:
+    """The inputs to a contract call."""
+
+    origin: uint160
+    caller: uint160
+    callvalue: uint256
+    calldata: Bytes
+    gasprice: uint256
+
+    def evaluate(self, model: z3.ModelRef) -> OrderedDict[str, str]:
+        """
+        Use a model to evaluate this instance as a dictionary of attributes.
+
+        Only attributes present in the model will be included.
+        """
+        r: OrderedDict[str, Any] = OrderedDict()
+        calldata = self.calldata.evaluate(model, True)
+        r["Data"] = f"0x{calldata[:8]} {calldata[8:]}".strip() if calldata else None
+        r["Value"] = self.callvalue
+        r["Caller"] = self.caller
+        r["Gas"] = self.gasprice
+
+        for k in list(r.keys()):
+            if r[k] is None:
+                del r[k]
+            elif z3.is_bv(r[k]):
+                v = zeval(model, r[k])
+                if is_concrete(v) and unwrap(v) > 0:
+                    r[k] = "0x" + unwrap_bytes(v).hex()
+                else:
+                    del r[k]
+            elif isinstance(r[k], str):
+                pass
+            else:
+                raise TypeError(f"unknown value type: {type(r[k])}")
+        return r
 
 
 @dataclass
