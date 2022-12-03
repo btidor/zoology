@@ -44,15 +44,6 @@ class Contract:
     program: Program
     storage: Array
 
-    def copy(self) -> Contract:
-        """Return a deep copy of this instance."""
-        # TODO: investigate __deepcopy__()
-        return Contract(
-            address=self.address,
-            program=self.program,
-            storage=self.storage.copy(),
-        )
-
 
 @dataclass
 class Transaction:
@@ -140,14 +131,3 @@ class Universe:
         """Apply accumulated constraints to the given solver instance."""
         for i, constraint in enumerate(self.transfer_constraints):
             solver.assert_and_track(constraint, f"XFER{i}{self.suffix}")
-
-    def copy(self) -> Universe:
-        """Return a deep copy of this instance."""
-        return Universe(
-            suffix=self.suffix,
-            balances=self.balances.copy(),
-            transfer_constraints=self.transfer_constraints.copy(),
-            agents=self.agents.copy(),
-            contribution=self.contribution,
-            extraction=self.extraction,
-        )

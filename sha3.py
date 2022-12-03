@@ -42,10 +42,6 @@ class SHA3:
 
     digest_constraints: List[Constraint] = field(default_factory=list)
 
-    def copy(self) -> SHA3:
-        """Return a deep copy of this instance."""
-        return SHA3(self.suffix, self.hashes.copy())
-
     def __getitem__(self, key: z3.BitVecRef) -> z3.BitVecRef:
         """Compute the SHA3 hash of a given key."""
         size = key.size() // 8

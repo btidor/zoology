@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import contextlib
-import copy
 from typing import (
     Any,
     Dict,
@@ -210,13 +209,6 @@ class Array:
     def peek(self, key: z3.BitVecRef) -> z3.BitVecRef:
         """Look up the given symbolic key, but don't track the lookup."""
         return cast(z3.BitVecRef, self.array[key])
-
-    def copy(self) -> Array:
-        """Return a deep copy of this instance."""
-        other = copy.copy(self)
-        other.accessed = other.accessed.copy()
-        other.written = other.written.copy()
-        return other
 
     def printable_diff(
         self, name: str, model: z3.ModelRef, original: Array

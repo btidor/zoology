@@ -52,24 +52,6 @@ class State:
     # taken, 0 if not. MSB-first with a leading 1 prepended.
     path: int
 
-    def copy(self) -> State:
-        """Return a deep copy of this instance."""
-        return State(
-            suffix=self.suffix,
-            block=self.block,
-            contract=self.contract.copy(),
-            transaction=self.transaction,
-            universe=self.universe.copy(),
-            sha3=self.sha3.copy(),
-            pc=self.pc,
-            stack=self.stack.copy(),
-            memory=self.memory.copy(),
-            returndata=self.returndata,
-            success=self.success,
-            path_constraints=self.path_constraints.copy(),
-            path=self.path,
-        )
-
     def constrain(self, solver: z3.Optimize, minimize: bool = False) -> None:
         """Apply accumulated constraints to the given solver instance."""
         if minimize:

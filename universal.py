@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """A universal transaction solver."""
 
+import copy
 from typing import Iterable, Iterator, Tuple, assert_never
 
 import z3
@@ -38,7 +39,7 @@ def universal_transaction(
     """
     start = symbolic_start(program, sha3, suffix)
 
-    init = start.copy()
+    init = copy.deepcopy(start)
     init.universe.transfer(
         init.transaction.caller,
         init.contract.address,
@@ -76,14 +77,14 @@ def symbolic_JUMPI(program: Program, state: State) -> Iterator[State]:
     b = state.stack.pop()
 
     if check(solver, b == 0):
-        next = state.copy()
+        next = copy.deepcopy(state)
         next.pc += 1
         next.path = (next.path << 1) | 0
         next.path_constraints.append(b == 0)
         yield next
 
     if check(solver, b != 0):
-        next = state.copy()
+        next = copy.deepcopy(state)
         next.pc = program.jumps[counter]
         next.path = (next.path << 1) | 1
         next.path_constraints.append(b != 0)
