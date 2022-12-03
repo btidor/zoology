@@ -5,18 +5,7 @@ import z3
 from disassembler import Instruction, Program
 from environment import Block, Contract, Universe
 from state import State
-from symbolic import (
-    BW,
-    BY,
-    Bytes,
-    concretize,
-    uint8,
-    uint256,
-    zconcat,
-    zextract,
-    zget,
-    zif,
-)
+from symbolic import BW, BY, Bytes, uint8, uint256, unwrap, zconcat, zextract, zget, zif
 
 
 def STOP(s: State) -> None:
@@ -74,7 +63,7 @@ def MULMOD(a: uint256, b: uint256, N: uint256) -> uint256:
 
 def EXP(a: uint256, _exponent: uint256) -> uint256:
     """0A - Exponential operation."""
-    exponent = concretize(_exponent, "EXP(a, exponent) requires concrete exponent")
+    exponent = unwrap(_exponent, "EXP(a, exponent) requires concrete exponent")
     if exponent == 0:
         return BW(1)
     for i in range(exponent - 1):
@@ -84,7 +73,7 @@ def EXP(a: uint256, _exponent: uint256) -> uint256:
 
 def SIGNEXTEND(_b: uint256, x: uint256) -> uint256:
     """0B - Extend length of two's complement signed integer."""
-    b = concretize(_b, "SIGNEXTEND(b, x) requires concrete b")
+    b = unwrap(_b, "SIGNEXTEND(b, x) requires concrete b")
     if b > 30:
         return x
     bits = (b + 1) * 8
@@ -143,7 +132,7 @@ def NOT(a: uint256) -> uint256:
 
 def BYTE(_i: uint256, x: uint256) -> uint256:
     """1A - Retrieve single bytes from word."""
-    i = concretize(_i, "BYTE(i, x) requires concrete i")
+    i = unwrap(_i, "BYTE(i, x) requires concrete i")
     if i > 31:
         return BW(0)
     start = 256 - (8 * i)
@@ -167,8 +156,8 @@ def SAR(shift: uint256, value: uint256) -> uint256:
 
 def SHA3(s: State, _offset: uint256, _size: uint256) -> uint256:
     """20 - Compute Keccak-256 hash."""
-    offset = concretize(_offset, "SHA3(offset, size) requires concrete offset")
-    size = concretize(_size, "SHA3(offset, size) requires concrete size")
+    offset = unwrap(_offset, "SHA3(offset, size) requires concrete offset")
+    size = unwrap(_size, "SHA3(offset, size) requires concrete size")
 
     data = zconcat(*[s.memory.get(i, BW(0)) for i in range(offset, offset + size)])
     return s.sha3[data]
@@ -218,11 +207,11 @@ def CALLDATACOPY(
     s: State, _destOffset: uint256, offset: uint256, _size: uint256
 ) -> None:
     """37 - Copy input data in current environment to memory."""
-    destOffset = concretize(
+    destOffset = unwrap(
         _destOffset,
         "CALLDATACOPY(destOffset, offset, size) requires concrete destOffset",
     )
-    size = concretize(
+    size = unwrap(
         _size, "CALLDATACOPY(destOffset, offset, size) requires concrete size"
     )
     for i in range(size):
@@ -272,14 +261,14 @@ def RETURNDATACOPY(
     s: State, _destOffset: uint256, _offset: uint256, _size: uint256
 ) -> None:
     """3E - Copy output data from the previous call to memory."""
-    destOffset = concretize(
+    destOffset = unwrap(
         _destOffset,
         "RETURNDATACOPY(destOffset, offset, size) requires concrete destOffset",
     )
-    offset = concretize(
+    offset = unwrap(
         _offset, "RETURNDATACOPY(destOffset, offset, size) requires concrete offset"
     )
-    size = concretize(
+    size = unwrap(
         _size, "RETURNDATACOPY(destOffset, offset, size) requires concrete size"
     )
     for i in range(size):
@@ -343,13 +332,13 @@ def POP(y: uint256) -> None:
 
 def MLOAD(s: State, _offset: uint256) -> uint256:
     """51 - Load word from memory."""
-    offset = concretize(_offset, "MLOAD(offset) requires concrete offset")
+    offset = unwrap(_offset, "MLOAD(offset) requires concrete offset")
     return zconcat(*[s.memory.get(offset + i, BY(0)) for i in range(32)])
 
 
 def MSTORE(s: State, _offset: uint256, value: uint256) -> None:
     """52 - Save word to memory."""
-    offset = concretize(_offset, "MSTORE(offset, value) requires concrete offset")
+    offset = unwrap(_offset, "MSTORE(offset, value) requires concrete offset")
     for i in range(31, -1, -1):
         s.memory[offset + i] = zextract(7, 0, value)
         value = value >> 8
@@ -357,7 +346,7 @@ def MSTORE(s: State, _offset: uint256, value: uint256) -> None:
 
 def MSTORE8(s: State, _offset: uint256, value: uint256) -> None:
     """53 - Save byte to memory."""
-    offset = concretize(_offset, "MSTORE8(offset, value) requires concrete offset")
+    offset = unwrap(_offset, "MSTORE8(offset, value) requires concrete offset")
     s.memory[offset] = zextract(7, 0, value)
 
 
@@ -373,7 +362,7 @@ def SSTORE(c: Contract, key: uint256, value: uint256) -> None:
 
 def JUMP(p: Program, s: State, _counter: uint256) -> None:
     """56 - Alter the program counter."""
-    counter = concretize(_counter, "JUMP(counter) requires concrete counter")
+    counter = unwrap(_counter, "JUMP(counter) requires concrete counter")
     # In theory, JUMP should revert if counter is not a valid jump target.
     # Instead, raise an error and fail the whole analysis. This lets us prove
     # that all jump targets are valid and within the body of the code, which is
@@ -517,11 +506,11 @@ def CALLCODE(
 
 def RETURN(s: State, _offset: uint256, _size: uint256) -> None:
     """F3 - Halts execution returning output data."""
-    offset = concretize(
+    offset = unwrap(
         _offset,
         "RETURN(offset, size) requires concrete offset",
     )
-    size = concretize(_size, "RETURN(offset, size) requires concrete size")
+    size = unwrap(_size, "RETURN(offset, size) requires concrete size")
     s.returndata = Bytes(
         "",
         [zget(s.memory, i, BW(0)) for i in range(offset, offset + size)],
@@ -569,11 +558,11 @@ def REVERT(s: State, _offset: uint256, _size: uint256) -> None:
 
     Halt execution reverting state changes but returning data and remaining gas.
     """
-    offset = concretize(
+    offset = unwrap(
         _offset,
         "REVERT(offset, size) requires concrete offset",
     )
-    size = concretize(_size, "REVERT(offset, size) requires concrete size")
+    size = unwrap(_size, "REVERT(offset, size) requires concrete size")
     s.returndata = Bytes(
         "", [zget(s.memory, i, BW(0)) for i in range(offset, offset + size)]
     )

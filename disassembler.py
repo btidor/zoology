@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Optional
 
 from opcodes import REFERENCE, UNIMPLEMENTED
-from symbolic import BW, concretize, uint256
+from symbolic import BW, uint256, unwrap
 
 
 @dataclass
@@ -45,7 +45,7 @@ class Instruction:
         if self.suffix is not None:
             msg += str(self.suffix)
         if self.operand is not None and self.suffix is not None:
-            operand = concretize(self.operand).to_bytes(self.suffix, "big")
+            operand = unwrap(self.operand).to_bytes(self.suffix, "big")
             msg += "\t0x" + operand.hex()
         return msg
 

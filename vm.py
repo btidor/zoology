@@ -11,7 +11,7 @@ from disassembler import Instruction, Program, disassemble
 from environment import Block, Contract, Universe
 from sha3 import SHA3
 from state import State
-from symbolic import BA, BW, Array, Bytes, concretize, concretize_hex, uint256
+from symbolic import BA, BW, Array, Bytes, uint256, unwrap, unwrap_bytes
 
 
 def step(state: State) -> Literal["CONTINUE", "JUMPI", "TERMINATE"]:
@@ -94,24 +94,22 @@ def printable_execution(state: State) -> Iterator[str]:
 
         # Print stack
         for x in state.stack:
-            yield "  " + concretize_hex(x)
+            yield "  " + unwrap_bytes(x).hex()
         yield ""
 
         if action == "TERMINATE":
             break
 
     yield ("RETURN" if state.success else "REVERT") + " " + str(
-        state.returndata.concretize()
+        state.returndata.require_concrete()
     )
 
 
 def concrete_JUMPI(state: State) -> None:
     """Handle a JUMPI action with concrete arguments. Mutates state."""
     program = state.contract.program
-    counter = concretize(
-        state.stack.pop(), "JUMPI(counter, b) requires concrete counter"
-    )
-    b = concretize(state.stack.pop(), "JUMPI(counter, b) requires concrete b")
+    counter = unwrap(state.stack.pop(), "JUMPI(counter, b) requires concrete counter")
+    b = unwrap(state.stack.pop(), "JUMPI(counter, b) requires concrete b")
     if counter not in program.jumps:
         raise ValueError(f"illegal JUMPI target: 0x{counter:x}")
     if b == 0:

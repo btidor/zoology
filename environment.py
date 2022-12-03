@@ -73,7 +73,7 @@ class Universe:
         self.transfer_constraints.append(
             z3.BVAddNoOverflow(self.contribution, cont, False)
         )
-        self.extraction += cont
+        self.contribution += cont
 
     def constrain(self, solver: z3.Optimize) -> None:
         """Apply accumulated constraints to the given solver instance."""

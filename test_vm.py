@@ -4,13 +4,13 @@ from typing import List, assert_never
 
 from disassembler import disassemble
 from state import State
-from symbolic import BW, Bytes, concretize
+from symbolic import BW, Bytes, unwrap
 from testlib import abiencode, compile_solidity, make_contract, make_state
 from vm import concrete_JUMPI, printable_execution, step
 
 
 def concretize_stack(state: State) -> List[int]:
-    return [concretize(x) for x in state.stack]
+    return [unwrap(x) for x in state.stack]
 
 
 def execute(state: State) -> None:
@@ -90,7 +90,7 @@ def test_execute_basic() -> None:
     action = step(state)
     assert action == "TERMINATE"
     assert state.success is False
-    assert state.returndata.concretize() == b""
+    assert state.returndata.require_concrete() == b""
     assert concretize_stack(state) == []
 
 
@@ -149,7 +149,7 @@ def test_execute_solidity() -> None:
     )
     execute(state)
     assert state.success is True
-    assert state.returndata.concretize() == b"\x00" * 32
+    assert state.returndata.require_concrete() == b"\x00" * 32
 
     state = make_state(
         contract=state.contract,  # carries forward storage
@@ -159,7 +159,7 @@ def test_execute_solidity() -> None:
     )
     execute(state)
     assert state.success is False
-    assert state.returndata.concretize()[68:91] == b"caller is not the owner"
+    assert state.returndata.require_concrete()[68:91] == b"caller is not the owner"
 
     state = make_state(
         contract=state.contract,
@@ -169,7 +169,7 @@ def test_execute_solidity() -> None:
     )
     execute(state)
     assert state.success is True
-    assert state.returndata.concretize() == b""
+    assert state.returndata.require_concrete() == b""
 
     state = make_state(
         contract=state.contract,
@@ -179,7 +179,7 @@ def test_execute_solidity() -> None:
     )
     execute(state)
     assert state.success is True
-    assert state.returndata.concretize()[-20:] == b"\xcc" * 20
+    assert state.returndata.require_concrete()[-20:] == b"\xcc" * 20
 
 
 def test_output_basic() -> None:

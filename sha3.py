@@ -13,10 +13,10 @@ from symbolic import (
     Array,
     Constraint,
     check,
-    concretize,
     describe,
     is_concrete,
     simplify,
+    unwrap,
     zeval,
 )
 
@@ -60,7 +60,7 @@ class SHA3:
         key = simplify(key)
         if is_concrete(key):
             digest = keccak.new(
-                data=concretize(key).to_bytes(size, "big"), digest_bits=256
+                data=unwrap(key).to_bytes(size, "big"), digest_bits=256
             ).digest()
             symbolic = BW(int.from_bytes(digest, "big"))
             self.digest_constraints.append(self.hashes[size][key] == symbolic)
@@ -101,11 +101,11 @@ class SHA3:
             solver.assert_and_track(constraint, f"SHA3.DIGEST{i}{self.suffix}")
             pass
 
-    def concretize(self, solver: z3.Optimize, model: z3.ModelRef) -> z3.ModelRef:
+    def narrow(self, solver: z3.Optimize, model: z3.ModelRef) -> z3.ModelRef:
         """Apply concrete SHA3 constraints to a given model instance."""
         hashes: Dict[bytes, bytes] = {}
         for n, key, val in self.items():
-            ckey = concretize(zeval(model, key, True))
+            ckey = unwrap(zeval(model, key, True))
             data = ckey.to_bytes(n, "big")
             hash = keccak.new(data=data, digest_bits=256)
             digest = int.from_bytes(hash.digest(), "big")

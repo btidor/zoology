@@ -10,7 +10,7 @@ from disassembler import Program, disassemble
 from environment import Block, Contract, Universe
 from sha3 import SHA3
 from state import State
-from symbolic import Array, Bytes, check, concretize
+from symbolic import Array, Bytes, check, unwrap
 from vm import step
 
 
@@ -58,9 +58,7 @@ def symbolic_JUMPI(program: Program, state: State) -> Iterator[State]:
     solver = z3.Optimize()
     state.constrain(solver)
 
-    counter = concretize(
-        state.stack.pop(), "JUMPI(counter, b) requires concrete counter"
-    )
+    counter = unwrap(state.stack.pop(), "JUMPI(counter, b) requires concrete counter")
     if counter not in program.jumps:
         raise ValueError(f"illegal JUMPI target: 0x{counter:x}")
     b = state.stack.pop()

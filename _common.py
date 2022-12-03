@@ -7,10 +7,10 @@ from symbolic import (
     BW,
     Array,
     check,
-    concretize,
-    concretize_hex,
     is_concrete,
     solver_stack,
+    unwrap,
+    unwrap_bytes,
     zeval,
 )
 
@@ -69,63 +69,63 @@ def _print_solution(
     m = solver.model()
 
     assert end.success is True
-    returnlen = concretize(end.returndata.length())
+    returnlen = unwrap(end.returndata.length())
     if returnlen > 0:
         rdata = "0x" + "".join(
-            concretize_hex(zeval(m, end.returndata[BW(i)], True))
+            unwrap_bytes(zeval(m, end.returndata[BW(i)], True)).hex()
             for i in range(returnlen)
         )
     else:
         rdata = "-"
     print(f"{kind}\t{hex(end.path).replace('0x', 'Px')}\t{rdata}")
 
-    m = end.sha3.concretize(solver, m)
+    m = end.sha3.narrow(solver, m)
     if predicate is not None:
         # TODO: this should be redundant now
-        m = predicate.state.sha3.concretize(solver, m)
+        m = predicate.state.sha3.narrow(solver, m)
 
-    if concretize(zeval(m, end.callvalue)) > 0:
-        print(f"Value\tETH 0x{concretize_hex(zeval(m, end.callvalue))}")
+    if unwrap(zeval(m, end.callvalue)) > 0:
+        print(f"Value\tETH 0x{unwrap_bytes(zeval(m, end.callvalue)).hex()}")
 
     print(f"Data\t({zeval(m, end.calldata.length())}) 0x", end="")
-    for i in range(concretize(zeval(m, end.calldata.length()))):
+    for i in range(unwrap(zeval(m, end.calldata.length()))):
         b = zeval(m, end.calldata[BW(i)])
         if z3.is_bv_value(b):
-            print(concretize_hex(b), end="")
+            print(unwrap_bytes(b), end="")
         else:
             print("??", end="")
         if i == 3:
             print(" ", end="")
     print()
     if z3.is_bv_value(zeval(m, end.address)):
-        print(f"Address\t0x{concretize_hex(zeval(m, end.address))}")
+        print(f"Address\t0x{unwrap_bytes(zeval(m, end.address)).hex()}")
     if z3.is_bv_value(zeval(m, end.caller)):
-        print(f"Caller\t0x{concretize_hex(zeval(m, end.caller))}")
+        print(f"Caller\t0x{unwrap_bytes(zeval(m, end.caller)).hex()}")
     if z3.is_bv_value(zeval(m, end.gasprice)):
-        print(f"Gas\tETH {concretize(zeval(m, end.gasprice)):011,}")
+        print(f"Gas\tETH {unwrap(zeval(m, end.gasprice)):011,}")
 
-    cs = concretize(zeval(m, start.universe.contribution, True))
-    ce = concretize(zeval(m, end.universe.contribution, True))
-    es = concretize(zeval(m, start.universe.extraction, True))
-    ee = concretize(zeval(m, end.universe.extraction, True))
+    cs = unwrap(zeval(m, start.universe.contribution, True))
+    ce = unwrap(zeval(m, end.universe.contribution, True))
+    es = unwrap(zeval(m, start.universe.extraction, True))
+    ee = unwrap(zeval(m, end.universe.extraction, True))
     if cs != ce:
-        print(f"Contrib\tETH 0x{concretize_hex(BW(cs))}")
-        print(f"\t-> ETH 0x{concretize_hex(BW(ce))}")
+        print(f"Contrib\tETH 0x{unwrap_bytes(BW(cs)).hex()}")
+        print(f"\t-> ETH 0x{unwrap_bytes(BW(ce)).hex()}")
     if es != ee:
-        print(f"Extract\tETH 0x{concretize_hex(BW(es))}")
-        print(f"\t-> ETH 0x{concretize_hex(BW(ee))}")
+        print(f"Extract\tETH 0x{unwrap_bytes(BW(es)).hex()}")
+        print(f"\t-> ETH 0x{unwrap_bytes(BW(ee)).hex()}")
 
     print_array("Balance", m, start.universe.balances, end.universe.balances)
     print_array("Storage", m, start.contract.storage, end.contract.storage)
     print()
 
     if predicate is not None and predicate.storage_key is not None:
-        print(f"Key\t0x{concretize_hex(zeval(m, predicate.storage_key, True))}")
+        print(f"Key\t0x{unwrap_bytes(zeval(m, predicate.storage_key, True)).hex()}")
         print(
-            f"Value\t0x{concretize_hex(zeval(m, start.contract.storage.peek(predicate.storage_key), True))}"
+            f"Value\t0x{unwrap_bytes(zeval(m, start.contract.storage.peek(predicate.storage_key), True)).hex()}"
         )
         print(
-            f"\t-> 0x{concretize_hex(zeval(m, end.contract.storage.peek(predicate.storage_key), True))}"
+            f"\t-> 0x{unwrap_bytes(zeval(m, end.contract.storage.peek(predicate.storage_key), True)).hex()}"
         )
         print()
 
@@ -137,9 +137,9 @@ def print_array(
     end: Array,
 ) -> None:
     indexify: Callable[[z3.BitVecRef], str] = (
-        lambda key: f"0x{concretize(key):x}" if is_concrete(key) else str(key)
+        lambda key: f"0x{unwrap(key):x}" if is_concrete(key) else str(key)
     )
-    valueify: Callable[[z3.BitVecRef], str] = lambda val: f"0x{concretize(val):x}"
+    valueify: Callable[[z3.BitVecRef], str] = lambda val: f"0x{unwrap(val):x}"
 
     accesses = {}
     for sym in end.accessed:

@@ -9,17 +9,7 @@ from _common import Predicate, constrain_to_goal
 from disassembler import Program, disassemble
 from sha3 import SHA3
 from state import State
-from symbolic import (
-    BW,
-    check,
-    concretize,
-    concretize_hex,
-    is_concrete,
-    simplify,
-    solver_stack,
-    zand,
-    zeval,
-)
+from symbolic import check, describe, is_concrete, simplify, solver_stack, unwrap, zand
 from universal import universal_transaction
 
 
@@ -125,7 +115,7 @@ def ownership_safety_predicates(state: State) -> Iterator[Predicate]:
                     state.origin != z3.Extract(159, 0, state.contract.storage.peek(k)),
                     state.caller != z3.Extract(159, 0, state.contract.storage.peek(k)),
                 ),
-                f"$OWNER[{concretize_hex(k)[2:]}]",
+                f"$OWNER[{describe(k)}]",
                 state,
             )
 
@@ -134,7 +124,7 @@ def balance_safety_predicates(state: State) -> Iterator[Predicate]:
     used: Set[str] = set()
     for key in state.contract.storage.accessed:
         if z3.is_bv_value(key):
-            index = hex(concretize(key))[2:]
+            index = hex(unwrap(key))[2:]
         else:
             hash = keccak.new(data=str(key).encode(), digest_bits=256).hexdigest()
             if hash in used:
@@ -163,7 +153,7 @@ def describe_state(solver: z3.Optimize, state: State) -> str:
     assert state.success is True
 
     model = solver.model()
-    return "0x" + state.calldata.zeval(model)
+    return "0x" + state.calldata.evaluate(model)
 
 
 if __name__ == "__main__":

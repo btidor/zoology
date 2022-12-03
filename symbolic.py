@@ -21,6 +21,9 @@ from typing import (
 import z3
 from Crypto.Hash import keccak
 
+K = TypeVar("K")
+
+
 Constraint: TypeAlias = Union[z3.ExprRef, Literal[True], Literal[False]]
 
 uint8: TypeAlias = z3.BitVecRef
@@ -59,7 +62,7 @@ def simplify(value: z3.BitVecRef) -> z3.BitVecRef:
     return cast(z3.BitVecRef, z3.simplify(value))
 
 
-def concretize(value: z3.BitVecRef, msg: Optional[str] = None) -> int:
+def unwrap(value: z3.BitVecRef, msg: Optional[str] = None) -> int:
     """Unwrap a concrete bitvector expression into an int."""
     value = simplify(value)
     if not is_concrete(value):
@@ -67,9 +70,9 @@ def concretize(value: z3.BitVecRef, msg: Optional[str] = None) -> int:
     return cast(int, value.as_long())
 
 
-def concretize_hex(value: z3.BitVecRef, msg: Optional[str] = None) -> str:
-    """Unwrap a concrete bitvector expression into a hex string."""
-    return concretize(value, msg).to_bytes(value.size() // 8, "big").hex()
+def unwrap_bytes(value: z3.BitVecRef, msg: Optional[str] = None) -> bytes:
+    """Unwrap a concrete bitvector expression into bytes."""
+    return unwrap(value, msg).to_bytes(value.size() // 8, "big")
 
 
 def zeval(
@@ -101,9 +104,6 @@ def zand(*constraints: Constraint) -> z3.BoolRef:
     return cast(z3.BoolRef, z3.And(*constraints))
 
 
-K = TypeVar("K")
-
-
 def zget(dict: Dict[K, z3.BitVecRef], key: K, default: z3.BitVecRef) -> z3.BitVecRef:
     """Look up a key in a dictionary with a default value."""
     return dict.get(key, default)
@@ -120,7 +120,7 @@ def describe(value: z3.BitVecRef) -> str:
     """
     value = simplify(value)
     if is_concrete(value):
-        v: int = concretize(value)
+        v: int = unwrap(value)
         p = []
         while v > 0:
             b = v & ((1 << 256) - 1)
@@ -159,17 +159,17 @@ class Bytes:
         """
         return cast(uint8, z3.If(i >= self.len, BY(0), self.arr[i]))
 
-    def concretize(self) -> bytes:
-        """Concretize this instance as a bytestring."""
-        return bytes(concretize(self[BW(i)]) for i in range(concretize(self.length())))
+    def require_concrete(self) -> bytes:
+        """Unwrap this concrete-valued instance to bytes."""
+        return bytes(unwrap(self[BW(i)]) for i in range(unwrap(self.length())))
 
-    def zeval(self, model: z3.ModelRef, model_completion: bool = False) -> str:
+    def evaluate(self, model: z3.ModelRef, model_completion: bool = False) -> str:
         """Use a model to evaluate this instance as a hexadecimal string."""
-        length = concretize(zeval(model, self.length()))
+        length = unwrap(zeval(model, self.length()))
         result = ""
         for i in range(length):
             b = zeval(model, self[BW(i)], model_completion)
-            result += concretize_hex(b) if is_concrete(b) else "??"
+            result += unwrap_bytes(b).hex() if is_concrete(b) else "??"
             if i == 3:
                 result += " "
         return result

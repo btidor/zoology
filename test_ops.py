@@ -6,7 +6,7 @@ import z3
 from disassembler import Instruction, Program
 from ops import *
 from state import State
-from symbolic import BA, BW, BY, Bytes, check, concretize_hex
+from symbolic import BA, BW, BY, Bytes, check, unwrap_bytes
 from testlib import make_block, make_contract, make_state
 
 
@@ -14,7 +14,7 @@ def _dump_memory(s: State) -> str:
     v = ""
     lim = max(s.memory.keys())
     for i in range(lim + 1):
-        v += concretize_hex(s.memory[i])
+        v += unwrap_bytes(s.memory[i]).hex()
     return "0x" + v.upper()
 
 
@@ -22,7 +22,7 @@ def test_STOP() -> None:
     s = make_state(returndata=[BW(0x12), BW(0x34)])
     STOP(s)
     assert s.success is True
-    assert s.returndata.concretize() == b""
+    assert s.returndata.require_concrete() == b""
 
 
 def test_ADD() -> None:
@@ -520,7 +520,7 @@ def test_CALL() -> None:
     s.universe.balances[s.address] = BW(125)
     res = CALL(s.universe, s, BW(0), BW(0x1234), BW(123), BW(0), BW(0), BW(0), BW(0))
     assert z3.simplify(res) == 1
-    assert s.returndata.concretize() == b""
+    assert s.returndata.require_concrete() == b""
     assert z3.simplify(s.universe.balances[BA(0x1234)]) == 123
     assert z3.simplify(s.universe.balances[s.address]) == 2
 
@@ -532,7 +532,7 @@ def test_RETURN() -> None:
     )
     RETURN(s, BW(0), BW(2))
     assert s.success is True
-    assert s.returndata.concretize() == b"\xff\x01"
+    assert s.returndata.require_concrete() == b"\xff\x01"
 
 
 def test_REVERT() -> None:
@@ -542,14 +542,14 @@ def test_REVERT() -> None:
     )
     REVERT(s, BW(0), BW(2))
     assert s.success is False
-    assert s.returndata.concretize() == b"\xff\x01"
+    assert s.returndata.require_concrete() == b"\xff\x01"
 
 
 def test_INVALID() -> None:
     s = make_state(returndata=[BW(0x12), BW(0x34)])
     INVALID(s)
     assert s.success is False
-    assert s.returndata.concretize() == b""
+    assert s.returndata.require_concrete() == b""
 
 
 def test_SELFDESTRUCT() -> None:
