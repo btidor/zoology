@@ -91,7 +91,7 @@ def _print_solution(
     for i in range(unwrap(zeval(m, end.calldata.length()))):
         b = zeval(m, end.calldata[BW(i)])
         if z3.is_bv_value(b):
-            print(unwrap_bytes(b), end="")
+            print(unwrap_bytes(b).hex(), end="")
         else:
             print("??", end="")
         if i == 3:

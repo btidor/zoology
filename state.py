@@ -51,8 +51,8 @@ class State:
         return State(
             suffix=self.suffix,
             block=self.block,
-            contract=self.contract,
-            universe=self.universe,
+            contract=self.contract.copy(),
+            universe=self.universe.copy(),
             sha3=self.sha3.copy(),
             pc=self.pc,
             stack=self.stack.copy(),
@@ -81,6 +81,9 @@ class State:
 
         for i, constraint in enumerate(self.path_constraints):
             solver.assert_and_track(constraint, f"PC{i}{self.suffix}")
+
+        self.sha3.constrain(solver)
+        self.universe.constrain(solver)
 
     def is_changed(self, solver: z3.Optimize, since: State) -> bool:
         """Check if any permanent state changes have been made."""

@@ -5,7 +5,7 @@ import z3
 from disassembler import Instruction, Program
 from environment import Block, Contract, Universe
 from state import State
-from symbolic import BW, BY, Bytes, uint8, uint256, unwrap, zconcat, zextract, zget, zif
+from symbolic import BW, BY, Bytes, uint256, unwrap, zconcat, zextract, zget, zif
 
 
 def STOP(s: State) -> None:
