@@ -155,8 +155,7 @@ def constrain_to_goal(solver: z3.Optimize, start: State, end: State) -> None:
     contract.
     """
     solver.assert_and_track(
-        # TODO: should this be ULE?
-        z3.ULT(start.universe.extraction, start.universe.contribution),
+        z3.ULE(start.universe.extraction, start.universe.contribution),
         "GOAL.PRE",
     )
     solver.assert_and_track(
