@@ -33,6 +33,7 @@ class Contract:
 
     def copy(self) -> Contract:
         """Return a deep copy of this instance."""
+        # TODO: investigate __deepcopy__()
         return Contract(
             program=self.program,
             storage=self.storage.copy(),

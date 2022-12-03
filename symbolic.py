@@ -7,6 +7,7 @@ import copy
 from typing import (
     Any,
     Dict,
+    Iterable,
     Iterator,
     List,
     Literal,
@@ -114,19 +115,21 @@ def describe(value: z3.BitVecRef) -> str:
     Produce a human-readable description of the given bitvector.
 
     For concrete bitvectors, returns a result in hexadecimal. Long values are
-    broken into 256-bit chunks using dot syntax, e.g. "0x1234.1".
+    broken into 256-bit chunks using dot syntax, e.g. "0x[1234.1]".
 
     For symbolic bitvectors, returns a hash based on the input variables.
     """
     value = simplify(value)
     if is_concrete(value):
         v: int = unwrap(value)
+        if v < (1 << 256):
+            return hex(v)
         p = []
         while v > 0:
             b = v & ((1 << 256) - 1)
             p.append(hex(b)[2:])
             v >>= 256
-        return "0x" + ".".join(reversed(p))
+        return f"0x[{'.'.join(reversed(p))}]"
     else:
         digest = keccak.new(data=str(value).encode(), digest_bits=256).digest()
         return "#" + digest[:3].hex()
@@ -165,13 +168,11 @@ class Bytes:
 
     def evaluate(self, model: z3.ModelRef, model_completion: bool = False) -> str:
         """Use a model to evaluate this instance as a hexadecimal string."""
-        length = unwrap(zeval(model, self.length()))
+        length = unwrap(zeval(model, self.length(), True))
         result = ""
         for i in range(length):
             b = zeval(model, self[BW(i)], model_completion)
             result += unwrap_bytes(b).hex() if is_concrete(b) else "??"
-            if i == 3:
-                result += " "
         return result
 
 
@@ -216,6 +217,46 @@ class Array:
         other.accessed = other.accessed.copy()
         other.written = other.written.copy()
         return other
+
+    def printable_diff(
+        self, name: str, model: z3.ModelRef, original: Array
+    ) -> Iterable[str]:
+        """
+        Evaluate a diff of this array against another.
+
+        Yields a human-readable description of the differences.
+        """
+        diffs = [
+            ("R", [(key, original.peek(key), None) for key in self.accessed]),
+            ("W", [(key, self.peek(key), original.peek(key)) for key in self.written]),
+        ]
+        line = name
+
+        for prefix, rows in diffs:
+            concrete = {}
+            for key, value, prior in rows:
+                k = describe(zeval(model, key, True))
+                v = describe(zeval(model, value, True))
+                p = describe(zeval(model, prior, True)) if prior is not None else None
+                concrete[k] = (v, p)
+
+            for key in sorted(concrete.keys()):
+                line += f"\t{prefix}: {key} "
+                if len(key) > 34:
+                    yield line
+                    line = "\t"
+                value, prior = concrete[key]
+                line += f"-> {value}"
+                if prior is not None:
+                    if len(value) > 34:
+                        yield line
+                        line = "\t  "
+                    line += " (no change)" if value == prior else f" (from {prior})"
+                yield line
+                line = ""
+
+        if line == "":
+            yield ""
 
 
 @contextlib.contextmanager

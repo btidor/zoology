@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, Iterator, List, Tuple, cast
+from typing import Dict, Iterable, Iterator, List, Tuple, cast
 
 import z3
 from Crypto.Hash import keccak
@@ -117,20 +117,25 @@ class SHA3:
             )
             assert check(solver)
             model = solver.model()
-
-        if len(hashes) > 0:
-            print(f"SHA3", end="")
-            keys = sorted(hashes.keys())
-            for k in keys:
-                if len(k) == 64:
-                    a = hex(int.from_bytes(k[:32], "big"))
-                    b = hex(int.from_bytes(k[32:], "big"))
-                    sk = f"0x[{a[2:]}.{b[2:]}]"
-                else:
-                    sk = hex(int.from_bytes(k, "big"))
-                print(f"\t{sk} ", end="")
-                if len(sk) > 34:
-                    print("\n\t", end="")
-                print(f"-> 0x{hashes[k].hex()}")
-
         return model
+
+    def printable(self, model: z3.ModelRef) -> Iterable[str]:
+        """Yield a human-readable evaluation using the given model."""
+        line = "SHA3"
+        seen = set()
+        for _, key, val in self.items():
+            k = describe(zeval(model, key, True))
+            if k in seen:
+                continue
+            line += f"\t{k} "
+            if len(k) > 34:
+                yield line
+                line = "\t"
+            v = describe(zeval(model, val, True))
+            line += f"-> {v}"
+            yield line
+            line = ""
+            seen.add(k)
+
+        if line == "":
+            yield ""

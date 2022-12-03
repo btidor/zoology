@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
+"""Performs multi-transaction analysis to find safety violations."""
 
-from typing import Iterator, List, Set
+from typing import Callable, Iterator, List, Optional, Set
 
 import z3
 from Crypto.Hash import keccak
 
-from _common import Predicate, constrain_to_goal
 from disassembler import Program, disassemble
 from sha3 import SHA3
 from state import State
 from symbolic import check, describe, is_concrete, simplify, solver_stack, unwrap, zand
-from universal import universal_transaction
+from universal import constrain_to_goal, universal_transaction
 
 
 def analyze(program: Program) -> None:
@@ -104,6 +104,26 @@ def analyze(program: Program) -> None:
                     # STEP transition found: constraint is eliminated
                     print(f" - {candidate}")
                     print(f"   {describe_state(solver, end)}")
+
+
+class Predicate:
+    def __init__(
+        self,
+        expression: Callable[[State], z3.BoolRef],
+        description: str,
+        state: State,
+        storage_key: Optional[z3.BitVecRef] = None,
+    ) -> None:
+        self.expression = expression
+        self.description = description
+        self.state = state
+        self.storage_key = storage_key
+
+    def eval(self, state: State) -> z3.BoolRef:
+        return self.expression(state)
+
+    def __repr__(self) -> str:
+        return self.description
 
 
 def ownership_safety_predicates(state: State) -> Iterator[Predicate]:
