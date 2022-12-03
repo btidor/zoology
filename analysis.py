@@ -5,29 +5,31 @@ from typing import Iterator, List, Set, cast
 import z3
 from Crypto.Hash import keccak
 
-from _common import Predicate
-from _state import State
-from _symbolic import BW, do_check, require_concrete, solver_stack
+from _common import Predicate, constrain_to_goal
 from disassembler import Program, disassemble
+from sha3 import SHA3
+from state import State
+from symbolic import BW, check, concretize, solver_stack
 from universal import universal_transaction
 
 
 def analyze(program: Program) -> None:
     print("Ownership: Universal Analysis")
+    sha3 = SHA3()
     ownership: List[Predicate] = []
-    for start, end in universal_transaction(program, ""):
+    for start, end in universal_transaction(program, sha3, ""):
         solver = z3.Optimize()
         end.constrain(solver, minimize=True)
 
         description = describe_state(solver, end)
 
         constrain_to_goal(solver, start, end)
-        if not do_check(solver):
+        if not check(solver):
             continue
 
         print(f" - {description}")
         for candidate in ownership_safety_predicates(end):
-            if not do_check(solver, candidate.eval(start)):
+            if not check(solver, candidate.eval(start)):
                 # (1) In order to be a valid safety predicate, it must preclude
                 # this transaction when applied to the start state
                 print(f"   {candidate}")
@@ -35,7 +37,7 @@ def analyze(program: Program) -> None:
 
     print()
     print("Ownership: Elimination")
-    for start, end in universal_transaction(program, "^"):
+    for start, end in universal_transaction(program, sha3, "^"):
         solver = z3.Optimize()
         end.constrain(solver, minimize=True)
 
@@ -49,7 +51,7 @@ def analyze(program: Program) -> None:
                 candidate.state.constrain(solver)
                 solver.assert_and_track(candidate.eval(start), "SAFE.PRE")
                 solver.assert_and_track(z3.Not(candidate.eval(end)), "UNSAFE.POST")
-                if do_check(solver):
+                if check(solver):
                     # STEP transition found: constraint is eliminated
                     print(f" - {candidate}")
                     print(f"   {describe_state(solver, end)}")
@@ -58,7 +60,7 @@ def analyze(program: Program) -> None:
     print("Balance: Universal Analysis")
     additional: List[str] = []
     balance: List[Predicate] = []
-    for start, end in universal_transaction(program, "^"):
+    for start, end in universal_transaction(program, sha3, "^"):
         solver = z3.Optimize()
         end.constrain(solver, minimize=True)
 
@@ -67,13 +69,13 @@ def analyze(program: Program) -> None:
         constrain_to_goal(solver, start, end)
         for predicate in ownership:
             solver.assert_and_track(predicate.eval(start), f"SAFE{predicate}")
-        if not do_check(solver):
+        if not check(solver):
             continue
 
         print(f" - {description}")
         additional.append(description)
         for candidate in balance_safety_predicates(end):
-            if not do_check(solver, candidate.eval(start)):
+            if not check(solver, candidate.eval(start)):
                 # (1) In order to be a valid safety predicate, it must preclude
                 # this transaction when applied to the start state
                 print(f"   {candidate}")
@@ -81,7 +83,7 @@ def analyze(program: Program) -> None:
 
     print()
     print("Balance: Elimination")
-    for start, end in universal_transaction(program, "^"):
+    for start, end in universal_transaction(program, sha3, "^"):
         solver = z3.Optimize()
         end.constrain(solver, minimize=True)
 
@@ -98,23 +100,25 @@ def analyze(program: Program) -> None:
                 candidate.state.constrain(solver)
                 solver.assert_and_track(candidate.eval(start), "SAFE.PRE")
                 solver.assert_and_track(z3.Not(candidate.eval(end)), "UNSAFE.POST")
-                if do_check(solver):
+                if check(solver):
                     # STEP transition found: constraint is eliminated
                     print(f" - {candidate}")
                     print(f"   {describe_state(solver, end)}")
 
 
 def ownership_safety_predicates(state: State) -> Iterator[Predicate]:
-    for key in state.storage.accessed:
+    for key in state.contract.storage.accessed:
         k = cast(z3.BitVecRef, z3.simplify(key))
         if z3.is_bv_value(k):
-            ck = require_concrete(k)
+            ck = concretize(k)
             yield Predicate(
                 lambda state: cast(
                     z3.BoolRef,
                     z3.And(
-                        state.origin != z3.Extract(159, 0, state.storage.array[ck]),
-                        state.caller != z3.Extract(159, 0, state.storage.array[ck]),
+                        state.origin
+                        != z3.Extract(159, 0, state.contract.storage.array[ck]),
+                        state.caller
+                        != z3.Extract(159, 0, state.contract.storage.array[ck]),
                     ),
                 ),
                 f"$OWNER[{hex(ck)[2:]}]",
@@ -124,9 +128,9 @@ def ownership_safety_predicates(state: State) -> Iterator[Predicate]:
 
 def balance_safety_predicates(state: State) -> Iterator[Predicate]:
     used: Set[str] = set()
-    for key in state.storage.accessed:
+    for key in state.contract.storage.accessed:
         if z3.is_bv_value(key):
-            index = hex(require_concrete(key))[2:]
+            index = hex(concretize(key))[2:]
         else:
             hash = keccak.new(data=str(key).encode(), digest_bits=256).hexdigest()
             if hash in used:
@@ -137,9 +141,10 @@ def balance_safety_predicates(state: State) -> Iterator[Predicate]:
             lambda state: cast(
                 z3.BoolRef,
                 z3.And(
-                    z3.UGE(state.contribution, state.extraction),
+                    z3.UGE(state.universe.contribution, state.universe.extraction),
                     z3.UGE(
-                        state.contribution - state.extraction, state.storage.array[key]
+                        state.universe.contribution - state.universe.extraction,
+                        state.contract.storage.array[key],
                     ),
                 ),
             ),
@@ -153,14 +158,14 @@ def describe_state(solver: z3.Optimize, state: State) -> str:
     # Re-adding these objectives increases performance by 2x?!
     solver.minimize(state.callvalue)
     solver.minimize(state.calldata.length())
-    assert do_check(solver)
+    assert check(solver)
     m = solver.model()
 
     calldata = "0x"
-    cdl = require_concrete(m.eval(state.calldata.length()))
+    cdl = concretize(m.eval(state.calldata.length()))
     for i in range(cdl):
         b = m.eval(state.calldata.get(BW(i)))
-        calldata += f"{require_concrete(b):02x}" if z3.is_bv_value(b) else "??"
+        calldata += f"{concretize(b):02x}" if z3.is_bv_value(b) else "??"
         if i == 3:
             calldata += " "
 

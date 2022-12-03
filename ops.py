@@ -1,11 +1,13 @@
+"""A library of EVM instruction implementations."""
+
 from typing import cast
 
 import z3
 
-from _state import State
-from _symbolic import BW, BY, require_concrete, uint8, uint160, uint256
-from _universe import Block, Contract, Universe
 from disassembler import Instruction, Program
+from environment import Block, Contract, Universe
+from state import State
+from symbolic import BW, BY, concretize, uint8, uint160, uint256
 
 
 def STOP(s: State) -> None:
@@ -63,9 +65,7 @@ def MULMOD(a: uint256, b: uint256, N: uint256) -> uint256:
 
 def EXP(a: uint256, _exponent: uint256) -> uint256:
     """0A - Exponential operation."""
-    exponent = require_concrete(
-        _exponent, "EXP(a, exponent) requires concrete exponent"
-    )
+    exponent = concretize(_exponent, "EXP(a, exponent) requires concrete exponent")
     if exponent == 0:
         return BW(1)
     for i in range(exponent - 1):
@@ -75,7 +75,7 @@ def EXP(a: uint256, _exponent: uint256) -> uint256:
 
 def SIGNEXTEND(_b: uint256, x: uint256) -> uint256:
     """0B - Extend length of two's complement signed integer."""
-    b = require_concrete(_b, "SIGNEXTEND(b, x) requires concrete b")
+    b = concretize(_b, "SIGNEXTEND(b, x) requires concrete b")
     if b > 30:
         return x
     bits = (b + 1) * 8
@@ -134,7 +134,7 @@ def NOT(a: uint256) -> uint256:
 
 def BYTE(_i: uint256, x: uint256) -> uint256:
     """1A - Retrieve single bytes from word."""
-    i = require_concrete(_i, "BYTE(i, x) requires concrete i")
+    i = concretize(_i, "BYTE(i, x) requires concrete i")
     if i > 31:
         return BW(0)
     start = 256 - (8 * i)
@@ -158,8 +158,8 @@ def SAR(shift: uint256, value: uint256) -> uint256:
 
 def SHA3(s: State, _offset: uint256, _size: uint256) -> uint256:
     """20 - Compute Keccak-256 hash."""
-    offset = require_concrete(_offset, "SHA3(offset, size) requires concrete offset")
-    size = require_concrete(_size, "SHA3(offset, size) requires concrete size")
+    offset = concretize(_offset, "SHA3(offset, size) requires concrete offset")
+    size = concretize(_size, "SHA3(offset, size) requires concrete size")
 
     data = cast(
         z3.BitVecRef,
@@ -212,11 +212,11 @@ def CALLDATACOPY(
     s: State, _destOffset: uint256, offset: uint256, _size: uint256
 ) -> None:
     """37 - Copy input data in current environment to memory."""
-    destOffset = require_concrete(
+    destOffset = concretize(
         _destOffset,
         "CALLDATACOPY(destOffset, offset, size) requires concrete destOffset",
     )
-    size = require_concrete(
+    size = concretize(
         _size, "CALLDATACOPY(destOffset, offset, size) requires concrete size"
     )
     for i in range(size):
@@ -266,14 +266,14 @@ def RETURNDATACOPY(
     s: State, _destOffset: uint256, _offset: uint256, _size: uint256
 ) -> None:
     """3E - Copy output data from the previous call to memory."""
-    destOffset = require_concrete(
+    destOffset = concretize(
         _destOffset,
         "RETURNDATACOPY(destOffset, offset, size) requires concrete destOffset",
     )
-    offset = require_concrete(
+    offset = concretize(
         _offset, "RETURNDATACOPY(destOffset, offset, size) requires concrete offset"
     )
-    size = require_concrete(
+    size = concretize(
         _size, "RETURNDATACOPY(destOffset, offset, size) requires concrete size"
     )
     for i in range(size):
@@ -339,7 +339,7 @@ def POP(y: uint256) -> None:
 
 def MLOAD(s: State, _offset: uint256) -> uint256:
     """51 - Load word from memory."""
-    offset = require_concrete(_offset, "MLOAD(offset) requires concrete offset")
+    offset = concretize(_offset, "MLOAD(offset) requires concrete offset")
     return cast(
         uint256, z3.Concat(*[s.memory.get(offset + i, BY(0)) for i in range(32)])
     )
@@ -347,7 +347,7 @@ def MLOAD(s: State, _offset: uint256) -> uint256:
 
 def MSTORE(s: State, _offset: uint256, value: uint256) -> None:
     """52 - Save word to memory."""
-    offset = require_concrete(_offset, "MSTORE(offset, value) requires concrete offset")
+    offset = concretize(_offset, "MSTORE(offset, value) requires concrete offset")
     for i in range(31, -1, -1):
         s.memory[offset + i] = cast(uint8, z3.Extract(7, 0, value))
         value = value >> 8
@@ -355,9 +355,7 @@ def MSTORE(s: State, _offset: uint256, value: uint256) -> None:
 
 def MSTORE8(s: State, _offset: uint256, value: uint8) -> None:
     """53 - Save byte to memory."""
-    offset = require_concrete(
-        _offset, "MSTORE8(offset, value) requires concrete offset"
-    )
+    offset = concretize(_offset, "MSTORE8(offset, value) requires concrete offset")
     s.memory[offset] = value & 0xFF
 
 
@@ -373,7 +371,7 @@ def SSTORE(c: Contract, key: uint256, value: uint256) -> None:
 
 def JUMP(p: Program, s: State, _counter: uint256) -> None:
     """56 - Alter the program counter."""
-    counter = require_concrete(_counter, "JUMP(counter) requires concrete counter")
+    counter = concretize(_counter, "JUMP(counter) requires concrete counter")
     # In theory, JUMP should revert if counter is not a valid jump target.
     # Instead, raise an error and fail the whole analysis. This lets us prove
     # that all jump targets are valid and within the body of the code, which is
@@ -517,11 +515,11 @@ def CALLCODE(
 
 def RETURN(s: State, _offset: uint256, _size: uint256) -> None:
     """F3 - Halts execution returning output data."""
-    offset = require_concrete(
+    offset = concretize(
         _offset,
         "RETURN(offset, size) requires concrete offset",
     )
-    size = require_concrete(_size, "RETURN(offset, size) requires concrete size")
+    size = concretize(_size, "RETURN(offset, size) requires concrete size")
     s.returndata = [s.memory.get(i, BW(0)) for i in range(offset, offset + size)]
     s.success = True
 
@@ -566,11 +564,11 @@ def REVERT(s: State, _offset: uint256, _size: uint256) -> None:
 
     Halt execution reverting state changes but returning data and remaining gas.
     """
-    offset = require_concrete(
+    offset = concretize(
         _offset,
         "REVERT(offset, size) requires concrete offset",
     )
-    size = require_concrete(_size, "REVERT(offset, size) requires concrete size")
+    size = concretize(_size, "REVERT(offset, size) requires concrete size")
     s.returndata = [s.memory.get(i, BW(0)) for i in range(offset, offset + size)]
     s.success = False
 

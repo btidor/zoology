@@ -3,10 +3,10 @@
 import pytest
 import z3
 
-from _ops import *
-from _state import State
-from _symbolic import BA, BW, BY, ByteArray, hexify
 from disassembler import Instruction, Program
+from ops import *
+from state import State
+from symbolic import BA, BW, BY, Bytes, check, concretize_hex
 from testlib import make_block, make_contract, make_state
 
 
@@ -14,7 +14,7 @@ def _dump_memory(s: State) -> str:
     v = ""
     lim = max(s.memory.keys())
     for i in range(lim + 1):
-        v += hexify(s.memory[i], 1)
+        v += concretize_hex(s.memory[i])
     return "0x" + v.upper()
 
 
@@ -259,7 +259,7 @@ def test_SHA3() -> None:
 
     solver = z3.Optimize()
     s.sha3.constrain(solver)
-    assert solver.check() == z3.sat
+    assert check(solver)
     assert (
         solver.model().eval(digest)
         == 0x29045A592007D0C246EF02C2223570DA9522D0CF0F73282C79A1BC8F0BB2C238
@@ -299,7 +299,7 @@ def test_CALLVALUE() -> None:
 
 def test_CALLDATALOAD() -> None:
     s = make_state(
-        calldata=ByteArray(
+        calldata=Bytes(
             "CALLDATA",
             b"\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff",
         )
@@ -316,13 +316,13 @@ def test_CALLDATALOAD() -> None:
 
 
 def test_CALLDATASIZE() -> None:
-    s = make_state(calldata=ByteArray("CALLDATA", b"\xff"))
+    s = make_state(calldata=Bytes("CALLDATA", b"\xff"))
     assert CALLDATASIZE(s) == 1
 
 
 def test_CALLDATACOPY() -> None:
     s = make_state(
-        calldata=ByteArray(
+        calldata=Bytes(
             "CALLDATA",
             b"\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff",
         )

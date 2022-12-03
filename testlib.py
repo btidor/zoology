@@ -5,11 +5,11 @@ from typing import Any, Dict
 import z3
 from Crypto.Hash import keccak
 
-from _hash import SHA3
-from _state import State
-from _symbolic import BA, BW, ByteArray, IntrospectableArray
-from _universe import Block, Contract, Universe
 from disassembler import Program
+from environment import Block, Contract, Universe
+from sha3 import SHA3
+from state import State
+from symbolic import BA, BW, Array, Bytes
 
 
 def make_block(**kwargs: Any) -> Block:
@@ -31,7 +31,7 @@ def make_block(**kwargs: Any) -> Block:
 def make_contract(**kwargs: Any) -> Contract:
     attrs: Dict[str, Any] = {
         "program": Program(),
-        "storage": IntrospectableArray("STORAGE", z3.BitVecSort(256), BW(0)),
+        "storage": Array("STORAGE", z3.BitVecSort(256), BW(0)),
     }
     attrs.update(**kwargs)
     return Contract(**attrs)
@@ -40,7 +40,7 @@ def make_contract(**kwargs: Any) -> Contract:
 def make_universe(**kwargs: Any) -> Universe:
     attrs: Dict[str, Any] = {
         "suffix": "",
-        "balances": IntrospectableArray("BALANCE", z3.BitVecSort(160), BW(0)),
+        "balances": Array("BALANCE", z3.BitVecSort(160), BW(0)),
         "transfer_constraints": [],
         "agents": [],
         "contribution": BW(0),
@@ -64,7 +64,7 @@ def make_state(**kwargs: Any) -> State:
         "origin": BA(0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB),
         "caller": BA(0xCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC),
         "callvalue": BW(0),
-        "calldata": ByteArray("CALLDATA", b""),
+        "calldata": Bytes("CALLDATA", b""),
         "gasprice": BW(0x12),
         "returndata": [],
         "success": None,

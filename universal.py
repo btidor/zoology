@@ -1,25 +1,16 @@
 #!/usr/bin/env python3
 """A universal transaction solver."""
 
-from typing import Callable, Dict, Iterator, Optional, Tuple, assert_never
+from typing import Iterator, Tuple, assert_never
 
 import z3
-from Crypto.Hash import keccak
 
-from _common import Predicate
-from _hash import SHA3
-from _state import State
-from _symbolic import (
-    BW,
-    ByteArray,
-    IntrospectableArray,
-    do_check,
-    hexify,
-    require_concrete,
-    solver_stack,
-)
-from _universe import Block, Contract, Universe
+from _common import print_solution
 from disassembler import Program, disassemble
+from environment import Block, Contract, Universe
+from sha3 import SHA3
+from state import State
+from symbolic import Array, Bytes, check, concretize
 from vm import step
 
 
@@ -37,7 +28,7 @@ def universal_transaction(
     prior execution of `universal_transaction()`, the two executions should have
     a different suffix.
     """
-    start = _make_start(program, sha3, suffix)
+    start = symbolic_start(program, sha3, suffix)
 
     init = start.copy()
     init.universe.transfer(init.caller, init.address, init.callvalue)
@@ -51,7 +42,7 @@ def universal_transaction(
             if action == "CONTINUE":
                 continue
             elif action == "JUMPI":
-                states.extend(_symbolic_JUMPI(program, state))
+                states.extend(symbolic_JUMPI(program, state))
                 break
             elif action == "TERMINATE":
                 assert state.success is not None
@@ -62,7 +53,35 @@ def universal_transaction(
                 assert_never(action)
 
 
-def _make_start(program: Program, sha3: SHA3, suffix: str) -> State:
+def symbolic_JUMPI(program: Program, state: State) -> Iterator[State]:
+    """Handle a JUMPI action with a symbolic condition. Yields next states."""
+    solver = z3.Optimize()
+    state.constrain(solver)
+
+    counter = concretize(
+        state.stack.pop(), "JUMPI(counter, b) requires concrete counter"
+    )
+    if counter not in program.jumps:
+        raise ValueError(f"illegal JUMPI target: 0x{counter:x}")
+    b = state.stack.pop()
+
+    if check(solver, b == 0):
+        next = state.copy()
+        next.pc += 1
+        next.path = (next.path << 1) | 0
+        next.path_constraints.append(b == 0)
+        yield next
+
+    if check(solver, b != 0):
+        next = state.copy()
+        next.pc = program.jumps[counter]
+        next.path = (next.path << 1) | 1
+        next.path_constraints.append(b != 0)
+        yield next
+
+
+def symbolic_start(program: Program, sha3: SHA3, suffix: str) -> State:
+    """Return a fully-symbolic start state."""
     block = Block(
         number=z3.BitVec(f"NUMBER{suffix}", 256),
         coinbase=z3.BitVec(f"COINBASE{suffix}", 160),
@@ -74,9 +93,7 @@ def _make_start(program: Program, sha3: SHA3, suffix: str) -> State:
     )
     contract = Contract(
         program=program,
-        storage=IntrospectableArray(
-            f"STORAGE{suffix}", z3.BitVecSort(256), z3.BitVecSort(256)
-        ),
+        storage=Array(f"STORAGE{suffix}", z3.BitVecSort(256), z3.BitVecSort(256)),
     )
     caller = z3.BitVec(f"CALLER", 160)
     universe = Universe(
@@ -84,9 +101,7 @@ def _make_start(program: Program, sha3: SHA3, suffix: str) -> State:
         # TODO: the balances of other accounts can change between transactions
         # (and the balance of this contract account too, via SELFDESTRUCT). How
         # do we model this?
-        balances=IntrospectableArray(
-            f"BALANCES{suffix}", z3.BitVecSort(160), z3.BitVecSort(256)
-        ),
+        balances=Array(f"BALANCES{suffix}", z3.BitVecSort(160), z3.BitVecSort(256)),
         transfer_constraints=[],
         agents=[caller],
         contribution=z3.BitVec(f"CONTRIBUTION{suffix}", 256),
@@ -108,180 +123,12 @@ def _make_start(program: Program, sha3: SHA3, suffix: str) -> State:
         origin=caller,
         caller=caller,
         callvalue=z3.BitVec(f"CALLVALUE{suffix}", 256),
-        calldata=ByteArray(f"CALLDATA{suffix}"),
+        calldata=Bytes(f"CALLDATA{suffix}"),
         gasprice=z3.BitVec(f"GASPRICE{suffix}", 256),
         returndata=[],
         success=None,
         path_constraints=[],
         path=1,
-    )
-
-
-def _symbolic_JUMPI(program: Program, state: State) -> Iterator[State]:
-    solver = z3.Optimize()
-    state.constrain(solver)
-
-    counter = require_concrete(
-        state.stack.pop(), "JUMPI(counter, b) requires concrete counter"
-    )
-    if counter not in program.jumps:
-        raise ValueError(f"illegal JUMPI target: 0x{counter:x}")
-    b = state.stack.pop()
-
-    if do_check(solver, b == 0):
-        next = state.copy()
-        next.pc += 1
-        next.path = (next.path << 1) | 0
-        next.path_constraints.append(b == 0)
-        yield next
-
-    if do_check(solver, b != 0):
-        next = state.copy()
-        next.pc = program.jumps[counter]
-        next.path = (next.path << 1) | 1
-        next.path_constraints.append(b != 0)
-        yield next
-
-
-def print_solution(
-    start: State,
-    end: State,
-    predicate: Optional[Predicate] = None,
-) -> None:
-    solver = z3.Optimize()
-    end.constrain(solver, minimize=True)
-    assert do_check(solver)
-
-    with solver_stack(solver):
-        constrain_to_goal(solver, start, end)
-        if do_check(solver):
-            _print_solution("🚩 GOAL", solver, start, end, predicate)
-            return
-
-        # `do_check()` can incorrectly return false if we give Z3 obviously
-        # contradictory constraints :(
-        assert len(solver.unsat_core()) > 0
-
-    if end.is_changed(solver, start):
-        do_check(solver)  # reset so we can extract the model
-        _print_solution("📒 STEP", solver, start, end, predicate)
-
-
-def _print_solution(
-    kind: str,
-    solver: z3.Optimize,
-    start: State,
-    end: State,
-    predicate: Optional[Predicate] = None,
-) -> None:
-    m = solver.model()
-
-    assert end.success is True
-    if len(end.returndata) > 0:
-        rdata = "0x" + "".join(hexify(m.eval(b, True), 1) for b in end.returndata)
-    else:
-        rdata = "-"
-    print(f"{kind}\t{hex(end.path).replace('0x', 'Px')}\t{rdata}")
-
-    m = end.sha3.concretize(solver, m)
-    if predicate is not None:
-        # TODO: this should be redundant now
-        m = predicate.state.sha3.concretize(solver, m)
-
-    if require_concrete(m.eval(end.callvalue)):
-        print(f"Value\tETH 0x{hexify(m.eval(end.callvalue), 32)}")
-
-    print(f"Data\t({m.eval(end.calldata.length())}) 0x", end="")
-    for i in range(require_concrete(m.eval(end.calldata.length()))):
-        b = m.eval(end.calldata.get(BW(i)))
-        if z3.is_bv_value(b):
-            print(hexify(b, 1), end="")
-        else:
-            print("??", end="")
-        if i == 3:
-            print(" ", end="")
-    print()
-    if z3.is_bv_value(m.eval(end.address)):
-        print(f"Address\t0x{hexify(m.eval(end.address), 20)}")
-    if z3.is_bv_value(m.eval(end.caller)):
-        print(f"Caller\t0x{hexify(m.eval(end.caller), 20)}")
-    if z3.is_bv_value(m.eval(end.gasprice)):
-        print(f"Gas\tETH {require_concrete(m.eval(end.gasprice)):011,}")
-
-    cs = require_concrete(m.eval(start.universe.contribution, True))
-    ce = require_concrete(m.eval(end.universe.contribution, True))
-    es = require_concrete(m.eval(start.universe.extraction, True))
-    ee = require_concrete(m.eval(end.universe.extraction, True))
-    if cs != ce:
-        print(f"Contrib\tETH 0x{hexify(BW(cs), 32)}")
-        print(f"\t-> ETH 0x{hexify(BW(ce), 32)}")
-    if es != ee:
-        print(f"Extract\tETH 0x{hexify(BW(es), 32)}")
-        print(f"\t-> ETH 0x{hexify(BW(ee), 32)}")
-
-    _print_array("Balance", m, start.universe.balances, end.universe.balances)
-    _print_array("Storage", m, start.contract.storage, end.contract.storage)
-    print()
-
-    if predicate is not None and predicate.storage_key is not None:
-        print(f"Key\t0x{hexify(m.eval(predicate.storage_key, True),32)}")
-        print(
-            f"Value\t0x{hexify(m.eval(start.contract.storage.array[predicate.storage_key], True),32)}"
-        )
-        print(
-            f"\t-> 0x{hexify(m.eval(end.contract.storage.array[predicate.storage_key], True),32)}"
-        )
-        print()
-
-
-def _print_array(
-    name: str,
-    m: z3.ModelRef,
-    start: IntrospectableArray,
-    end: IntrospectableArray,
-) -> None:
-    indexify: Callable[[z3.ExprRef], str] = (
-        lambda key: f"0x{require_concrete(key):x}" if z3.is_bv_value(key) else str(key)
-    )
-    valueify: Callable[[z3.ExprRef], str] = lambda val: f"0x{require_concrete(val):x}"
-
-    accesses = {}
-    for sym in end.accessed:
-        key = indexify(m.eval(sym))
-        val = valueify(m.eval(start.array[sym], True))
-        accesses[key] = val
-
-    writes = {}
-    for sym in end.written:
-        key = indexify(m.eval(sym))
-        pre = valueify(m.eval(start.array[sym], True))
-        post = valueify(m.eval(end.array[sym], True))
-        writes[key] = (pre, post)
-
-    if len(accesses) > 0 or len(writes) > 0:
-        print(name, end="")
-        for key in sorted(accesses.keys()):
-            print(f"\tR: {key} ", end="")
-            if len(key) > 34:
-                print("\n\t", end="")
-            print(f"-> {accesses[key]}")
-        for key in sorted(writes.keys()):
-            print(f"\tW: {key} ", end="")
-            if len(key) > 34:
-                print("\n\t", end="")
-            pre, post = writes[key]
-            print(f"-> {post} ", end="")
-            if len(post) > 34:
-                print("\n\t   ", end="")
-            print(f"(no change)" if pre == post else f"(from {pre})")
-
-
-def constrain_to_goal(solver: z3.Optimize, start: State, end: State) -> None:
-    solver.assert_and_track(
-        z3.ULT(start.universe.extraction, start.universe.contribution), "GOAL.PRE"
-    )
-    solver.assert_and_track(
-        z3.UGT(end.universe.extraction, end.universe.contribution), "GOAL.POST"
     )
 
 

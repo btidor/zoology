@@ -1,3 +1,5 @@
+"""Classes for modeling contract execution."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -5,9 +7,9 @@ from typing import Dict, List, Optional, cast
 
 import z3
 
-from _hash import SHA3
-from _symbolic import ByteArray, Constraint, do_check, uint8, uint160, uint256
-from _universe import Block, Contract, Universe
+from environment import Block, Contract, Universe
+from sha3 import SHA3
+from symbolic import Bytes, Constraint, check, uint8, uint160, uint256
 
 
 @dataclass
@@ -29,7 +31,7 @@ class State:
     origin: uint160
     caller: uint160
     callvalue: uint256
-    calldata: ByteArray
+    calldata: Bytes
     gasprice: uint256
 
     returndata: List[z3.BitVecRef]
@@ -81,15 +83,14 @@ class State:
             solver.assert_and_track(constraint, f"PC{i}{self.suffix}")
 
     def is_changed(self, solver: z3.Optimize, since: State) -> bool:
-        assert self.success is True
-
+        """Check if any permanent state changes have been made."""
         # TODO: constrain further to eliminate no-op writes?
         if len(self.contract.storage.written) > 0:
             return True
 
         # Check if any address other than the contract itself has increased
         for addr in self.universe.balances.written:
-            if do_check(
+            if check(
                 solver,
                 z3.And(
                     addr != self.address,

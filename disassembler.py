@@ -6,8 +6,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Optional, cast
 
-from _opcodes import REFERENCE, UNIMPLEMENTED
-from _symbolic import BW, require_concrete, uint256
+from opcodes import REFERENCE, UNIMPLEMENTED
+from symbolic import BW, concretize, uint256
 
 
 @dataclass
@@ -45,9 +45,7 @@ class Instruction:
         if self.suffix is not None:
             msg += str(self.suffix)
         if self.operand is not None:
-            operand = require_concrete(self.operand).to_bytes(
-                cast(int, self.suffix), "big"
-            )
+            operand = concretize(self.operand).to_bytes(cast(int, self.suffix), "big")
             msg += "\t0x" + operand.hex()
         return msg
 

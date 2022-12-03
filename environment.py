@@ -1,3 +1,5 @@
+"""Classes for modeling the state of the Ethereum blockchain."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -5,13 +7,13 @@ from typing import List
 
 import z3
 
-from _symbolic import BA, BW, Constraint, IntrospectableArray, uint160, uint256
 from disassembler import Program
+from symbolic import BW, Array, Constraint, uint160, uint256
 
 
 @dataclass
 class Block:
-    """A block in the Ethereum blockchain."""
+    """A block in the blockchain."""
 
     number: uint256
     coinbase: uint160
@@ -27,7 +29,7 @@ class Contract:
     """A deployed contract account with code and symbolic storage."""
 
     program: Program
-    storage: IntrospectableArray
+    storage: Array
 
 
 @dataclass
@@ -36,7 +38,7 @@ class Universe:
 
     suffix: str
 
-    balances: IntrospectableArray
+    balances: Array
     transfer_constraints: List[Constraint]
 
     # These variables track how much value has been moved from the contracts
