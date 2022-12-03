@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List, Optional, cast
+from typing import Dict, List, Optional
 
 import z3
 
@@ -34,7 +34,7 @@ class State:
     calldata: Bytes
     gasprice: uint256
 
-    returndata: List[z3.BitVecRef]
+    returndata: Bytes
     success: Optional[bool]
 
     # List of Z3 expressions that must be satisfied in order for the program to
@@ -94,8 +94,8 @@ class State:
                 solver,
                 z3.And(
                     addr != self.address,
-                    cast(z3.BitVecRef, self.universe.balances.array[addr])
-                    > cast(z3.BitVecRef, since.universe.balances.array[addr]),
+                    self.universe.balances.peek(addr)
+                    > since.universe.balances.peek(addr),
                 ),
             ):
                 return True

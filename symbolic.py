@@ -6,12 +6,14 @@ import contextlib
 import copy
 from typing import (
     Any,
+    Dict,
     Iterator,
     List,
     Literal,
     Optional,
     TypeAlias,
     TypeGuard,
+    TypeVar,
     Union,
     cast,
 )
@@ -52,28 +54,59 @@ def is_concrete(value: z3.BitVecRef) -> TypeGuard[z3.BitVecNumRef]:
     return cast(bool, z3.is_bv_value(value))
 
 
-def simplify(value: z3.ExprRef) -> z3.BitVecRef:
+def simplify(value: z3.BitVecRef) -> z3.BitVecRef:
     """Simplify a bitvector expression."""
-    value = z3.simplify(value)
+    return cast(z3.BitVecRef, z3.simplify(value))
+
+
+def concretize(value: z3.BitVecRef, msg: Optional[str] = None) -> int:
+    """Unwrap a concrete bitvector expression into an int."""
+    value = simplify(value)
+    if not is_concrete(value):
+        raise ValueError(msg or "unexpected symbolic value")
+    return cast(int, value.as_long())
+
+
+def concretize_hex(value: z3.BitVecRef, msg: Optional[str] = None) -> str:
+    """Unwrap a concrete bitvector expression into a hex string."""
+    return concretize(value, msg).to_bytes(value.size() // 8, "big").hex()
+
+
+def zeval(
+    model: z3.ModelRef, value: z3.BitVecRef, model_completion: bool = False
+) -> z3.BitVecRef:
+    """Evaluate a given bitvector expression with the given model."""
     if not z3.is_bv(value):
         raise ValueError("unexpected non-bitvector")
-    return cast(z3.BitVecRef, value)
+    return cast(z3.BitVecRef, model.eval(value, model_completion))
 
 
-def concretize(var: z3.ExprRef, msg: Optional[str] = None) -> int:
-    """Unwrap a concrete bitvector expression into an int."""
-    s = z3.simplify(var)
-    if not z3.is_bv(s):
-        raise ValueError("unexpected non-bitvector")
-    if not z3.is_bv_value(s):
-        raise ValueError(msg or "unexpected symbolic value")
-    return cast(int, cast(z3.BitVecNumRef, s).as_long())
+def zif(condition: Constraint, then: z3.BitVecRef, else_: z3.BitVecRef) -> z3.BitVecRef:
+    """Return a symbolic if statement over bitvectors."""
+    return cast(z3.BitVecRef, z3.If(condition, then, else_))
 
 
-def concretize_hex(value: z3.BitVecRef) -> str:
-    """Unwrap a concrete bitvector expression into a hex string."""
-    value = simplify(value)
-    return concretize(value).to_bytes(value.size() // 8, "big").hex()
+def zconcat(*values: z3.BitVecRef) -> z3.BitVecRef:
+    """Return the concatenation of symbolic bitvectors."""
+    return cast(z3.BitVecRef, z3.Concat(*values))
+
+
+def zextract(high: int, low: int, value: z3.BitVecRef) -> z3.BitVecRef:
+    """Return the result of slicing a symbolic bitvector."""
+    return cast(z3.BitVecRef, z3.Extract(high, low, value))
+
+
+def zand(*constraints: Constraint) -> z3.BoolRef:
+    """Return the union of the given symbolic constraints."""
+    return cast(z3.BoolRef, z3.And(*constraints))
+
+
+K = TypeVar("K")
+
+
+def zget(dict: Dict[K, z3.BitVecRef], key: K, default: z3.BitVecRef) -> z3.BitVecRef:
+    """Look up a key in a dictionary with a default value."""
+    return dict.get(key, default)
 
 
 def describe(value: z3.BitVecRef) -> str:
@@ -102,13 +135,15 @@ def describe(value: z3.BitVecRef) -> str:
 class Bytes:
     """A symbolic, unknown-length sequence of immutable bytes."""
 
-    def __init__(self, name: str, data: bytes | None = None) -> None:
+    def __init__(self, name: str, data: bytes | List[uint8] | None = None) -> None:
         """Create a new Bytes."""
-        self.arr = z3.Array(f"{name}", z3.BitVecSort(256), z3.BitVecSort(8))
         if data is None:
+            assert name != ""
             self.len = z3.BitVec(f"{name}.length", 256)
+            self.arr = z3.Array(f"{name}", z3.BitVecSort(256), z3.BitVecSort(8))
         else:
             self.len = BW(len(data))
+            self.arr = z3.K(z3.BitVecSort(256), BY(0))
             for i, b in enumerate(data):
                 self.arr = cast(z3.ArrayRef, z3.Store(self.arr, i, b))
 
@@ -116,13 +151,28 @@ class Bytes:
         """Return the symbolic length of the bytestring."""
         return self.len
 
-    def get(self, i: uint256) -> uint8:
+    def __getitem__(self, i: uint256) -> uint8:
         """
         Return the byte at the given symbolic index.
 
         Reads past the end of the bytestring return zero.
         """
         return cast(uint8, z3.If(i >= self.len, BY(0), self.arr[i]))
+
+    def concretize(self) -> bytes:
+        """Concretize this instance as a bytestring."""
+        return bytes(concretize(self[BW(i)]) for i in range(concretize(self.length())))
+
+    def zeval(self, model: z3.ModelRef, model_completion: bool = False) -> str:
+        """Use a model to evaluate this instance as a hexadecimal string."""
+        length = concretize(zeval(model, self.length()))
+        result = ""
+        for i in range(length):
+            b = zeval(model, self[BW(i)], model_completion)
+            result += concretize_hex(b) if is_concrete(b) else "??"
+            if i == 3:
+                result += " "
+        return result
 
 
 class Array:
@@ -155,6 +205,10 @@ class Array:
         """Set the given symbolic key to the given symbolic value."""
         self.written.append(key)
         self.array = cast(z3.ArrayRef, z3.Store(self.array, key, val))
+
+    def peek(self, key: z3.BitVecRef) -> z3.BitVecRef:
+        """Look up the given symbolic key, but don't track the lookup."""
+        return cast(z3.BitVecRef, self.array[key])
 
     def copy(self) -> Array:
         """Return a deep copy of this instance."""

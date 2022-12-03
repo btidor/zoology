@@ -13,10 +13,6 @@ def concretize_stack(state: State) -> List[int]:
     return [concretize(x) for x in state.stack]
 
 
-def concretize_returndata(state: State) -> bytes:
-    return bytes(concretize(x) for x in state.returndata)
-
-
 def execute(state: State) -> None:
     while True:
         action = step(state)
@@ -94,7 +90,7 @@ def test_execute_basic() -> None:
     action = step(state)
     assert action == "TERMINATE"
     assert state.success is False
-    assert state.returndata == []
+    assert state.returndata.concretize() == b""
     assert concretize_stack(state) == []
 
 
@@ -153,7 +149,7 @@ def test_execute_solidity() -> None:
     )
     execute(state)
     assert state.success is True
-    assert concretize_returndata(state) == b"\x00" * 32
+    assert state.returndata.concretize() == b"\x00" * 32
 
     state = make_state(
         contract=state.contract,  # carries forward storage
@@ -163,7 +159,7 @@ def test_execute_solidity() -> None:
     )
     execute(state)
     assert state.success is False
-    assert concretize_returndata(state)[68:91] == b"caller is not the owner"
+    assert state.returndata.concretize()[68:91] == b"caller is not the owner"
 
     state = make_state(
         contract=state.contract,
@@ -173,7 +169,7 @@ def test_execute_solidity() -> None:
     )
     execute(state)
     assert state.success is True
-    assert concretize_returndata(state) == b""
+    assert state.returndata.concretize() == b""
 
     state = make_state(
         contract=state.contract,
@@ -183,7 +179,7 @@ def test_execute_solidity() -> None:
     )
     execute(state)
     assert state.success is True
-    assert concretize_returndata(state)[-20:] == b"\xcc" * 20
+    assert state.returndata.concretize()[-20:] == b"\xcc" * 20
 
 
 def test_output_basic() -> None:

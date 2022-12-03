@@ -22,7 +22,7 @@ def test_STOP() -> None:
     s = make_state(returndata=[BW(0x12), BW(0x34)])
     STOP(s)
     assert s.success is True
-    assert s.returndata == []
+    assert s.returndata.concretize() == b""
 
 
 def test_ADD() -> None:
@@ -347,18 +347,16 @@ def test_GASPRICE() -> None:
 
 
 def test_RETURNDATASIZE() -> None:
-    s = make_state(
-        returndata=[z3.BitVecVal(b, 8) for b in b"abcdefghijklmnopqrstuvwxyz"]
-    )
+    s = make_state(returndata=Bytes("", b"abcdefghijklmnopqrstuvwxyz"))
     assert z3.simplify(RETURNDATASIZE(s)) == 26
 
 
 def test_RETURNDATACOPY() -> None:
     s = make_state(
-        returndata=[
-            z3.BitVecVal(b, 8)
-            for b in b"\x7d\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\x7f"
-        ]
+        returndata=Bytes(
+            "",
+            b"\x7d\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\x7f",
+        )
     )
 
     RETURNDATACOPY(s, BW(0), BW(0), BW(32))
@@ -368,6 +366,8 @@ def test_RETURNDATACOPY() -> None:
     )
 
     RETURNDATACOPY(s, BW(0), BW(31), BW(8))
+    for k, v in s.memory.items():
+        print(k, v, v.size())
     assert (
         _dump_memory(s)
         == "0x7F00000000000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF7F"
@@ -520,7 +520,7 @@ def test_CALL() -> None:
     s.universe.balances[s.address] = BW(125)
     res = CALL(s.universe, s, BW(0), BW(0x1234), BW(123), BW(0), BW(0), BW(0), BW(0))
     assert z3.simplify(res) == 1
-    assert len(s.returndata) == 0
+    assert s.returndata.concretize() == b""
     assert z3.simplify(s.universe.balances[BA(0x1234)]) == 123
     assert z3.simplify(s.universe.balances[s.address]) == 2
 
@@ -532,7 +532,7 @@ def test_RETURN() -> None:
     )
     RETURN(s, BW(0), BW(2))
     assert s.success is True
-    assert [z3.simplify(b) for b in s.returndata] == [0xFF, 0x01]
+    assert s.returndata.concretize() == b"\xff\x01"
 
 
 def test_REVERT() -> None:
@@ -542,14 +542,14 @@ def test_REVERT() -> None:
     )
     REVERT(s, BW(0), BW(2))
     assert s.success is False
-    assert [z3.simplify(b) for b in s.returndata] == [0xFF, 0x01]
+    assert s.returndata.concretize() == b"\xff\x01"
 
 
 def test_INVALID() -> None:
     s = make_state(returndata=[BW(0x12), BW(0x34)])
     INVALID(s)
     assert s.success is False
-    assert s.returndata == []
+    assert s.returndata.concretize() == b""
 
 
 def test_SELFDESTRUCT() -> None:

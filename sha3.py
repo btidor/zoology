@@ -8,7 +8,17 @@ from typing import Dict, Iterator, List, Tuple, cast
 import z3
 from Crypto.Hash import keccak
 
-from symbolic import BW, Array, Constraint, check, concretize, describe, simplify
+from symbolic import (
+    BW,
+    Array,
+    Constraint,
+    check,
+    concretize,
+    describe,
+    is_concrete,
+    simplify,
+    zeval,
+)
 
 
 @dataclass
@@ -48,7 +58,7 @@ class SHA3:
             )
 
         key = simplify(key)
-        if z3.is_bv_value(key):
+        if is_concrete(key):
             digest = keccak.new(
                 data=concretize(key).to_bytes(size, "big"), digest_bits=256
             ).digest()
@@ -95,7 +105,7 @@ class SHA3:
         """Apply concrete SHA3 constraints to a given model instance."""
         hashes: Dict[bytes, bytes] = {}
         for n, key, val in self.items():
-            ckey = concretize(model.eval(key, True))
+            ckey = concretize(zeval(model, key, True))
             data = ckey.to_bytes(n, "big")
             hash = keccak.new(data=data, digest_bits=256)
             digest = int.from_bytes(hash.digest(), "big")

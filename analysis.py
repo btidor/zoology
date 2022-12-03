@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from typing import Iterator, List, Set, cast
+from typing import Iterator, List, Set
 
 import z3
 from Crypto.Hash import keccak
@@ -9,7 +9,17 @@ from _common import Predicate, constrain_to_goal
 from disassembler import Program, disassemble
 from sha3 import SHA3
 from state import State
-from symbolic import BW, check, concretize, solver_stack
+from symbolic import (
+    BW,
+    check,
+    concretize,
+    concretize_hex,
+    is_concrete,
+    simplify,
+    solver_stack,
+    zand,
+    zeval,
+)
 from universal import universal_transaction
 
 
@@ -108,20 +118,14 @@ def analyze(program: Program) -> None:
 
 def ownership_safety_predicates(state: State) -> Iterator[Predicate]:
     for key in state.contract.storage.accessed:
-        k = cast(z3.BitVecRef, z3.simplify(key))
-        if z3.is_bv_value(k):
-            ck = concretize(k)
+        k = simplify(key)
+        if is_concrete(k):
             yield Predicate(
-                lambda state: cast(
-                    z3.BoolRef,
-                    z3.And(
-                        state.origin
-                        != z3.Extract(159, 0, state.contract.storage.array[ck]),
-                        state.caller
-                        != z3.Extract(159, 0, state.contract.storage.array[ck]),
-                    ),
+                lambda state: zand(
+                    state.origin != z3.Extract(159, 0, state.contract.storage.peek(k)),
+                    state.caller != z3.Extract(159, 0, state.contract.storage.peek(k)),
                 ),
-                f"$OWNER[{hex(ck)[2:]}]",
+                f"$OWNER[{concretize_hex(k)[2:]}]",
                 state,
             )
 
@@ -138,14 +142,11 @@ def balance_safety_predicates(state: State) -> Iterator[Predicate]:
             used.add(hash)
             index = hash[:8] + "?"
         yield Predicate(
-            lambda state: cast(
-                z3.BoolRef,
-                z3.And(
-                    z3.UGE(state.universe.contribution, state.universe.extraction),
-                    z3.UGE(
-                        state.universe.contribution - state.universe.extraction,
-                        state.contract.storage.array[key],
-                    ),
+            lambda state: zand(
+                z3.UGE(state.universe.contribution, state.universe.extraction),
+                z3.UGE(
+                    state.universe.contribution - state.universe.extraction,
+                    state.contract.storage.peek(key),
                 ),
             ),
             f"$BALANCE[{index}]",
@@ -159,18 +160,10 @@ def describe_state(solver: z3.Optimize, state: State) -> str:
     solver.minimize(state.callvalue)
     solver.minimize(state.calldata.length())
     assert check(solver)
-    m = solver.model()
-
-    calldata = "0x"
-    cdl = concretize(m.eval(state.calldata.length()))
-    for i in range(cdl):
-        b = m.eval(state.calldata.get(BW(i)))
-        calldata += f"{concretize(b):02x}" if z3.is_bv_value(b) else "??"
-        if i == 3:
-            calldata += " "
-
     assert state.success is True
-    return calldata
+
+    model = solver.model()
+    return "0x" + state.calldata.zeval(model)
 
 
 if __name__ == "__main__":

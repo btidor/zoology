@@ -100,10 +100,9 @@ def printable_execution(state: State) -> Iterator[str]:
         if action == "TERMINATE":
             break
 
-    result = bytes(
-        concretize(d, "return data must be concrete") for d in state.returndata
+    yield ("RETURN" if state.success else "REVERT") + " " + str(
+        state.returndata.concretize()
     )
-    yield ("RETURN" if state.success else "REVERT") + " " + str(result)
 
 
 def concrete_JUMPI(state: State) -> None:
@@ -161,7 +160,7 @@ def concrete_start(program: Program) -> State:
         callvalue=BW(0),
         calldata=Bytes("CALLDATA", b"\x6f\xab\x5d\xdf"),
         gasprice=BW(0x12),
-        returndata=[],
+        returndata=Bytes("", b""),
         success=None,
         path_constraints=[],
         path=1,

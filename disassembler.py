@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, List, Optional, cast
+from typing import Dict, Iterable, List, Optional
 
 from opcodes import REFERENCE, UNIMPLEMENTED
 from symbolic import BW, concretize, uint256
@@ -44,8 +44,8 @@ class Instruction:
         msg = f"{self.offset:04x}  {self.name}"
         if self.suffix is not None:
             msg += str(self.suffix)
-        if self.operand is not None:
-            operand = concretize(self.operand).to_bytes(cast(int, self.suffix), "big")
+        if self.operand is not None and self.suffix is not None:
+            operand = concretize(self.operand).to_bytes(self.suffix, "big")
             msg += "\t0x" + operand.hex()
         return msg
 

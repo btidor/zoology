@@ -125,7 +125,7 @@ def symbolic_start(program: Program, sha3: SHA3, suffix: str) -> State:
         callvalue=z3.BitVec(f"CALLVALUE{suffix}", 256),
         calldata=Bytes(f"CALLDATA{suffix}"),
         gasprice=z3.BitVec(f"GASPRICE{suffix}", 256),
-        returndata=[],
+        returndata=Bytes("", b""),
         success=None,
         path_constraints=[],
         path=1,

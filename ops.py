@@ -1,18 +1,27 @@
 """A library of EVM instruction implementations."""
 
-from typing import cast
-
 import z3
 
 from disassembler import Instruction, Program
 from environment import Block, Contract, Universe
 from state import State
-from symbolic import BW, BY, concretize, uint8, uint160, uint256
+from symbolic import (
+    BW,
+    BY,
+    Bytes,
+    concretize,
+    uint8,
+    uint256,
+    zconcat,
+    zextract,
+    zget,
+    zif,
+)
 
 
 def STOP(s: State) -> None:
     """00 - Halts execution."""
-    s.returndata = []
+    s.returndata = Bytes("", b"")
     s.success = True
 
 
@@ -33,34 +42,34 @@ def SUB(a: uint256, b: uint256) -> uint256:
 
 def DIV(a: uint256, b: uint256) -> uint256:
     """04 - Integer division operation."""
-    return cast(uint256, z3.If(b == 0, BW(0), z3.UDiv(a, b)))
+    return zif(b == 0, BW(0), z3.UDiv(a, b))
 
 
 def SDIV(a: uint256, b: uint256) -> uint256:
     """05 - Signed integer division operation (truncated)."""
-    return cast(uint256, z3.If(b == 0, BW(0), a / b))
+    return zif(b == 0, BW(0), a / b)
 
 
 def MOD(a: uint256, b: uint256) -> uint256:
     """06 - Modulo remainder operation."""
-    return cast(uint256, z3.If(b == 0, BW(0), z3.URem(a, b)))
+    return zif(b == 0, BW(0), z3.URem(a, b))
 
 
 def SMOD(a: uint256, b: uint256) -> uint256:
     """07 - Signed modulo remainder operation."""
-    return cast(uint256, z3.If(b == 0, BW(0), a % b))
+    return zif(b == 0, BW(0), a % b)
 
 
 def ADDMOD(a: uint256, b: uint256, N: uint256) -> uint256:
     """08 - Modulo addition operation."""
     a, b, N = z3.ZeroExt(1, a), z3.ZeroExt(1, b), z3.ZeroExt(1, N)
-    return cast(uint256, z3.If(N == 0, BW(0), z3.Extract(255, 0, z3.URem(a + b, N))))
+    return zif(N == 0, BW(0), zextract(255, 0, z3.URem(a + b, N)))
 
 
 def MULMOD(a: uint256, b: uint256, N: uint256) -> uint256:
     """09 - Modulo multiplication operation."""
     a, b, N = z3.ZeroExt(256, a), z3.ZeroExt(256, b), z3.ZeroExt(256, N)
-    return cast(uint256, z3.If(N == 0, BW(0), z3.Extract(255, 0, z3.URem(a * b, N))))
+    return zif(N == 0, BW(0), zextract(255, 0, z3.URem(a * b, N)))
 
 
 def EXP(a: uint256, _exponent: uint256) -> uint256:
@@ -84,32 +93,32 @@ def SIGNEXTEND(_b: uint256, x: uint256) -> uint256:
 
 def LT(a: uint256, b: uint256) -> uint256:
     """10 - Less-than comparison."""
-    return cast(uint256, z3.If(z3.ULT(a, b), BW(1), BW(0)))
+    return zif(z3.ULT(a, b), BW(1), BW(0))
 
 
 def GT(a: uint256, b: uint256) -> uint256:
     """11 - Greater-than comparison."""
-    return cast(uint256, z3.If(z3.UGT(a, b), BW(1), BW(0)))
+    return zif(z3.UGT(a, b), BW(1), BW(0))
 
 
 def SLT(a: uint256, b: uint256) -> uint256:
     """12 - Signed less-than comparison."""
-    return cast(uint256, z3.If(a < b, BW(1), BW(0)))
+    return zif(a < b, BW(1), BW(0))
 
 
 def SGT(a: uint256, b: uint256) -> uint256:
     """13 - Signed greater-than comparison."""
-    return cast(uint256, z3.If(a > b, BW(1), BW(0)))
+    return zif(a > b, BW(1), BW(0))
 
 
 def EQ(a: uint256, b: uint256) -> uint256:
     """14 - Equality comparison."""
-    return cast(uint256, z3.If(a == b, BW(1), BW(0)))
+    return zif(a == b, BW(1), BW(0))
 
 
 def ISZERO(a: uint256) -> uint256:
     """15 - Simple not operator."""
-    return cast(uint256, z3.If(a == 0, BW(1), BW(0)))
+    return zif(a == 0, BW(1), BW(0))
 
 
 def AND(a: uint256, b: uint256) -> uint256:
@@ -138,7 +147,7 @@ def BYTE(_i: uint256, x: uint256) -> uint256:
     if i > 31:
         return BW(0)
     start = 256 - (8 * i)
-    return cast(uint256, z3.Extract(start - 1, start - 8, x))
+    return zextract(start - 1, start - 8, x)
 
 
 def SHL(shift: uint256, value: uint256) -> uint256:
@@ -161,10 +170,7 @@ def SHA3(s: State, _offset: uint256, _size: uint256) -> uint256:
     offset = concretize(_offset, "SHA3(offset, size) requires concrete offset")
     size = concretize(_size, "SHA3(offset, size) requires concrete size")
 
-    data = cast(
-        z3.BitVecRef,
-        z3.Concat(*[s.memory.get(i, BW(0)) for i in range(offset, offset + size)]),
-    )
+    data = zconcat(*[s.memory.get(i, BW(0)) for i in range(offset, offset + size)])
     return s.sha3[data]
 
 
@@ -175,7 +181,7 @@ def ADDRESS(s: State) -> uint256:
 
 def BALANCE(u: Universe, s: State, address: uint256) -> uint256:
     """31 - Get balance of the given account."""
-    return u.balances[cast(uint160, z3.Extract(159, 0, address))]
+    return u.balances[zextract(159, 0, address)]
 
 
 def ORIGIN(s: State) -> uint256:
@@ -200,7 +206,7 @@ def CALLVALUE(s: State) -> uint256:
 
 def CALLDATALOAD(s: State, i: uint256) -> uint256:
     """35 - Get input data of current environment."""
-    return cast(uint256, z3.Concat(*[s.calldata.get(i + j) for j in range(32)]))
+    return zconcat(*[s.calldata[i + BW(j)] for j in range(32)])
 
 
 def CALLDATASIZE(s: State) -> uint256:
@@ -220,7 +226,7 @@ def CALLDATACOPY(
         _size, "CALLDATACOPY(destOffset, offset, size) requires concrete size"
     )
     for i in range(size):
-        s.memory[destOffset + i] = s.calldata.get(offset + i)
+        s.memory[destOffset + i] = s.calldata[offset + i]
 
 
 def CODESIZE() -> uint256:
@@ -259,7 +265,7 @@ def RETURNDATASIZE(s: State) -> uint256:
 
     Get size of output data from the previous call from the current environment.
     """
-    return BW(len(s.returndata))
+    return s.returndata.length()
 
 
 def RETURNDATACOPY(
@@ -277,9 +283,7 @@ def RETURNDATACOPY(
         _size, "RETURNDATACOPY(destOffset, offset, size) requires concrete size"
     )
     for i in range(size):
-        s.memory[destOffset + i] = (
-            s.returndata[offset + i] if offset + i < len(s.returndata) else BW(0)
-        )
+        s.memory[destOffset + i] = s.returndata[offset + BW(i)]
 
 
 def EXTCODEHASH(address: uint256) -> uint256:
@@ -340,23 +344,21 @@ def POP(y: uint256) -> None:
 def MLOAD(s: State, _offset: uint256) -> uint256:
     """51 - Load word from memory."""
     offset = concretize(_offset, "MLOAD(offset) requires concrete offset")
-    return cast(
-        uint256, z3.Concat(*[s.memory.get(offset + i, BY(0)) for i in range(32)])
-    )
+    return zconcat(*[s.memory.get(offset + i, BY(0)) for i in range(32)])
 
 
 def MSTORE(s: State, _offset: uint256, value: uint256) -> None:
     """52 - Save word to memory."""
     offset = concretize(_offset, "MSTORE(offset, value) requires concrete offset")
     for i in range(31, -1, -1):
-        s.memory[offset + i] = cast(uint8, z3.Extract(7, 0, value))
+        s.memory[offset + i] = zextract(7, 0, value)
         value = value >> 8
 
 
-def MSTORE8(s: State, _offset: uint256, value: uint8) -> None:
+def MSTORE8(s: State, _offset: uint256, value: uint256) -> None:
     """53 - Save byte to memory."""
     offset = concretize(_offset, "MSTORE8(offset, value) requires concrete offset")
-    s.memory[offset] = value & 0xFF
+    s.memory[offset] = zextract(7, 0, value)
 
 
 def SLOAD(c: Contract, key: uint256) -> uint256:
@@ -495,8 +497,8 @@ def CALL(
     """F1 - Message-call into an account."""
     # TODO: we assume the address is an externally-owned account (i.e. contains
     # no code). How should we handle CALLs to contracts?
-    s.returndata = []
-    u.transfer(s.address, cast(uint160, z3.Extract(159, 0, address)), value)
+    s.returndata = Bytes("", b"")
+    u.transfer(s.address, zextract(159, 0, address), value)
     return BW(1)
 
 
@@ -520,7 +522,10 @@ def RETURN(s: State, _offset: uint256, _size: uint256) -> None:
         "RETURN(offset, size) requires concrete offset",
     )
     size = concretize(_size, "RETURN(offset, size) requires concrete size")
-    s.returndata = [s.memory.get(i, BW(0)) for i in range(offset, offset + size)]
+    s.returndata = Bytes(
+        "",
+        [zget(s.memory, i, BW(0)) for i in range(offset, offset + size)],
+    )
     s.success = True
 
 
@@ -569,13 +574,15 @@ def REVERT(s: State, _offset: uint256, _size: uint256) -> None:
         "REVERT(offset, size) requires concrete offset",
     )
     size = concretize(_size, "REVERT(offset, size) requires concrete size")
-    s.returndata = [s.memory.get(i, BW(0)) for i in range(offset, offset + size)]
+    s.returndata = Bytes(
+        "", [zget(s.memory, i, BW(0)) for i in range(offset, offset + size)]
+    )
     s.success = False
 
 
 def INVALID(s: State) -> None:
     """FE - Designated invalid instruction."""
-    s.returndata = []
+    s.returndata = Bytes("", b"")
     s.success = False
 
 
