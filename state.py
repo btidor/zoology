@@ -11,12 +11,12 @@ import z3
 from environment import Block, Contract, Transaction, Universe
 from sha3 import SHA3
 from symbolic import (
+    BA,
     Bytes,
     Constraint,
     check,
     is_concrete,
     uint8,
-    uint160,
     uint256,
     unwrap,
     unwrap_bytes,
@@ -71,6 +71,27 @@ class State:
 
         self.sha3.constrain(solver)
         self.universe.constrain(solver)
+
+    def narrow(self, solver: z3.Optimize, model: z3.ModelRef) -> z3.ModelRef:
+        """Apply concrete constraints to a given model instance."""
+        constraint = self.contract.address == BA(
+            0xADADADADADADADADADADADADADADADADADADADAD
+        )
+        if check(solver, constraint):
+            solver.assert_and_track(constraint, "DEFAULT.ADDRESS")
+            assert check(solver)
+            model = solver.model()
+
+        constraint = self.transaction.caller == BA(
+            0xCACACACACACACACACACACACACACACACACACACACA
+        )
+        if check(solver, constraint):
+            solver.assert_and_track(constraint, "DEFAULT.CALLER")
+            assert check(solver)
+            model = solver.model()
+
+        check(solver)
+        return self.sha3.narrow(solver, model)
 
     def is_changed(self, solver: z3.Optimize, since: State) -> bool:
         """Check if any permanent state changes have been made."""

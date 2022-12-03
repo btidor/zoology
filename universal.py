@@ -191,8 +191,7 @@ def _printable_transition(
     solver: z3.Optimize, start: State, end: State, kind: str
 ) -> Iterable[str]:
     model = solver.model()
-    model = end.sha3.narrow(solver, model)
-    # TODO: narrow state so caller, address are deterministic
+    model = end.narrow(solver, model)
 
     if end.success is True:
         result = "RETURN"
