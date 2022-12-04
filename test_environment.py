@@ -33,8 +33,8 @@ def test_transfer() -> None:
 
     solver = z3.Optimize()
     end.constrain(solver)
-    solver.add(start.universe.balances[src] == 0xAAA)
-    solver.add(start.universe.balances[dst] == 0x0)
+    solver.assert_and_track(start.universe.balances[src] == 0xAAA, "TEST1")
+    solver.assert_and_track(start.universe.balances[dst] == 0x0, "TEST2")
     assert check(solver)
 
     model = solver.model()
@@ -51,5 +51,5 @@ def test_impossible_transfer() -> None:
 
     solver = z3.Optimize()
     end.constrain(solver)
-    solver.add(z3.ULE(start.universe.balances[src], 0xF))
+    solver.assert_and_track(z3.ULE(start.universe.balances[src], 0xF), "TEST1")
     assert not check(solver)

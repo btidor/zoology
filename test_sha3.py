@@ -27,7 +27,7 @@ def test_symbolic() -> None:
 
     solver = z3.Optimize()
     sha3.constrain(solver)
-    solver.add(input == bytes_to_bitvector(b"testing"))
+    solver.assert_and_track(input == bytes_to_bitvector(b"testing"), "TEST1")
     assert check(solver)
 
     model = solver.model()
@@ -47,9 +47,11 @@ def test_impossible_concrete() -> None:
 
     solver = z3.Optimize()
     sha3.constrain(solver)
-    solver.add(input == bytes_to_bitvector(b"testing"))
-    solver.add(
-        digest == BW(0x0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF)
+    solver.assert_and_track(input == bytes_to_bitvector(b"testing"), "TEST1")
+    solver.assert_and_track(
+        digest
+        == BW(0x0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF),
+        "TEST2",
     )
     assert check(solver)
 
@@ -67,12 +69,12 @@ def test_impossible_symbolic() -> None:
 
     solver = z3.Optimize()
     sha3.constrain(solver)
-    solver.add(
-        digest == BW(0x0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF)
+    solver.assert_and_track(
+        digest
+        == BW(0x0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF),
+        "TEST1",
     )
-    with pytest.raises(AssertionError):
-        # This can fail the unsat_core() check for some reason.
-        assert check(solver)  # should be False
+    assert not check(solver)
 
 
 def test_items() -> None:

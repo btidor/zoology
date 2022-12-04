@@ -1,6 +1,6 @@
 import os
 import subprocess
-from typing import Any, Dict
+from typing import Any, Dict, Optional, assert_never
 
 import z3
 from Crypto.Hash import keccak
@@ -9,7 +9,9 @@ from disassembler import Program
 from environment import Block, Contract, Transaction, Universe
 from sha3 import SHA3
 from state import State
-from symbolic import BA, BW, Array, Bytes
+from symbolic import BA, BW, Array, Bytes, check, solver_stack
+from universal import constrain_to_goal
+from vm import concrete_JUMPI, step
 
 
 def make_block(**kwargs: Any) -> Block:
@@ -95,3 +97,43 @@ def compile_solidity(source: str, version: str) -> bytes:
 
 def abiencode(signature: str) -> bytes:
     return keccak.new(data=signature.encode(), digest_bits=256).digest()[:4]
+
+
+def execute(state: State) -> None:
+    while True:
+        action = step(state)
+        if action == "CONTINUE":
+            continue
+        elif action == "JUMPI":
+            concrete_JUMPI(state)
+        elif action == "TERMINATE":
+            return
+        else:
+            assert_never(action)
+
+
+def check_transition(
+    start: State,
+    end: State,
+    path: int,
+    is_goal: Optional[bool],
+    method: str,
+    value: Optional[str] = None,
+) -> None:
+    assert end.path == path
+    assert end.success is True
+
+    solver = z3.Optimize()
+    end.constrain(solver, minimize=True)
+    with solver_stack(solver):
+        constrain_to_goal(solver, start, end)
+        assert check(solver) == bool(is_goal)
+
+    if is_goal is not True:
+        assert end.is_changed(solver, start) == (is_goal is False)
+    assert check(solver)
+
+    model = end.narrow(solver, solver.model())
+    transaction = end.transaction.evaluate(model)
+    assert transaction.get("Data", "")[:10] == method
+    assert transaction.get("Value", None) == value

@@ -1,6 +1,6 @@
 #!/usr/bin/env pytest
 
-from typing import List, assert_never
+from typing import List
 
 from disassembler import disassemble
 from state import State
@@ -8,28 +8,16 @@ from symbolic import BW, Bytes, unwrap
 from testlib import (
     abiencode,
     compile_solidity,
+    execute,
     make_contract,
     make_state,
     make_transaction,
 )
-from vm import concrete_JUMPI, printable_execution, step
+from vm import printable_execution, step
 
 
 def concretize_stack(state: State) -> List[int]:
     return [unwrap(x) for x in state.stack]
-
-
-def execute(state: State) -> None:
-    while True:
-        action = step(state)
-        if action == "CONTINUE":
-            continue
-        elif action == "JUMPI":
-            concrete_JUMPI(state)
-        elif action == "TERMINATE":
-            return
-        else:
-            assert_never(action)
 
 
 def test_execute_basic() -> None:

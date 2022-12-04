@@ -274,8 +274,10 @@ def check(solver: z3.Optimize, *assumptions: Any) -> bool:
     if check == z3.sat:
         return True
     elif check == z3.unsat:
-        # `do_check()` can incorrectly return false if we give Z3 obviously
-        # contradictory constraints :(
+        # Sometimes the solver return "unsat" but can't produce an unsatisfiable
+        # core. Origintally I thought it was returning "unsat" incorrectly, but
+        # that might not be true. This *can* happen if we add unnamed
+        # constraints with `solver.add()` -- use `assert_and_track()` instead!
         assert len(solver.unsat_core()) > 0
         return False
     else:
