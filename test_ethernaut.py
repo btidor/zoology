@@ -15,8 +15,7 @@ from testlib import (
     make_state,
     make_transaction,
 )
-from universal import printable_transition, universal_transaction
-from vm import printable_execution
+from universal import universal_transaction
 
 
 def test_fallback() -> None:
@@ -64,7 +63,7 @@ def test_fallback() -> None:
             }
         }
     """
-    code = compile_solidity(source, Solidity.v08)
+    code = compile_solidity(source)
     program = disassemble(code)
 
     state = make_state(
@@ -79,27 +78,13 @@ def test_fallback() -> None:
     assert state.returndata.require_concrete() == unwrap_bytes(BW(0))
 
     universal = universal_transaction(program, SHA3(), "")
-
-    start, end = next(universal)
-    check_transition(start, end, 0x19, "SAVE", None, 1)
-
-    start, end = next(universal)
-    check_transition(start, end, 0x2F, "GOAL", "withdraw()")
-
-    start, end = next(universal)
-    check_transition(start, end, 0x4F, "VIEW", "contributions(address)")
-
-    start, end = next(universal)
-    check_transition(start, end, 0x23, "VIEW", "owner()")
-
-    start, end = next(universal)
-    check_transition(start, end, 0x10F, "SAVE", "contribute()")
-
-    start, end = next(universal)
-    check_transition(start, end, 0x10E, "SAVE", "contribute()")
-
-    start, end = next(universal)
-    check_transition(start, end, 0x83, "VIEW", "getContribution()")
+    check_transition(*next(universal), 0x19, "SAVE", None, 1)
+    check_transition(*next(universal), 0x2F, "GOAL", "withdraw()")
+    check_transition(*next(universal), 0x4F, "VIEW", "contributions(address)")
+    check_transition(*next(universal), 0x23, "VIEW", "owner()")
+    check_transition(*next(universal), 0x10F, "SAVE", "contribute()")
+    check_transition(*next(universal), 0x10E, "SAVE", "contribute()")
+    check_transition(*next(universal), 0x83, "VIEW", "getContribution()")
 
     with pytest.raises(StopIteration):
         next(universal)
@@ -146,7 +131,7 @@ def test_fallout() -> None:
             }
         }
     """
-    code = compile_solidity(source, Solidity.v08)
+    code = compile_solidity(source)
     program = disassemble(code)
 
     state = make_state(
@@ -163,24 +148,12 @@ def test_fallout() -> None:
     )
 
     universal = universal_transaction(program, SHA3(), "")
-
-    start, end = next(universal)
-    check_transition(start, end, 0x5, "SAVE", "Fal1out()")
-
-    start, end = next(universal)
-    check_transition(start, end, 0x4F, "GOAL", "collectAllocations()")
-
-    start, end = next(universal)
-    check_transition(start, end, 0x23, "VIEW", "owner()")
-
-    start, end = next(universal)
-    check_transition(start, end, 0x43F, "GOAL", "sendAllocation(address)")
-
-    start, end = next(universal)
-    check_transition(start, end, 0x83, "SAVE", "allocate()")
-
-    start, end = next(universal)
-    check_transition(start, end, 0x40F, "VIEW", "allocatorBalance(address)")
+    check_transition(*next(universal), 0x5, "SAVE", "Fal1out()")
+    check_transition(*next(universal), 0x4F, "GOAL", "collectAllocations()")
+    check_transition(*next(universal), 0x23, "VIEW", "owner()")
+    check_transition(*next(universal), 0x43F, "GOAL", "sendAllocation(address)")
+    check_transition(*next(universal), 0x83, "SAVE", "allocate()")
+    check_transition(*next(universal), 0x40F, "VIEW", "allocatorBalance(address)")
 
     with pytest.raises(StopIteration):
         next(universal)
@@ -223,7 +196,7 @@ def test_coinflip() -> None:
             }
         }
     """
-    code = compile_solidity(source, Solidity.v08)
+    code = compile_solidity(source)
     program = disassemble(code)
 
     state = make_state(
@@ -261,7 +234,7 @@ def test_telephone() -> None:
             }
         }
     """
-    code = compile_solidity(source, Solidity.v08)
+    code = compile_solidity(source)
     program = disassemble(code)
 
     state = make_state(
@@ -281,12 +254,8 @@ def test_telephone() -> None:
     assert state.returndata.require_concrete() == b""
 
     universal = universal_transaction(program, SHA3(), "")
-
-    start, end = next(universal)
-    check_transition(start, end, 0xD, "VIEW", "owner()")
-
-    start, end = next(universal)
-    check_transition(start, end, 0xCF, "GOAL", "changeOwner(address)")
+    check_transition(*next(universal), 0xD, "VIEW", "owner()")
+    check_transition(*next(universal), 0xCF, "GOAL", "changeOwner(address)")
 
     with pytest.raises(StopIteration):
         next(universal)
@@ -318,7 +287,7 @@ def test_token() -> None:
             }
         }
     """
-    code = compile_solidity(source, Solidity.v06)
+    code = compile_solidity(source, version=Solidity.v06)
     program = disassemble(code)
 
     state = make_state(
@@ -338,15 +307,9 @@ def test_token() -> None:
     assert state.returndata.require_concrete() == unwrap_bytes(BW(1))
 
     universal = universal_transaction(program, SHA3(), "")
-
-    start, end = next(universal)
-    check_transition(start, end, 0xD, "VIEW", "totalSupply()")
-
-    start, end = next(universal)
-    check_transition(start, end, 0x33, "VIEW", "balanceOf(address)")
-
-    start, end = next(universal)
-    check_transition(start, end, 0xC7, "SAVE", "transfer(address,uint256)")
+    check_transition(*next(universal), 0xD, "VIEW", "totalSupply()")
+    check_transition(*next(universal), 0x33, "VIEW", "balanceOf(address)")
+    check_transition(*next(universal), 0xC7, "SAVE", "transfer(address,uint256)")
 
     with pytest.raises(StopIteration):
         next(universal)
@@ -389,7 +352,7 @@ def test_delegation() -> None:
             }
         }
     """
-    code = compile_solidity(source, Solidity.v08, "Delegation")
+    code = compile_solidity(source, contract="Delegation", version=Solidity.v08)
     program = disassemble(code)
 
     state = make_state(
@@ -404,14 +367,183 @@ def test_delegation() -> None:
     assert state.returndata.require_concrete() == b""
 
     universal = universal_transaction(program, SHA3(), "")
-
-    start, end = next(universal)
-    check_transition(start, end, 0x0, "VIEW", "owner()")
-
-    start, end = next(universal)
-    check_transition(start, end, 0x0, "SAVE", "pwn()")
+    check_transition(*next(universal), 0x0, "VIEW", "owner()")
+    check_transition(*next(universal), 0x0, "SAVE", "pwn()")
 
     with pytest.raises(StopIteration):
         next(universal)
+
+
+def test_force() -> None:
+    code = bytes.fromhex(
+        "6080604052600080fdfea26469706673582212203717ccea65e207051915ebdbec707aead0330450f3d14318591e16cc74fd06bc64736f6c634300080c0033"
+    )
+    program = disassemble(code)
+
+    state = make_state(
+        contract=make_contract(program=program),
+        transaction=make_transaction(
+            callvalue=BW(0x1234),
+            calldata=Bytes("CALLDATA", b""),
+        ),
+    )
+    execute(state)
+    assert state.success is False
+    assert state.returndata.require_concrete() == b""
+
+    universal = universal_transaction(program, SHA3(), "")
+
+    with pytest.raises(StopIteration):
+        next(universal)
+
+
+def test_vault() -> None:
+    source = """
+        // SPDX-License-Identifier: MIT
+        pragma solidity ^0.8.0;
+
+        contract Vault {
+            bool public locked;
+            bytes32 private password;
+
+            constructor(bytes32 _password) {
+                locked = true;
+                password = _password;
+            }
+
+            function unlock(bytes32 _password) public {
+                if (password == _password) {
+                    locked = false;
+                }
+            }
+        }
+    """
+    code = compile_solidity(source)
+    program = disassemble(code)
+
+    state = make_state(
+        contract=make_contract(program=program),
+        transaction=make_transaction(
+            callvalue=BW(0),
+            calldata=Bytes(
+                "CALLDATA", abiencode("unlock(bytes32)") + unwrap_bytes(BW(0))
+            ),
+        ),
+    )
+    execute(state)
+    assert state.success is True
+    assert state.returndata.require_concrete() == b""
+
+    universal = universal_transaction(program, SHA3(), "")
+
+    check_transition(*next(universal), 0xD, "VIEW", "locked()")
+    check_transition(*next(universal), 0xCF, "VIEW", "unlock(bytes32)")
+    check_transition(*next(universal), 0xCE, "SAVE", "unlock(bytes32)")
+
+    with pytest.raises(StopIteration):
+        next(universal)
+
+
+def test_king() -> None:
+    source = """
+        // SPDX-License-Identifier: MIT
+        pragma solidity ^0.8.0;
+
+        contract King {
+
+            address king;
+            uint public prize;
+            address public owner;
+
+            constructor() payable {
+                owner = msg.sender;
+                king = msg.sender;
+                prize = msg.value;
+            }
+
+            receive() external payable {
+                require(msg.value >= prize || msg.sender == owner);
+                payable(king).transfer(msg.value);
+                king = msg.sender;
+                prize = msg.value;
+            }
+
+            function _king() public view returns (address) {
+                return king;
+            }
+        }
+    """
+    code = compile_solidity(source)
+    program = disassemble(code)
+
+    state = make_state(
+        contract=make_contract(program=program),
+        transaction=make_transaction(
+            callvalue=BW(0x1234),
+            calldata=Bytes("CALLDATA", b""),
+        ),
+    )
+    execute(state)
+    assert state.success is True
+    assert state.returndata.require_concrete() == b""
+
+    universal = universal_transaction(program, SHA3(), "")
+
+    check_transition(*next(universal), 0x37, "SAVE", None, None)
+    check_transition(*next(universal), 0x33, "SAVE", None, None)
+    check_transition(*next(universal), 0xB, "VIEW", "_king()")
+    check_transition(*next(universal), 0x13, "VIEW", "owner()")
+    check_transition(*next(universal), 0x23, "VIEW", "prize()")
+
+    with pytest.raises(StopIteration):
+        next(universal)
+
+
+@pytest.mark.skip("implement GAS")
+def test_reentrancy() -> None:
+    source = """
+        // SPDX-License-Identifier: MIT
+        pragma solidity ^0.8.0;
+
+        contract Reentrance {
+
+            mapping(address => uint) public balances;
+
+            function donate(address _to) public payable {
+                balances[_to] += msg.value;
+            }
+
+            function balanceOf(address _who) public view returns (uint balance) {
+                return balances[_who];
+            }
+
+            function withdraw(uint _amount) public {
+                if(balances[msg.sender] >= _amount) {
+                (bool result,) = msg.sender.call{value:_amount}("");
+                if(result) {
+                    _amount;
+                }
+                balances[msg.sender] -= _amount;
+                }
+            }
+
+            receive() external payable {}
+        }
+    """
+    code = compile_solidity(source)
+    program = disassemble(code)
+
+    state = make_state(
+        contract=make_contract(program=program),
+        transaction=make_transaction(
+            callvalue=BW(0x1234),
+            calldata=Bytes(
+                "CALLDATA", abiencode("donate(address)") + unwrap_bytes(BW(1))
+            ),
+        ),
+    )
+    execute(state)
+    assert state.success is True
+    assert state.returndata.require_concrete() == b""
 
     assert False

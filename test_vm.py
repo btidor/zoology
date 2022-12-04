@@ -136,7 +136,7 @@ def test_execute_solidity() -> None:
             }
         }
     """
-    code = compile_solidity(source, Solidity.v08)
+    code = compile_solidity(source)
     program = disassemble(code)
 
     state = make_state(

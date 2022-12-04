@@ -65,24 +65,12 @@ def test_fallout() -> None:
     )
     program = disassemble(code)
     universal = universal_transaction(program, SHA3(), "")
-
-    start, end = next(universal)
-    check_transition(start, end, 0xB, "SAVE", "0x6fab5ddf")
-
-    start, end = next(universal)
-    check_transition(start, end, 0xAF, "GOAL", "0x8aa96f38")
-
-    start, end = next(universal)
-    check_transition(start, end, 0x53, "VIEW", "0x8da5cb5b")
-
-    start, end = next(universal)
-    check_transition(start, end, 0x9F, "GOAL", "0xa2dea26f")
-
-    start, end = next(universal)
-    check_transition(start, end, 0x23, "SAVE", "0xabaa9916")
-
-    start, end = next(universal)
-    check_transition(start, end, 0x87, "VIEW", "0xffd40b56")
+    check_transition(*next(universal), 0xB, "SAVE", "0x6fab5ddf")
+    check_transition(*next(universal), 0xAF, "GOAL", "0x8aa96f38")
+    check_transition(*next(universal), 0x53, "VIEW", "0x8da5cb5b")
+    check_transition(*next(universal), 0x9F, "GOAL", "0xa2dea26f")
+    check_transition(*next(universal), 0x23, "SAVE", "0xabaa9916")
+    check_transition(*next(universal), 0x87, "VIEW", "0xffd40b56")
 
     with pytest.raises(StopIteration):
         next(universal)

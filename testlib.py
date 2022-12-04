@@ -92,7 +92,9 @@ def make_state(**kwargs: Any) -> State:
 
 
 def compile_solidity(
-    source: str, version: Solidity, contract: Optional[str] = None
+    source: str,
+    contract: Optional[str] = None,
+    version: Solidity = Solidity.v08,
 ) -> bytes:
     env = os.environ.copy()
     env["SOLC_VERSION"] = version.value
@@ -168,16 +170,17 @@ def check_transition(
         assert end.is_changed(solver, start) == (kind == "SAVE")
     assert check(solver)
 
-    if method is None:
-        prefix = b""
-    elif method.startswith("0x"):
-        prefix = bytes.fromhex(method[2:])
-    else:
-        prefix = abiencode(method)
-
     model = end.narrow(solver, solver.model())
     transaction = end.transaction.evaluate(model)
-    assert bytes.fromhex(transaction.get("Data", "")[2:10]) == prefix
+
+    actual = bytes.fromhex(transaction.get("Data", "")[2:10])
+    if method is None:
+        assert actual == b""
+    elif method.startswith("0x"):
+        assert actual == bytes.fromhex(method[2:])
+    else:
+        assert actual == abiencode(method)
+
     if "Value" not in transaction:
         assert value is None
     else:
