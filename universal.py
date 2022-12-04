@@ -169,9 +169,13 @@ def printable_transition(start: State, end: State) -> Iterable[str]:
             return
 
     if end.is_changed(solver, start):
-        check(solver)  # reset so we can extract the model
-        for line in _printable_transition(solver, start, end, "📒 STEP"):
-            yield line
+        kind = "📒 SAVE"
+    else:
+        kind = "  VIEW"
+
+    check(solver)  # reset so we can extract the model
+    for line in _printable_transition(solver, start, end, kind):
+        yield line
 
 
 def _printable_transition(

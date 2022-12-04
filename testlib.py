@@ -1,6 +1,6 @@
 import os
 import subprocess
-from typing import Any, Dict, Optional, assert_never
+from typing import Any, Dict, Literal, Optional, assert_never
 
 import z3
 from Crypto.Hash import keccak
@@ -32,7 +32,7 @@ def make_block(**kwargs: Any) -> Block:
 
 def make_contract(**kwargs: Any) -> Contract:
     attrs: Dict[str, Any] = {
-        "address": BA(0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA),
+        "address": BA(0xADADADADADADADADADADADADADADADADADADADAD),
         "program": Program(),
         "storage": Array("STORAGE", z3.BitVecSort(256), BW(0)),
     }
@@ -42,8 +42,8 @@ def make_contract(**kwargs: Any) -> Contract:
 
 def make_transaction(**kwargs: Any) -> Transaction:
     attrs: Dict[str, Any] = {
-        "origin": BA(0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB),
-        "caller": BA(0xCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC),
+        "origin": BA(0xCACACACACACACACACACACACACACACACACACACACA),
+        "caller": BA(0xCACACACACACACACACACACACACACACACACACACACA),
         "callvalue": BW(0),
         "calldata": Bytes("", b""),
         "gasprice": BW(0x12),
@@ -116,9 +116,9 @@ def check_transition(
     start: State,
     end: State,
     path: int,
-    is_goal: Optional[bool],
-    method: str,
-    value: Optional[str] = None,
+    kind: Literal["GOAL", "SAVE", "VIEW"],
+    method: Optional[str],
+    value: Optional[int] = None,
 ) -> None:
     assert end.path == path
     assert end.success is True
@@ -127,13 +127,24 @@ def check_transition(
     end.constrain(solver, minimize=True)
     with solver_stack(solver):
         constrain_to_goal(solver, start, end)
-        assert check(solver) == bool(is_goal)
+        assert check(solver) == (kind == "GOAL")
 
-    if is_goal is not True:
-        assert end.is_changed(solver, start) == (is_goal is False)
+    if kind != "GOAL":
+        assert end.is_changed(solver, start) == (kind == "SAVE")
     assert check(solver)
+
+    if method is None:
+        prefix = b""
+    elif method.startswith("0x"):
+        prefix = bytes.fromhex(method[2:])
+    else:
+        prefix = abiencode(method)
 
     model = end.narrow(solver, solver.model())
     transaction = end.transaction.evaluate(model)
-    assert transaction.get("Data", "")[:10] == method
-    assert transaction.get("Value", None) == value
+    assert bytes.fromhex(transaction.get("Data", "")[2:10]) == prefix
+    if "Value" not in transaction:
+        assert value is None
+    else:
+        assert value is not None
+        assert transaction["Value"] == "0x" + int.to_bytes(value, 32).hex()

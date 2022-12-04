@@ -183,7 +183,7 @@ def test_execute_solidity() -> None:
     )
     execute(state)
     assert state.success is True
-    assert state.returndata.require_concrete()[-20:] == b"\xcc" * 20
+    assert state.returndata.require_concrete()[-20:] == b"\xca" * 20
 
 
 def test_output_basic() -> None:

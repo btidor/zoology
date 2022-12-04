@@ -19,7 +19,7 @@ def test_transaction_evaluate() -> None:
 
     values = state.transaction.evaluate(solver.model())
     assert values == {
-        "Caller": "0xcccccccccccccccccccccccccccccccccccccccc",
+        "Caller": "0xcacacacacacacacacacacacacacacacacacacaca",
         "Gas": "0x0000000000000000000000000000000000000000000000000000000000000012",
     }
 
