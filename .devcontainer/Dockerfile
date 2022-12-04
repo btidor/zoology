@@ -10,4 +10,4 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
 
 RUN ln -sf /usr/bin/python3.11 /usr/bin/python3
 
-RUN pip install black mypy pydocstyle pytest
+RUN pip install black mypy pydocstyle

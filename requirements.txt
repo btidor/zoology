@@ -1,4 +1,5 @@
 pycryptodome
 pytest
+pytest-xdist
 solc-select
 z3-solver

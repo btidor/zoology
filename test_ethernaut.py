@@ -6,6 +6,7 @@ from disassembler import disassemble
 from sha3 import SHA3
 from symbolic import BA, BW, Bytes, unwrap_bytes
 from testlib import (
+    Solidity,
     abiencode,
     check_transition,
     compile_solidity,
@@ -63,7 +64,7 @@ def test_fallback() -> None:
             }
         }
     """
-    code = compile_solidity(source, "0.8.17")
+    code = compile_solidity(source, Solidity.v08)
     program = disassemble(code)
 
     state = make_state(
@@ -145,7 +146,7 @@ def test_fallout() -> None:
             }
         }
     """
-    code = compile_solidity(source, "0.8.17")
+    code = compile_solidity(source, Solidity.v08)
     program = disassemble(code)
 
     state = make_state(
@@ -222,7 +223,7 @@ def test_coinflip() -> None:
             }
         }
     """
-    code = compile_solidity(source, "0.8.17")
+    code = compile_solidity(source, Solidity.v08)
     program = disassemble(code)
 
     state = make_state(
@@ -260,7 +261,7 @@ def test_telephone() -> None:
             }
         }
     """
-    code = compile_solidity(source, "0.8.17")
+    code = compile_solidity(source, Solidity.v08)
     program = disassemble(code)
 
     state = make_state(
@@ -317,7 +318,7 @@ def test_token() -> None:
             }
         }
     """
-    code = compile_solidity(source, "0.6.12")
+    code = compile_solidity(source, Solidity.v06)
     program = disassemble(code)
 
     state = make_state(
@@ -388,7 +389,7 @@ def test_delegation() -> None:
             }
         }
     """
-    code = compile_solidity(source, "0.8.17", "Delegation")
+    code = compile_solidity(source, Solidity.v08, "Delegation")
     program = disassemble(code)
 
     state = make_state(

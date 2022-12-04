@@ -6,6 +6,7 @@ from disassembler import disassemble
 from state import State
 from symbolic import BW, Bytes, unwrap
 from testlib import (
+    Solidity,
     abiencode,
     compile_solidity,
     execute,
@@ -135,7 +136,7 @@ def test_execute_solidity() -> None:
             }
         }
     """
-    code = compile_solidity(source, "0.8.17")
+    code = compile_solidity(source, Solidity.v08)
     program = disassemble(code)
 
     state = make_state(

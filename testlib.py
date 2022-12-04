@@ -1,5 +1,6 @@
 import os
 import subprocess
+from enum import Enum
 from typing import Any, Dict, Literal, Optional, assert_never
 
 import z3
@@ -12,6 +13,11 @@ from state import State
 from symbolic import BA, BW, Array, Bytes, check, solver_stack
 from universal import constrain_to_goal
 from vm import concrete_JUMPI, step
+
+
+class Solidity(Enum):
+    v08 = "0.8.17"
+    v06 = "0.6.12"
 
 
 def make_block(**kwargs: Any) -> Block:
@@ -86,10 +92,10 @@ def make_state(**kwargs: Any) -> State:
 
 
 def compile_solidity(
-    source: str, version: str, contract: Optional[str] = None
+    source: str, version: Solidity, contract: Optional[str] = None
 ) -> bytes:
     env = os.environ.copy()
-    env["SOLC_VERSION"] = version
+    env["SOLC_VERSION"] = version.value
     output = subprocess.check_output(
         ["solc", "--bin-runtime", "-"], env=env, input=source.encode()
     ).splitlines()
@@ -107,6 +113,21 @@ def compile_solidity(
         return list(matches.values())[0]
     else:
         return matches[contract]
+
+
+def install_solidity() -> None:
+    marker = os.path.expanduser("~/.config/solc-versions")
+    target = [version.value for version in Solidity]
+    if os.path.exists(marker):
+        with open(marker) as f:
+            if f.read() == str(target):
+                return
+
+    for version in Solidity:
+        subprocess.check_call(["solc-select", "install", version.value])
+
+    with open(marker, "w") as f:
+        f.write(str(target))
 
 
 def abiencode(signature: str) -> bytes:
