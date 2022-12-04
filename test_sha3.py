@@ -85,6 +85,9 @@ def test_items() -> None:
     assert first[:2] == (5, bytes_to_bitvector(b"hello"))
     assert second[:2] == (7, bytes_to_bitvector(b"testing"))
 
+    with pytest.raises(StopIteration):
+        next(items)
+
 
 def test_printable() -> None:
     sha3 = SHA3()
