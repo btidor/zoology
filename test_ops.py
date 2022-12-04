@@ -376,8 +376,6 @@ def test_RETURNDATACOPY() -> None:
     )
 
     RETURNDATACOPY(s, BW(0), BW(31), BW(8))
-    for k, v in s.memory.items():
-        print(k, v, v.size())
     assert (
         _dump_memory(s)
         == "0x7F00000000000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF7F"

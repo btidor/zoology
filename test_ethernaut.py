@@ -4,7 +4,7 @@ import pytest
 
 from disassembler import disassemble
 from sha3 import SHA3
-from symbolic import BW, Bytes, unwrap_bytes
+from symbolic import BA, BW, Bytes, unwrap_bytes
 from testlib import (
     abiencode,
     check_transition,
@@ -15,6 +15,7 @@ from testlib import (
     make_transaction,
 )
 from universal import printable_transition, universal_transaction
+from vm import printable_execution
 
 
 def test_fallback() -> None:
@@ -74,7 +75,7 @@ def test_fallback() -> None:
     )
     execute(state)
     assert state.success is True
-    assert state.returndata.require_concrete() == b"\x00" * 32
+    assert state.returndata.require_concrete() == unwrap_bytes(BW(0))
 
     universal = universal_transaction(program, SHA3(), "")
 
@@ -156,8 +157,9 @@ def test_fallout() -> None:
     )
     execute(state)
     assert state.success is True
-    print()
-    assert unwrap_bytes(state.contract.storage[BW(1)]) == (b"\x00" * 12 + b"\xca" * 20)
+    assert unwrap_bytes(state.contract.storage[BW(1)]) == unwrap_bytes(
+        BW(0xCACACACACACACACACACACACACACACACACACACACA)
+    )
 
     universal = universal_transaction(program, SHA3(), "")
 
@@ -181,3 +183,234 @@ def test_fallout() -> None:
 
     with pytest.raises(StopIteration):
         next(universal)
+
+
+@pytest.mark.skip("implement BLOCKHASH")
+def test_coinflip() -> None:
+    source = """
+        // SPDX-License-Identifier: MIT
+        pragma solidity ^0.8.0;
+
+        contract CoinFlip {
+
+            uint256 public consecutiveWins;
+            uint256 lastHash;
+            uint256 FACTOR = 57896044618658097711785492504343953926634992332820282019728792003956564819968;
+
+            constructor() {
+                consecutiveWins = 0;
+            }
+
+            function flip(bool _guess) public returns (bool) {
+                uint256 blockValue = uint256(blockhash(block.number - 1));
+
+                if (lastHash == blockValue) {
+                    revert();
+                }
+
+                lastHash = blockValue;
+                uint256 coinFlip = blockValue / FACTOR;
+                bool side = coinFlip == 1 ? true : false;
+
+                if (side == _guess) {
+                    consecutiveWins++;
+                    return true;
+                } else {
+                    consecutiveWins = 0;
+                    return false;
+                }
+            }
+        }
+    """
+    code = compile_solidity(source, "0.8.17")
+    program = disassemble(code)
+
+    state = make_state(
+        contract=make_contract(program=program),
+        transaction=make_transaction(
+            callvalue=BW(0),
+            calldata=Bytes("CALLDATA", abiencode("flip(bool)") + unwrap_bytes(BW(0))),
+        ),
+    )
+    execute(state)
+    assert state.success is True
+    assert unwrap_bytes(state.contract.storage[BW(1)]) == unwrap_bytes(BW(0))
+
+    assert False  # finish test
+
+
+@pytest.mark.skip("implement OWNER != CALLER")
+def test_telephone() -> None:
+    source = """
+        // SPDX-License-Identifier: MIT
+        pragma solidity ^0.8.0;
+
+        contract Telephone {
+
+            address public owner;
+
+            constructor() {
+                owner = msg.sender;
+            }
+
+            function changeOwner(address _owner) public {
+                if (tx.origin != msg.sender) {
+                    owner = _owner;
+                }
+            }
+        }
+    """
+    code = compile_solidity(source, "0.8.17")
+    program = disassemble(code)
+
+    state = make_state(
+        contract=make_contract(program=program),
+        transaction=make_transaction(
+            caller=BA(0xB1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1),
+            callvalue=BW(0),
+            calldata=Bytes(
+                "CALLDATA",
+                abiencode("changeOwner(address)")
+                + unwrap_bytes(BW(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF)),
+            ),
+        ),
+    )
+    execute(state)
+    assert state.success is True
+    assert state.returndata.require_concrete() == b""
+
+    universal = universal_transaction(program, SHA3(), "")
+
+    start, end = next(universal)
+    check_transition(start, end, 0xD, "VIEW", "owner()")
+
+    start, end = next(universal)
+    check_transition(start, end, 0xCF, "GOAL", "changeOwner(address)")
+
+    with pytest.raises(StopIteration):
+        next(universal)
+
+
+def test_token() -> None:
+    source = """
+        // SPDX-License-Identifier: MIT
+        pragma solidity ^0.6.0;
+
+        contract Token {
+
+            mapping(address => uint) balances;
+            uint public totalSupply;
+
+            constructor(uint _initialSupply) public {
+                balances[msg.sender] = totalSupply = _initialSupply;
+            }
+
+            function transfer(address _to, uint _value) public returns (bool) {
+                require(balances[msg.sender] - _value >= 0);
+                balances[msg.sender] -= _value;
+                balances[_to] += _value;
+                return true;
+            }
+
+            function balanceOf(address _owner) public view returns (uint balance) {
+                return balances[_owner];
+            }
+        }
+    """
+    code = compile_solidity(source, "0.6.12")
+    program = disassemble(code)
+
+    state = make_state(
+        contract=make_contract(program=program),
+        transaction=make_transaction(
+            callvalue=BW(0),
+            calldata=Bytes(
+                "CALLDATA",
+                abiencode("transfer(address,uint256)")
+                + unwrap_bytes(BW(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF))
+                + unwrap_bytes(BW(0xEEEE)),
+            ),
+        ),
+    )
+    execute(state)
+    assert state.success is True
+    assert state.returndata.require_concrete() == unwrap_bytes(BW(1))
+
+    universal = universal_transaction(program, SHA3(), "")
+
+    start, end = next(universal)
+    check_transition(start, end, 0xD, "VIEW", "totalSupply()")
+
+    start, end = next(universal)
+    check_transition(start, end, 0x33, "VIEW", "balanceOf(address)")
+
+    start, end = next(universal)
+    check_transition(start, end, 0xC7, "SAVE", "transfer(address,uint256)")
+
+    with pytest.raises(StopIteration):
+        next(universal)
+
+
+@pytest.mark.skip("implement GAS")
+def test_delegation() -> None:
+    source = """
+        // SPDX-License-Identifier: MIT
+        pragma solidity ^0.8.0;
+
+        contract Delegate {
+
+            address public owner;
+
+            constructor(address _owner) {
+                owner = _owner;
+            }
+
+            function pwn() public {
+                owner = msg.sender;
+            }
+        }
+
+        contract Delegation {
+
+            address public owner;
+            Delegate delegate;
+
+            constructor(address _delegateAddress) {
+                delegate = Delegate(_delegateAddress);
+                owner = msg.sender;
+            }
+
+            fallback() external {
+                (bool result,) = address(delegate).delegatecall(msg.data);
+                if (result) {
+                    this;
+                }
+            }
+        }
+    """
+    code = compile_solidity(source, "0.8.17", "Delegation")
+    program = disassemble(code)
+
+    state = make_state(
+        contract=make_contract(program=program),
+        transaction=make_transaction(
+            callvalue=BW(0),
+            calldata=Bytes("CALLDATA", abiencode("pwn()")),
+        ),
+    )
+    execute(state)
+    assert state.success is True
+    assert state.returndata.require_concrete() == b""
+
+    universal = universal_transaction(program, SHA3(), "")
+
+    start, end = next(universal)
+    check_transition(start, end, 0x0, "VIEW", "owner()")
+
+    start, end = next(universal)
+    check_transition(start, end, 0x0, "SAVE", "pwn()")
+
+    with pytest.raises(StopIteration):
+        next(universal)
+
+    assert False

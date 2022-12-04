@@ -85,14 +85,28 @@ def make_state(**kwargs: Any) -> State:
     return State(**attrs)
 
 
-def compile_solidity(source: str, version: str) -> bytes:
+def compile_solidity(
+    source: str, version: str, contract: Optional[str] = None
+) -> bytes:
     env = os.environ.copy()
     env["SOLC_VERSION"] = version
     output = subprocess.check_output(
         ["solc", "--bin-runtime", "-"], env=env, input=source.encode()
-    )
-    hexstr = output.splitlines()[-2].decode()
-    return bytes.fromhex(hexstr)
+    ).splitlines()
+
+    current = "<unknown>"
+    matches: Dict[str, bytes] = {}
+    for i in range(len(output)):
+        if output[i].startswith(b"======="):
+            current = output[i].split(b" ")[1][8:].decode()
+        if output[i] == b"Binary of the runtime part:":
+            matches[current] = bytes.fromhex(output[i + 1].decode())
+
+    if contract is None:
+        assert len(matches) == 1
+        return list(matches.values())[0]
+    else:
+        return matches[contract]
 
 
 def abiencode(signature: str) -> bytes:
