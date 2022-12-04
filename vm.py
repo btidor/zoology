@@ -38,7 +38,9 @@ def step(state: State) -> Literal["CONTINUE", "JUMPI", "TERMINATE"]:
         for name in sig.parameters:
             kls = sig.parameters[name].annotation
             if kls == uint256:
-                args.append(state.stack.pop())
+                val = state.stack.pop()
+                assert val.size() == 256
+                args.append(val)
             elif kls == State:
                 args.append(state)
             elif kls == Instruction:
@@ -112,6 +114,7 @@ def concrete_JUMPI(state: State) -> None:
 
 def concrete_start(program: Program, value: uint256, data: bytes) -> State:
     """Return a concrete start state with realistic values."""
+    assert value.size() == 256
     block = Block(
         number=BW(16030969),
         coinbase=BA(0xDAFEA492D9C6733AE3D56B7ED1ADB60692C98BC5),

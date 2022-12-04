@@ -105,8 +105,10 @@ class State:
                 solver,
                 z3.And(
                     addr != self.contract.address,
-                    self.universe.balances.peek(addr)
-                    > since.universe.balances.peek(addr),
+                    z3.UGT(
+                        self.universe.balances.peek(addr),
+                        since.universe.balances.peek(addr),
+                    ),
                 ),
             ):
                 return True

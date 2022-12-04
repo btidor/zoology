@@ -147,6 +147,8 @@ class Bytes:
             self.len = BW(len(data))
             self.arr = z3.K(z3.BitVecSort(256), BY(0))
             for i, b in enumerate(data):
+                if z3.is_bv(b):
+                    assert cast(z3.BitVecRef, b).size() == 8
                 self.arr = cast(z3.ArrayRef, z3.Store(self.arr, i, b))
 
     def length(self) -> uint256:
@@ -159,6 +161,7 @@ class Bytes:
 
         Reads past the end of the bytestring return zero.
         """
+        assert i.size() == 256
         return cast(uint8, z3.If(i >= self.len, BY(0), self.arr[i]))
 
     def require_concrete(self) -> bytes:
@@ -271,6 +274,9 @@ def check(solver: z3.Optimize, *assumptions: Any) -> bool:
     if check == z3.sat:
         return True
     elif check == z3.unsat:
+        # `do_check()` can incorrectly return false if we give Z3 obviously
+        # contradictory constraints :(
+        assert len(solver.unsat_core()) > 0
         return False
     else:
         raise Exception(f"z3 failure: {solver.reason_unknown()}")

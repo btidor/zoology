@@ -10,16 +10,7 @@ from disassembler import Program, disassemble
 from environment import Block, Contract, Transaction, Universe
 from sha3 import SHA3
 from state import State
-from symbolic import (
-    Array,
-    Bytes,
-    check,
-    is_concrete,
-    solver_stack,
-    unwrap,
-    unwrap_bytes,
-    zeval,
-)
+from symbolic import Array, Bytes, check, solver_stack, unwrap, unwrap_bytes, zeval
 from vm import step
 
 
@@ -176,10 +167,6 @@ def printable_transition(start: State, end: State) -> Iterable[str]:
             for line in _printable_transition(solver, start, end, "🚩 GOAL"):
                 yield line
             return
-
-        # `do_check()` can incorrectly return false if we give Z3 obviously
-        # contradictory constraints :(
-        assert len(solver.unsat_core()) > 0
 
     if end.is_changed(solver, start):
         check(solver)  # reset so we can extract the model
