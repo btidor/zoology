@@ -98,12 +98,12 @@ def symbolic_start(program: Program, sha3: SHA3, suffix: str) -> State:
         program=program,
         storage=Array(f"STORAGE{suffix}", z3.BitVecSort(256), z3.BitVecSort(256)),
     )
-    caller = z3.BitVec(f"CALLER", 160)
+    origin, caller = z3.BitVec(f"ORIGIN", 160), z3.BitVec(f"CALLER", 160)
     transaction = Transaction(
         # TODO: properly constrain ORIGIN to be an EOA and CALLER to either be
         # equal to ORIGIN or else be a non-EOA; handle the case where ORIGIN and
         # CALLER vary across transactions.
-        origin=caller,
+        origin=origin,
         caller=caller,
         callvalue=z3.BitVec(f"CALLVALUE{suffix}", 256),
         calldata=Bytes(f"CALLDATA{suffix}"),
@@ -114,9 +114,10 @@ def symbolic_start(program: Program, sha3: SHA3, suffix: str) -> State:
         # TODO: the balances of other accounts can change between transactions
         # (and the balance of this contract account too, via SELFDESTRUCT). How
         # do we model this?
-        balances=Array(f"BALANCES{suffix}", z3.BitVecSort(160), z3.BitVecSort(256)),
+        balances=Array(f"BALANCE{suffix}", z3.BitVecSort(160), z3.BitVecSort(256)),
         transfer_constraints=[],
-        agents=[caller],
+        blockhashes=Array(f"BLOCKHASH{suffix}", z3.BitVecSort(256), z3.BitVecSort(256)),
+        agents=[origin, caller],
         contribution=z3.BitVec(f"CONTRIBUTION{suffix}", 256),
         extraction=z3.BitVec(f"EXTRACTION{suffix}", 256),
     )

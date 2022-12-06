@@ -15,7 +15,7 @@ from testlib import (
     make_state,
     make_transaction,
 )
-from universal import universal_transaction
+from universal import printable_transition, universal_transaction
 
 
 def test_fallback() -> None:
@@ -159,7 +159,6 @@ def test_fallout() -> None:
         next(universal)
 
 
-@pytest.mark.skip("implement BLOCKHASH")
 def test_coinflip() -> None:
     source = """
         // SPDX-License-Identifier: MIT
@@ -206,14 +205,19 @@ def test_coinflip() -> None:
             calldata=Bytes("CALLDATA", abiencode("flip(bool)") + unwrap_bytes(BW(0))),
         ),
     )
+    state.contract.storage[BW(1)] = BW(0xFEDC)
+    state.contract.storage[BW(2)] = BW(
+        57896044618658097711785492504343953926634992332820282019728792003956564819968
+    )
     execute(state)
     assert state.success is True
     assert unwrap_bytes(state.contract.storage[BW(1)]) == unwrap_bytes(BW(0))
 
-    assert False  # finish test
+    universal = universal_transaction(program, SHA3(), "")
+    check_transition(*next(universal), 0x6FF, "SAVE", "flip(bool)")
+    check_transition(*next(universal), 0xDFD, "SAVE", "flip(bool)")
 
 
-@pytest.mark.skip("implement OWNER != CALLER")
 def test_telephone() -> None:
     source = """
         // SPDX-License-Identifier: MIT
@@ -255,7 +259,8 @@ def test_telephone() -> None:
 
     universal = universal_transaction(program, SHA3(), "")
     check_transition(*next(universal), 0xD, "VIEW", "owner()")
-    check_transition(*next(universal), 0xCF, "GOAL", "changeOwner(address)")
+    check_transition(*next(universal), 0xCF, "VIEW", "changeOwner(address)")
+    check_transition(*next(universal), 0xCE, "SAVE", "changeOwner(address)")
 
     with pytest.raises(StopIteration):
         next(universal)

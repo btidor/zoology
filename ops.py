@@ -279,9 +279,17 @@ def EXTCODEHASH(address: uint256) -> uint256:
     raise NotImplementedError("EXTCODEHASH")
 
 
-def BLOCKHASH(blockNumber: uint256) -> uint256:
+def BLOCKHASH(s: State, blockNumber: uint256) -> uint256:
     """40 - Get the hash of one of the 256 most recent complete blocks."""
-    raise NotImplementedError("BLOCKHASH")
+    return zif(
+        z3.ULT(blockNumber, s.block.number - 256),
+        BW(0),
+        zif(
+            z3.UGE(blockNumber, s.block.number),
+            BW(0),
+            s.universe.blockhashes[blockNumber],
+        ),
+    )
 
 
 def COINBASE(s: State) -> uint256:

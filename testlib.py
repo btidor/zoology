@@ -48,7 +48,7 @@ def make_contract(**kwargs: Any) -> Contract:
 
 def make_transaction(**kwargs: Any) -> Transaction:
     attrs: Dict[str, Any] = {
-        "origin": BA(0xCACACACACACACACACACACACACACACACACACACACA),
+        "origin": BA(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0),
         "caller": BA(0xCACACACACACACACACACACACACACACACACACACACA),
         "callvalue": BW(0),
         "calldata": Bytes("", b""),
@@ -63,6 +63,7 @@ def make_universe(**kwargs: Any) -> Universe:
         "suffix": "",
         "balances": Array("BALANCE", z3.BitVecSort(160), BW(0)),
         "transfer_constraints": [],
+        "blockhashes": Array("BLOCKHASH", z3.BitVecSort(256), BW(0)),
         "agents": [],
         "contribution": BW(0),
         "extraction": BW(0),

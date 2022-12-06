@@ -93,6 +93,8 @@ class Universe:
     balances: Array
     transfer_constraints: List[Constraint]
 
+    blockhashes: Array
+
     # These variables track how much value has been moved from the contracts
     # under test to our agent's accounts. To avoid overflow errors, we track
     # value contributed to and value extracted from the contracts under test as

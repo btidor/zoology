@@ -382,6 +382,16 @@ def test_RETURNDATACOPY() -> None:
     )
 
 
+def test_BLOCKHASH() -> None:
+    s = make_state()
+    s.universe.blockhashes.array = z3.K(z3.BitVecSort(256), BW(0x9999))
+    assert z3.simplify(BLOCKHASH(s, s.block.number - 10)) == 0x9999
+    assert z3.simplify(BLOCKHASH(s, s.block.number - 256)) == 0x9999
+    assert z3.simplify(BLOCKHASH(s, s.block.number - 257)) == 0
+    assert z3.simplify(BLOCKHASH(s, s.block.number)) == 0
+    assert z3.simplify(BLOCKHASH(s, s.block.number + 10)) == 0
+
+
 def test_COINBASE() -> None:
     block = make_block(coinbase=BA(0x9BBFED6889322E016E0A02EE459D306FC19545D8))
     s = make_state(block=block)

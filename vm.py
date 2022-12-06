@@ -127,13 +127,13 @@ def concrete_start(program: Program, value: uint256, data: bytes) -> State:
         basefee=BW(12267131109),
     )
     contract = Contract(
-        address=BA(0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA),
+        address=BA(0xADADADADADADADADADADADADADADADADADADADAD),
         program=program,
         storage=Array("STORAGE", z3.BitVecSort(256), BW(0)),
     )
     transaction = Transaction(
-        origin=BA(0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB),
-        caller=BA(0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB),
+        origin=BA(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0),
+        caller=BA(0xCACACACACACACACACACACACACACACACACACACACA),
         callvalue=value,
         calldata=Bytes("", data),
         gasprice=BW(0x12),
@@ -142,6 +142,7 @@ def concrete_start(program: Program, value: uint256, data: bytes) -> State:
         suffix="",
         balances=Array("BALANCE", z3.BitVecSort(160), BW(0)),
         transfer_constraints=[],
+        blockhashes=Array("BLOCKHASH", z3.BitVecSort(256), BW(0)),
         agents=[],
         contribution=BW(0),
         extraction=BW(0),

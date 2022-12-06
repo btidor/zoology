@@ -58,16 +58,12 @@ class State:
             solver.minimize(self.transaction.callvalue)
             solver.minimize(self.transaction.calldata.length())
 
-        # TODO: a contract could, in theory, call itself...
-        solver.assert_and_track(
-            self.contract.address != self.transaction.origin, f"ADDROR{self.suffix}"
-        )
-        solver.assert_and_track(
-            self.contract.address != self.transaction.caller, f"ADDRCL{self.suffix}"
-        )
-
         for i, constraint in enumerate(self.path_constraints):
             solver.assert_and_track(constraint, f"PC{i}{self.suffix}")
+
+        # ASSUMPTION: the current block number is at least 256. This prevents
+        # the BLOCKHASH instruction from overflowing.
+        solver.assert_and_track(z3.UGE(self.block.number, 256), f"NUMBER{self.suffix}")
 
         self.sha3.constrain(solver)
         self.universe.constrain(solver)
