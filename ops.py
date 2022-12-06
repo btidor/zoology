@@ -402,14 +402,16 @@ def MSIZE(s: State) -> uint256:
     return BW(max(s.memory.keys()) + 1)
 
 
-def GAS() -> uint256:
+def GAS(s: State) -> uint256:
     """
     5A.
 
     Get the amount of available gas, including the corresponding reduction for
     the cost of this instruction.
     """
-    raise NotImplementedError("GAS")
+    gas = z3.BitVec(f"GAS{len(s.gas_variables)}{s.suffix}", 256)
+    s.gas_variables.append(gas)
+    return gas
 
 
 def JUMPDEST() -> None:

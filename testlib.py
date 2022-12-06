@@ -85,6 +85,7 @@ def make_state(**kwargs: Any) -> State:
         "memory": {},
         "returndata": Bytes("", b""),
         "success": None,
+        "gas_variables": [],
         "path_constraints": [],
         "path": 1,
     }

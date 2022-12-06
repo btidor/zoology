@@ -43,6 +43,10 @@ class State:
     returndata: Bytes
     success: Optional[bool]
 
+    # Every time the GAS instruction is invoked we return a symbolic result,
+    # tracked here. These should be monotonically decreasing.
+    gas_variables: List[z3.BitVecRef]
+
     # List of Z3 expressions that must be satisfied in order for the program to
     # reach this state. Based on the JUMPI instructions (if statements) seen so
     # far.
@@ -63,7 +67,13 @@ class State:
 
         # ASSUMPTION: the current block number is at least 256. This prevents
         # the BLOCKHASH instruction from overflowing.
-        solver.assert_and_track(z3.UGE(self.block.number, 256), f"NUMBER{self.suffix}")
+        solver.assert_and_track(z3.UGE(self.block.number, 256), f"NUMLIM{self.suffix}")
+
+        for i in range(1, len(self.gas_variables)):
+            solver.assert_and_track(
+                z3.UGE(self.gas_variables[i - 1], self.gas_variables[i]),
+                f"MONOGAS{i}{self.suffix}",
+            )
 
         self.sha3.constrain(solver)
         self.universe.constrain(solver)

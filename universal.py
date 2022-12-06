@@ -133,6 +133,7 @@ def symbolic_start(program: Program, sha3: SHA3, suffix: str) -> State:
         memory={},
         returndata=Bytes("", b""),
         success=None,
+        gas_variables=[],
         path_constraints=[],
         path=1,
     )

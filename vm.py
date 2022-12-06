@@ -159,6 +159,7 @@ def concrete_start(program: Program, value: uint256, data: bytes) -> State:
         memory={},
         returndata=Bytes("", b""),
         success=None,
+        gas_variables=[],
         path_constraints=[],
         path=1,
     )

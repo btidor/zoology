@@ -320,7 +320,7 @@ def test_token() -> None:
         next(universal)
 
 
-@pytest.mark.skip("implement GAS")
+@pytest.mark.skip("implement DELEGATECALL")
 def test_delegation() -> None:
     source = """
         // SPDX-License-Identifier: MIT
@@ -504,7 +504,7 @@ def test_king() -> None:
         next(universal)
 
 
-@pytest.mark.skip("implement GAS")
+@pytest.mark.skip("implement CALL properly")
 def test_reentrancy() -> None:
     source = """
         // SPDX-License-Identifier: MIT

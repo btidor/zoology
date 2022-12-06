@@ -507,6 +507,11 @@ def test_MSIZE() -> None:
     assert z3.simplify(MSIZE(s)) == 124
 
 
+def test_GAS() -> None:
+    s = make_state()
+    assert GAS(s).decl().name() == "GAS0"
+
+
 def test_PUSH() -> None:
     ins = Instruction(0x0, 2, "PUSH", 1, BW(0x01))
     assert z3.simplify(PUSH(ins)) == 0x01
