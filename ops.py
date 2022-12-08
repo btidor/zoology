@@ -217,14 +217,28 @@ def CALLDATACOPY(
         s.memory[destOffset + i] = s.transaction.calldata[offset + i]
 
 
-def CODESIZE() -> uint256:
+def CODESIZE(s: State) -> uint256:
     """38 - Get size of code running in current environment."""
-    raise NotImplementedError("CODESIZE")
+    return BW(len(s.contract.program.bytes))
 
 
-def CODECOPY(destOffset: uint256, offset: uint256, size: uint256) -> None:
+def CODECOPY(s: State, _destOffset: uint256, _offset: uint256, _size: uint256) -> None:
     """39 - Copy code running in current environment to memory."""
-    raise NotImplementedError("CODECOPY")
+    destOffset = unwrap(
+        _destOffset,
+        "CODECOPY(destOffset, offset, size) requires concrete destOffset",
+    )
+    offset = unwrap(
+        _offset,
+        "CODECOPY(destOffset, offset, size) requires concrete offset",
+    )
+    size = unwrap(_size, "CODECOPY(destOffset, offset, size) requires concrete size")
+    # TODO: write a test!
+    for i in range(size):
+        if offset + i < len(s.contract.program.bytes):
+            s.memory[destOffset + i] = BY(s.contract.program.bytes[offset + i])
+        else:
+            s.memory[destOffset + i] = BY(0)
 
 
 def GASPRICE(s: State) -> uint256:

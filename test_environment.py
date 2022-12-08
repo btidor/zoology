@@ -4,7 +4,7 @@ import copy
 
 import z3
 
-from disassembler import Program
+from disassembler import disassemble
 from sha3 import SHA3
 from symbolic import BA, BW, check, zeval
 from testlib import make_state
@@ -25,7 +25,7 @@ def test_transaction_evaluate() -> None:
 
 
 def test_transfer() -> None:
-    start = symbolic_start(Program(), SHA3(), "")
+    start = symbolic_start(disassemble(b""), SHA3(), "")
     end = copy.deepcopy(start)
     src, dst = BA(0x1234), BA(0x5678)
 
@@ -43,7 +43,7 @@ def test_transfer() -> None:
 
 
 def test_impossible_transfer() -> None:
-    start = symbolic_start(Program(), SHA3(), "")
+    start = symbolic_start(disassemble(b""), SHA3(), "")
     end = copy.deepcopy(start)
     src, dst = BA(0x1234), BA(0x5678)
 

@@ -6,7 +6,7 @@ from typing import Any, Dict, Literal, Optional, assert_never
 import z3
 from Crypto.Hash import keccak
 
-from disassembler import Program
+from disassembler import disassemble
 from environment import Block, Contract, Transaction, Universe
 from sha3 import SHA3
 from state import State
@@ -39,7 +39,7 @@ def make_block(**kwargs: Any) -> Block:
 def make_contract(**kwargs: Any) -> Contract:
     attrs: Dict[str, Any] = {
         "address": BA(0xADADADADADADADADADADADADADADADADADADADAD),
-        "program": Program(),
+        "program": disassemble(b""),
         "storage": Array("STORAGE", z3.BitVecSort(256), BW(0)),
     }
     attrs.update(**kwargs)

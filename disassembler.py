@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, Iterable, List, Optional
 
 from opcodes import REFERENCE, UNIMPLEMENTED
@@ -14,11 +14,12 @@ from symbolic import BW, uint256, unwrap
 class Program:
     """The disassembled code of an EVM contract."""
 
-    instructions: List[Instruction] = field(default_factory=list)
+    bytes: bytes
+    instructions: List[Instruction]
 
     # Maps byte offsets in the contract, as used by JUMP/JUMPI, to an index into
     # `instructions`.
-    jumps: Dict[int, int] = field(default_factory=dict)
+    jumps: Dict[int, int]
 
 
 @dataclass
@@ -52,7 +53,7 @@ class Instruction:
 
 def disassemble(code: bytes) -> Program:
     """Parse and validate an EVM contract's code."""
-    program = Program()
+    program = Program(bytes=code, instructions=[], jumps={})
 
     offset = 0
     while offset < len(code):

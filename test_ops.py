@@ -3,7 +3,7 @@
 import pytest
 import z3
 
-from disassembler import Instruction, Program
+from disassembler import Instruction, disassemble
 from ops import *
 from state import State
 from symbolic import BA, BW, BY, Bytes, check, unwrap_bytes
@@ -350,6 +350,32 @@ def test_CALLDATACOPY() -> None:
     )
 
 
+def test_CODESIZE() -> None:
+    s = make_state(
+        contract=make_contract(
+            program=disassemble(bytes.fromhex("66000000000000005B")),
+        )
+    )
+    assert CODESIZE(s) == 9
+
+
+def test_CODECOPY() -> None:
+    s = make_state(
+        contract=make_contract(
+            program=disassemble(bytes.fromhex("66000000000000005B")),
+        )
+    )
+
+    CODECOPY(s, BW(0), BW(0), BW(0x09))
+    assert _dump_memory(s) == "0x66000000000000005B"
+
+    CODECOPY(s, BW(1), BW(8), BW(0x20))
+    assert (
+        _dump_memory(s)
+        == "0x665B00000000000000000000000000000000000000000000000000000000000000"
+    )
+
+
 def test_GASPRICE() -> None:
     transaction = make_transaction(gasprice=BW(10))
     s = make_state(transaction=transaction)
@@ -488,11 +514,13 @@ def test_SSTORE() -> None:
 
 
 def test_JUMP() -> None:
-    program = Program(jumps={8: 90})
-    contract = make_contract(program=program)
+    contract = make_contract(
+        program=disassemble(bytes.fromhex("66000000000000005B")),
+    )
+    print(contract.program)
     s = make_state(contract=contract)
     JUMP(s, BW(8))
-    assert s.pc == 90
+    assert s.pc == 1
     with pytest.raises(KeyError):
         JUMP(s, BW(99))
 
