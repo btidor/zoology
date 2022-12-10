@@ -62,7 +62,7 @@ def MULMOD(a: uint256, b: uint256, N: uint256) -> uint256:
 
 def EXP(a: uint256, _exponent: uint256) -> uint256:
     """0A - Exponential operation."""
-    exponent = unwrap(_exponent, "EXP(a, exponent) requires concrete exponent")
+    exponent = unwrap(_exponent, "EXP requires concrete exponent")
     if exponent == 0:
         return BW(1)
     for i in range(exponent - 1):
@@ -72,7 +72,7 @@ def EXP(a: uint256, _exponent: uint256) -> uint256:
 
 def SIGNEXTEND(_b: uint256, x: uint256) -> uint256:
     """0B - Extend length of two's complement signed integer."""
-    b = unwrap(_b, "SIGNEXTEND(b, x) requires concrete b")
+    b = unwrap(_b, "SIGNEXTEND requires concrete b")
     if b > 30:
         return x
     bits = (b + 1) * 8
@@ -131,7 +131,7 @@ def NOT(a: uint256) -> uint256:
 
 def BYTE(_i: uint256, x: uint256) -> uint256:
     """1A - Retrieve single bytes from word."""
-    i = unwrap(_i, "BYTE(i, x) requires concrete i")
+    i = unwrap(_i, "BYTE requires concrete i")
     if i > 31:
         return BW(0)
     start = 256 - (8 * i)
@@ -155,8 +155,8 @@ def SAR(shift: uint256, value: uint256) -> uint256:
 
 def SHA3(s: State, _offset: uint256, _size: uint256) -> uint256:
     """20 - Compute Keccak-256 hash."""
-    offset = unwrap(_offset, "SHA3(offset, size) requires concrete offset")
-    size = unwrap(_size, "SHA3(offset, size) requires concrete size")
+    offset = unwrap(_offset, "SHA3 requires concrete offset")
+    size = unwrap(_size, "SHA3 requires concrete size")
 
     data = zconcat(*[s.memory.get(i, BW(0)) for i in range(offset, offset + size)])
     return s.sha3[data]
@@ -206,13 +206,8 @@ def CALLDATACOPY(
     s: State, _destOffset: uint256, offset: uint256, _size: uint256
 ) -> None:
     """37 - Copy input data in current environment to memory."""
-    destOffset = unwrap(
-        _destOffset,
-        "CALLDATACOPY(destOffset, offset, size) requires concrete destOffset",
-    )
-    size = unwrap(
-        _size, "CALLDATACOPY(destOffset, offset, size) requires concrete size"
-    )
+    destOffset = unwrap(_destOffset, "CALLDATACOPY requires concrete destOffset")
+    size = unwrap(_size, "CALLDATACOPY requires concrete size")
     for i in range(size):
         s.memory[destOffset + i] = s.transaction.calldata[offset + i]
 
@@ -224,16 +219,9 @@ def CODESIZE(s: State) -> uint256:
 
 def CODECOPY(s: State, _destOffset: uint256, _offset: uint256, _size: uint256) -> None:
     """39 - Copy code running in current environment to memory."""
-    destOffset = unwrap(
-        _destOffset,
-        "CODECOPY(destOffset, offset, size) requires concrete destOffset",
-    )
-    offset = unwrap(
-        _offset,
-        "CODECOPY(destOffset, offset, size) requires concrete offset",
-    )
-    size = unwrap(_size, "CODECOPY(destOffset, offset, size) requires concrete size")
-    # TODO: write a test!
+    destOffset = unwrap(_destOffset, "CODECOPY requires concrete destOffset")
+    offset = unwrap(_offset, "CODECOPY requires concrete offset")
+    size = unwrap(_size, "CODECOPY requires concrete size")
     for i in range(size):
         if offset + i < len(s.contract.program.bytes):
             s.memory[destOffset + i] = BY(s.contract.program.bytes[offset + i])
@@ -353,13 +341,13 @@ def POP(y: uint256) -> None:
 
 def MLOAD(s: State, _offset: uint256) -> uint256:
     """51 - Load word from memory."""
-    offset = unwrap(_offset, "MLOAD(offset) requires concrete offset")
+    offset = unwrap(_offset, "MLOAD requires concrete offset")
     return zconcat(*[s.memory.get(offset + i, BY(0)) for i in range(32)])
 
 
 def MSTORE(s: State, _offset: uint256, value: uint256) -> None:
     """52 - Save word to memory."""
-    offset = unwrap(_offset, "MSTORE(offset, value) requires concrete offset")
+    offset = unwrap(_offset, "MSTORE requires concrete offset")
     for i in range(31, -1, -1):
         s.memory[offset + i] = zextract(7, 0, value)
         value = value >> 8
@@ -367,7 +355,7 @@ def MSTORE(s: State, _offset: uint256, value: uint256) -> None:
 
 def MSTORE8(s: State, _offset: uint256, value: uint256) -> None:
     """53 - Save byte to memory."""
-    offset = unwrap(_offset, "MSTORE8(offset, value) requires concrete offset")
+    offset = unwrap(_offset, "MSTORE8 requires concrete offset")
     s.memory[offset] = zextract(7, 0, value)
 
 
@@ -383,7 +371,7 @@ def SSTORE(s: State, key: uint256, value: uint256) -> None:
 
 def JUMP(s: State, _counter: uint256) -> None:
     """56 - Alter the program counter."""
-    counter = unwrap(_counter, "JUMP(counter) requires concrete counter")
+    counter = unwrap(_counter, "JUMP requires concrete counter")
     # In theory, JUMP should revert if counter is not a valid jump target.
     # Instead, raise an error and fail the whole analysis. This lets us prove
     # that all jump targets are valid and within the body of the code, which is
@@ -528,11 +516,8 @@ def CALLCODE(
 
 def RETURN(s: State, _offset: uint256, _size: uint256) -> None:
     """F3 - Halts execution returning output data."""
-    offset = unwrap(
-        _offset,
-        "RETURN(offset, size) requires concrete offset",
-    )
-    size = unwrap(_size, "RETURN(offset, size) requires concrete size")
+    offset = unwrap(_offset, "RETURN requires concrete offset")
+    size = unwrap(_size, "RETURN requires concrete size")
     s.returndata = Bytes(
         "",
         [zget(s.memory, i, BW(0)) for i in range(offset, offset + size)],
@@ -580,11 +565,8 @@ def REVERT(s: State, _offset: uint256, _size: uint256) -> None:
 
     Halt execution reverting state changes but returning data and remaining gas.
     """
-    offset = unwrap(
-        _offset,
-        "REVERT(offset, size) requires concrete offset",
-    )
-    size = unwrap(_size, "REVERT(offset, size) requires concrete size")
+    offset = unwrap(_offset, "REVERT requires concrete offset")
+    size = unwrap(_size, "REVERT requires concrete size")
     s.returndata = Bytes(
         "", [zget(s.memory, i, BW(0)) for i in range(offset, offset + size)]
     )

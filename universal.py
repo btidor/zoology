@@ -62,7 +62,7 @@ def symbolic_JUMPI(program: Program, state: State) -> Iterator[State]:
     solver = z3.Optimize()
     state.constrain(solver)
 
-    counter = unwrap(state.stack.pop(), "JUMPI(counter, b) requires concrete counter")
+    counter = unwrap(state.stack.pop(), "JUMPI requires concrete counter")
     if counter not in program.jumps:
         raise ValueError(f"illegal JUMPI target: 0x{counter:x}")
     b = state.stack.pop()

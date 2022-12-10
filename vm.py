@@ -102,8 +102,8 @@ def printable_execution(state: State) -> Iterator[str]:
 def concrete_JUMPI(state: State) -> None:
     """Handle a JUMPI action with concrete arguments. Mutates state."""
     program = state.contract.program
-    counter = unwrap(state.stack.pop(), "JUMPI(counter, b) requires concrete counter")
-    b = unwrap(state.stack.pop(), "JUMPI(counter, b) requires concrete b")
+    counter = unwrap(state.stack.pop(), "JUMPI requires concrete counter")
+    b = unwrap(state.stack.pop(), "JUMPI requires concrete b")
     if counter not in program.jumps:
         raise ValueError(f"illegal JUMPI target: 0x{counter:x}")
     if b == 0:
