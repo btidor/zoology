@@ -1,16 +1,27 @@
 import os
 import subprocess
 from enum import Enum
-from typing import Any, Dict, Literal, Optional, assert_never
+from typing import Any, Dict, List, Literal, Optional, assert_never
 
 import z3
 from Crypto.Hash import keccak
 
-from disassembler import disassemble
+from disassembler import Program, disassemble
 from environment import Block, Contract, Transaction, Universe
 from sha3 import SHA3
 from state import State
-from symbolic import BA, BW, Array, Bytes, check, solver_stack
+from symbolic import (
+    BA,
+    BW,
+    Array,
+    Bytes,
+    Constraint,
+    check,
+    solver_stack,
+    uint8,
+    uint160,
+    uint256,
+)
 from universal import constrain_to_goal
 from vm import concrete_JUMPI, step
 
@@ -36,61 +47,96 @@ def make_block(**kwargs: Any) -> Block:
     return Block(**attrs)
 
 
-def make_contract(**kwargs: Any) -> Contract:
-    attrs: Dict[str, Any] = {
-        "address": BA(0xADADADADADADADADADADADADADADADADADADADAD),
-        "program": disassemble(b""),
-        "storage": Array("STORAGE", z3.BitVecSort(256), BW(0)),
-    }
-    attrs.update(**kwargs)
-    return Contract(**attrs)
+def make_contract(
+    address: uint160 = BA(0xADADADADADADADADADADADADADADADADADADADAD),
+    program: Program = disassemble(b""),
+    storage: Array = Array("STORAGE", z3.BitVecSort(256), BW(0)),
+) -> Contract:
+    return Contract(
+        address=address,
+        program=program,
+        storage=storage,
+    )
 
 
-def make_transaction(**kwargs: Any) -> Transaction:
-    attrs: Dict[str, Any] = {
-        "origin": BA(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0),
-        "caller": BA(0xCACACACACACACACACACACACACACACACACACACACA),
-        "callvalue": BW(0),
-        "calldata": Bytes("", b""),
-        "gasprice": BW(0x12),
-    }
-    attrs.update(**kwargs)
-    return Transaction(**attrs)
+def make_transaction(
+    origin: Optional[uint160] = None,
+    caller: Optional[uint160] = None,
+    callvalue: Optional[uint256] = None,
+    calldata: Optional[Bytes] = None,
+    gasprice: Optional[uint256] = None,
+) -> Transaction:
+    return Transaction(
+        origin=BA(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0)
+        if origin is None
+        else origin,
+        caller=BA(0xCACACACACACACACACACACACACACACACACACACACA)
+        if caller is None
+        else caller,
+        callvalue=BW(0) if callvalue is None else callvalue,
+        calldata=Bytes("", b"") if calldata is None else calldata,
+        gasprice=BW(0x12) if gasprice is None else gasprice,
+    )
 
 
-def make_universe(**kwargs: Any) -> Universe:
-    attrs: Dict[str, Any] = {
-        "suffix": "",
-        "balances": Array("BALANCE", z3.BitVecSort(160), BW(0)),
-        "transfer_constraints": [],
-        "blockhashes": Array("BLOCKHASH", z3.BitVecSort(256), BW(0)),
-        "agents": [],
-        "contribution": BW(0),
-        "extraction": BW(0),
-    }
-    attrs.update(**kwargs)
-    return Universe(**attrs)
+def make_universe(
+    suffix: Optional[str] = None,
+    balances: Optional[Array] = None,
+    transfer_constraints: Optional[List[Constraint]] = None,
+    blockhashes: Optional[Array] = None,
+    agents: Optional[List[uint160]] = None,
+    contribution: Optional[uint256] = None,
+    extraction: Optional[uint256] = None,
+) -> Universe:
+    return Universe(
+        suffix="" if suffix is None else suffix,
+        balances=Array("BALANCE", z3.BitVecSort(160), BW(0))
+        if balances is None
+        else balances,
+        transfer_constraints=[]
+        if transfer_constraints is None
+        else transfer_constraints,
+        blockhashes=Array("BLOCKHASH", z3.BitVecSort(256), BW(0))
+        if blockhashes is None
+        else blockhashes,
+        agents=[] if agents is None else agents,
+        contribution=BW(0) if contribution is None else contribution,
+        extraction=BW(0) if extraction is None else extraction,
+    )
 
 
-def make_state(**kwargs: Any) -> State:
-    attrs: Dict[str, Any] = {
-        "suffix": "",
-        "block": make_block(),
-        "contract": make_contract(),
-        "transaction": make_transaction(),
-        "universe": make_universe(),
-        "sha3": SHA3(),
-        "pc": 0,
-        "stack": [],
-        "memory": {},
-        "returndata": Bytes("", b""),
-        "success": None,
-        "gas_variables": [],
-        "path_constraints": [],
-        "path": 1,
-    }
-    attrs.update(**kwargs)
-    return State(**attrs)
+def make_state(
+    suffix: Optional[str] = None,
+    block: Optional[Block] = None,
+    contract: Optional[Contract] = None,
+    transaction: Optional[Transaction] = None,
+    universe: Optional[Universe] = None,
+    sha3: Optional[SHA3] = None,
+    pc: Optional[int] = None,
+    stack: Optional[List[uint256]] = None,
+    memory: Optional[Dict[int, uint8]] = None,
+    returndata: Optional[Bytes] = None,
+    success: Optional[bool] = None,
+    gas_variables: Optional[List[uint256]] = None,
+    path_constraints: Optional[List[Constraint]] = None,
+    path: Optional[int] = None,
+) -> State:
+    return State(
+        suffix="" if suffix is None else suffix,
+        block=make_block() if block is None else block,
+        contract=make_contract() if contract is None else contract,
+        transaction=make_transaction() if transaction is None else transaction,
+        universe=make_universe() if universe is None else universe,
+        sha3=SHA3() if sha3 is None else sha3,
+        pc=0 if pc is None else pc,
+        stack=[] if stack is None else stack,
+        memory={} if memory is None else memory,
+        returndata=Bytes("", b"") if returndata is None else returndata,
+        success=None if success is None else success,
+        gas_variables=[] if gas_variables is None else gas_variables,
+        path_constraints=[] if path_constraints is None else path_constraints,
+        path=1 if path is None else path,
+    )
 
 
 def compile_solidity(

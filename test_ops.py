@@ -19,7 +19,7 @@ def _dump_memory(s: State) -> str:
 
 
 def test_STOP() -> None:
-    s = make_state(returndata=[BW(0x12), BW(0x34)])
+    s = make_state(returndata=Bytes("", b"\x12\x34"))
     STOP(s)
     assert s.success is True
     assert s.returndata.require_concrete() == b""
@@ -574,7 +574,7 @@ def test_SWAP() -> None:
 
 
 def test_CALL() -> None:
-    s = make_state(returndata=[BY(1)])
+    s = make_state(returndata=Bytes("", b"\x01"))
     s.universe.balances[s.contract.address] = BW(125)
     res = CALL(s, BW(0), BW(0x1234), BW(123), BW(0), BW(0), BW(0), BW(0))
     assert z3.simplify(res) == 1
@@ -585,7 +585,7 @@ def test_CALL() -> None:
 
 def test_RETURN() -> None:
     s = make_state(
-        returndata=[BW(0x12), BW(0x34)],
+        returndata=Bytes("", b"\x12\x34"),
         memory={0: BY(0xFF), 1: BY(0x01)},
     )
     RETURN(s, BW(0), BW(2))
@@ -595,7 +595,7 @@ def test_RETURN() -> None:
 
 def test_REVERT() -> None:
     s = make_state(
-        returndata=[BW(0x12), BW(0x34)],
+        returndata=Bytes("", b"\x12\x34"),
         memory={0: BY(0xFF), 1: BY(0x01)},
     )
     REVERT(s, BW(0), BW(2))
@@ -604,7 +604,7 @@ def test_REVERT() -> None:
 
 
 def test_INVALID() -> None:
-    s = make_state(returndata=[BW(0x12), BW(0x34)])
+    s = make_state(returndata=Bytes("", b"\x12\x34"))
     INVALID(s)
     assert s.success is False
     assert s.returndata.require_concrete() == b""
