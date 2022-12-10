@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from collections import OrderedDict
+from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Dict, Iterator, List, Optional
 
 import z3
 
@@ -42,6 +43,8 @@ class State:
 
     returndata: Bytes
     success: Optional[bool]
+
+    subcontexts: List[State]
 
     # Every time the GAS instruction is invoked we return a symbolic result,
     # tracked here. These should be monotonically decreasing.
@@ -135,3 +138,34 @@ class State:
         if returndata:
             r["Return"] = "0x" + returndata
         return r
+
+    @contextmanager
+    def descend(self, contract: Contract, transaction: Transaction) -> Iterator[State]:
+        """Descend into a subcontext."""
+        context = State(
+            suffix=f"{len(self.subcontexts)}.{self.suffix}",
+            block=self.block,
+            contract=contract,
+            transaction=transaction,
+            universe=self.universe,
+            sha3=self.sha3,
+            pc=0,
+            stack=[],
+            memory={},
+            success=None,
+            returndata=Bytes("", b""),
+            subcontexts=[],
+            gas_variables=self.gas_variables,
+            path_constraints=self.path_constraints,
+            path=self.path,
+        )
+        context.universe.transfer(
+            transaction.caller, contract.address, transaction.callvalue
+        )
+        self.subcontexts.append(context)
+
+        yield context
+
+        self.gas_variables = context.gas_variables
+        self.path_constraints = context.path_constraints
+        self.path = context.path

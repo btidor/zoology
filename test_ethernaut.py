@@ -4,7 +4,7 @@ import pytest
 
 from disassembler import disassemble
 from sha3 import SHA3
-from symbolic import BA, BW, Bytes, unwrap_bytes
+from symbolic import BA, BW, Bytes, unwrap, unwrap_bytes
 from testlib import (
     Solidity,
     abiencode,
@@ -14,6 +14,7 @@ from testlib import (
     make_contract,
     make_state,
     make_transaction,
+    make_universe,
 )
 from universal import printable_transition, universal_transaction
 
@@ -320,7 +321,6 @@ def test_token() -> None:
         next(universal)
 
 
-@pytest.mark.skip("implement DELEGATECALL")
 def test_delegation() -> None:
     source = """
         // SPDX-License-Identifier: MIT
@@ -357,26 +357,31 @@ def test_delegation() -> None:
             }
         }
     """
-    code = compile_solidity(source, contract="Delegation", version=Solidity.v08)
-    program = disassemble(code)
+    delegate = disassemble(compile_solidity(source, contract="Delegate"))
+    delegation = disassemble(compile_solidity(source, contract="Delegation"))
 
+    other = make_contract(address=BA(0xABCDEF), program=delegate)
     state = make_state(
-        contract=make_contract(program=program),
+        contract=make_contract(program=delegation),
         transaction=make_transaction(
             callvalue=BW(0),
             calldata=Bytes("CALLDATA", abiencode("pwn()")),
         ),
+        universe=make_universe(contracts={unwrap(other.address): other}),
     )
+    state.contract.storage[BW(1)] = BW(unwrap(other.address))
     execute(state)
     assert state.success is True
     assert state.returndata.require_concrete() == b""
 
-    universal = universal_transaction(program, SHA3(), "")
-    check_transition(*next(universal), 0x0, "VIEW", "owner()")
-    check_transition(*next(universal), 0x0, "SAVE", "pwn()")
+    # TODO: implement byte-array copy with symbolic arguments
 
-    with pytest.raises(StopIteration):
-        next(universal)
+    # universal = universal_transaction(delegation, SHA3(), "")
+    # check_transition(*next(universal), 0x0, "VIEW", "owner()")
+    # check_transition(*next(universal), 0x0, "SAVE", "pwn()")
+
+    # with pytest.raises(StopIteration):
+    #     next(universal)
 
 
 def test_force() -> None:

@@ -2,6 +2,7 @@
 """An implementation of the Ethereum virtual machine."""
 
 import inspect
+from contextlib import contextmanager
 from typing import Iterator, List, Literal, Optional, assert_never
 
 import z3
@@ -14,7 +15,9 @@ from state import State
 from symbolic import BA, BW, Array, Bytes, uint256, unwrap, unwrap_bytes
 
 
-def step(state: State) -> Literal["CONTINUE", "JUMPI", "TERMINATE"]:
+def step(
+    state: State,
+) -> Literal["CONTINUE", "JUMPI", "GAS", "DELEGATECALL", "TERMINATE"]:
     """
     Execute a single instruction.
 
@@ -31,6 +34,12 @@ def step(state: State) -> Literal["CONTINUE", "JUMPI", "TERMINATE"]:
 
     if ins.name == "JUMPI":
         return "JUMPI"
+    elif ins.name == "GAS":
+        state.pc += 1
+        return "GAS"
+    elif ins.name == "DELEGATECALL":
+        state.pc += 1
+        return "DELEGATECALL"
     elif hasattr(ops, ins.name):
         fn = getattr(ops, ins.name)
         sig = inspect.signature(fn)
@@ -83,6 +92,12 @@ def printable_execution(state: State) -> Iterator[str]:
             pass
         elif action == "JUMPI":
             concrete_JUMPI(state)
+        elif action == "GAS":
+            concrete_GAS(state)
+        elif action == "DELEGATECALL":
+            with concrete_DELEGATECALL(state) as substate:
+                for line in printable_execution(substate):
+                    yield "  " + line
         else:
             assert_never(action)
 
@@ -110,6 +125,45 @@ def concrete_JUMPI(state: State) -> None:
         state.pc += 1
     else:
         state.pc = program.jumps[counter]
+
+
+def concrete_GAS(state: State) -> None:
+    """Handle a GAS action using a concrete dummy value. Mutates state."""
+    state.stack.append(BW(0x1234))
+
+
+@contextmanager
+def concrete_DELEGATECALL(state: State) -> Iterator[State]:
+    """Handle a DELEGATECALL action. Yields a single state."""
+    gas = state.stack.pop()
+    address = unwrap(state.stack.pop(), "DELEGATECALL requires concrete address")
+    argsOffset = unwrap(state.stack.pop(), "DELEGATECALL requires concrete argsOffset")
+    argsSize = unwrap(state.stack.pop(), "DELEGATECALL requires concrete argsSize")
+    retOffset = unwrap(
+        state.stack.pop(),
+        "DELEGATECALL requires concrete retOffset",
+    )
+    retSize = unwrap(state.stack.pop(), "DELEGATECALL requires concrete retSize")
+
+    data = [state.memory[argsOffset + i] for i in range(argsSize)]
+    transaction = Transaction(
+        origin=state.transaction.origin,
+        caller=state.transaction.caller,
+        callvalue=state.transaction.callvalue,
+        calldata=Bytes("", data),
+        gasprice=state.transaction.gasprice,
+    )
+    contract = state.universe.contracts.get(address, None)
+    if not contract:
+        raise ValueError("DELEGATECALL to unknown contract: " + hex(address))
+
+    with state.descend(contract, transaction) as substate:
+        yield substate
+
+        for i in range(retSize):
+            state.memory[retOffset + i] = substate.returndata[BW(i)]
+
+        state.stack.append(BW(1) if substate.success else BW(0))
 
 
 def concrete_start(program: Program, value: uint256, data: bytes) -> State:
@@ -160,6 +214,7 @@ def concrete_start(program: Program, value: uint256, data: bytes) -> State:
         memory={},
         returndata=Bytes("", b""),
         success=None,
+        subcontexts=[],
         gas_variables=[],
         path_constraints=[],
         path=1,

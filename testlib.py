@@ -1,7 +1,7 @@
 import os
 import subprocess
 from enum import Enum
-from typing import Any, Dict, List, Literal, Optional, assert_never
+from typing import Dict, List, Literal, Optional, assert_never
 
 import z3
 from Crypto.Hash import keccak
@@ -23,7 +23,7 @@ from symbolic import (
     uint256,
 )
 from universal import constrain_to_goal
-from vm import concrete_JUMPI, step
+from vm import concrete_DELEGATECALL, concrete_GAS, concrete_JUMPI, step
 
 
 class Solidity(Enum):
@@ -31,31 +31,45 @@ class Solidity(Enum):
     v06 = "0.6.12"
 
 
-def make_block(**kwargs: Any) -> Block:
-    attrs: Dict[str, Any] = {
-        "number": BW(16030969),
-        "coinbase": BA(0xDAFEA492D9C6733AE3D56B7ED1ADB60692C98BC5),
-        "timestamp": BW(1669214471),
-        "prevrandao": BW(
+def make_block(
+    number: Optional[uint256] = None,
+    coinbase: Optional[uint256] = None,
+    timestamp: Optional[uint256] = None,
+    prevrandao: Optional[uint256] = None,
+    gaslimit: Optional[uint256] = None,
+    chainid: Optional[uint256] = None,
+    basefee: Optional[uint256] = None,
+) -> Block:
+    return Block(
+        number=BW(16030969) if number is None else number,
+        coinbase=BA(0xDAFEA492D9C6733AE3D56B7ED1ADB60692C98BC5)
+        if coinbase is None
+        else coinbase,
+        timestamp=BW(1669214471) if timestamp is None else timestamp,
+        prevrandao=BW(
             0xCC7E0A66B3B9E3F54B7FDB9DCF98D57C03226D73BFFBB4E0BA7B08F92CE00D19
-        ),
-        "gaslimit": BW(30000000000000000),
-        "chainid": BW(1),
-        "basefee": BW(12267131109),
-    }
-    attrs.update(**kwargs)
-    return Block(**attrs)
+        )
+        if prevrandao is None
+        else prevrandao,
+        gaslimit=BW(30000000000000000) if gaslimit is None else gaslimit,
+        chainid=BW(1) if chainid is None else chainid,
+        basefee=BW(12267131109) if basefee is None else basefee,
+    )
 
 
 def make_contract(
-    address: uint160 = BA(0xADADADADADADADADADADADADADADADADADADADAD),
-    program: Program = disassemble(b""),
-    storage: Array = Array("STORAGE", z3.BitVecSort(256), BW(0)),
+    address: Optional[uint160] = None,
+    program: Optional[Program] = None,
+    storage: Optional[Array] = None,
 ) -> Contract:
     return Contract(
-        address=address,
-        program=program,
-        storage=storage,
+        address=BA(0xADADADADADADADADADADADADADADADADADADADAD)
+        if address is None
+        else address,
+        program=disassemble(b"") if program is None else program,
+        storage=Array("STORAGE", z3.BitVecSort(256), BW(0))
+        if storage is None
+        else storage,
     )
 
 
@@ -119,6 +133,7 @@ def make_state(
     memory: Optional[Dict[int, uint8]] = None,
     returndata: Optional[Bytes] = None,
     success: Optional[bool] = None,
+    subcontexts: Optional[List[State]] = None,
     gas_variables: Optional[List[uint256]] = None,
     path_constraints: Optional[List[Constraint]] = None,
     path: Optional[int] = None,
@@ -135,6 +150,7 @@ def make_state(
         memory={} if memory is None else memory,
         returndata=Bytes("", b"") if returndata is None else returndata,
         success=None if success is None else success,
+        subcontexts=[] if subcontexts is None else subcontexts,
         gas_variables=[] if gas_variables is None else gas_variables,
         path_constraints=[] if path_constraints is None else path_constraints,
         path=1 if path is None else path,
@@ -193,6 +209,11 @@ def execute(state: State) -> None:
             continue
         elif action == "JUMPI":
             concrete_JUMPI(state)
+        elif action == "GAS":
+            concrete_GAS(state)
+        elif action == "DELEGATECALL":
+            with concrete_DELEGATECALL(state) as substate:
+                execute(substate)
         elif action == "TERMINATE":
             return
         else:

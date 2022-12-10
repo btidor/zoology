@@ -11,7 +11,7 @@ from environment import Block, Contract, Transaction, Universe
 from sha3 import SHA3
 from state import State
 from symbolic import Array, Bytes, check, solver_stack, unwrap, unwrap_bytes, zeval
-from vm import step
+from vm import concrete_DELEGATECALL, step
 
 
 def universal_transaction(
@@ -36,22 +36,32 @@ def universal_transaction(
         init.contract.address,
         init.transaction.callvalue,
     )
-    states = [init]
+    for end in _universal_transaction(init):
+        yield start, end
 
+
+def _universal_transaction(start: State) -> Iterator[State]:
+    states = [start]
     while len(states) > 0:
         state = states.pop()
-
         while True:
             action = step(state)
             if action == "CONTINUE":
                 continue
             elif action == "JUMPI":
-                states.extend(symbolic_JUMPI(program, state))
+                states.extend(symbolic_JUMPI(state.contract.program, state))
                 break
+            elif action == "GAS":
+                symbolic_GAS(state)
+                continue
+            elif action == "DELEGATECALL":
+                with concrete_DELEGATECALL(state) as substate:
+                    for end in _universal_transaction(state):
+                        yield end
             elif action == "TERMINATE":
                 assert state.success is not None
                 if state.success:
-                    yield start, state
+                    yield state
                 break
             else:
                 assert_never(action)
@@ -80,6 +90,13 @@ def symbolic_JUMPI(program: Program, state: State) -> Iterator[State]:
         next.path = (next.path << 1) | 1
         next.path_constraints.append(b != 0)
         yield next
+
+
+def symbolic_GAS(state: State) -> None:
+    """Handle a GAS action using a symbolic value. Mutates state."""
+    gas = z3.BitVec(f"GAS{len(state.gas_variables)}{state.suffix}", 256)
+    state.gas_variables.append(gas)
+    state.stack.append(gas)
 
 
 def symbolic_start(program: Program, sha3: SHA3, suffix: str) -> State:
@@ -134,6 +151,7 @@ def symbolic_start(program: Program, sha3: SHA3, suffix: str) -> State:
         memory={},
         returndata=Bytes("", b""),
         success=None,
+        subcontexts=[],
         gas_variables=[],
         path_constraints=[],
         path=1,

@@ -4,7 +4,18 @@ import z3
 
 from disassembler import Instruction
 from state import State
-from symbolic import BW, BY, Bytes, uint256, unwrap, zconcat, zextract, zget, zif
+from symbolic import (
+    BW,
+    BY,
+    Bytes,
+    simplify,
+    uint256,
+    unwrap,
+    zconcat,
+    zextract,
+    zget,
+    zif,
+)
 
 
 def STOP(s: State) -> None:
@@ -429,10 +440,12 @@ def GAS(s: State) -> uint256:
 
     Get the amount of available gas, including the corresponding reduction for
     the cost of this instruction.
+
+    This opcode should be implemented by the VM. Since we don't actually track
+    gas usage, the VM will need to return either a symbolic value or a concrete
+    dummy value.
     """
-    gas = z3.BitVec(f"GAS{len(s.gas_variables)}{s.suffix}", 256)
-    s.gas_variables.append(gas)
-    return gas
+    raise NotImplementedError("GAS")
 
 
 def JUMPDEST() -> None:
@@ -557,6 +570,8 @@ def DELEGATECALL(
 
     Message-call into this account with an alternative account's code, but
     persisting the current values for sender and value.
+
+    This opcode should be implemented by the VM.
     """
     raise NotImplementedError("DELEGATECALL")
 
