@@ -91,6 +91,7 @@ def zif(condition: Constraint, then: z3.BitVecRef, else_: z3.BitVecRef) -> z3.Bi
 
 def zconcat(*values: z3.BitVecRef) -> z3.BitVecRef:
     """Return the concatenation of symbolic bitvectors."""
+    # TODO: support zero-length bitvectors, empty hash, etc.
     return cast(z3.BitVecRef, z3.Concat(*values))
 
 

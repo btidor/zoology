@@ -116,6 +116,7 @@ def symbolic_start(program: Program, sha3: SHA3, suffix: str) -> State:
         # do we model this?
         balances=Array(f"BALANCE{suffix}", z3.BitVecSort(160), z3.BitVecSort(256)),
         transfer_constraints=[],
+        contracts={},
         blockhashes=Array(f"BLOCKHASH{suffix}", z3.BitVecSort(256), z3.BitVecSort(256)),
         agents=[origin, caller],
         contribution=z3.BitVec(f"CONTRIBUTION{suffix}", 256),

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from dataclasses import dataclass
-from typing import Any, List
+from typing import Any, Dict, List
 
 import z3
 
@@ -92,6 +92,8 @@ class Universe:
 
     balances: Array
     transfer_constraints: List[Constraint]
+
+    contracts: Dict[int, Contract]  # address -> Contract
 
     blockhashes: Array
 

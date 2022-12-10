@@ -7,14 +7,20 @@ from disassembler import Instruction, disassemble
 from ops import *
 from state import State
 from symbolic import BA, BW, BY, Bytes, check, unwrap_bytes
-from testlib import make_block, make_contract, make_state, make_transaction
+from testlib import (
+    make_block,
+    make_contract,
+    make_state,
+    make_transaction,
+    make_universe,
+)
 
 
 def _dump_memory(s: State) -> str:
     v = ""
     lim = max(s.memory.keys())
     for i in range(lim + 1):
-        v += unwrap_bytes(s.memory[i]).hex()
+        v += unwrap_bytes(s.memory.get(i, BY(0))).hex()
     return "0x" + v.upper()
 
 
@@ -382,6 +388,30 @@ def test_GASPRICE() -> None:
     assert z3.simplify(GASPRICE(s)) == 10
 
 
+def test_EXTCODESIZE() -> None:
+    address = 0xABCDABCDABCDABCDABCDABCDABCDABCDABCDABCD
+    contract = make_contract(
+        address=BA(address), program=disassemble(bytes.fromhex("66000000000000005B"))
+    )
+    s = make_state(universe=make_universe(contracts={address: contract}))
+    assert EXTCODESIZE(s, BA(address)) == 9
+    assert EXTCODESIZE(s, BA(0x1234)) == 0
+
+
+def test_EXTCODECOPY() -> None:
+    address = 0xABCDABCDABCDABCDABCDABCDABCDABCDABCDABCD
+    contract = make_contract(
+        address=BA(address), program=disassemble(bytes.fromhex("66000000000000005B"))
+    )
+    s = make_state(universe=make_universe(contracts={address: contract}))
+
+    EXTCODECOPY(s, BA(address), BW(3), BW(5), BW(7))
+    assert _dump_memory(s) == "0x0000000000005B000000"
+
+    EXTCODECOPY(s, BA(0x1234), BW(0), BW(0), BW(10))
+    assert _dump_memory(s) == "0x00000000000000000000"
+
+
 def test_RETURNDATASIZE() -> None:
     s = make_state(returndata=Bytes("", b"abcdefghijklmnopqrstuvwxyz"))
     assert z3.simplify(RETURNDATASIZE(s)) == 26
@@ -406,6 +436,20 @@ def test_RETURNDATACOPY() -> None:
         _dump_memory(s)
         == "0x7F00000000000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF7F"
     )
+
+
+def test_EXTCODEHASH() -> None:  # TODO
+    address = 0xABCDABCDABCDABCDABCDABCDABCDABCDABCDABCD
+    contract = make_contract(
+        address=BA(address), program=disassemble(bytes.fromhex("66000000000000005B"))
+    )
+    s = make_state(universe=make_universe(contracts={address: contract}))
+
+    assert (
+        EXTCODEHASH(s, BA(address))
+        == 0xD579742AEE22A336CAC42EFE05B2CF1281DB892E213257B929C2338EA0675B00
+    )
+    assert EXTCODEHASH(s, BA(0x1234)) == 0x0
 
 
 def test_BLOCKHASH() -> None:

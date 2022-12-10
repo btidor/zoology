@@ -234,19 +234,37 @@ def GASPRICE(s: State) -> uint256:
     return s.transaction.gasprice
 
 
-def EXTCODESIZE(address: uint256) -> uint256:
+def EXTCODESIZE(s: State, _address: uint256) -> uint256:
     """3B - Get size of an account's code."""
-    raise NotImplementedError("EXTCODESIZE")
+    # TODO: support EXTCODESIZE on symbolic addresses, e.g. to check if the
+    # caller is an EOA.
+    address = unwrap(_address, "EXTCODESIZE requires concrete address")
+
+    contract = s.universe.contracts.get(address, None)
+    if contract is None:
+        return BW(0)
+    return BW(len(contract.program.bytes))
 
 
 def EXTCODECOPY(
-    address: uint256,
-    destOffset: uint256,
-    offset: uint256,
-    size: uint256,
+    s: State,
+    _address: uint256,
+    _destOffset: uint256,
+    _offset: uint256,
+    _size: uint256,
 ) -> None:
     """3C - Copy an account's code to memory."""
-    raise NotImplementedError("EXTCODECOPY")
+    address = unwrap(_address, "EXTCODECOPY requires concrete address")
+    destOffset = unwrap(_destOffset, "EXTCODECOPY requires concrete destOffset")
+    offset = unwrap(_offset, "EXTCODECOPY requires concrete offset")
+    size = unwrap(_size, "EXTCODECOPY requires concrete size")
+
+    contract = s.universe.contracts.get(address, None)
+    code = contract.program.bytes if contract else b""
+    for i in range(size):
+        s.memory[destOffset + i] = (
+            BY(code[offset + i]) if offset + i < len(code) else BY(0)
+        )
 
 
 def RETURNDATASIZE(s: State) -> uint256:
@@ -262,23 +280,24 @@ def RETURNDATACOPY(
     s: State, _destOffset: uint256, _offset: uint256, _size: uint256
 ) -> None:
     """3E - Copy output data from the previous call to memory."""
-    destOffset = unwrap(
-        _destOffset,
-        "RETURNDATACOPY(destOffset, offset, size) requires concrete destOffset",
-    )
-    offset = unwrap(
-        _offset, "RETURNDATACOPY(destOffset, offset, size) requires concrete offset"
-    )
-    size = unwrap(
-        _size, "RETURNDATACOPY(destOffset, offset, size) requires concrete size"
-    )
+    destOffset = unwrap(_destOffset, "RETURNDATACOPY requires concrete destOffset")
+    offset = unwrap(_offset, "RETURNDATACOPY requires concrete offset")
+    size = unwrap(_size, "RETURNDATACOPY requires concrete size")
     for i in range(size):
         s.memory[destOffset + i] = s.returndata[offset + BW(i)]
 
 
-def EXTCODEHASH(address: uint256) -> uint256:
+def EXTCODEHASH(s: State, _address: uint256) -> uint256:
     """3F - Get hash of an account's code."""
-    raise NotImplementedError("EXTCODEHASH")
+    address = unwrap(_address, "EXTCODEHASH requires concrete address")
+
+    contract = s.universe.contracts.get(address, None)
+    if contract is None:
+        # TODO: for EOAs we should actually return the empty hash
+        return BW(0)
+
+    data = zconcat(*[BY(b) for b in contract.program.bytes])
+    return s.sha3[data]
 
 
 def BLOCKHASH(s: State, blockNumber: uint256) -> uint256:

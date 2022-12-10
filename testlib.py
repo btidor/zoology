@@ -83,6 +83,7 @@ def make_universe(
     suffix: Optional[str] = None,
     balances: Optional[Array] = None,
     transfer_constraints: Optional[List[Constraint]] = None,
+    contracts: Optional[Dict[int, Contract]] = None,
     blockhashes: Optional[Array] = None,
     agents: Optional[List[uint160]] = None,
     contribution: Optional[uint256] = None,
@@ -96,6 +97,7 @@ def make_universe(
         transfer_constraints=[]
         if transfer_constraints is None
         else transfer_constraints,
+        contracts={} if contracts is None else contracts,
         blockhashes=Array("BLOCKHASH", z3.BitVecSort(256), BW(0))
         if blockhashes is None
         else blockhashes,
