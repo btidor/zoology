@@ -88,7 +88,7 @@ def make_transaction(
         if caller is None
         else caller,
         callvalue=BW(0) if callvalue is None else callvalue,
-        calldata=Bytes("", b"") if calldata is None else calldata,
+        calldata=Bytes.concrete(b"") if calldata is None else calldata,
         gasprice=BW(0x12) if gasprice is None else gasprice,
     )
 
@@ -148,7 +148,7 @@ def make_state(
         pc=0 if pc is None else pc,
         stack=[] if stack is None else stack,
         memory={} if memory is None else memory,
-        returndata=Bytes("", b"") if returndata is None else returndata,
+        returndata=Bytes.concrete(b"") if returndata is None else returndata,
         success=None if success is None else success,
         subcontexts=[] if subcontexts is None else subcontexts,
         gas_variables=[] if gas_variables is None else gas_variables,

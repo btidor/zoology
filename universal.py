@@ -123,7 +123,7 @@ def symbolic_start(program: Program, sha3: SHA3, suffix: str) -> State:
         origin=origin,
         caller=caller,
         callvalue=z3.BitVec(f"CALLVALUE{suffix}", 256),
-        calldata=Bytes(f"CALLDATA{suffix}"),
+        calldata=Bytes.symbolic(f"CALLDATA{suffix}"),
         gasprice=z3.BitVec(f"GASPRICE{suffix}", 256),
     )
     universe = Universe(
@@ -149,7 +149,7 @@ def symbolic_start(program: Program, sha3: SHA3, suffix: str) -> State:
         pc=0,
         stack=[],
         memory={},
-        returndata=Bytes("", b""),
+        returndata=Bytes.concrete(b""),
         success=None,
         subcontexts=[],
         gas_variables=[],

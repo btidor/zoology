@@ -6,7 +6,6 @@ from disassembler import disassemble
 from state import State
 from symbolic import BW, Bytes, unwrap
 from testlib import (
-    Solidity,
     abiencode,
     compile_solidity,
     execute,
@@ -28,7 +27,7 @@ def test_execute_basic() -> None:
         contract=make_contract(program=program),
         transaction=make_transaction(
             callvalue=BW(0),
-            calldata=Bytes("CALLDATA", b""),
+            calldata=Bytes.concrete(b""),
         ),
     )
 
@@ -143,7 +142,7 @@ def test_execute_solidity() -> None:
         contract=make_contract(program=program),
         transaction=make_transaction(
             callvalue=BW(0),
-            calldata=Bytes("CALLDATA", abiencode("owner()")),
+            calldata=Bytes.concrete(abiencode("owner()")),
         ),
     )
     execute(state)
@@ -154,7 +153,7 @@ def test_execute_solidity() -> None:
         contract=state.contract,  # carries forward storage
         transaction=make_transaction(
             callvalue=BW(0),
-            calldata=Bytes("CALLDATA", abiencode("withdraw()")),
+            calldata=Bytes.concrete(abiencode("withdraw()")),
         ),
         universe=state.universe,
     )
@@ -166,7 +165,7 @@ def test_execute_solidity() -> None:
         contract=state.contract,
         transaction=make_transaction(
             callvalue=BW(123456),
-            calldata=Bytes("CALLDATA", abiencode("contribute()")),
+            calldata=Bytes.concrete(abiencode("contribute()")),
         ),
         universe=state.universe,
     )
@@ -178,7 +177,7 @@ def test_execute_solidity() -> None:
         contract=state.contract,
         transaction=make_transaction(
             callvalue=BW(0),
-            calldata=Bytes("CALLDATA", abiencode("owner()")),
+            calldata=Bytes.concrete(abiencode("owner()")),
         ),
         universe=state.universe,
     )
@@ -194,7 +193,7 @@ def test_output_basic() -> None:
         contract=make_contract(program=program),
         transaction=make_transaction(
             callvalue=BW(0),
-            calldata=Bytes("CALLDATA", b""),
+            calldata=Bytes.concrete(b""),
         ),
     )
 

@@ -136,25 +136,31 @@ def describe(value: z3.BitVecRef) -> str:
 
 
 class Bytes:
-    """A symbolic, unknown-length sequence of immutable bytes."""
+    """A symbolic-length sequence of symbolic bytes. Immutable."""
 
-    def __init__(self, name: str, data: bytes | List[uint8] | None = None) -> None:
-        """Create a new Bytes."""
-        if data is None:
-            assert name != ""
-            self.len = z3.BitVec(f"{name}.length", 256)
-            self.arr = z3.Array(f"{name}", z3.BitVecSort(256), z3.BitVecSort(8))
-        else:
-            self.len = BW(len(data))
-            self.arr = z3.K(z3.BitVecSort(256), BY(0))
-            for i, b in enumerate(data):
-                if z3.is_bv(b):
-                    assert cast(z3.BitVecRef, b).size() == 8
-                self.arr = cast(z3.ArrayRef, z3.Store(self.arr, i, b))
+    def __init__(self, length: uint256, array: z3.ArrayRef) -> None:
+        """Create a new Bytes. For internal use."""
+        self.length = length
+        self.array = array
 
-    def length(self) -> uint256:
-        """Return the symbolic length of the bytestring."""
-        return self.len
+    @classmethod
+    def concrete(cls, data: bytes | List[uint8]) -> Bytes:
+        """Create a new Bytes from a concrete list of bytes."""
+        length = BW(len(data))
+        array = z3.K(z3.BitVecSort(256), BY(0))
+        for i, b in enumerate(data):
+            if z3.is_bv(b):
+                assert cast(z3.BitVecRef, b).size() == 8
+            array = cast(z3.ArrayRef, z3.Store(array, i, b))
+        return Bytes(length, array)
+
+    @classmethod
+    def symbolic(cls, name: str) -> Bytes:
+        """Create a new, fully-symbolic Bytes."""
+        return Bytes(
+            z3.BitVec(f"{name}.length", 256),
+            z3.Array(name, z3.BitVecSort(256), z3.BitVecSort(8)),
+        )
 
     def __getitem__(self, i: uint256) -> uint8:
         """
@@ -163,15 +169,15 @@ class Bytes:
         Reads past the end of the bytestring return zero.
         """
         assert i.size() == 256
-        return cast(uint8, z3.If(i >= self.len, BY(0), self.arr[i]))
+        return cast(uint8, z3.If(i >= self.length, BY(0), self.array[i]))
 
     def require_concrete(self) -> bytes:
         """Unwrap this concrete-valued instance to bytes."""
-        return bytes(unwrap(self[BW(i)]) for i in range(unwrap(self.length())))
+        return bytes(unwrap(self[BW(i)]) for i in range(unwrap(self.length)))
 
     def evaluate(self, model: z3.ModelRef, model_completion: bool = False) -> str:
         """Use a model to evaluate this instance as a hexadecimal string."""
-        length = unwrap(zeval(model, self.length(), True))
+        length = unwrap(zeval(model, self.length, True))
         result = ""
         for i in range(length):
             b = zeval(model, self[BW(i)], model_completion)
@@ -181,7 +187,7 @@ class Bytes:
 
 class Array:
     """
-    A symbolic array.
+    A symbolic array. Mutable.
 
     Represented as a Z3 Array, i.e. an uninterpreted function from the given
     domain to the given codomain.

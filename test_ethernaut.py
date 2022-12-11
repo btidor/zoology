@@ -71,7 +71,7 @@ def test_fallback() -> None:
         contract=make_contract(program=program),
         transaction=make_transaction(
             callvalue=BW(0),
-            calldata=Bytes("CALLDATA", abiencode("owner()")),
+            calldata=Bytes.concrete(abiencode("owner()")),
         ),
     )
     execute(state)
@@ -139,7 +139,7 @@ def test_fallout() -> None:
         contract=make_contract(program=program),
         transaction=make_transaction(
             callvalue=BW(0),
-            calldata=Bytes("CALLDATA", abiencode("Fal1out()")),
+            calldata=Bytes.concrete(abiencode("Fal1out()")),
         ),
     )
     execute(state)
@@ -203,7 +203,7 @@ def test_coinflip() -> None:
         contract=make_contract(program=program),
         transaction=make_transaction(
             callvalue=BW(0),
-            calldata=Bytes("CALLDATA", abiencode("flip(bool)") + unwrap_bytes(BW(0))),
+            calldata=Bytes.concrete(abiencode("flip(bool)") + unwrap_bytes(BW(0))),
         ),
     )
     state.contract.storage[BW(1)] = BW(0xFEDC)
@@ -247,10 +247,9 @@ def test_telephone() -> None:
         transaction=make_transaction(
             caller=BA(0xB1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1),
             callvalue=BW(0),
-            calldata=Bytes(
-                "CALLDATA",
+            calldata=Bytes.concrete(
                 abiencode("changeOwner(address)")
-                + unwrap_bytes(BW(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF)),
+                + unwrap_bytes(BW(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF))
             ),
         ),
     )
@@ -300,11 +299,10 @@ def test_token() -> None:
         contract=make_contract(program=program),
         transaction=make_transaction(
             callvalue=BW(0),
-            calldata=Bytes(
-                "CALLDATA",
+            calldata=Bytes.concrete(
                 abiencode("transfer(address,uint256)")
                 + unwrap_bytes(BW(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF))
-                + unwrap_bytes(BW(0xEEEE)),
+                + unwrap_bytes(BW(0xEEEE))
             ),
         ),
     )
@@ -365,7 +363,7 @@ def test_delegation() -> None:
         contract=make_contract(program=delegation),
         transaction=make_transaction(
             callvalue=BW(0),
-            calldata=Bytes("CALLDATA", abiencode("pwn()")),
+            calldata=Bytes.concrete(abiencode("pwn()")),
         ),
         universe=make_universe(contracts={unwrap(other.address): other}),
     )
@@ -394,7 +392,7 @@ def test_force() -> None:
         contract=make_contract(program=program),
         transaction=make_transaction(
             callvalue=BW(0x1234),
-            calldata=Bytes("CALLDATA", b""),
+            calldata=Bytes.concrete(b""),
         ),
     )
     execute(state)
@@ -435,9 +433,7 @@ def test_vault() -> None:
         contract=make_contract(program=program),
         transaction=make_transaction(
             callvalue=BW(0),
-            calldata=Bytes(
-                "CALLDATA", abiencode("unlock(bytes32)") + unwrap_bytes(BW(0))
-            ),
+            calldata=Bytes.concrete(abiencode("unlock(bytes32)") + unwrap_bytes(BW(0))),
         ),
     )
     execute(state)
@@ -490,7 +486,7 @@ def test_king() -> None:
         contract=make_contract(program=program),
         transaction=make_transaction(
             callvalue=BW(0x1234),
-            calldata=Bytes("CALLDATA", b""),
+            calldata=Bytes.concrete(b""),
         ),
     )
     execute(state)
@@ -547,9 +543,7 @@ def test_reentrancy() -> None:
         contract=make_contract(program=program),
         transaction=make_transaction(
             callvalue=BW(0x1234),
-            calldata=Bytes(
-                "CALLDATA", abiencode("donate(address)") + unwrap_bytes(BW(1))
-            ),
+            calldata=Bytes.concrete(abiencode("donate(address)") + unwrap_bytes(BW(1))),
         ),
     )
     execute(state)

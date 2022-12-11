@@ -63,7 +63,7 @@ class State:
         """Apply accumulated constraints to the given solver instance."""
         if minimize:
             solver.minimize(self.transaction.callvalue)
-            solver.minimize(self.transaction.calldata.length())
+            solver.minimize(self.transaction.calldata.length)
 
         for i, constraint in enumerate(self.path_constraints):
             solver.assert_and_track(constraint, f"PC{i}{self.suffix}")
@@ -153,7 +153,7 @@ class State:
             stack=[],
             memory={},
             success=None,
-            returndata=Bytes("", b""),
+            returndata=Bytes.concrete(b""),
             subcontexts=[],
             gas_variables=self.gas_variables,
             path_constraints=self.path_constraints,

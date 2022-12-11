@@ -4,23 +4,12 @@ import z3
 
 from disassembler import Instruction
 from state import State
-from symbolic import (
-    BW,
-    BY,
-    Bytes,
-    simplify,
-    uint256,
-    unwrap,
-    zconcat,
-    zextract,
-    zget,
-    zif,
-)
+from symbolic import BW, BY, Bytes, uint256, unwrap, zconcat, zextract, zget, zif
 
 
 def STOP(s: State) -> None:
     """00 - Halts execution."""
-    s.returndata = Bytes("", b"")
+    s.returndata = Bytes.concrete(b"")
     s.success = True
 
 
@@ -210,7 +199,7 @@ def CALLDATALOAD(s: State, i: uint256) -> uint256:
 
 def CALLDATASIZE(s: State) -> uint256:
     """36 - Get size of input data in current environment."""
-    return s.transaction.calldata.length()
+    return s.transaction.calldata.length
 
 
 def CALLDATACOPY(
@@ -284,7 +273,7 @@ def RETURNDATASIZE(s: State) -> uint256:
 
     Get size of output data from the previous call from the current environment.
     """
-    return s.returndata.length()
+    return s.returndata.length
 
 
 def RETURNDATACOPY(
@@ -528,7 +517,7 @@ def CALL(
     """F1 - Message-call into an account."""
     # TODO: we assume the address is an externally-owned account (i.e. contains
     # no code). How should we handle CALLs to contracts?
-    s.returndata = Bytes("", b"")
+    s.returndata = Bytes.concrete(b"")
     s.universe.transfer(s.contract.address, zextract(159, 0, address), value)
     return BW(1)
 
@@ -550,9 +539,8 @@ def RETURN(s: State, _offset: uint256, _size: uint256) -> None:
     """F3 - Halts execution returning output data."""
     offset = unwrap(_offset, "RETURN requires concrete offset")
     size = unwrap(_size, "RETURN requires concrete size")
-    s.returndata = Bytes(
-        "",
-        [zget(s.memory, i, BW(0)) for i in range(offset, offset + size)],
+    s.returndata = Bytes.concrete(
+        [zget(s.memory, i, BW(0)) for i in range(offset, offset + size)]
     )
     s.success = True
 
@@ -601,15 +589,15 @@ def REVERT(s: State, _offset: uint256, _size: uint256) -> None:
     """
     offset = unwrap(_offset, "REVERT requires concrete offset")
     size = unwrap(_size, "REVERT requires concrete size")
-    s.returndata = Bytes(
-        "", [zget(s.memory, i, BW(0)) for i in range(offset, offset + size)]
+    s.returndata = Bytes.concrete(
+        [zget(s.memory, i, BW(0)) for i in range(offset, offset + size)]
     )
     s.success = False
 
 
 def INVALID(s: State) -> None:
     """FE - Designated invalid instruction."""
-    s.returndata = Bytes("", b"")
+    s.returndata = Bytes.concrete(b"")
     s.success = False
 
 

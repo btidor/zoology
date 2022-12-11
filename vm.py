@@ -150,7 +150,7 @@ def concrete_DELEGATECALL(state: State) -> Iterator[State]:
         origin=state.transaction.origin,
         caller=state.transaction.caller,
         callvalue=state.transaction.callvalue,
-        calldata=Bytes("", data),
+        calldata=Bytes.concrete(data),
         gasprice=state.transaction.gasprice,
     )
     contract = state.universe.contracts.get(address, None)
@@ -189,7 +189,7 @@ def concrete_start(program: Program, value: uint256, data: bytes) -> State:
         origin=BA(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0),
         caller=BA(0xCACACACACACACACACACACACACACACACACACACACA),
         callvalue=value,
-        calldata=Bytes("", data),
+        calldata=Bytes.concrete(data),
         gasprice=BW(0x12),
     )
     universe = Universe(
@@ -212,7 +212,7 @@ def concrete_start(program: Program, value: uint256, data: bytes) -> State:
         pc=0,
         stack=[],
         memory={},
-        returndata=Bytes("", b""),
+        returndata=Bytes.concrete(b""),
         success=None,
         subcontexts=[],
         gas_variables=[],

@@ -170,7 +170,7 @@ def balance_safety_predicates(state: State) -> Iterator[Predicate]:
 def describe_state(solver: z3.Optimize, state: State) -> str:
     # Re-adding these objectives increases performance by 2x?!
     solver.minimize(state.transaction.callvalue)
-    solver.minimize(state.transaction.calldata.length())
+    solver.minimize(state.transaction.calldata.length)
     assert check(solver)
     assert state.success is True
 
