@@ -145,7 +145,7 @@ def ownership_safety_predicates(state: State) -> Iterator[Predicate]:
 def balance_safety_predicates(state: State) -> Iterator[Predicate]:
     used: Set[str] = set()
     for key in state.contract.storage.accessed:
-        if z3.is_bv_value(key):
+        if is_concrete(key):
             index = hex(unwrap(key))[2:]
         else:
             hash = keccak.new(data=str(key).encode(), digest_bits=256).hexdigest()

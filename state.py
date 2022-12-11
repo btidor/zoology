@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import OrderedDict
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Dict, Iterator, List, Optional
+from typing import Iterator, List, Optional
 
 import z3
 
@@ -17,7 +17,6 @@ from symbolic import (
     Constraint,
     check,
     is_concrete,
-    uint8,
     uint256,
     unwrap,
     unwrap_bytes,
@@ -39,7 +38,7 @@ class State:
 
     pc: int
     stack: List[uint256]
-    memory: Dict[int, uint8]  # concrete index -> 1-byte value
+    memory: Bytes
 
     returndata: Bytes
     success: Optional[bool]
@@ -151,7 +150,7 @@ class State:
             sha3=self.sha3,
             pc=0,
             stack=[],
-            memory={},
+            memory=Bytes.concrete(b""),
             success=None,
             returndata=Bytes.concrete(b""),
             subcontexts=[],

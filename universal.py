@@ -148,7 +148,7 @@ def symbolic_start(program: Program, sha3: SHA3, suffix: str) -> State:
         sha3=sha3,
         pc=0,
         stack=[],
-        memory={},
+        memory=Bytes.concrete(b""),
         returndata=Bytes.concrete(b""),
         success=None,
         subcontexts=[],

@@ -14,6 +14,7 @@ from symbolic import (
     Array,
     Bytes,
     Constraint,
+    is_bitvector,
     is_concrete,
     uint160,
     uint256,
@@ -71,7 +72,7 @@ class Transaction:
         for k in list(r.keys()):
             if r[k] is None:
                 del r[k]
-            elif z3.is_bv(r[k]):
+            elif is_bitvector(r[k]):
                 v = zeval(model, r[k])
                 if is_concrete(v) and unwrap(v) > 0:
                     r[k] = "0x" + unwrap_bytes(v).hex()

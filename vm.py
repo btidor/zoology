@@ -137,15 +137,12 @@ def concrete_DELEGATECALL(state: State) -> Iterator[State]:
     """Handle a DELEGATECALL action. Yields a single state."""
     gas = state.stack.pop()
     address = unwrap(state.stack.pop(), "DELEGATECALL requires concrete address")
-    argsOffset = unwrap(state.stack.pop(), "DELEGATECALL requires concrete argsOffset")
+    argsOffset = state.stack.pop()
     argsSize = unwrap(state.stack.pop(), "DELEGATECALL requires concrete argsSize")
-    retOffset = unwrap(
-        state.stack.pop(),
-        "DELEGATECALL requires concrete retOffset",
-    )
+    retOffset = state.stack.pop()
     retSize = unwrap(state.stack.pop(), "DELEGATECALL requires concrete retSize")
 
-    data = [state.memory[argsOffset + i] for i in range(argsSize)]
+    data = [state.memory[argsOffset + BW(i)] for i in range(argsSize)]
     transaction = Transaction(
         origin=state.transaction.origin,
         caller=state.transaction.caller,
@@ -161,7 +158,7 @@ def concrete_DELEGATECALL(state: State) -> Iterator[State]:
         yield substate
 
         for i in range(retSize):
-            state.memory[retOffset + i] = substate.returndata[BW(i)]
+            state.memory[retOffset + BW(i)] = substate.returndata[BW(i)]
 
         state.stack.append(BW(1) if substate.success else BW(0))
 
@@ -211,7 +208,7 @@ def concrete_start(program: Program, value: uint256, data: bytes) -> State:
         sha3=SHA3(),
         pc=0,
         stack=[],
-        memory={},
+        memory=Bytes.concrete(b""),
         returndata=Bytes.concrete(b""),
         success=None,
         subcontexts=[],

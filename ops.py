@@ -4,7 +4,7 @@ import z3
 
 from disassembler import Instruction
 from state import State
-from symbolic import BW, BY, Bytes, uint256, unwrap, zconcat, zextract, zget, zif
+from symbolic import BW, BY, Bytes, uint256, unwrap, zconcat, zextract, zif
 
 
 def STOP(s: State) -> None:
@@ -153,12 +153,11 @@ def SAR(shift: uint256, value: uint256) -> uint256:
     return value >> shift
 
 
-def SHA3(s: State, _offset: uint256, _size: uint256) -> uint256:
+def SHA3(s: State, offset: uint256, _size: uint256) -> uint256:
     """20 - Compute Keccak-256 hash."""
-    offset = unwrap(_offset, "SHA3 requires concrete offset")
     size = unwrap(_size, "SHA3 requires concrete size")
 
-    data = zconcat(*[s.memory.get(i, BW(0)) for i in range(offset, offset + size)])
+    data = zconcat(*[s.memory[offset + BW(i)] for i in range(size)])
     return s.sha3[data]
 
 
@@ -203,13 +202,12 @@ def CALLDATASIZE(s: State) -> uint256:
 
 
 def CALLDATACOPY(
-    s: State, _destOffset: uint256, offset: uint256, _size: uint256
+    s: State, destOffset: uint256, offset: uint256, _size: uint256
 ) -> None:
     """37 - Copy input data in current environment to memory."""
-    destOffset = unwrap(_destOffset, "CALLDATACOPY requires concrete destOffset")
     size = unwrap(_size, "CALLDATACOPY requires concrete size")
     for i in range(size):
-        s.memory[destOffset + i] = s.transaction.calldata[offset + i]
+        s.memory[destOffset + BW(i)] = s.transaction.calldata[offset + BW(i)]
 
 
 def CODESIZE(s: State) -> uint256:
@@ -217,16 +215,15 @@ def CODESIZE(s: State) -> uint256:
     return BW(len(s.contract.program.bytes))
 
 
-def CODECOPY(s: State, _destOffset: uint256, _offset: uint256, _size: uint256) -> None:
+def CODECOPY(s: State, destOffset: uint256, _offset: uint256, _size: uint256) -> None:
     """39 - Copy code running in current environment to memory."""
-    destOffset = unwrap(_destOffset, "CODECOPY requires concrete destOffset")
     offset = unwrap(_offset, "CODECOPY requires concrete offset")
     size = unwrap(_size, "CODECOPY requires concrete size")
     for i in range(size):
         if offset + i < len(s.contract.program.bytes):
-            s.memory[destOffset + i] = BY(s.contract.program.bytes[offset + i])
+            s.memory[destOffset + BW(i)] = BY(s.contract.program.bytes[offset + i])
         else:
-            s.memory[destOffset + i] = BY(0)
+            s.memory[destOffset + BW(i)] = BY(0)
 
 
 def GASPRICE(s: State) -> uint256:
@@ -249,20 +246,19 @@ def EXTCODESIZE(s: State, _address: uint256) -> uint256:
 def EXTCODECOPY(
     s: State,
     _address: uint256,
-    _destOffset: uint256,
+    destOffset: uint256,
     _offset: uint256,
     _size: uint256,
 ) -> None:
     """3C - Copy an account's code to memory."""
     address = unwrap(_address, "EXTCODECOPY requires concrete address")
-    destOffset = unwrap(_destOffset, "EXTCODECOPY requires concrete destOffset")
     offset = unwrap(_offset, "EXTCODECOPY requires concrete offset")
     size = unwrap(_size, "EXTCODECOPY requires concrete size")
 
     contract = s.universe.contracts.get(address, None)
     code = contract.program.bytes if contract else b""
     for i in range(size):
-        s.memory[destOffset + i] = (
+        s.memory[destOffset + BW(i)] = (
             BY(code[offset + i]) if offset + i < len(code) else BY(0)
         )
 
@@ -277,14 +273,12 @@ def RETURNDATASIZE(s: State) -> uint256:
 
 
 def RETURNDATACOPY(
-    s: State, _destOffset: uint256, _offset: uint256, _size: uint256
+    s: State, destOffset: uint256, offset: uint256, _size: uint256
 ) -> None:
     """3E - Copy output data from the previous call to memory."""
-    destOffset = unwrap(_destOffset, "RETURNDATACOPY requires concrete destOffset")
-    offset = unwrap(_offset, "RETURNDATACOPY requires concrete offset")
     size = unwrap(_size, "RETURNDATACOPY requires concrete size")
     for i in range(size):
-        s.memory[destOffset + i] = s.returndata[offset + BW(i)]
+        s.memory[destOffset + BW(i)] = s.returndata[offset + BW(i)]
 
 
 def EXTCODEHASH(s: State, _address: uint256) -> uint256:
@@ -358,23 +352,20 @@ def POP(y: uint256) -> None:
     pass
 
 
-def MLOAD(s: State, _offset: uint256) -> uint256:
+def MLOAD(s: State, offset: uint256) -> uint256:
     """51 - Load word from memory."""
-    offset = unwrap(_offset, "MLOAD requires concrete offset")
-    return zconcat(*[s.memory.get(offset + i, BY(0)) for i in range(32)])
+    return zconcat(*[s.memory[offset + BW(i)] for i in range(32)])
 
 
-def MSTORE(s: State, _offset: uint256, value: uint256) -> None:
+def MSTORE(s: State, offset: uint256, value: uint256) -> None:
     """52 - Save word to memory."""
-    offset = unwrap(_offset, "MSTORE requires concrete offset")
     for i in range(31, -1, -1):
-        s.memory[offset + i] = zextract(7, 0, value)
+        s.memory[offset + BW(i)] = zextract(7, 0, value)
         value = value >> 8
 
 
-def MSTORE8(s: State, _offset: uint256, value: uint256) -> None:
+def MSTORE8(s: State, offset: uint256, value: uint256) -> None:
     """53 - Save byte to memory."""
-    offset = unwrap(_offset, "MSTORE8 requires concrete offset")
     s.memory[offset] = zextract(7, 0, value)
 
 
@@ -420,7 +411,7 @@ def PC(ins: Instruction) -> uint256:
 
 def MSIZE(s: State) -> uint256:
     """59 - Get the size of active memory in bytes."""
-    return BW(max(s.memory.keys()) + 1)
+    return s.memory.length
 
 
 def GAS(s: State) -> uint256:
@@ -535,13 +526,10 @@ def CALLCODE(
     raise NotImplementedError("CALLCODE")
 
 
-def RETURN(s: State, _offset: uint256, _size: uint256) -> None:
+def RETURN(s: State, offset: uint256, _size: uint256) -> None:
     """F3 - Halts execution returning output data."""
-    offset = unwrap(_offset, "RETURN requires concrete offset")
     size = unwrap(_size, "RETURN requires concrete size")
-    s.returndata = Bytes.concrete(
-        [zget(s.memory, i, BW(0)) for i in range(offset, offset + size)]
-    )
+    s.returndata = Bytes.concrete([s.memory[offset + BW(i)] for i in range(size)])
     s.success = True
 
 
@@ -581,17 +569,14 @@ def STATICCALL(
     raise NotImplementedError("STATICCALL")
 
 
-def REVERT(s: State, _offset: uint256, _size: uint256) -> None:
+def REVERT(s: State, offset: uint256, _size: uint256) -> None:
     """
     FD.
 
     Halt execution reverting state changes but returning data and remaining gas.
     """
-    offset = unwrap(_offset, "REVERT requires concrete offset")
     size = unwrap(_size, "REVERT requires concrete size")
-    s.returndata = Bytes.concrete(
-        [zget(s.memory, i, BW(0)) for i in range(offset, offset + size)]
-    )
+    s.returndata = Bytes.concrete([s.memory[offset + BW(i)] for i in range(size)])
     s.success = False
 
 

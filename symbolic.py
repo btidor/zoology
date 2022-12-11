@@ -5,7 +5,6 @@ from __future__ import annotations
 import contextlib
 from typing import (
     Any,
-    Dict,
     Iterable,
     Iterator,
     List,
@@ -57,6 +56,11 @@ def is_concrete(value: z3.BitVecRef) -> TypeGuard[z3.BitVecNumRef]:
     return cast(bool, z3.is_bv_value(value))
 
 
+def is_bitvector(value: Any) -> TypeGuard[z3.BitVecRef]:
+    """Check whether a given variable is a bitvector."""
+    return cast(bool, z3.is_bv(value))
+
+
 def simplify(value: z3.BitVecRef) -> z3.BitVecRef:
     """Simplify a bitvector expression."""
     return cast(z3.BitVecRef, z3.simplify(value))
@@ -79,7 +83,7 @@ def zeval(
     model: z3.ModelRef, value: z3.BitVecRef, model_completion: bool = False
 ) -> z3.BitVecRef:
     """Evaluate a given bitvector expression with the given model."""
-    if not z3.is_bv(value):
+    if not is_bitvector(value):
         raise ValueError("unexpected non-bitvector")
     return cast(z3.BitVecRef, model.eval(value, model_completion))
 
@@ -103,11 +107,6 @@ def zextract(high: int, low: int, value: z3.BitVecRef) -> z3.BitVecRef:
 def zand(*constraints: Constraint) -> z3.BoolRef:
     """Return the union of the given symbolic constraints."""
     return cast(z3.BoolRef, z3.And(*constraints))
-
-
-def zget(dict: Dict[K, z3.BitVecRef], key: K, default: z3.BitVecRef) -> z3.BitVecRef:
-    """Look up a key in a dictionary with a default value."""
-    return dict.get(key, default)
 
 
 def describe(value: z3.BitVecRef) -> str:
@@ -136,7 +135,7 @@ def describe(value: z3.BitVecRef) -> str:
 
 
 class Bytes:
-    """A symbolic-length sequence of symbolic bytes. Immutable."""
+    """A symbolic-length sequence of symbolic bytes. Mutable."""
 
     def __init__(self, length: uint256, array: z3.ArrayRef) -> None:
         """Create a new Bytes. For internal use."""
@@ -169,7 +168,14 @@ class Bytes:
         Reads past the end of the bytestring return zero.
         """
         assert i.size() == 256
-        return cast(uint8, z3.If(i >= self.length, BY(0), self.array[i]))
+        return zif(i >= self.length, BY(0), cast(z3.BitVecRef, self.array[i]))
+
+    def __setitem__(self, i: uint256, v: uint8) -> None:
+        """Write the byte at the given symbolic index."""
+        assert i.size() == 256
+        assert v.size() == 8
+        self.length = simplify(zif(i >= self.length, i + 1, self.length))
+        self.array = cast(z3.ArrayRef, z3.Store(self.array, i, v))
 
     def require_concrete(self) -> bytes:
         """Unwrap this concrete-valued instance to bytes."""

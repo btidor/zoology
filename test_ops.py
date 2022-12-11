@@ -5,8 +5,7 @@ import z3
 
 from disassembler import Instruction, disassemble
 from ops import *
-from state import State
-from symbolic import BA, BW, BY, Bytes, check, simplify, unwrap_bytes
+from symbolic import BA, BW, Bytes, check, simplify
 from testlib import (
     make_block,
     make_contract,
@@ -14,14 +13,6 @@ from testlib import (
     make_transaction,
     make_universe,
 )
-
-
-def _dump_memory(s: State) -> str:
-    v = ""
-    lim = max(s.memory.keys())
-    for i in range(lim + 1):
-        v += unwrap_bytes(s.memory.get(i, BY(0))).hex()
-    return "0x" + v.upper()
 
 
 def test_STOP() -> None:
@@ -260,7 +251,7 @@ def test_SAR() -> None:
 
 
 def test_SHA3() -> None:
-    s = make_state(memory={0: BY(0xFF), 1: BY(0xFF), 2: BY(0xFF), 3: BY(0xFF)})
+    s = make_state(memory=Bytes.concrete(b"\xff\xff\xff\xff"))
     digest = SHA3(s, BW(0), BW(4))
 
     solver = z3.Optimize()
@@ -342,14 +333,14 @@ def test_CALLDATACOPY() -> None:
 
     CALLDATACOPY(s, BW(0), BW(0), BW(32))
     assert (
-        _dump_memory(s)
-        == "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+        s.memory.require_concrete().hex()
+        == "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
     )
 
     CALLDATACOPY(s, BW(0), BW(31), BW(8))
     assert (
-        _dump_memory(s)
-        == "0xFF00000000000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+        s.memory.require_concrete().hex()
+        == "ff00000000000000ffffffffffffffffffffffffffffffffffffffffffffffff"
     )
 
 
@@ -370,12 +361,12 @@ def test_CODECOPY() -> None:
     )
 
     CODECOPY(s, BW(0), BW(0), BW(0x09))
-    assert _dump_memory(s) == "0x66000000000000005B"
+    assert s.memory.require_concrete().hex() == "66000000000000005b"
 
     CODECOPY(s, BW(1), BW(8), BW(0x20))
     assert (
-        _dump_memory(s)
-        == "0x665B00000000000000000000000000000000000000000000000000000000000000"
+        s.memory.require_concrete().hex()
+        == "665b00000000000000000000000000000000000000000000000000000000000000"
     )
 
 
@@ -403,10 +394,10 @@ def test_EXTCODECOPY() -> None:
     s = make_state(universe=make_universe(contracts={address: contract}))
 
     EXTCODECOPY(s, BA(address), BW(3), BW(5), BW(7))
-    assert _dump_memory(s) == "0x0000000000005B000000"
+    assert s.memory.require_concrete().hex() == "0000000000005b000000"
 
     EXTCODECOPY(s, BA(0x1234), BW(0), BW(0), BW(10))
-    assert _dump_memory(s) == "0x00000000000000000000"
+    assert s.memory.require_concrete().hex() == "00000000000000000000"
 
 
 def test_RETURNDATASIZE() -> None:
@@ -423,14 +414,14 @@ def test_RETURNDATACOPY() -> None:
 
     RETURNDATACOPY(s, BW(0), BW(0), BW(32))
     assert (
-        _dump_memory(s)
-        == "0x7DFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF7F"
+        s.memory.require_concrete().hex()
+        == "7dffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f"
     )
 
     RETURNDATACOPY(s, BW(0), BW(31), BW(8))
     assert (
-        _dump_memory(s)
-        == "0x7F00000000000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF7F"
+        s.memory.require_concrete().hex()
+        == "7f00000000000000ffffffffffffffffffffffffffffffffffffffffffffff7f"
     )
 
 
@@ -507,7 +498,13 @@ def test_BASEFEE() -> None:
 
 
 def test_MLOAD() -> None:
-    s = make_state(memory={31: BY(0xFF)})
+    s = make_state(
+        memory=Bytes.concrete(
+            bytes.fromhex(
+                "00000000000000000000000000000000000000000000000000000000000000FF"
+            )
+        )
+    )
     assert simplify(MLOAD(s, BW(0))) == 0xFF
     assert simplify(MLOAD(s, BW(1))) == 0xFF00
 
@@ -516,22 +513,23 @@ def test_MSTORE() -> None:
     s = make_state()
     MSTORE(s, BW(0), BW(0xFF))
     assert (
-        _dump_memory(s)
-        == "0x00000000000000000000000000000000000000000000000000000000000000FF"
+        s.memory.require_concrete().hex()
+        == "00000000000000000000000000000000000000000000000000000000000000ff"
     )
     MSTORE(s, BW(1), BW(0xFF))
     assert (
-        _dump_memory(s)
-        == "0x0000000000000000000000000000000000000000000000000000000000000000FF"
+        s.memory.require_concrete().hex()
+        == "0000000000000000000000000000000000000000000000000000000000000000ff"
     )
 
 
 def test_MSTORE8() -> None:
     s = make_state()
     MSTORE8(s, BW(0), BW(0xFFFF))
-    assert _dump_memory(s) == "0xFF"
+
+    assert s.memory.require_concrete().hex() == "ff"
     MSTORE8(s, BW(1), BW(0xAABBCCDDEE))
-    assert _dump_memory(s) == "0xFFEE"
+    assert s.memory.require_concrete().hex() == "ffee"
 
 
 def test_SLOAD() -> None:
@@ -571,7 +569,7 @@ def test_PC() -> None:
 
 
 def test_MSIZE() -> None:
-    s = make_state(memory={123: BY(0x01)})
+    s = make_state(memory=Bytes.concrete(b"\x00" * 123 + b"\x01"))
     assert simplify(MSIZE(s)) == 124
 
 
@@ -620,8 +618,7 @@ def test_CALL() -> None:
 
 def test_RETURN() -> None:
     s = make_state(
-        returndata=Bytes.concrete(b"\x12\x34"),
-        memory={0: BY(0xFF), 1: BY(0x01)},
+        returndata=Bytes.concrete(b"\x12\x34"), memory=Bytes.concrete(b"\xff\x01")
     )
     RETURN(s, BW(0), BW(2))
     assert s.success is True
@@ -630,8 +627,7 @@ def test_RETURN() -> None:
 
 def test_REVERT() -> None:
     s = make_state(
-        returndata=Bytes.concrete(b"\x12\x34"),
-        memory={0: BY(0xFF), 1: BY(0x01)},
+        returndata=Bytes.concrete(b"\x12\x34"), memory=Bytes.concrete(b"\xff\x01")
     )
     REVERT(s, BW(0), BW(2))
     assert s.success is False
