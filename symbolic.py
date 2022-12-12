@@ -168,13 +168,13 @@ class Bytes:
         Reads past the end of the bytestring return zero.
         """
         assert i.size() == 256
-        return zif(i >= self.length, BY(0), cast(z3.BitVecRef, self.array[i]))
+        return zif(z3.ULT(i, self.length), cast(z3.BitVecRef, self.array[i]), BY(0))
 
     def __setitem__(self, i: uint256, v: uint8) -> None:
         """Write the byte at the given symbolic index."""
         assert i.size() == 256
         assert v.size() == 8
-        self.length = simplify(zif(i >= self.length, i + 1, self.length))
+        self.length = simplify(zif(z3.ULT(i, self.length), self.length, i + 1))
         self.array = cast(z3.ArrayRef, z3.Store(self.array, i, v))
 
     def require_concrete(self) -> bytes:
