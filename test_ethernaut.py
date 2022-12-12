@@ -450,6 +450,7 @@ def test_vault() -> None:
         next(universal)
 
 
+@pytest.mark.skip("slow")
 def test_king() -> None:
     source = """
         // SPDX-License-Identifier: MIT
