@@ -136,6 +136,12 @@ def describe(value: z3.BitVecRef) -> str:
         return "#" + digest[:3].hex()
 
 
+BytesWrite: TypeAlias = Union[
+    Tuple[uint256, uint8],
+    Tuple[Tuple[uint256, uint256, uint256], "Bytes"],
+]
+
+
 class Bytes:
     """A symbolic-length sequence of symbolic bytes. Mutable."""
 
@@ -155,7 +161,7 @@ class Bytes:
 
         self.length = length
         self.base = base
-        self.writes = writes
+        self.writes: List[BytesWrite] = cast(List[BytesWrite], writes)
 
     @classmethod
     def concrete(cls, data: bytes | List[uint8]) -> Bytes:
@@ -189,7 +195,17 @@ class Bytes:
         assert i.size() == 256
         item = cast(z3.BitVecRef, self.base[i])
         for k, v in self.writes:
-            item = zif(i == k, v, item)
+            if isinstance(k, tuple):
+                assert isinstance(v, Bytes)
+                destOffset, offset, size = k
+                item = zif(
+                    zand(z3.UGE(i, destOffset), z3.ULT(i, destOffset + size)),
+                    v[offset + (i - destOffset)],
+                    item,
+                )
+            else:
+                assert not isinstance(v, Bytes)
+                item = zif(i == k, v, item)
         return zif(z3.ULT(i, self.length), item, BY(0))
 
     def __setitem__(self, i: uint256, v: uint8) -> None:
@@ -198,6 +214,22 @@ class Bytes:
         assert v.size() == 8
         self.length = simplify(zif(z3.ULT(i, self.length), self.length, i + 1))
         self.writes.append((i, v))
+
+    def splice_from(
+        self, other: Bytes, destOffset: uint256, offset: uint256, size: uint256
+    ) -> None:
+        """Splice another Bytes into this one using the given offsets."""
+        assert offset.size() == 256
+        assert destOffset.size() == 256
+        assert size.size() == 256
+        self.length = simplify(
+            zif(
+                z3.ULT(destOffset + size - 1, self.length),
+                self.length,
+                destOffset + size,
+            )
+        )
+        self.writes.append(((destOffset, offset, size), other))
 
     def require_concrete(self) -> bytes:
         """Unwrap this concrete-valued instance to bytes."""

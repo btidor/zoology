@@ -200,13 +200,9 @@ def CALLDATASIZE(s: State) -> uint256:
     return s.transaction.calldata.length
 
 
-def CALLDATACOPY(
-    s: State, destOffset: uint256, offset: uint256, _size: uint256
-) -> None:
+def CALLDATACOPY(s: State, destOffset: uint256, offset: uint256, size: uint256) -> None:
     """37 - Copy input data in current environment to memory."""
-    size = unwrap(_size, "CALLDATACOPY requires concrete size")
-    for i in range(size):
-        s.memory[destOffset + BW(i)] = s.transaction.calldata[offset + BW(i)]
+    s.memory.splice_from(s.transaction.calldata, destOffset, offset, size)
 
 
 def CODESIZE(s: State) -> uint256:
@@ -214,15 +210,10 @@ def CODESIZE(s: State) -> uint256:
     return BW(len(s.contract.program.bytes))
 
 
-def CODECOPY(s: State, destOffset: uint256, _offset: uint256, _size: uint256) -> None:
+def CODECOPY(s: State, destOffset: uint256, offset: uint256, size: uint256) -> None:
     """39 - Copy code running in current environment to memory."""
-    offset = unwrap(_offset, "CODECOPY requires concrete offset")
-    size = unwrap(_size, "CODECOPY requires concrete size")
-    for i in range(size):
-        if offset + i < len(s.contract.program.bytes):
-            s.memory[destOffset + BW(i)] = BY(s.contract.program.bytes[offset + i])
-        else:
-            s.memory[destOffset + BW(i)] = BY(0)
+    code = Bytes.concrete(s.contract.program.bytes)
+    s.memory.splice_from(code, destOffset, offset, size)
 
 
 def GASPRICE(s: State) -> uint256:
@@ -246,20 +237,15 @@ def EXTCODECOPY(
     s: State,
     _address: uint256,
     destOffset: uint256,
-    _offset: uint256,
-    _size: uint256,
+    offset: uint256,
+    size: uint256,
 ) -> None:
     """3C - Copy an account's code to memory."""
     address = unwrap(_address, "EXTCODECOPY requires concrete address")
-    offset = unwrap(_offset, "EXTCODECOPY requires concrete offset")
-    size = unwrap(_size, "EXTCODECOPY requires concrete size")
 
     contract = s.universe.contracts.get(address, None)
-    code = contract.program.bytes if contract else b""
-    for i in range(size):
-        s.memory[destOffset + BW(i)] = (
-            BY(code[offset + i]) if offset + i < len(code) else BY(0)
-        )
+    code = Bytes.concrete(contract.program.bytes if contract else b"")
+    s.memory.splice_from(code, destOffset, offset, size)
 
 
 def RETURNDATASIZE(s: State) -> uint256:
@@ -272,12 +258,10 @@ def RETURNDATASIZE(s: State) -> uint256:
 
 
 def RETURNDATACOPY(
-    s: State, destOffset: uint256, offset: uint256, _size: uint256
+    s: State, destOffset: uint256, offset: uint256, size: uint256
 ) -> None:
     """3E - Copy output data from the previous call to memory."""
-    size = unwrap(_size, "RETURNDATACOPY requires concrete size")
-    for i in range(size):
-        s.memory[destOffset + BW(i)] = s.returndata[offset + BW(i)]
+    s.memory.splice_from(s.returndata, destOffset, offset, size)
 
 
 def EXTCODEHASH(s: State, _address: uint256) -> uint256:
