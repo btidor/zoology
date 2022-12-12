@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import copy
 from typing import (
     Any,
     Iterable,
@@ -10,6 +11,7 @@ from typing import (
     List,
     Literal,
     Optional,
+    Tuple,
     TypeAlias,
     TypeGuard,
     TypeVar,
@@ -137,21 +139,37 @@ def describe(value: z3.BitVecRef) -> str:
 class Bytes:
     """A symbolic-length sequence of symbolic bytes. Mutable."""
 
-    def __init__(self, length: uint256, array: z3.ArrayRef) -> None:
+    def __init__(
+        self, length: uint256, base: z3.ArrayRef, writes: List[Tuple[uint256, uint8]]
+    ) -> None:
         """Create a new Bytes. For internal use."""
+        domain, range = base.domain(), base.range()
+        assert isinstance(domain, z3.BitVecSortRef)
+        assert isinstance(range, z3.BitVecSortRef)
+        assert domain.size() == 256
+        assert range.size() == 8
+
+        for k, v in writes:
+            assert k.size() == 256
+            assert v.size() == 8
+
         self.length = length
-        self.array = array
+        self.base = base
+        self.writes = writes
 
     @classmethod
     def concrete(cls, data: bytes | List[uint8]) -> Bytes:
         """Create a new Bytes from a concrete list of bytes."""
         length = BW(len(data))
-        array = z3.K(z3.BitVecSort(256), BY(0))
+        writes = []
         for i, b in enumerate(data):
-            if z3.is_bv(b):
-                assert cast(z3.BitVecRef, b).size() == 8
-            array = cast(z3.ArrayRef, z3.Store(array, i, b))
-        return Bytes(length, array)
+            if is_bitvector(b):
+                assert b.size() == 8
+                writes.append((BW(i), b))
+            else:
+                assert isinstance(b, int)
+                writes.append((BW(i), BY(b)))
+        return Bytes(length, z3.K(z3.BitVecSort(256), BY(0)), writes)
 
     @classmethod
     def symbolic(cls, name: str) -> Bytes:
@@ -159,6 +177,7 @@ class Bytes:
         return Bytes(
             z3.BitVec(f"{name}.length", 256),
             z3.Array(name, z3.BitVecSort(256), z3.BitVecSort(8)),
+            [],
         )
 
     def __getitem__(self, i: uint256) -> uint8:
@@ -168,14 +187,17 @@ class Bytes:
         Reads past the end of the bytestring return zero.
         """
         assert i.size() == 256
-        return zif(z3.ULT(i, self.length), cast(z3.BitVecRef, self.array[i]), BY(0))
+        item = cast(z3.BitVecRef, self.base[i])
+        for k, v in self.writes:
+            item = zif(i == k, v, item)
+        return zif(z3.ULT(i, self.length), item, BY(0))
 
     def __setitem__(self, i: uint256, v: uint8) -> None:
         """Write the byte at the given symbolic index."""
         assert i.size() == 256
         assert v.size() == 8
         self.length = simplify(zif(z3.ULT(i, self.length), self.length, i + 1))
-        self.array = cast(z3.ArrayRef, z3.Store(self.array, i, v))
+        self.writes.append((i, v))
 
     def require_concrete(self) -> bytes:
         """Unwrap this concrete-valued instance to bytes."""
