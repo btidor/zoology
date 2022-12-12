@@ -129,13 +129,13 @@ def NOT(a: uint256) -> uint256:
     return ~a
 
 
-def BYTE(_i: uint256, x: uint256) -> uint256:
+def BYTE(i: uint256, x: uint256) -> uint256:
     """1A - Retrieve single bytes from word."""
-    i = unwrap(_i, "BYTE requires concrete i")
-    if i > 31:
-        return BW(0)
-    start = 256 - (8 * i)
-    return zextract(start - 1, start - 8, x)
+    return zif(
+        z3.ULT(i, 32),
+        BW(0xFF) & (x >> (8 * (31 - i))),
+        BW(0),
+    )
 
 
 def SHL(shift: uint256, value: uint256) -> uint256:

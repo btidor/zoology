@@ -212,10 +212,10 @@ def test_NOT() -> None:
 
 
 def test_BYTE() -> None:
-    assert simplify(BYTE(BW(31), BW(0xFF))) == 0xFF
-    assert simplify(BYTE(BW(30), BW(0x8800))) == 0x88
-    assert simplify(BYTE(BW(30), BW(0xAABBCC))) == 0xBB
-    assert simplify(BYTE(BW(123456), BW(0xAABBCC))) == 0
+    assert simplify(BYTE(BW(31), BW(0xFF))) == BW(0xFF)
+    assert simplify(BYTE(BW(30), BW(0x8800))) == BW(0x88)
+    assert simplify(BYTE(BW(30), BW(0xAABBCC))) == BW(0xBB)
+    assert simplify(BYTE(BW(123456), BW(0xAABBCC))) == BW(0)
 
 
 def test_SHL() -> None:
