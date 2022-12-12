@@ -135,11 +135,17 @@ def test_SIGNEXTEND() -> None:
         == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
     )
     assert (
-        simplify(SIGNEXTEND(BW(0), BW(0xAA)))
+        simplify(SIGNEXTEND(BW(0), BW(0xAAAA)))
         == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFAA
     )
+    assert (
+        simplify(SIGNEXTEND(BW(1), BW(0xABCD)))
+        == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFABCD
+    )
     assert simplify(SIGNEXTEND(BW(0), BW(0x7F))) == 0x7F
+    assert simplify(SIGNEXTEND(BW(1), BW(0x5BCD))) == 0x5BCD
     assert simplify(SIGNEXTEND(BW(2), BW(0xFF))) == 0xFF
+    assert simplify(SIGNEXTEND(BW(2), BW(0xABCD))) == 0xABCD
     assert simplify(SIGNEXTEND(BW(0x7F), BW(0x7F))) == 0x7F
 
 

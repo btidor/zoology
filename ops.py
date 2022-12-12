@@ -4,7 +4,7 @@ import z3
 
 from disassembler import Instruction
 from state import State
-from symbolic import BW, BY, Bytes, uint256, unwrap, zconcat, zextract, zif
+from symbolic import BW, BY, Bytes, uint256, unwrap, zand, zconcat, zextract, zif
 
 
 def STOP(s: State) -> None:
@@ -70,13 +70,12 @@ def EXP(a: uint256, _exponent: uint256) -> uint256:
     return a
 
 
-def SIGNEXTEND(_b: uint256, x: uint256) -> uint256:
+def SIGNEXTEND(b: uint256, x: uint256) -> uint256:
     """0B - Extend length of two's complement signed integer."""
-    b = unwrap(_b, "SIGNEXTEND requires concrete b")
-    if b > 30:
-        return x
-    bits = (b + 1) * 8
-    return z3.SignExt(256 - bits, z3.Extract(bits - 1, 0, x))
+    signoffset = 8 * b + 7
+    signbit = (x >> signoffset) & 0x1
+    mask = ~((1 << signoffset) - 1)
+    return zif(zand(z3.ULT(b, 32), signbit == 1), x | mask, x)
 
 
 def LT(a: uint256, b: uint256) -> uint256:
