@@ -141,7 +141,7 @@ class State:
     @contextmanager
     def descend(self, contract: Contract, transaction: Transaction) -> Iterator[State]:
         """Descend into a subcontext."""
-        context = State(
+        substate = State(
             suffix=f"{len(self.subcontexts)}.{self.suffix}",
             block=self.block,
             contract=contract,
@@ -158,13 +158,16 @@ class State:
             path_constraints=self.path_constraints,
             path=self.path,
         )
-        context.universe.transfer(
+        substate.universe.transfer(
             transaction.caller, contract.address, transaction.callvalue
         )
-        self.subcontexts.append(context)
+        self.subcontexts.append(substate)
 
-        yield context
+        yield substate
 
-        self.gas_variables = context.gas_variables
-        self.path_constraints = context.path_constraints
-        self.path = context.path
+        # TODO: support reentrancy (apply storage changes to contract)
+
+        self.returndata = substate.returndata
+        self.gas_variables = substate.gas_variables
+        self.path_constraints = substate.path_constraints
+        self.path = substate.path

@@ -57,7 +57,7 @@ def _universal_transaction(start: State) -> Iterator[State]:
                 continue
             elif action == "DELEGATECALL":
                 with concrete_DELEGATECALL(state) as substate:
-                    for end in _universal_transaction(state):
+                    for end in _universal_transaction(substate):
                         yield end
             elif action == "TERMINATE":
                 assert state.success is not None

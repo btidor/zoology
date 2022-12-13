@@ -106,7 +106,7 @@ class Array:
 
 BytesWrite: TypeAlias = Union[
     Tuple[uint256, uint8],
-    Tuple[Tuple[uint256, uint256, uint256], "Bytes"],
+    Tuple[uint256, "ByteSlice"],
 ]
 
 
@@ -151,7 +151,16 @@ class Bytes(abc.ABC):
 
     @abc.abstractmethod
     def __getitem__(self, i: uint256) -> uint8:
+        """
+        Return the byte at the given symbolic index.
+
+        Reads past the end of the bytestring return zero.
+        """
         ...
+
+    def slice(self, offset: uint256, size: uint256) -> ByteSlice:
+        """Return a symbolic slice of this instance."""
+        return ByteSlice(self, offset, size)
 
     def bigvector(self) -> z3.BitVecRef:
         """
@@ -183,42 +192,46 @@ class FrozenBytes(Bytes):
     """A symbolic-length sequence of symbolic bytes. Immutable."""
 
     def __getitem__(self, i: uint256) -> uint8:
-        """
-        Return the byte at the given symbolic index.
-
-        Reads past the end of the bytestring return zero.
-        """
         assert i.size() == 256
         return zget(self.array, i)
+
+
+class ByteSlice(FrozenBytes):
+    """A symbolic-length slice of symbolic bytes. Immutable."""
+
+    def __init__(self, inner: Bytes, offset: uint256, size: uint256) -> None:
+        """Create a new ByteSlice."""
+        assert offset.size() == 256
+        assert size.size() == 256
+        self.inner = copy.deepcopy(inner)
+        self.length = size
+        self.offset = offset
+
+    def __getitem__(self, i: uint256) -> uint8:
+        assert i.size() == 256
+        item = self.inner[self.offset + i]
+        return zif(z3.ULT(i, self.length), item, BY(0))
 
 
 class MutableBytes(Bytes):
     """A symbolic-length sequence of symbolic bytes. Mutable."""
 
     def __getitem__(self, i: uint256) -> uint8:
-        """
-        Return the byte at the given symbolic index.
-
-        Reads past the end of the bytestring return zero.
-        """
         assert i.size() == 256
         item = zget(self.array, i)
         for k, v in self.writes:
-            if isinstance(k, tuple):
-                assert isinstance(v, Bytes)
-                destOffset, offset, size = k
+            if isinstance(v, ByteSlice):
+                destOffset = k
                 item = zif(
-                    zand(z3.UGE(i, destOffset), z3.ULT(i, destOffset + size)),
-                    v[offset + (i - destOffset)],
+                    zand(z3.UGE(i, destOffset), z3.ULT(i, destOffset + v.length)),
+                    v[i - destOffset],
                     item,
                 )
             else:
-                assert not isinstance(v, Bytes)
                 item = zif(i == k, v, item)
         return zif(z3.ULT(i, self.length), item, BY(0))
 
     def __setitem__(self, i: uint256, v: uint8) -> None:
-        """Write the byte at the given symbolic index."""
         assert i.size() == 256
         assert v.size() == 8
         self.length = simplify(zif(z3.ULT(i, self.length), self.length, i + 1))
@@ -230,28 +243,20 @@ class MutableBytes(Bytes):
         else:
             self.writes.append((i, v))
 
-    def splice_from(
-        self,
-        other: Bytes,
-        destOffset: uint256,
-        offset: uint256,
-        size: uint256,
-    ) -> None:
-        """Splice another Bytes into this one using the given offsets."""
-        assert offset.size() == 256
-        assert destOffset.size() == 256
-        assert size.size() == 256
+    def graft(self, slice: ByteSlice, at: uint256) -> None:
+        """Graft another Bytes into this one at the given offset."""
+        assert at.size() == 256
         self.length = simplify(
             zif(
-                z3.ULT(destOffset + size - 1, self.length),
+                z3.ULT(at + slice.length - 1, self.length),
                 self.length,
-                destOffset + size,
+                at + slice.length,
             )
         )
-        if len(self.writes) == 0 and is_concrete(size):
+        if len(self.writes) == 0 and is_concrete(slice.length):
             # Avoid creating custom writes when possible because of the
             # performance cliff (see above).
-            for i in range(unwrap(size)):
-                self[destOffset + BW(i)] = simplify(other[offset + BW(i)])
+            for i in range(unwrap(slice.length)):
+                self[at + BW(i)] = simplify(slice[BW(i)])
         else:
-            self.writes.append(((destOffset, offset, size), copy.deepcopy(other)))
+            self.writes.append((at, slice))

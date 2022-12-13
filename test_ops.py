@@ -562,7 +562,6 @@ def test_JUMP() -> None:
     contract = make_contract(
         program=disassemble(bytes.fromhex("66000000000000005B")),
     )
-    print(contract.program)
     s = make_state(contract=contract)
     JUMP(s, BW(8))
     assert s.pc == 1

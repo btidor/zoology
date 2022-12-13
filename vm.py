@@ -139,16 +139,15 @@ def concrete_DELEGATECALL(state: State) -> Iterator[State]:
     gas = state.stack.pop()
     address = unwrap(state.stack.pop(), "DELEGATECALL requires concrete address")
     argsOffset = state.stack.pop()
-    argsSize = unwrap(state.stack.pop(), "DELEGATECALL requires concrete argsSize")
+    argsSize = state.stack.pop()
     retOffset = state.stack.pop()
-    retSize = unwrap(state.stack.pop(), "DELEGATECALL requires concrete retSize")
+    retSize = state.stack.pop()
 
-    data = [state.memory[argsOffset + BW(i)] for i in range(argsSize)]
     transaction = Transaction(
         origin=state.transaction.origin,
         caller=state.transaction.caller,
         callvalue=state.transaction.callvalue,
-        calldata=FrozenBytes.concrete(data),
+        calldata=state.memory.slice(argsOffset, argsSize),
         gasprice=state.transaction.gasprice,
     )
     contract = state.universe.contracts.get(address, None)
@@ -158,9 +157,7 @@ def concrete_DELEGATECALL(state: State) -> Iterator[State]:
     with state.descend(contract, transaction) as substate:
         yield substate
 
-        for i in range(retSize):
-            state.memory[retOffset + BW(i)] = substate.returndata[BW(i)]
-
+        state.memory.graft(substate.returndata.slice(BW(0), retSize), retOffset)
         state.stack.append(BW(1) if substate.success else BW(0))
 
 

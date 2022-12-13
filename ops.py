@@ -203,7 +203,7 @@ def CALLDATASIZE(s: State) -> uint256:
 
 def CALLDATACOPY(s: State, destOffset: uint256, offset: uint256, size: uint256) -> None:
     """37 - Copy input data in current environment to memory."""
-    s.memory.splice_from(s.transaction.calldata, destOffset, offset, size)
+    s.memory.graft(s.transaction.calldata.slice(offset, size), destOffset)
 
 
 def CODESIZE(s: State) -> uint256:
@@ -213,7 +213,7 @@ def CODESIZE(s: State) -> uint256:
 
 def CODECOPY(s: State, destOffset: uint256, offset: uint256, size: uint256) -> None:
     """39 - Copy code running in current environment to memory."""
-    s.memory.splice_from(s.contract.program.code, destOffset, offset, size)
+    s.memory.graft(s.contract.program.code.slice(offset, size), destOffset)
 
 
 def GASPRICE(s: State) -> uint256:
@@ -245,7 +245,7 @@ def EXTCODECOPY(
 
     contract = s.universe.contracts.get(address, None)
     code = contract.program.code if contract else FrozenBytes.concrete(b"")
-    s.memory.splice_from(code, destOffset, offset, size)
+    s.memory.graft(code.slice(offset, size), destOffset)
 
 
 def RETURNDATASIZE(s: State) -> uint256:
@@ -261,7 +261,7 @@ def RETURNDATACOPY(
     s: State, destOffset: uint256, offset: uint256, size: uint256
 ) -> None:
     """3E - Copy output data from the previous call to memory."""
-    s.memory.splice_from(s.returndata, destOffset, offset, size)
+    s.memory.graft(s.returndata.slice(offset, size), destOffset)
 
 
 def EXTCODEHASH(s: State, _address: uint256) -> uint256:

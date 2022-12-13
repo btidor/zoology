@@ -1,9 +1,11 @@
 #!/usr/bin/env pytest
 
+import copy
+
 import pytest
 
-from arrays import FrozenBytes, MutableBytes
-from disassembler import disassemble
+from arrays import FrozenBytes
+from disassembler import disassemble, printable_disassembly
 from sha3 import SHA3
 from symbolic import BA, BW, unwrap, unwrap_bytes
 from testlib import (
@@ -17,7 +19,12 @@ from testlib import (
     make_transaction,
     make_universe,
 )
-from universal import printable_transition, universal_transaction
+from universal import (
+    _universal_transaction,
+    printable_transition,
+    symbolic_start,
+    universal_transaction,
+)
 
 
 def test_fallback() -> None:
@@ -375,14 +382,28 @@ def test_delegation() -> None:
     assert state.success is True
     assert state.returndata.require_concrete() == b""
 
-    # TODO: implement byte-array copy with symbolic arguments
+    start = symbolic_start(delegation, SHA3(), "")
+    init = copy.deepcopy(start)
+    init.universe.transfer(
+        init.transaction.caller, init.contract.address, init.transaction.callvalue
+    )
+    init.contract.storage[BW(1)] = BW(unwrap(other.address))
+    init.universe.contracts[unwrap(other.address)] = other
 
-    # universal = universal_transaction(delegation, SHA3(), "")
-    # check_transition(*next(universal), 0x0, "VIEW", "owner()")
-    # check_transition(*next(universal), 0x0, "SAVE", "pwn()")
+    universal = _universal_transaction(init)
+    check_transition(
+        start, next(universal), 0xF, "SAVE", None
+    )  # TODO: shouldn't this revert?
+    check_transition(
+        start, next(universal), 0xD, "SAVE", "owner()"
+    )  # TODO: should be VIEW
+    check_transition(start, next(universal), 0xC9, "SAVE", "pwn()")
+    check_transition(
+        start, next(universal), 0x19, "SAVE", "0x01014004"
+    )  # TODO: ...what in the world?
 
-    # with pytest.raises(StopIteration):
-    #     next(universal)
+    with pytest.raises(StopIteration):
+        next(universal)
 
 
 def test_force() -> None:
