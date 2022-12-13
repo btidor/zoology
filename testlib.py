@@ -13,7 +13,15 @@ from sha3 import SHA3
 from state import State
 from symbolic import BA, BW, Constraint, check, solver_stack, uint160, uint256
 from universal import constrain_to_goal
-from vm import concrete_DELEGATECALL, concrete_GAS, concrete_JUMPI, step
+from vm import (
+    concrete_CALL,
+    concrete_CALLCODE,
+    concrete_DELEGATECALL,
+    concrete_GAS,
+    concrete_JUMPI,
+    concrete_STATICCALL,
+    step,
+)
 
 
 class Solidity(Enum):
@@ -201,8 +209,17 @@ def execute(state: State) -> None:
             concrete_JUMPI(state)
         elif action == "GAS":
             concrete_GAS(state)
+        elif action == "CALL":
+            with concrete_CALL(state) as substate:
+                execute(substate)
+        elif action == "CALLCODE":
+            with concrete_CALLCODE(state) as substate:
+                execute(substate)
         elif action == "DELEGATECALL":
             with concrete_DELEGATECALL(state) as substate:
+                execute(substate)
+        elif action == "STATICCALL":
+            with concrete_STATICCALL(state) as substate:
                 execute(substate)
         elif action == "TERMINATE":
             return

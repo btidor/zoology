@@ -487,12 +487,12 @@ def CALL(
     retOffset: uint256,
     retSize: uint256,
 ) -> uint256:
-    """F1 - Message-call into an account."""
-    # TODO: we assume the address is an externally-owned account (i.e. contains
-    # no code). How should we handle CALLs to contracts?
-    s.returndata = FrozenBytes.concrete(b"")
-    s.universe.transfer(s.contract.address, zextract(159, 0, address), value)
-    return BW(1)
+    """
+    F1 - Message-call into an account.
+
+    This opcode should be implemented by the VM.
+    """
+    raise NotImplementedError("CALL")
 
 
 def CALLCODE(
@@ -504,7 +504,11 @@ def CALLCODE(
     retOffset: uint256,
     retSize: uint256,
 ) -> uint256:
-    """F2 - Message-call into this account with alternative account's code."""
+    """
+    F2 - Message-call into this account with alternative account's code.
+
+    This opcode should be implemented by the VM.
+    """
     raise NotImplementedError("CALLCODE")
 
 
@@ -547,7 +551,11 @@ def STATICCALL(
     retOffset: uint256,
     retSize: uint256,
 ) -> uint256:
-    """FA - Static message-call into an account."""
+    """
+    FA - Static message-call into an account.
+
+    This opcode should be implemented by the VM.
+    """
     raise NotImplementedError("STATICCALL")
 
 

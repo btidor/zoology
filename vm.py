@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """An implementation of the Ethereum virtual machine."""
 
+import copy
 import inspect
 from contextlib import contextmanager
 from typing import Iterator, List, Literal, Optional, assert_never
@@ -18,7 +19,16 @@ from symbolic import BA, BW, uint256, unwrap, unwrap_bytes
 
 def step(
     state: State,
-) -> Literal["CONTINUE", "JUMPI", "GAS", "DELEGATECALL", "TERMINATE"]:
+) -> Literal[
+    "CONTINUE",
+    "JUMPI",
+    "GAS",
+    "CALL",
+    "CALLCODE",
+    "DELEGATECALL",
+    "STATICCALL",
+    "TERMINATE",
+]:
     """
     Execute a single instruction.
 
@@ -38,9 +48,18 @@ def step(
     elif ins.name == "GAS":
         state.pc += 1
         return "GAS"
+    elif ins.name == "CALL":
+        state.pc += 1
+        return "CALL"
+    elif ins.name == "CALLCODE":
+        state.pc += 1
+        return "CALLCODE"
     elif ins.name == "DELEGATECALL":
         state.pc += 1
         return "DELEGATECALL"
+    elif ins.name == "STATICCALL":
+        state.pc += 1
+        return "STATICCALL"
     elif hasattr(ops, ins.name):
         fn = getattr(ops, ins.name)
         sig = inspect.signature(fn)
@@ -95,8 +114,20 @@ def printable_execution(state: State) -> Iterator[str]:
             concrete_JUMPI(state)
         elif action == "GAS":
             concrete_GAS(state)
+        elif action == "CALL":
+            with concrete_CALL(state) as substate:
+                for line in printable_execution(substate):
+                    yield "  " + line
+        elif action == "CALLCODE":
+            with concrete_CALLCODE(state) as substate:
+                for line in printable_execution(substate):
+                    yield "  " + line
         elif action == "DELEGATECALL":
             with concrete_DELEGATECALL(state) as substate:
+                for line in printable_execution(substate):
+                    yield "  " + line
+        elif action == "STATICCALL":
+            with concrete_STATICCALL(state) as substate:
                 for line in printable_execution(substate):
                     yield "  " + line
         else:
@@ -134,6 +165,57 @@ def concrete_GAS(state: State) -> None:
 
 
 @contextmanager
+def concrete_CALL(state: State) -> Iterator[State]:
+    """Handle a CALL action. Yields a single state."""
+    gas = state.stack.pop()
+    address = unwrap(state.stack.pop(), "CALL requires concrete address")
+    value = state.stack.pop()
+    argsOffset = state.stack.pop()
+    argsSize = state.stack.pop()
+    retOffset = state.stack.pop()
+    retSize = state.stack.pop()
+
+    # # TODO: we assume the address is an externally-owned account (i.e. contains
+    # # no code). How should we handle CALLs to contracts?
+    # s.returndata = FrozenBytes.concrete(b"")
+    # s.universe.transfer(s.contract.address, zextract(159, 0, address), value)
+    # return BW(1)
+    raise NotImplementedError("CALL")
+
+
+@contextmanager
+def concrete_CALLCODE(state: State) -> Iterator[State]:
+    """Handle a CALLCODE action. Yields a single state."""
+    gas = state.stack.pop()
+    address = unwrap(state.stack.pop(), "CALLCODE requires concrete address")
+    value = state.stack.pop()
+    argsOffset = state.stack.pop()
+    argsSize = state.stack.pop()
+    retOffset = state.stack.pop()
+    retSize = state.stack.pop()
+
+    transaction = Transaction(
+        origin=state.transaction.origin,
+        caller=state.contract.address,
+        callvalue=value,
+        calldata=state.memory.slice(argsOffset, argsSize),
+        gasprice=state.transaction.gasprice,
+    )
+    other = state.universe.contracts.get(address, None)
+    if not other:
+        raise ValueError("CALLCODE to unknown contract: " + hex(address))
+    contract = copy.copy(state.contract)
+    contract.program = other.program
+
+    with state.descend(contract, transaction) as substate:
+        yield substate
+
+        state.contract.storage = contract.storage
+        state.memory.graft(substate.returndata.slice(BW(0), retSize), retOffset)
+        state.stack.append(BW(1) if substate.success else BW(0))
+
+
+@contextmanager
 def concrete_DELEGATECALL(state: State) -> Iterator[State]:
     """Handle a DELEGATECALL action. Yields a single state."""
     gas = state.stack.pop()
@@ -150,15 +232,31 @@ def concrete_DELEGATECALL(state: State) -> Iterator[State]:
         calldata=state.memory.slice(argsOffset, argsSize),
         gasprice=state.transaction.gasprice,
     )
-    contract = state.universe.contracts.get(address, None)
-    if not contract:
+    other = state.universe.contracts.get(address, None)
+    if not other:
         raise ValueError("DELEGATECALL to unknown contract: " + hex(address))
+    contract = copy.copy(state.contract)
+    contract.program = other.program
 
     with state.descend(contract, transaction) as substate:
         yield substate
 
+        state.contract.storage = contract.storage
         state.memory.graft(substate.returndata.slice(BW(0), retSize), retOffset)
         state.stack.append(BW(1) if substate.success else BW(0))
+
+
+@contextmanager
+def concrete_STATICCALL(state: State) -> Iterator[State]:
+    """Handle a STATICCALL action. Yields a single state."""
+    gas = state.stack.pop()
+    address = unwrap(state.stack.pop(), "STATICCALL requires concrete address")
+    argsOffset = state.stack.pop()
+    argsSize = state.stack.pop()
+    retOffset = state.stack.pop()
+    retSize = state.stack.pop()
+
+    raise NotImplementedError("STATICCALL")
 
 
 def concrete_start(program: Program, value: uint256, data: bytes) -> State:

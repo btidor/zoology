@@ -12,7 +12,13 @@ from environment import Block, Contract, Transaction, Universe
 from sha3 import SHA3
 from state import State
 from symbolic import check, solver_stack, unwrap, unwrap_bytes, zeval
-from vm import concrete_DELEGATECALL, step
+from vm import (
+    concrete_CALL,
+    concrete_CALLCODE,
+    concrete_DELEGATECALL,
+    concrete_STATICCALL,
+    step,
+)
 
 
 def universal_transaction(
@@ -55,8 +61,20 @@ def _universal_transaction(start: State) -> Iterator[State]:
             elif action == "GAS":
                 symbolic_GAS(state)
                 continue
+            elif action == "CALL":
+                with concrete_CALL(state) as substate:
+                    for end in _universal_transaction(substate):
+                        yield end
+            elif action == "CALLCODE":
+                with concrete_CALLCODE(state) as substate:
+                    for end in _universal_transaction(substate):
+                        yield end
             elif action == "DELEGATECALL":
                 with concrete_DELEGATECALL(state) as substate:
+                    for end in _universal_transaction(substate):
+                        yield end
+            elif action == "STATICCALL":
+                with concrete_STATICCALL(state) as substate:
                     for end in _universal_transaction(substate):
                         yield end
             elif action == "TERMINATE":
