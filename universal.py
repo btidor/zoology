@@ -6,11 +6,12 @@ from typing import Iterable, Iterator, Tuple, assert_never
 
 import z3
 
+from arrays import Array, FrozenBytes, MutableBytes
 from disassembler import Program, disassemble
 from environment import Block, Contract, Transaction, Universe
 from sha3 import SHA3
 from state import State
-from symbolic import Array, Bytes, check, solver_stack, unwrap, unwrap_bytes, zeval
+from symbolic import check, solver_stack, unwrap, unwrap_bytes, zeval
 from vm import concrete_DELEGATECALL, step
 
 
@@ -123,7 +124,7 @@ def symbolic_start(program: Program, sha3: SHA3, suffix: str) -> State:
         origin=origin,
         caller=caller,
         callvalue=z3.BitVec(f"CALLVALUE{suffix}", 256),
-        calldata=Bytes.symbolic(f"CALLDATA{suffix}"),
+        calldata=FrozenBytes.symbolic(f"CALLDATA{suffix}"),
         gasprice=z3.BitVec(f"GASPRICE{suffix}", 256),
     )
     universe = Universe(
@@ -148,8 +149,8 @@ def symbolic_start(program: Program, sha3: SHA3, suffix: str) -> State:
         sha3=sha3,
         pc=0,
         stack=[],
-        memory=Bytes.concrete(b""),
-        returndata=Bytes.concrete(b""),
+        memory=MutableBytes.concrete(b""),
+        returndata=FrozenBytes.concrete(b""),
         success=None,
         subcontexts=[],
         gas_variables=[],

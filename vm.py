@@ -8,11 +8,12 @@ from typing import Iterator, List, Literal, Optional, assert_never
 import z3
 
 import ops
+from arrays import Array, FrozenBytes, MutableBytes
 from disassembler import Instruction, Program, disassemble
 from environment import Block, Contract, Transaction, Universe
 from sha3 import SHA3
 from state import State
-from symbolic import BA, BW, Array, Bytes, uint256, unwrap, unwrap_bytes
+from symbolic import BA, BW, uint256, unwrap, unwrap_bytes
 
 
 def step(
@@ -147,7 +148,7 @@ def concrete_DELEGATECALL(state: State) -> Iterator[State]:
         origin=state.transaction.origin,
         caller=state.transaction.caller,
         callvalue=state.transaction.callvalue,
-        calldata=Bytes.concrete(data),
+        calldata=FrozenBytes.concrete(data),
         gasprice=state.transaction.gasprice,
     )
     contract = state.universe.contracts.get(address, None)
@@ -186,7 +187,7 @@ def concrete_start(program: Program, value: uint256, data: bytes) -> State:
         origin=BA(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0),
         caller=BA(0xCACACACACACACACACACACACACACACACACACACACA),
         callvalue=value,
-        calldata=Bytes.concrete(data),
+        calldata=FrozenBytes.concrete(data),
         gasprice=BW(0x12),
     )
     universe = Universe(
@@ -208,8 +209,8 @@ def concrete_start(program: Program, value: uint256, data: bytes) -> State:
         sha3=SHA3(),
         pc=0,
         stack=[],
-        memory=Bytes.concrete(b""),
-        returndata=Bytes.concrete(b""),
+        memory=MutableBytes.concrete(b""),
+        returndata=FrozenBytes.concrete(b""),
         success=None,
         subcontexts=[],
         gas_variables=[],

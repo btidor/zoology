@@ -2,14 +2,15 @@
 
 import z3
 
+from arrays import FrozenBytes, MutableBytes
 from disassembler import Instruction
 from state import State
-from symbolic import BW, BY, Bytes, uint256, unwrap, zand, zconcat, zextract, zif
+from symbolic import BW, BY, uint256, unwrap, zand, zconcat, zextract, zif
 
 
 def STOP(s: State) -> None:
     """00 - Halts execution."""
-    s.returndata = Bytes.concrete(b"")
+    s.returndata = FrozenBytes.concrete(b"")
     s.success = True
 
 
@@ -212,7 +213,7 @@ def CODESIZE(s: State) -> uint256:
 
 def CODECOPY(s: State, destOffset: uint256, offset: uint256, size: uint256) -> None:
     """39 - Copy code running in current environment to memory."""
-    code = Bytes.concrete(s.contract.program.bytes)
+    code = MutableBytes.concrete(s.contract.program.bytes)
     s.memory.splice_from(code, destOffset, offset, size)
 
 
@@ -244,7 +245,7 @@ def EXTCODECOPY(
     address = unwrap(_address, "EXTCODECOPY requires concrete address")
 
     contract = s.universe.contracts.get(address, None)
-    code = Bytes.concrete(contract.program.bytes if contract else b"")
+    code = MutableBytes.concrete(contract.program.bytes if contract else b"")
     s.memory.splice_from(code, destOffset, offset, size)
 
 
@@ -491,7 +492,7 @@ def CALL(
     """F1 - Message-call into an account."""
     # TODO: we assume the address is an externally-owned account (i.e. contains
     # no code). How should we handle CALLs to contracts?
-    s.returndata = Bytes.concrete(b"")
+    s.returndata = FrozenBytes.concrete(b"")
     s.universe.transfer(s.contract.address, zextract(159, 0, address), value)
     return BW(1)
 
@@ -512,7 +513,7 @@ def CALLCODE(
 def RETURN(s: State, offset: uint256, _size: uint256) -> None:
     """F3 - Halts execution returning output data."""
     size = unwrap(_size, "RETURN requires concrete size")
-    s.returndata = Bytes.concrete([s.memory[offset + BW(i)] for i in range(size)])
+    s.returndata = FrozenBytes.concrete([s.memory[offset + BW(i)] for i in range(size)])
     s.success = True
 
 
@@ -559,13 +560,13 @@ def REVERT(s: State, offset: uint256, _size: uint256) -> None:
     Halt execution reverting state changes but returning data and remaining gas.
     """
     size = unwrap(_size, "REVERT requires concrete size")
-    s.returndata = Bytes.concrete([s.memory[offset + BW(i)] for i in range(size)])
+    s.returndata = FrozenBytes.concrete([s.memory[offset + BW(i)] for i in range(size)])
     s.success = False
 
 
 def INVALID(s: State) -> None:
     """FE - Designated invalid instruction."""
-    s.returndata = Bytes.concrete(b"")
+    s.returndata = FrozenBytes.concrete(b"")
     s.success = False
 
 

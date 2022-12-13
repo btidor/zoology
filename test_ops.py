@@ -3,9 +3,10 @@
 import pytest
 import z3
 
+from arrays import FrozenBytes, MutableBytes
 from disassembler import Instruction, disassemble
 from ops import *
-from symbolic import BA, BW, Bytes, check, simplify
+from symbolic import BA, BW, check, simplify
 from testlib import (
     make_block,
     make_contract,
@@ -16,7 +17,7 @@ from testlib import (
 
 
 def test_STOP() -> None:
-    s = make_state(returndata=Bytes.concrete(b"\x12\x34"))
+    s = make_state(returndata=FrozenBytes.concrete(b"\x12\x34"))
     STOP(s)
     assert s.success is True
     assert s.returndata.require_concrete() == b""
@@ -257,7 +258,7 @@ def test_SAR() -> None:
 
 
 def test_SHA3() -> None:
-    s = make_state(memory=Bytes.concrete(b"\xff\xff\xff\xff"))
+    s = make_state(memory=MutableBytes.concrete(b"\xff\xff\xff\xff"))
     digest = SHA3(s, BW(0), BW(4))
 
     solver = z3.Optimize()
@@ -307,7 +308,7 @@ def test_CALLVALUE() -> None:
 
 def test_CALLDATALOAD() -> None:
     transaction = make_transaction(
-        calldata=Bytes.concrete(
+        calldata=FrozenBytes.concrete(
             b"\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff"
         )
     )
@@ -324,14 +325,14 @@ def test_CALLDATALOAD() -> None:
 
 
 def test_CALLDATASIZE() -> None:
-    transaction = make_transaction(calldata=Bytes.concrete(b"\xff"))
+    transaction = make_transaction(calldata=FrozenBytes.concrete(b"\xff"))
     s = make_state(transaction=transaction)
     assert CALLDATASIZE(s) == 1
 
 
 def test_CALLDATACOPY() -> None:
     transaction = make_transaction(
-        calldata=Bytes.concrete(
+        calldata=FrozenBytes.concrete(
             b"\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff"
         )
     )
@@ -407,13 +408,13 @@ def test_EXTCODECOPY() -> None:
 
 
 def test_RETURNDATASIZE() -> None:
-    s = make_state(returndata=Bytes.concrete(b"abcdefghijklmnopqrstuvwxyz"))
+    s = make_state(returndata=FrozenBytes.concrete(b"abcdefghijklmnopqrstuvwxyz"))
     assert simplify(RETURNDATASIZE(s)) == 26
 
 
 def test_RETURNDATACOPY() -> None:
     s = make_state(
-        returndata=Bytes.concrete(
+        returndata=FrozenBytes.concrete(
             b"\x7d\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\x7f"
         )
     )
@@ -431,7 +432,7 @@ def test_RETURNDATACOPY() -> None:
     )
 
 
-def test_EXTCODEHASH() -> None:  # TODO
+def test_EXTCODEHASH() -> None:
     address = 0xABCDABCDABCDABCDABCDABCDABCDABCDABCDABCD
     contract = make_contract(
         address=BA(address), program=disassemble(bytes.fromhex("66000000000000005B"))
@@ -505,7 +506,7 @@ def test_BASEFEE() -> None:
 
 def test_MLOAD() -> None:
     s = make_state(
-        memory=Bytes.concrete(
+        memory=MutableBytes.concrete(
             bytes.fromhex(
                 "00000000000000000000000000000000000000000000000000000000000000FF"
             )
@@ -575,7 +576,7 @@ def test_PC() -> None:
 
 
 def test_MSIZE() -> None:
-    s = make_state(memory=Bytes.concrete(b"\x00" * 123 + b"\x01"))
+    s = make_state(memory=MutableBytes.concrete(b"\x00" * 123 + b"\x01"))
     assert simplify(MSIZE(s)) == 124
 
 
@@ -613,7 +614,7 @@ def test_SWAP() -> None:
 
 
 def test_CALL() -> None:
-    s = make_state(returndata=Bytes.concrete(b"\x01"))
+    s = make_state(returndata=FrozenBytes.concrete(b"\x01"))
     s.universe.balances[s.contract.address] = BW(125)
     res = CALL(s, BW(0), BW(0x1234), BW(123), BW(0), BW(0), BW(0), BW(0))
     assert simplify(res) == 1
@@ -624,7 +625,8 @@ def test_CALL() -> None:
 
 def test_RETURN() -> None:
     s = make_state(
-        returndata=Bytes.concrete(b"\x12\x34"), memory=Bytes.concrete(b"\xff\x01")
+        returndata=FrozenBytes.concrete(b"\x12\x34"),
+        memory=MutableBytes.concrete(b"\xff\x01"),
     )
     RETURN(s, BW(0), BW(2))
     assert s.success is True
@@ -633,7 +635,8 @@ def test_RETURN() -> None:
 
 def test_REVERT() -> None:
     s = make_state(
-        returndata=Bytes.concrete(b"\x12\x34"), memory=Bytes.concrete(b"\xff\x01")
+        returndata=FrozenBytes.concrete(b"\x12\x34"),
+        memory=MutableBytes.concrete(b"\xff\x01"),
     )
     REVERT(s, BW(0), BW(2))
     assert s.success is False
@@ -641,7 +644,7 @@ def test_REVERT() -> None:
 
 
 def test_INVALID() -> None:
-    s = make_state(returndata=Bytes.concrete(b"\x12\x34"))
+    s = make_state(returndata=FrozenBytes.concrete(b"\x12\x34"))
     INVALID(s)
     assert s.success is False
     assert s.returndata.require_concrete() == b""

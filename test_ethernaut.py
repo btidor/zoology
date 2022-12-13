@@ -2,9 +2,10 @@
 
 import pytest
 
+from arrays import FrozenBytes, MutableBytes
 from disassembler import disassemble
 from sha3 import SHA3
-from symbolic import BA, BW, Bytes, unwrap, unwrap_bytes
+from symbolic import BA, BW, unwrap, unwrap_bytes
 from testlib import (
     Solidity,
     abiencode,
@@ -71,7 +72,7 @@ def test_fallback() -> None:
         contract=make_contract(program=program),
         transaction=make_transaction(
             callvalue=BW(0),
-            calldata=Bytes.concrete(abiencode("owner()")),
+            calldata=FrozenBytes.concrete(abiencode("owner()")),
         ),
     )
     execute(state)
@@ -139,7 +140,7 @@ def test_fallout() -> None:
         contract=make_contract(program=program),
         transaction=make_transaction(
             callvalue=BW(0),
-            calldata=Bytes.concrete(abiencode("Fal1out()")),
+            calldata=FrozenBytes.concrete(abiencode("Fal1out()")),
         ),
     )
     execute(state)
@@ -203,7 +204,9 @@ def test_coinflip() -> None:
         contract=make_contract(program=program),
         transaction=make_transaction(
             callvalue=BW(0),
-            calldata=Bytes.concrete(abiencode("flip(bool)") + unwrap_bytes(BW(0))),
+            calldata=FrozenBytes.concrete(
+                abiencode("flip(bool)") + unwrap_bytes(BW(0))
+            ),
         ),
     )
     state.contract.storage[BW(1)] = BW(0xFEDC)
@@ -247,7 +250,7 @@ def test_telephone() -> None:
         transaction=make_transaction(
             caller=BA(0xB1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1),
             callvalue=BW(0),
-            calldata=Bytes.concrete(
+            calldata=FrozenBytes.concrete(
                 abiencode("changeOwner(address)")
                 + unwrap_bytes(BW(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF))
             ),
@@ -299,7 +302,7 @@ def test_token() -> None:
         contract=make_contract(program=program),
         transaction=make_transaction(
             callvalue=BW(0),
-            calldata=Bytes.concrete(
+            calldata=FrozenBytes.concrete(
                 abiencode("transfer(address,uint256)")
                 + unwrap_bytes(BW(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF))
                 + unwrap_bytes(BW(0xEEEE))
@@ -363,7 +366,7 @@ def test_delegation() -> None:
         contract=make_contract(program=delegation),
         transaction=make_transaction(
             callvalue=BW(0),
-            calldata=Bytes.concrete(abiencode("pwn()")),
+            calldata=FrozenBytes.concrete(abiencode("pwn()")),
         ),
         universe=make_universe(contracts={unwrap(other.address): other}),
     )
@@ -392,7 +395,7 @@ def test_force() -> None:
         contract=make_contract(program=program),
         transaction=make_transaction(
             callvalue=BW(0x1234),
-            calldata=Bytes.concrete(b""),
+            calldata=FrozenBytes.concrete(b""),
         ),
     )
     execute(state)
@@ -433,7 +436,9 @@ def test_vault() -> None:
         contract=make_contract(program=program),
         transaction=make_transaction(
             callvalue=BW(0),
-            calldata=Bytes.concrete(abiencode("unlock(bytes32)") + unwrap_bytes(BW(0))),
+            calldata=FrozenBytes.concrete(
+                abiencode("unlock(bytes32)") + unwrap_bytes(BW(0))
+            ),
         ),
     )
     execute(state)
@@ -487,7 +492,7 @@ def test_king() -> None:
         contract=make_contract(program=program),
         transaction=make_transaction(
             callvalue=BW(0x1234),
-            calldata=Bytes.concrete(b""),
+            calldata=FrozenBytes.concrete(b""),
         ),
     )
     execute(state)
@@ -544,7 +549,9 @@ def test_reentrancy() -> None:
         contract=make_contract(program=program),
         transaction=make_transaction(
             callvalue=BW(0x1234),
-            calldata=Bytes.concrete(abiencode("donate(address)") + unwrap_bytes(BW(1))),
+            calldata=FrozenBytes.concrete(
+                abiencode("donate(address)") + unwrap_bytes(BW(1))
+            ),
         ),
     )
     execute(state)

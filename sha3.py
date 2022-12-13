@@ -8,9 +8,9 @@ from typing import Dict, Iterable, Iterator, List, Tuple, cast
 import z3
 from Crypto.Hash import keccak
 
+from arrays import Array
 from symbolic import (
     BW,
-    Array,
     Constraint,
     check,
     describe,

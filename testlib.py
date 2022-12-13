@@ -6,21 +6,12 @@ from typing import Dict, List, Literal, Optional, assert_never
 import z3
 from Crypto.Hash import keccak
 
+from arrays import Array, FrozenBytes, MutableBytes
 from disassembler import Program, disassemble
 from environment import Block, Contract, Transaction, Universe
 from sha3 import SHA3
 from state import State
-from symbolic import (
-    BA,
-    BW,
-    Array,
-    Bytes,
-    Constraint,
-    check,
-    solver_stack,
-    uint160,
-    uint256,
-)
+from symbolic import BA, BW, Constraint, check, solver_stack, uint160, uint256
 from universal import constrain_to_goal
 from vm import concrete_DELEGATECALL, concrete_GAS, concrete_JUMPI, step
 
@@ -76,7 +67,7 @@ def make_transaction(
     origin: Optional[uint160] = None,
     caller: Optional[uint160] = None,
     callvalue: Optional[uint256] = None,
-    calldata: Optional[Bytes] = None,
+    calldata: Optional[FrozenBytes] = None,
     gasprice: Optional[uint256] = None,
 ) -> Transaction:
     return Transaction(
@@ -87,7 +78,7 @@ def make_transaction(
         if caller is None
         else caller,
         callvalue=BW(0) if callvalue is None else callvalue,
-        calldata=Bytes.concrete(b"") if calldata is None else calldata,
+        calldata=FrozenBytes.concrete(b"") if calldata is None else calldata,
         gasprice=BW(0x12) if gasprice is None else gasprice,
     )
 
@@ -129,8 +120,8 @@ def make_state(
     sha3: Optional[SHA3] = None,
     pc: Optional[int] = None,
     stack: Optional[List[uint256]] = None,
-    memory: Optional[Bytes] = None,
-    returndata: Optional[Bytes] = None,
+    memory: Optional[MutableBytes] = None,
+    returndata: Optional[FrozenBytes] = None,
     success: Optional[bool] = None,
     subcontexts: Optional[List[State]] = None,
     gas_variables: Optional[List[uint256]] = None,
@@ -146,8 +137,8 @@ def make_state(
         sha3=SHA3() if sha3 is None else sha3,
         pc=0 if pc is None else pc,
         stack=[] if stack is None else stack,
-        memory=Bytes.concrete(b"") if memory is None else memory,
-        returndata=Bytes.concrete(b"") if returndata is None else returndata,
+        memory=MutableBytes.concrete(b"") if memory is None else memory,
+        returndata=FrozenBytes.concrete(b"") if returndata is None else returndata,
         success=None if success is None else success,
         subcontexts=[] if subcontexts is None else subcontexts,
         gas_variables=[] if gas_variables is None else gas_variables,

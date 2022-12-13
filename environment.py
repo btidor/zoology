@@ -8,11 +8,10 @@ from typing import Any, Dict, List
 
 import z3
 
+from arrays import Array, FrozenBytes
 from disassembler import Program
 from symbolic import (
     BW,
-    Array,
-    Bytes,
     Constraint,
     is_bitvector,
     is_concrete,
@@ -53,7 +52,7 @@ class Transaction:
     origin: uint160
     caller: uint160
     callvalue: uint256
-    calldata: Bytes
+    calldata: FrozenBytes
     gasprice: uint256
 
     def evaluate(self, model: z3.ModelRef) -> OrderedDict[str, str]:

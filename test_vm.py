@@ -2,9 +2,10 @@
 
 from typing import List
 
+from arrays import FrozenBytes
 from disassembler import disassemble
 from state import State
-from symbolic import BW, Bytes, unwrap
+from symbolic import BW, unwrap
 from testlib import (
     abiencode,
     compile_solidity,
@@ -27,7 +28,7 @@ def test_execute_basic() -> None:
         contract=make_contract(program=program),
         transaction=make_transaction(
             callvalue=BW(0),
-            calldata=Bytes.concrete(b""),
+            calldata=FrozenBytes.concrete(b""),
         ),
     )
 
@@ -142,7 +143,7 @@ def test_execute_solidity() -> None:
         contract=make_contract(program=program),
         transaction=make_transaction(
             callvalue=BW(0),
-            calldata=Bytes.concrete(abiencode("owner()")),
+            calldata=FrozenBytes.concrete(abiencode("owner()")),
         ),
     )
     execute(state)
@@ -153,7 +154,7 @@ def test_execute_solidity() -> None:
         contract=state.contract,  # carries forward storage
         transaction=make_transaction(
             callvalue=BW(0),
-            calldata=Bytes.concrete(abiencode("withdraw()")),
+            calldata=FrozenBytes.concrete(abiencode("withdraw()")),
         ),
         universe=state.universe,
     )
@@ -165,7 +166,7 @@ def test_execute_solidity() -> None:
         contract=state.contract,
         transaction=make_transaction(
             callvalue=BW(123456),
-            calldata=Bytes.concrete(abiencode("contribute()")),
+            calldata=FrozenBytes.concrete(abiencode("contribute()")),
         ),
         universe=state.universe,
     )
@@ -177,7 +178,7 @@ def test_execute_solidity() -> None:
         contract=state.contract,
         transaction=make_transaction(
             callvalue=BW(0),
-            calldata=Bytes.concrete(abiencode("owner()")),
+            calldata=FrozenBytes.concrete(abiencode("owner()")),
         ),
         universe=state.universe,
     )
@@ -193,7 +194,7 @@ def test_output_basic() -> None:
         contract=make_contract(program=program),
         transaction=make_transaction(
             callvalue=BW(0),
-            calldata=Bytes.concrete(b""),
+            calldata=FrozenBytes.concrete(b""),
         ),
     )
 

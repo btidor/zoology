@@ -9,11 +9,11 @@ from typing import Iterator, List, Optional
 
 import z3
 
+from arrays import FrozenBytes, MutableBytes
 from environment import Block, Contract, Transaction, Universe
 from sha3 import SHA3
 from symbolic import (
     BA,
-    Bytes,
     Constraint,
     check,
     is_concrete,
@@ -38,9 +38,9 @@ class State:
 
     pc: int
     stack: List[uint256]
-    memory: Bytes
+    memory: MutableBytes
 
-    returndata: Bytes
+    returndata: FrozenBytes
     success: Optional[bool]
 
     subcontexts: List[State]
@@ -150,9 +150,9 @@ class State:
             sha3=self.sha3,
             pc=0,
             stack=[],
-            memory=Bytes.concrete(b""),
+            memory=MutableBytes.concrete(b""),
             success=None,
-            returndata=Bytes.concrete(b""),
+            returndata=FrozenBytes.concrete(b""),
             subcontexts=[],
             gas_variables=self.gas_variables,
             path_constraints=self.path_constraints,
