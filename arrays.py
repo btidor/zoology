@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import abc
 import copy
-from typing import Any, Iterable, List, Tuple, TypeAlias, Union, cast
+from typing import Any, Iterable, List, Tuple, TypeAlias, Union
 
 import z3
 
@@ -21,7 +21,9 @@ from symbolic import (
     unwrap_bytes,
     zand,
     zeval,
+    zget,
     zif,
+    zstore,
 )
 
 
@@ -49,16 +51,16 @@ class Array:
     def __getitem__(self, key: z3.BitVecRef) -> z3.BitVecRef:
         """Look up the given symbolic key."""
         self.accessed.append(key)
-        return cast(z3.BitVecRef, self.array[key])
+        return zget(self.array, key)
 
     def __setitem__(self, key: z3.BitVecRef, val: z3.BitVecRef) -> None:
         """Set the given symbolic key to the given symbolic value."""
         self.written.append(key)
-        self.array = cast(z3.ArrayRef, z3.Store(self.array, key, val))
+        self.array = zstore(self.array, key, val)
 
     def peek(self, key: z3.BitVecRef) -> z3.BitVecRef:
         """Look up the given symbolic key, but don't track the lookup."""
-        return cast(z3.BitVecRef, self.array[key])
+        return zget(self.array, key)
 
     def printable_diff(
         self, name: str, model: z3.ModelRef, original: Array
@@ -132,10 +134,10 @@ class Bytes(abc.ABC):
         for i, b in enumerate(data):
             if is_bitvector(b):
                 assert b.size() == 8
-                array = cast(z3.ArrayRef, z3.Store(array, BW(i), b))
+                array = zstore(array, BW(i), b)
             else:
                 assert isinstance(b, int)
-                array = cast(z3.ArrayRef, z3.Store(array, BW(i), BY(b)))
+                array = zstore(array, BW(i), BY(b))
         return cls(length, array)
 
     @classmethod
@@ -174,7 +176,7 @@ class FrozenBytes(Bytes):
         Reads past the end of the bytestring return zero.
         """
         assert i.size() == 256
-        return cast(uint8, self.array[i])
+        return zget(self.array, i)
 
 
 class MutableBytes(Bytes):
@@ -187,7 +189,7 @@ class MutableBytes(Bytes):
         Reads past the end of the bytestring return zero.
         """
         assert i.size() == 256
-        item = cast(z3.BitVecRef, self.array[i])
+        item = zget(self.array, i)
         for k, v in self.writes:
             if isinstance(k, tuple):
                 assert isinstance(v, Bytes)
@@ -211,7 +213,7 @@ class MutableBytes(Bytes):
             # Warning: passing writes through to the underlying array when there
             # are no custom writes is a good optimization (~12% speedup), but it
             # does create a performance cliff.
-            self.array = cast(z3.ArrayRef, z3.Store(self.array, i, v))
+            self.array = zstore(self.array, i, v)
         else:
             self.writes.append((i, v))
 

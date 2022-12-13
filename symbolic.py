@@ -107,6 +107,16 @@ def zand(*constraints: Constraint) -> z3.BoolRef:
     return cast(z3.BoolRef, z3.And(*constraints))
 
 
+def zget(array: z3.ArrayRef, key: z3.BitVecRef) -> z3.BitVecRef:
+    """Return the given element of the given array."""
+    return cast(z3.BitVecRef, array[key])
+
+
+def zstore(array: z3.ArrayRef, key: z3.BitVecRef, value: z3.BitVecRef) -> z3.ArrayRef:
+    """Return the given element of the given array."""
+    return cast(z3.ArrayRef, z3.Store(array, key, value))
+
+
 def describe(value: z3.BitVecRef) -> str:
     """
     Produce a human-readable description of the given bitvector.

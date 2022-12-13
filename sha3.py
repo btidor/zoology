@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, Iterator, List, Tuple, cast
+from typing import Dict, Iterable, Iterator, List, Tuple
 
 import z3
 from Crypto.Hash import keccak
@@ -18,6 +18,7 @@ from symbolic import (
     simplify,
     unwrap,
     zeval,
+    zget,
 )
 
 
@@ -68,7 +69,7 @@ class SHA3:
         """Iterate over (n, key, value) tuples."""
         for n, arr in self.hashes.items():
             for key in arr.accessed:
-                yield (n, key, cast(z3.BitVecRef, arr.array[key]))
+                yield (n, key, zget(arr.array, key))
 
     def constrain(self, solver: z3.Optimize) -> None:
         """Apply computed SHA3 constraints to the given solver instance."""
