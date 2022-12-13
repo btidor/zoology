@@ -5,9 +5,9 @@ import copy
 import pytest
 
 from arrays import FrozenBytes
-from disassembler import disassemble, printable_disassembly
+from disassembler import disassemble
 from sha3 import SHA3
-from symbolic import BA, BW, unwrap, unwrap_bytes
+from symbolic import BA, BW, unwrap, unwrap_bytes, zstore
 from testlib import (
     Solidity,
     abiencode,
@@ -377,7 +377,9 @@ def test_delegation() -> None:
         ),
         universe=make_universe(contracts={unwrap(other.address): other}),
     )
-    state.contract.storage[BW(1)] = BW(unwrap(other.address))
+    state.contract.storage.array = zstore(
+        state.contract.storage.array, BW(1), BW(unwrap(other.address))
+    )
     execute(state)
     assert state.success is True
     assert state.returndata.require_concrete() == b""
@@ -387,20 +389,17 @@ def test_delegation() -> None:
     init.universe.transfer(
         init.transaction.caller, init.contract.address, init.transaction.callvalue
     )
-    init.contract.storage[BW(1)] = BW(unwrap(other.address))
+    init.contract.storage.array = zstore(
+        init.contract.storage.array, BW(1), BW(unwrap(other.address))
+    )
     init.universe.contracts[unwrap(other.address)] = other
 
     universal = _universal_transaction(init)
-    check_transition(
-        start, next(universal), 0xF, "SAVE", None
-    )  # TODO: shouldn't this revert?
-    check_transition(
-        start, next(universal), 0xD, "SAVE", "owner()"
-    )  # TODO: should be VIEW
+    check_transition(start, next(universal), 0xF, "VIEW", None)  # *
+    check_transition(start, next(universal), 0xD, "VIEW", "owner()")
     check_transition(start, next(universal), 0xC9, "SAVE", "pwn()")
-    check_transition(
-        start, next(universal), 0x19, "SAVE", "0x01014004"
-    )  # TODO: ...what in the world?
+    check_transition(start, next(universal), 0x19, "VIEW", "0x00020801")  # *
+    # * if Delegate reverts, Delegation will still return successfully
 
     with pytest.raises(StopIteration):
         next(universal)
