@@ -7,13 +7,7 @@ from arrays import FrozenBytes, MutableBytes
 from disassembler import Instruction, disassemble
 from ops import *
 from symbolic import BA, BW, check, simplify
-from testlib import (
-    make_block,
-    make_contract,
-    make_state,
-    make_transaction,
-    make_universe,
-)
+from testlib import make_block, make_contract, make_state, make_transaction
 
 
 def test_STOP() -> None:
@@ -327,7 +321,7 @@ def test_CALLDATALOAD() -> None:
 def test_CALLDATASIZE() -> None:
     transaction = make_transaction(calldata=FrozenBytes.concrete(b"\xff"))
     s = make_state(transaction=transaction)
-    assert CALLDATASIZE(s) == 1
+    assert simplify(CALLDATASIZE(s)) == 1
 
 
 def test_CALLDATACOPY() -> None:
@@ -357,7 +351,7 @@ def test_CODESIZE() -> None:
             program=disassemble(bytes.fromhex("66000000000000005B")),
         )
     )
-    assert CODESIZE(s) == 9
+    assert simplify(CODESIZE(s)) == 9
 
 
 def test_CODECOPY() -> None:
@@ -388,9 +382,10 @@ def test_EXTCODESIZE() -> None:
     contract = make_contract(
         address=BA(address), program=disassemble(bytes.fromhex("66000000000000005B"))
     )
-    s = make_state(universe=make_universe(contracts={address: contract}))
-    assert EXTCODESIZE(s, BA(address)) == 9
-    assert EXTCODESIZE(s, BA(0x1234)) == 0
+    s = make_state()
+    s.universe.add_contract(contract)
+    assert simplify(EXTCODESIZE(s, BA(address))) == 9
+    assert simplify(EXTCODESIZE(s, BA(0x1234))) == 0
 
 
 def test_EXTCODECOPY() -> None:
@@ -398,7 +393,8 @@ def test_EXTCODECOPY() -> None:
     contract = make_contract(
         address=BA(address), program=disassemble(bytes.fromhex("66000000000000005B"))
     )
-    s = make_state(universe=make_universe(contracts={address: contract}))
+    s = make_state()
+    s.universe.add_contract(contract)
 
     EXTCODECOPY(s, BA(address), BW(3), BW(5), BW(7))
     assert s.memory.require_concrete().hex() == "0000000000005b000000"
@@ -437,13 +433,14 @@ def test_EXTCODEHASH() -> None:
     contract = make_contract(
         address=BA(address), program=disassemble(bytes.fromhex("66000000000000005B"))
     )
-    s = make_state(universe=make_universe(contracts={address: contract}))
+    s = make_state()
+    s.universe.add_contract(contract)
 
     assert (
-        EXTCODEHASH(s, BA(address))
+        simplify(EXTCODEHASH(s, BA(address)))
         == 0xD579742AEE22A336CAC42EFE05B2CF1281DB892E213257B929C2338EA0675B00
     )
-    assert EXTCODEHASH(s, BA(0x1234)) == 0x0
+    assert simplify(EXTCODEHASH(s, BA(0x1234))) == 0x0
 
 
 def test_BLOCKHASH() -> None:
@@ -495,7 +492,7 @@ def test_GASLIMIT() -> None:
 
 def test_CHAINID() -> None:
     s = make_state()
-    assert CHAINID(s) == 1
+    assert simplify(CHAINID(s)) == 1
 
 
 def test_BASEFEE() -> None:
@@ -610,16 +607,6 @@ def test_SWAP() -> None:
     ins = Instruction(0x0, 1, "SWAP")
     with pytest.raises(ValueError):
         SWAP(ins, s)
-
-
-def test_CALL() -> None:
-    s = make_state(returndata=FrozenBytes.concrete(b"\x01"))
-    s.universe.balances[s.contract.address] = BW(125)
-    res = CALL(s, BW(0), BW(0x1234), BW(123), BW(0), BW(0), BW(0), BW(0))
-    assert simplify(res) == 1
-    assert s.returndata.require_concrete() == b""
-    assert simplify(s.universe.balances[BA(0x1234)]) == 123
-    assert simplify(s.universe.balances[s.contract.address]) == 2
 
 
 def test_RETURN() -> None:

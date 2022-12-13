@@ -17,14 +17,8 @@ from testlib import (
     make_contract,
     make_state,
     make_transaction,
-    make_universe,
 )
-from universal import (
-    _universal_transaction,
-    printable_transition,
-    symbolic_start,
-    universal_transaction,
-)
+from universal import _universal_transaction, symbolic_start, universal_transaction
 
 
 def test_fallback() -> None:
@@ -375,8 +369,8 @@ def test_delegation() -> None:
             callvalue=BW(0),
             calldata=FrozenBytes.concrete(abiencode("pwn()")),
         ),
-        universe=make_universe(contracts={unwrap(other.address): other}),
     )
+    state.universe.add_contract(other)
     state.contract.storage.array = zstore(
         state.contract.storage.array, BW(1), BW(unwrap(other.address))
     )
@@ -398,7 +392,7 @@ def test_delegation() -> None:
     check_transition(start, next(universal), 0xF, "VIEW", None)  # *
     check_transition(start, next(universal), 0xD, "VIEW", "owner()")
     check_transition(start, next(universal), 0xC9, "SAVE", "pwn()")
-    check_transition(start, next(universal), 0x19, "VIEW", "0x00020801")  # *
+    check_transition(start, next(universal), 0x19, "VIEW", "$any4")  # *
     # * if Delegate reverts, Delegation will still return successfully
 
     with pytest.raises(StopIteration):
@@ -466,7 +460,6 @@ def test_vault() -> None:
     assert state.returndata.require_concrete() == b""
 
     universal = universal_transaction(program, SHA3(), "")
-
     check_transition(*next(universal), 0xD, "VIEW", "locked()")
     check_transition(*next(universal), 0xCF, "VIEW", "unlock(bytes32)")
     check_transition(*next(universal), 0xCE, "SAVE", "unlock(bytes32)")
@@ -520,7 +513,6 @@ def test_king() -> None:
     assert state.returndata.require_concrete() == b""
 
     universal = universal_transaction(program, SHA3(), "")
-
     check_transition(*next(universal), 0x37, "SAVE", None, None)
     check_transition(*next(universal), 0x33, "SAVE", None, None)
     check_transition(*next(universal), 0xB, "VIEW", "_king()")
@@ -531,7 +523,6 @@ def test_king() -> None:
         next(universal)
 
 
-@pytest.mark.skip("implement CALL properly")
 def test_reentrancy() -> None:
     source = """
         // SPDX-License-Identifier: MIT
@@ -551,11 +542,11 @@ def test_reentrancy() -> None:
 
             function withdraw(uint _amount) public {
                 if(balances[msg.sender] >= _amount) {
-                (bool result,) = msg.sender.call{value:_amount}("");
-                if(result) {
-                    _amount;
-                }
-                balances[msg.sender] -= _amount;
+                    (bool result,) = msg.sender.call{value:_amount}("");
+                    if(result) {
+                        _amount;
+                    }
+                    balances[msg.sender] -= _amount;
                 }
             }
 
@@ -578,4 +569,14 @@ def test_reentrancy() -> None:
     assert state.success is True
     assert state.returndata.require_concrete() == b""
 
-    assert False
+    universal = universal_transaction(program, SHA3(), "")
+    check_transition(*next(universal), 0x6, "VIEW", None)
+    check_transition(*next(universal), 0x2F, "SAVE", "donate(address)")
+    check_transition(*next(universal), 0x4F, "VIEW", "balances(address)")
+    check_transition(*next(universal), 0x11F, "VIEW", "withdraw(uint256)")
+    check_transition(*next(universal), 0x47B, "GOAL", "withdraw(uint256)")
+    check_transition(*next(universal), 0x479, "GOAL", "withdraw(uint256)")
+    check_transition(*next(universal), 0x10F, "VIEW", "balanceOf(address)")
+
+    with pytest.raises(StopIteration):
+        next(universal)

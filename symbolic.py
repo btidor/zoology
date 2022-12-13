@@ -107,6 +107,11 @@ def zand(*constraints: Constraint) -> z3.BoolRef:
     return cast(z3.BoolRef, z3.And(*constraints))
 
 
+def zor(*constraints: Constraint) -> z3.BoolRef:
+    """Return the intersection of the given symbolic constraints."""
+    return cast(z3.BoolRef, z3.Or(*constraints))
+
+
 def zget(array: z3.ArrayRef, key: z3.BitVecRef) -> z3.BitVecRef:
     """Return the given element of the given array."""
     return cast(z3.BitVecRef, array[key])

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import OrderedDict
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Iterator, List, Optional
+from typing import Iterator, List, Optional, Tuple
 
 import z3
 
@@ -20,6 +20,7 @@ from symbolic import (
     uint256,
     unwrap,
     unwrap_bytes,
+    zand,
     zeval,
 )
 
@@ -48,6 +49,10 @@ class State:
     # Every time the GAS instruction is invoked we return a symbolic result,
     # tracked here. These should be monotonically decreasing.
     gas_variables: List[z3.BitVecRef]
+
+    # Every time the CALL instruction is invoked we return a symbolic result,
+    # tracked here.
+    call_variables: List[Tuple[FrozenBytes, z3.BoolRef]]
 
     # List of Z3 expressions that must be satisfied in order for the program to
     # reach this state. Based on the JUMPI instructions (if statements) seen so
@@ -111,7 +116,7 @@ class State:
         for addr in self.universe.balances.written:
             if check(
                 solver,
-                z3.And(
+                zand(
                     addr != self.contract.address,
                     z3.UGT(
                         self.universe.balances.peek(addr),
@@ -155,6 +160,7 @@ class State:
             returndata=FrozenBytes.concrete(b""),
             subcontexts=[],
             gas_variables=self.gas_variables,
+            call_variables=self.call_variables,
             path_constraints=self.path_constraints,
             path=self.path,
         )
@@ -169,5 +175,6 @@ class State:
 
         self.returndata = substate.returndata
         self.gas_variables = substate.gas_variables
+        self.call_variables = substate.call_variables
         self.path_constraints = substate.path_constraints
         self.path = substate.path

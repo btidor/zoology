@@ -1,7 +1,7 @@
 import os
 import subprocess
 from enum import Enum
-from typing import Dict, List, Literal, Optional, assert_never
+from typing import Dict, List, Literal, Optional, Tuple, assert_never
 
 import z3
 from Crypto.Hash import keccak
@@ -96,6 +96,7 @@ def make_universe(
     balances: Optional[Array] = None,
     transfer_constraints: Optional[List[Constraint]] = None,
     contracts: Optional[Dict[int, Contract]] = None,
+    codesizes: Optional[Array] = None,
     blockhashes: Optional[Array] = None,
     agents: Optional[List[uint160]] = None,
     contribution: Optional[uint256] = None,
@@ -110,6 +111,9 @@ def make_universe(
         if transfer_constraints is None
         else transfer_constraints,
         contracts={} if contracts is None else contracts,
+        codesizes=Array("CODESIZE", z3.BitVecSort(160), BW(0))
+        if codesizes is None
+        else codesizes,
         blockhashes=Array("BLOCKHASH", z3.BitVecSort(256), BW(0))
         if blockhashes is None
         else blockhashes,
@@ -133,6 +137,7 @@ def make_state(
     success: Optional[bool] = None,
     subcontexts: Optional[List[State]] = None,
     gas_variables: Optional[List[uint256]] = None,
+    call_variables: Optional[List[Tuple[FrozenBytes, z3.BoolRef]]] = None,
     path_constraints: Optional[List[Constraint]] = None,
     path: Optional[int] = None,
 ) -> State:
@@ -150,6 +155,7 @@ def make_state(
         success=None if success is None else success,
         subcontexts=[] if subcontexts is None else subcontexts,
         gas_variables=[] if gas_variables is None else gas_variables,
+        call_variables=[] if call_variables is None else call_variables,
         path_constraints=[] if path_constraints is None else path_constraints,
         path=1 if path is None else path,
     )
@@ -210,8 +216,7 @@ def execute(state: State) -> None:
         elif action == "GAS":
             concrete_GAS(state)
         elif action == "CALL":
-            with concrete_CALL(state) as substate:
-                execute(substate)
+            concrete_CALL(state)
         elif action == "CALLCODE":
             with concrete_CALLCODE(state) as substate:
                 execute(substate)
@@ -235,7 +240,7 @@ def check_transition(
     method: Optional[str],
     value: Optional[int] = None,
 ) -> None:
-    assert end.path == path
+    assert end.path == path, f"unexpected path: Px{hex(end.path)[2:]}"
     assert end.success is True
 
     solver = z3.Optimize()
@@ -253,11 +258,13 @@ def check_transition(
 
     actual = bytes.fromhex(transaction.get("Data", "")[2:10])
     if method is None:
-        assert actual == b""
+        assert actual == b"", f"unexpected data: {actual.hex()}"
     elif method.startswith("0x"):
-        assert actual == bytes.fromhex(method[2:])
+        assert actual == bytes.fromhex(method[2:]), f"unexpected data: {actual.hex()}"
+    elif method == "$any4":
+        assert len(actual) == 4, f"unexpected data: {actual.hex()}"
     else:
-        assert actual == abiencode(method)
+        assert actual == abiencode(method), f"unexpected data: {actual.hex()}"
 
     if "Value" not in transaction:
         assert value is None

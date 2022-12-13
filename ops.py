@@ -221,16 +221,9 @@ def GASPRICE(s: State) -> uint256:
     return s.transaction.gasprice
 
 
-def EXTCODESIZE(s: State, _address: uint256) -> uint256:
+def EXTCODESIZE(s: State, address: uint256) -> uint256:
     """3B - Get size of an account's code."""
-    # TODO: support EXTCODESIZE on symbolic addresses, e.g. to check if the
-    # caller is an EOA.
-    address = unwrap(_address, "EXTCODESIZE requires concrete address")
-
-    contract = s.universe.contracts.get(address, None)
-    if contract is None:
-        return BW(0)
-    return contract.program.code.length
+    return s.universe.codesizes[address]
 
 
 def EXTCODECOPY(
@@ -512,10 +505,9 @@ def CALLCODE(
     raise NotImplementedError("CALLCODE")
 
 
-def RETURN(s: State, offset: uint256, _size: uint256) -> None:
+def RETURN(s: State, offset: uint256, size: uint256) -> None:
     """F3 - Halts execution returning output data."""
-    size = unwrap(_size, "RETURN requires concrete size")
-    s.returndata = FrozenBytes.concrete([s.memory[offset + BW(i)] for i in range(size)])
+    s.returndata = s.memory.slice(offset, size)
     s.success = True
 
 
@@ -559,14 +551,13 @@ def STATICCALL(
     raise NotImplementedError("STATICCALL")
 
 
-def REVERT(s: State, offset: uint256, _size: uint256) -> None:
+def REVERT(s: State, offset: uint256, size: uint256) -> None:
     """
     FD.
 
     Halt execution reverting state changes but returning data and remaining gas.
     """
-    size = unwrap(_size, "REVERT requires concrete size")
-    s.returndata = FrozenBytes.concrete([s.memory[offset + BW(i)] for i in range(size)])
+    s.returndata = s.memory.slice(offset, size)
     s.success = False
 
 

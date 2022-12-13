@@ -20,6 +20,8 @@ from symbolic import (
     unwrap,
     unwrap_bytes,
     zeval,
+    zif,
+    zor,
 )
 
 
@@ -94,6 +96,7 @@ class Universe:
     transfer_constraints: List[Constraint]
 
     contracts: Dict[int, Contract]  # address -> Contract
+    codesizes: Array  # address -> code size
 
     blockhashes: Array
 
@@ -104,6 +107,15 @@ class Universe:
     agents: List[uint160]
     contribution: uint256
     extraction: uint256
+
+    def add_contract(self, contract: Contract) -> None:
+        """
+        Add a contract to the contract registry.
+
+        The contract must have a concrete address.
+        """
+        self.contracts[unwrap(contract.address)] = contract
+        self.codesizes[contract.address] = contract.program.code.length
 
     def transfer(self, src: uint160, dst: uint160, val: uint256) -> None:
         """Transfer value from one account to another."""
@@ -120,12 +132,12 @@ class Universe:
         self.balances[src] -= val
         self.balances[dst] += val
 
-        ext = z3.If(z3.Or(False, *[dst == agent for agent in self.agents]), val, BW(0))
+        ext = zif(zor(False, *[dst == agent for agent in self.agents]), val, BW(0))
         self.transfer_constraints.append(
             z3.BVAddNoOverflow(self.extraction, ext, False)
         )
         self.extraction += ext
-        cont = z3.If(z3.Or(False, *[src == agent for agent in self.agents]), val, BW(0))
+        cont = zif(zor(False, *[src == agent for agent in self.agents]), val, BW(0))
         self.transfer_constraints.append(
             z3.BVAddNoOverflow(self.contribution, cont, False)
         )

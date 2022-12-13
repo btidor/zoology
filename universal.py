@@ -11,7 +11,7 @@ from disassembler import Program, disassemble
 from environment import Block, Contract, Transaction, Universe
 from sha3 import SHA3
 from state import State
-from symbolic import check, solver_stack, unwrap, unwrap_bytes, zeval
+from symbolic import BW, check, solver_stack, unwrap, unwrap_bytes, zeval
 from vm import (
     concrete_CALL,
     concrete_CALLCODE,
@@ -43,6 +43,7 @@ def universal_transaction(
         init.contract.address,
         init.transaction.callvalue,
     )
+    init.universe.codesizes[init.transaction.origin] = BW(0)
     for end in _universal_transaction(init):
         yield start, end
 
@@ -62,9 +63,7 @@ def _universal_transaction(start: State) -> Iterator[State]:
                 symbolic_GAS(state)
                 continue
             elif action == "CALL":
-                with concrete_CALL(state) as substate:
-                    for end in _universal_transaction(substate):
-                        yield end
+                concrete_CALL(state)
             elif action == "CALLCODE":
                 with concrete_CALLCODE(state) as substate:
                     for end in _universal_transaction(substate):
@@ -153,11 +152,13 @@ def symbolic_start(program: Program, sha3: SHA3, suffix: str) -> State:
         balances=Array(f"BALANCE{suffix}", z3.BitVecSort(160), z3.BitVecSort(256)),
         transfer_constraints=[],
         contracts={},
+        codesizes=Array(f"CODESIZE{suffix}", z3.BitVecSort(160), z3.BitVecSort(256)),
         blockhashes=Array(f"BLOCKHASH{suffix}", z3.BitVecSort(256), z3.BitVecSort(256)),
         agents=[origin, caller],
         contribution=z3.BitVec(f"CONTRIBUTION{suffix}", 256),
         extraction=z3.BitVec(f"EXTRACTION{suffix}", 256),
     )
+    universe.codesizes[contract.address] = contract.program.code.length
     return State(
         suffix=suffix,
         block=block,
@@ -172,6 +173,7 @@ def symbolic_start(program: Program, sha3: SHA3, suffix: str) -> State:
         success=None,
         subcontexts=[],
         gas_variables=[],
+        call_variables=[],
         path_constraints=[],
         path=1,
     )

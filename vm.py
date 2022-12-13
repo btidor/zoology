@@ -14,7 +14,7 @@ from disassembler import Instruction, Program, disassemble
 from environment import Block, Contract, Transaction, Universe
 from sha3 import SHA3
 from state import State
-from symbolic import BA, BW, uint256, unwrap, unwrap_bytes
+from symbolic import BA, BW, uint256, unwrap, unwrap_bytes, zextract, zif, zor
 
 
 def step(
@@ -115,9 +115,7 @@ def printable_execution(state: State) -> Iterator[str]:
         elif action == "GAS":
             concrete_GAS(state)
         elif action == "CALL":
-            with concrete_CALL(state) as substate:
-                for line in printable_execution(substate):
-                    yield "  " + line
+            concrete_CALL(state)
         elif action == "CALLCODE":
             with concrete_CALLCODE(state) as substate:
                 for line in printable_execution(substate):
@@ -164,23 +162,29 @@ def concrete_GAS(state: State) -> None:
     state.stack.append(BW(0x1234))
 
 
-@contextmanager
-def concrete_CALL(state: State) -> Iterator[State]:
-    """Handle a CALL action. Yields a single state."""
+def concrete_CALL(state: State) -> None:
+    """Handle a CALL action. Mutates state."""
     gas = state.stack.pop()
-    address = unwrap(state.stack.pop(), "CALL requires concrete address")
+    address = zextract(159, 0, state.stack.pop())
     value = state.stack.pop()
     argsOffset = state.stack.pop()
     argsSize = state.stack.pop()
     retOffset = state.stack.pop()
     retSize = state.stack.pop()
 
-    # # TODO: we assume the address is an externally-owned account (i.e. contains
-    # # no code). How should we handle CALLs to contracts?
-    # s.returndata = FrozenBytes.concrete(b"")
-    # s.universe.transfer(s.contract.address, zextract(159, 0, address), value)
-    # return BW(1)
-    raise NotImplementedError("CALL")
+    # TODO: handle calls that mutate storage, including self-calls
+    state.universe.transfer(state.contract.address, address, value)
+    returndata = FrozenBytes.symbolic(
+        f"RETURNDATA{len(state.call_variables)}{state.suffix}"
+    )
+    success = zor(
+        z3.Bool(f"RETURNOK{len(state.call_variables)}{state.suffix}"),
+        # Calls (transfers) to an EOA always succeed.
+        state.universe.codesizes[address] == 0,
+    )
+    state.call_variables.append((returndata, success))
+    state.returndata = returndata
+    state.stack.append(zif(success, BW(1), BW(0)))
 
 
 @contextmanager
@@ -290,11 +294,13 @@ def concrete_start(program: Program, value: uint256, data: bytes) -> State:
         balances=Array("BALANCE", z3.BitVecSort(160), BW(0)),
         transfer_constraints=[],
         contracts={},
+        codesizes=Array("CODESIZE", z3.BitVecSort(160), BW(0)),
         blockhashes=Array("BLOCKHASH", z3.BitVecSort(256), BW(0)),
         agents=[],
         contribution=BW(0),
         extraction=BW(0),
     )
+    universe.codesizes[contract.address] = contract.program.code.length
     return State(
         suffix="",
         block=block,
@@ -309,6 +315,7 @@ def concrete_start(program: Program, value: uint256, data: bytes) -> State:
         success=None,
         subcontexts=[],
         gas_variables=[],
+        call_variables=[],
         path_constraints=[],
         path=1,
     )
