@@ -20,6 +20,7 @@ from symbolic import (
     unwrap,
     unwrap_bytes,
     zand,
+    zconcat,
     zeval,
     zget,
     zif,
@@ -152,8 +153,20 @@ class Bytes(abc.ABC):
     def __getitem__(self, i: uint256) -> uint8:
         ...
 
+    def bigvector(self) -> z3.BitVecRef:
+        """
+        Return a single, large bitvector of this instance's bytes.
+
+        Requires a concrete length.
+        """
+        return zconcat(*[self[BW(i)] for i in range(unwrap(self.length))])
+
     def require_concrete(self) -> bytes:
-        """Unwrap this concrete-valued instance to bytes."""
+        """
+        Unwrap this instance to bytes.
+
+        Requires a concrete length and all-concrete values.
+        """
         return bytes(unwrap(self[BW(i)]) for i in range(unwrap(self.length)))
 
     def evaluate(self, model: z3.ModelRef, model_completion: bool = False) -> str:

@@ -2,10 +2,10 @@
 
 import z3
 
-from arrays import FrozenBytes, MutableBytes
+from arrays import FrozenBytes
 from disassembler import Instruction
 from state import State
-from symbolic import BW, BY, uint256, unwrap, zand, zconcat, zextract, zif
+from symbolic import BW, uint256, unwrap, zand, zconcat, zextract, zif
 
 
 def STOP(s: State) -> None:
@@ -208,13 +208,12 @@ def CALLDATACOPY(s: State, destOffset: uint256, offset: uint256, size: uint256) 
 
 def CODESIZE(s: State) -> uint256:
     """38 - Get size of code running in current environment."""
-    return BW(len(s.contract.program.bytes))
+    return s.contract.program.code.length
 
 
 def CODECOPY(s: State, destOffset: uint256, offset: uint256, size: uint256) -> None:
     """39 - Copy code running in current environment to memory."""
-    code = MutableBytes.concrete(s.contract.program.bytes)
-    s.memory.splice_from(code, destOffset, offset, size)
+    s.memory.splice_from(s.contract.program.code, destOffset, offset, size)
 
 
 def GASPRICE(s: State) -> uint256:
@@ -231,7 +230,7 @@ def EXTCODESIZE(s: State, _address: uint256) -> uint256:
     contract = s.universe.contracts.get(address, None)
     if contract is None:
         return BW(0)
-    return BW(len(contract.program.bytes))
+    return contract.program.code.length
 
 
 def EXTCODECOPY(
@@ -245,7 +244,7 @@ def EXTCODECOPY(
     address = unwrap(_address, "EXTCODECOPY requires concrete address")
 
     contract = s.universe.contracts.get(address, None)
-    code = MutableBytes.concrete(contract.program.bytes if contract else b"")
+    code = contract.program.code if contract else FrozenBytes.concrete(b"")
     s.memory.splice_from(code, destOffset, offset, size)
 
 
@@ -274,8 +273,7 @@ def EXTCODEHASH(s: State, _address: uint256) -> uint256:
         # TODO: for EOAs we should actually return the empty hash
         return BW(0)
 
-    data = zconcat(*[BY(b) for b in contract.program.bytes])
-    return s.sha3[data]
+    return s.sha3[contract.program.code.bigvector()]
 
 
 def BLOCKHASH(s: State, blockNumber: uint256) -> uint256:
