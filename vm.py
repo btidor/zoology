@@ -14,7 +14,18 @@ from disassembler import Instruction, Program, disassemble
 from environment import Block, Contract, Transaction, Universe
 from sha3 import SHA3
 from state import State
-from symbolic import BA, BW, uint256, unwrap, unwrap_bytes, zextract, zif, zor
+from symbolic import (
+    BA,
+    BW,
+    is_concrete,
+    simplify,
+    uint256,
+    unwrap,
+    unwrap_bytes,
+    zextract,
+    zif,
+    zor,
+)
 
 
 def step(
@@ -115,7 +126,9 @@ def printable_execution(state: State) -> Iterator[str]:
         elif action == "GAS":
             concrete_GAS(state)
         elif action == "CALL":
-            concrete_CALL(state)
+            for substate in concrete_CALL(state):
+                for line in printable_execution(substate):
+                    yield "  " + line
         elif action == "CALLCODE":
             with concrete_CALLCODE(state) as substate:
                 for line in printable_execution(substate):
@@ -159,11 +172,11 @@ def concrete_JUMPI(state: State) -> None:
 
 def concrete_GAS(state: State) -> None:
     """Handle a GAS action using a concrete dummy value. Mutates state."""
-    state.stack.append(BW(0x1234))
+    state.stack.append(BW(0x00A500A500A500A500A5))
 
 
-def concrete_CALL(state: State) -> None:
-    """Handle a CALL action. Mutates state."""
+def concrete_CALL(state: State) -> Iterator[State]:
+    """Handle a CALL action. May yield a single state, or none."""
     gas = state.stack.pop()
     address = zextract(159, 0, state.stack.pop())
     value = state.stack.pop()
@@ -173,18 +186,55 @@ def concrete_CALL(state: State) -> None:
     retSize = state.stack.pop()
 
     # TODO: handle calls that mutate storage, including self-calls
-    state.universe.transfer(state.contract.address, address, value)
-    returndata = FrozenBytes.symbolic(
-        f"RETURNDATA{len(state.call_variables)}{state.suffix}"
-    )
-    success = zor(
-        z3.Bool(f"RETURNOK{len(state.call_variables)}{state.suffix}"),
-        # Calls (transfers) to an EOA always succeed.
-        state.universe.codesizes[address] == 0,
-    )
-    state.call_variables.append((returndata, success))
+
+    codesize = simplify(state.universe.codesizes[address])
+    if is_concrete(codesize) and unwrap(codesize) == 0:
+        # Simple transfer to an EOA: always succeeds.
+        state.universe.transfer(state.contract.address, address, value)
+        returndata = FrozenBytes.concrete(b"")
+        ok = BW(1)
+    elif is_concrete(address):
+        # Call to a concrete address: simulate the full execution.
+        transaction = Transaction(
+            origin=state.transaction.origin,
+            caller=state.contract.address,
+            callvalue=value,
+            calldata=state.memory.slice(argsOffset, argsSize),
+            gasprice=state.transaction.gasprice,
+        )
+
+        contract = state.universe.contracts.get(unwrap(address), None)
+        if not contract:
+            raise ValueError("CALL to unknown contract: " + hex(unwrap(address)))
+
+        with state.descend(contract, transaction) as substate:
+            yield substate
+
+            returndata = substate.returndata
+            ok = BW(1) if substate.success else BW(0)
+    else:
+        # Call to a symbolic address: return a fully-symbolic response.
+        prefix = f"RETURNDATA{len(state.call_variables)}{state.suffix}"
+        returndata = FrozenBytes(
+            zif(
+                state.universe.codesizes[address] == 0,
+                BW(0),
+                z3.BitVec(f"{prefix}.length", 256),
+            ),
+            z3.Array(prefix, z3.BitVecSort(256), z3.BitVecSort(8)),
+        )
+        success = zor(
+            z3.Bool(f"RETURNOK{len(state.call_variables)}{state.suffix}"),
+            # Calls (transfers) to an EOA always succeed.
+            state.universe.codesizes[address] == 0,
+        )
+        ok = zif(success, BW(1), BW(0))
+        state.universe.transfer(state.contract.address, address, value)
+        state.call_variables.append((state.returndata, success))
+
     state.returndata = returndata
-    state.stack.append(zif(success, BW(1), BW(0)))
+    state.memory.graft(returndata.slice(BW(0), retSize), retOffset)
+    state.stack.append(ok)
 
 
 @contextmanager
@@ -301,6 +351,7 @@ def concrete_start(program: Program, value: uint256, data: bytes) -> State:
         extraction=BW(0),
     )
     universe.codesizes[contract.address] = contract.program.code.length
+    universe.codesizes[BA(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0)] = BW(0)
     return State(
         suffix="",
         block=block,

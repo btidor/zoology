@@ -216,7 +216,8 @@ def execute(state: State) -> None:
         elif action == "GAS":
             concrete_GAS(state)
         elif action == "CALL":
-            concrete_CALL(state)
+            for substate in concrete_CALL(state):
+                execute(substate)
         elif action == "CALLCODE":
             with concrete_CALLCODE(state) as substate:
                 execute(substate)

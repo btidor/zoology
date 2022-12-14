@@ -18,7 +18,12 @@ from testlib import (
     make_state,
     make_transaction,
 )
-from universal import _universal_transaction, symbolic_start, universal_transaction
+from universal import (
+    _universal_transaction,
+    printable_transition,
+    symbolic_start,
+    universal_transaction,
+)
 
 
 def test_fallback() -> None:
@@ -577,6 +582,69 @@ def test_reentrancy() -> None:
     check_transition(*next(universal), 0x47B, "GOAL", "withdraw(uint256)")
     check_transition(*next(universal), 0x479, "GOAL", "withdraw(uint256)")
     check_transition(*next(universal), 0x10F, "VIEW", "balanceOf(address)")
+
+    with pytest.raises(StopIteration):
+        next(universal)
+
+
+def test_elevator() -> None:
+    source = """
+        // SPDX-License-Identifier: MIT
+        pragma solidity ^0.8.0;
+
+        interface Building {
+            function isLastFloor(uint) external returns (bool);
+        }
+
+        contract Elevator {
+            bool public top;
+            uint public floor;
+
+            function goTo(uint _floor) public {
+                Building building = Building(msg.sender);
+
+                if (! building.isLastFloor(_floor)) {
+                    floor = _floor;
+                    top = building.isLastFloor(floor);
+                }
+            }
+        }
+
+        contract TestBuilding is Building {
+            function isLastFloor(uint floor) external pure returns (bool) {
+                return floor == 12;
+            }
+        }
+    """
+    program = disassemble(compile_solidity(source, "Elevator"))
+    building = disassemble(compile_solidity(source, "TestBuilding"))
+
+    state = make_state(
+        contract=make_contract(program=program),
+        transaction=make_transaction(
+            caller=BA(0x76543210),
+            callvalue=BW(0),
+            calldata=FrozenBytes.concrete(
+                abiencode("goTo(uint256)") + unwrap_bytes(BW(1))
+            ),
+        ),
+    )
+    state.universe.add_contract(make_contract(address=BA(0x76543210), program=building))
+
+    execute(state)
+    assert state.success is True
+    assert state.returndata.require_concrete() == b""
+
+    for start, end in universal_transaction(program, SHA3(), ""):
+        for line in printable_transition(start, end):
+            print(line)
+
+    assert False  # TODO: finish this test case
+
+    universal = universal_transaction(program, SHA3(), "")
+    check_transition(*next(universal), 0xD, "VIEW", "floor()")
+    check_transition(*next(universal), 0x67F, "VIEW", "goTo(uint256)")
+    check_transition(*next(universal), 0x31, "VIEW", "top()")
 
     with pytest.raises(StopIteration):
         next(universal)

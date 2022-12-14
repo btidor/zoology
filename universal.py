@@ -43,7 +43,6 @@ def universal_transaction(
         init.contract.address,
         init.transaction.callvalue,
     )
-    init.universe.codesizes[init.transaction.origin] = BW(0)
     for end in _universal_transaction(init):
         yield start, end
 
@@ -63,7 +62,9 @@ def _universal_transaction(start: State) -> Iterator[State]:
                 symbolic_GAS(state)
                 continue
             elif action == "CALL":
-                concrete_CALL(state)
+                for substate in concrete_CALL(state):
+                    for end in _universal_transaction(substate):
+                        yield end
             elif action == "CALLCODE":
                 with concrete_CALLCODE(state) as substate:
                     for end in _universal_transaction(substate):
@@ -159,6 +160,7 @@ def symbolic_start(program: Program, sha3: SHA3, suffix: str) -> State:
         extraction=z3.BitVec(f"EXTRACTION{suffix}", 256),
     )
     universe.codesizes[contract.address] = contract.program.code.length
+    universe.codesizes[origin] = BW(0)
     return State(
         suffix=suffix,
         block=block,
