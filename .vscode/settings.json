@@ -4,7 +4,7 @@
     },
     "editor.formatOnSave": true,
     "files.exclude": {
-        "**/mcore_*": true,
+        "**/prof": true,
         "**/__pycache__": true,
         "**/.mypy_cache": true,
         "**/.pytest_cache": true
