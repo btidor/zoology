@@ -83,7 +83,8 @@ class Array:
                 k = describe(zeval(model, key, True))
                 v = describe(zeval(model, value, True))
                 p = describe(zeval(model, prior, True)) if prior is not None else None
-                concrete[k] = (v, p)
+                if v != p:
+                    concrete[k] = (v, p)
 
             for key in sorted(concrete.keys()):
                 line += f"\t{prefix}: {key} "
@@ -96,7 +97,7 @@ class Array:
                     if len(value) > 34:
                         yield line
                         line = "\t  "
-                    line += " (no change)" if value == prior else f" (from {prior})"
+                    line += f" (from {prior})"
                 yield line
                 line = ""
 
@@ -144,7 +145,7 @@ class Bytes(abc.ABC):
     @classmethod
     def symbolic(cls, name: str) -> Any:
         """Create a new, fully-symbolic Bytes."""
-        return MutableBytes(
+        return cls(
             z3.BitVec(f"{name}.length", 256),
             z3.Array(name, z3.BitVecSort(256), z3.BitVecSort(8)),
         )
@@ -246,6 +247,11 @@ class MutableBytes(Bytes):
     def graft(self, slice: ByteSlice, at: uint256) -> None:
         """Graft another Bytes into this one at the given offset."""
         assert at.size() == 256
+
+        if is_concrete(slice.length) and unwrap(slice.length) == 0:
+            # Short circuit e.g. in DELEGATECALL when retSize is zero.
+            return
+
         self.length = simplify(
             zif(
                 z3.ULT(at + slice.length - 1, self.length),

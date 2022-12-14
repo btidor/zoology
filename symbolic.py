@@ -51,7 +51,7 @@ def BY(i: int) -> uint8:
 
 def is_concrete(value: z3.BitVecRef) -> TypeGuard[z3.BitVecNumRef]:
     """Check whether a given bitvector is concrete or symbolic."""
-    return cast(bool, z3.is_bv_value(value))
+    return cast(bool, z3.is_bv_value(simplify(value)))
 
 
 def is_bitvector(value: Any) -> TypeGuard[z3.BitVecRef]:

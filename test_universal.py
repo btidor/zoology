@@ -43,10 +43,6 @@ def test_basic() -> None:
         \t-> 0x8000000000001
         \tR: 0xcacacacacacacacacacacacacacacacacacacaca
         \t-> 0x0
-        \tW: 0xadadadadadadadadadadadadadadadadadadadad
-        \t-> 0x8000000000001 (no change)
-        \tW: 0xcacacacacacacacacacacacacacacacacacacaca
-        \t-> 0x0 (no change)
 
         Storage\tW: 0xee -> 0xff (from 0x0)
     """.splitlines()

@@ -69,6 +69,9 @@ class State:
             solver.minimize(self.transaction.callvalue)
             solver.minimize(self.transaction.calldata.length)
 
+            for returndata, _ in self.call_variables:
+                solver.minimize(returndata.length)
+
         for i, constraint in enumerate(self.path_constraints):
             solver.assert_and_track(constraint, f"PC{i}{self.suffix}")
 
