@@ -388,10 +388,10 @@ def test_delegation() -> None:
     init.universe.transfer(
         init.transaction.caller, init.contract.address, init.transaction.callvalue
     )
+    init.universe.add_contract(other)
     init.contract.storage.array = zstore(
         init.contract.storage.array, BW(1), BW(unwrap(other.address))
     )
-    init.universe.contracts[unwrap(other.address)] = other
 
     universal = _universal_transaction(init)
     check_transition(start, next(universal), 0xF, "VIEW", None)  # *
@@ -640,6 +640,313 @@ def test_elevator() -> None:
     check_transition(*next(universal), 0x67F, "VIEW", "goTo(uint256)")
     check_transition(*next(universal), 0x33F7, "SAVE", "goTo(uint256)")
     check_transition(*next(universal), 0x31, "VIEW", "top()")
+
+    with pytest.raises(StopIteration):
+        next(universal)
+
+
+def test_privacy() -> None:
+    code = bytes.fromhex(
+        "6080604052348015600f57600080fd5b5060043610603c5760003560e01c8063b3cea217146041578063cf30901214605c578063e1afb08c146077575b600080fd5b604960015481565b6040519081526020015b60405180910390f35b60005460689060ff1681565b60405190151581526020016053565b6086608236600460b8565b6088565b005b6005546fffffffffffffffffffffffffffffffff1982811691161460ab57600080fd5b506000805460ff19169055565b60006020828403121560c957600080fd5b81356fffffffffffffffffffffffffffffffff198116811460e957600080fd5b939250505056fea2646970667358221220199fe33db58ed15b2bbeab277974ecd5658987f1e54e16ba5130d3be0834910e64736f6c634300080c0033"
+    )
+    program = disassemble(code)
+
+    state = make_state(
+        contract=make_contract(program=program),
+        transaction=make_transaction(
+            callvalue=BW(0),
+            calldata=FrozenBytes.concrete(
+                abiencode("unlock(bytes16)") + unwrap_bytes(BW(0x4321 << 128))
+            ),
+        ),
+    )
+    state.contract.storage.array = zstore(
+        state.contract.storage.array, BW(5), BW(0x4321 << 128)
+    )
+    execute(state)
+    assert state.success is True
+    assert state.returndata.require_concrete() == b""
+
+    universal = universal_transaction(program, SHA3(), "")
+    check_transition(*next(universal), 0xD, "VIEW", "ID()")
+    check_transition(*next(universal), 0x19, "VIEW", "locked()")
+    check_transition(*next(universal), 0x18F, "SAVE", "unlock(bytes16)")
+
+    with pytest.raises(StopIteration):
+        next(universal)
+
+
+def test_gatekeeper_one() -> None:
+    source = """
+        // SPDX-License-Identifier: MIT
+        pragma solidity ^0.8.0;
+
+        contract GatekeeperOne {
+
+            address public entrant;
+
+            modifier gateOne() {
+                require(msg.sender != tx.origin);
+                _;
+            }
+
+            modifier gateTwo() {
+                require(gasleft() % 8191 == 0);
+                _;
+            }
+
+            modifier gateThree(bytes8 _gateKey) {
+                require(uint32(uint64(_gateKey)) == uint16(uint64(_gateKey)), "GatekeeperOne: invalid gateThree part one");
+                require(uint32(uint64(_gateKey)) != uint64(_gateKey), "GatekeeperOne: invalid gateThree part two");
+                require(uint32(uint64(_gateKey)) == uint16(uint160(tx.origin)), "GatekeeperOne: invalid gateThree part three");
+                _;
+            }
+
+            function enter(bytes8 _gateKey) public gateOne gateTwo gateThree(_gateKey) returns (bool) {
+                entrant = tx.origin;
+                return true;
+            }
+        }
+    """
+    code = compile_solidity(source)
+    program = disassemble(code)
+
+    # We can't test execute() because concrete gas is not implemented.
+
+    universal = universal_transaction(program, SHA3(), "")
+    check_transition(*next(universal), 0xDFF, "SAVE", "enter(bytes8)")
+    check_transition(*next(universal), 0x19, "VIEW", "entrant()")
+
+    with pytest.raises(StopIteration):
+        next(universal)
+
+
+def test_gatekeeper_two() -> None:
+    source = """
+        // SPDX-License-Identifier: MIT
+        pragma solidity ^0.8.0;
+
+        contract GatekeeperTwo {
+
+            address public entrant;
+
+            modifier gateOne() {
+                require(msg.sender != tx.origin);
+                _;
+            }
+
+            modifier gateTwo() {
+                uint x;
+                assembly { x := extcodesize(caller()) }
+                require(x == 0);
+                _;
+            }
+
+            modifier gateThree(bytes8 _gateKey) {
+                require(uint64(bytes8(keccak256(abi.encodePacked(msg.sender)))) ^ uint64(_gateKey) == type(uint64).max);
+                _;
+            }
+
+            function enter(bytes8 _gateKey) public gateOne gateTwo gateThree(_gateKey) returns (bool) {
+                entrant = tx.origin;
+                return true;
+            }
+        }
+    """
+    code = compile_solidity(source)
+    program = disassemble(code)
+
+    state = make_state(
+        contract=make_contract(program=program),
+        transaction=make_transaction(
+            callvalue=BW(0),
+            calldata=FrozenBytes.concrete(
+                abiencode("enter(bytes8)")
+                + bytes.fromhex(
+                    "65d5bd2c953ab27b000000000000000000000000000000000000000000000000"
+                )
+            ),
+        ),
+    )
+    execute(state)
+    assert state.success is True
+    assert state.returndata.require_concrete() == unwrap_bytes(BW(1))
+
+    universal = universal_transaction(program, SHA3(), "")
+    check_transition(*next(universal), 0x1BF, "SAVE", "enter(bytes8)")
+    check_transition(*next(universal), 0x19, "VIEW", "entrant()")
+
+    with pytest.raises(StopIteration):
+        next(universal)
+
+
+@pytest.mark.skip("TODO")
+def test_naughtcoin() -> None:
+    raise NotImplementedError("openzeppelin erc-20")
+
+
+def test_preservation() -> None:
+    source = """
+        // SPDX-License-Identifier: MIT
+        pragma solidity ^0.8.0;
+
+        contract Preservation {
+
+            // public library contracts
+            address public timeZone1Library;
+            address public timeZone2Library;
+            address public owner;
+            uint storedTime;
+            // Sets the function signature for delegatecall
+            bytes4 constant setTimeSignature = bytes4(keccak256("setTime(uint256)"));
+
+            constructor(address _timeZone1LibraryAddress, address _timeZone2LibraryAddress) {
+                timeZone1Library = _timeZone1LibraryAddress;
+                timeZone2Library = _timeZone2LibraryAddress;
+                owner = msg.sender;
+            }
+
+            // set the time for timezone 1
+            function setFirstTime(uint _timeStamp) public {
+                timeZone1Library.delegatecall(abi.encodePacked(setTimeSignature, _timeStamp));
+            }
+
+            // set the time for timezone 2
+            function setSecondTime(uint _timeStamp) public {
+                timeZone2Library.delegatecall(abi.encodePacked(setTimeSignature, _timeStamp));
+            }
+        }
+
+        // Simple library contract to set the time
+        contract LibraryContract {
+
+            // stores a timestamp
+            uint storedTime;
+
+            function setTime(uint _time) public {
+                storedTime = _time;
+            }
+        }
+    """
+    preservation = make_contract(
+        program=disassemble(compile_solidity(source, "Preservation"))
+    )
+    library = make_contract(
+        address=BA(0x1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B),
+        program=disassemble(compile_solidity(source, "LibraryContract")),
+    )
+
+    state = make_state(
+        contract=preservation,
+        transaction=make_transaction(
+            callvalue=BW(0),
+            calldata=FrozenBytes.concrete(
+                abiencode("setFirstTime(uint256)") + unwrap_bytes(BW(0x5050))
+            ),
+        ),
+    )
+    state.universe.add_contract(library)
+    state.contract.storage.array = zstore(
+        state.contract.storage.array, BW(0), BW(unwrap(library.address))
+    )
+    state.contract.storage.array = zstore(
+        state.contract.storage.array, BW(1), BW(unwrap(library.address))
+    )
+
+    execute(state)
+    assert state.success is True
+    assert state.returndata.require_concrete() == b""
+
+    start = symbolic_start(preservation.program, SHA3(), "")
+    init = copy.deepcopy(start)
+    init.universe.transfer(
+        init.transaction.caller, init.contract.address, init.transaction.callvalue
+    )
+    init.universe.add_contract(library)
+    init.contract.storage.array = zstore(
+        init.contract.storage.array, BW(0), BW(unwrap(library.address))
+    )
+    init.contract.storage.array = zstore(
+        init.contract.storage.array, BW(1), BW(unwrap(library.address))
+    )
+
+    universal = _universal_transaction(init)
+    check_transition(start, next(universal), 0xD, "VIEW", "timeZone2Library()")
+    check_transition(start, next(universal), 0x19, "VIEW", "timeZone1Library()")
+    check_transition(start, next(universal), 0xC737, "SAVE", "setTime(uint256)")
+    # TODO: should be SAVE
+    check_transition(start, next(universal), 0xC73, "VIEW", "setSecondTime(uint256)")
+    check_transition(start, next(universal), 0x61, "VIEW", "owner()")
+    check_transition(start, next(universal), 0x30737, "SAVE", "setTime(uint256)")
+    # TODO: should be SAVE
+    check_transition(start, next(universal), 0x3073, "VIEW", "setFirstTime(uint256)")
+
+    with pytest.raises(StopIteration):
+        next(universal)
+
+
+def test_recovery() -> None:
+    source = """
+        // SPDX-License-Identifier: MIT
+        pragma solidity ^0.8.0;
+
+        contract Recovery {
+
+            //generate tokens
+            function generateToken(string memory _name, uint256 _initialSupply) public {
+                new SimpleToken(_name, msg.sender, _initialSupply);
+
+            }
+        }
+
+        contract SimpleToken {
+
+            string public name;
+            mapping (address => uint) public balances;
+
+            // constructor
+            constructor(string memory _name, address _creator, uint256 _initialSupply) {
+                name = _name;
+                balances[_creator] = _initialSupply;
+            }
+
+            // collect ether in return for tokens
+            receive() external payable {
+                balances[msg.sender] = msg.value * 10;
+            }
+
+            // allow transfers of tokens
+            function transfer(address _to, uint _amount) public {
+                require(balances[msg.sender] >= _amount);
+                balances[msg.sender] = balances[msg.sender] - _amount;
+                balances[_to] = _amount;
+            }
+
+            // clean up after ourselves
+            function destroy(address payable _to) public {
+                selfdestruct(_to);
+            }
+        }
+    """
+    program = disassemble(compile_solidity(source, "SimpleToken"))
+    state = make_state(
+        contract=make_contract(program=program),
+        transaction=make_transaction(
+            callvalue=BW(0x1000),
+            calldata=FrozenBytes.concrete(b""),
+        ),
+    )
+    execute(state)
+    assert state.success is True
+    assert state.returndata.require_concrete() == b""
+
+    universal = universal_transaction(program, SHA3(), "")
+    check_transition(*next(universal), 0xD, "SAVE", None)
+
+    with pytest.raises(NotImplementedError):  # DELEGATECALL
+        next(universal)
+
+    # TODO: some branches are missing because of the error
 
     with pytest.raises(StopIteration):
         next(universal)

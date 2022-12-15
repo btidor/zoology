@@ -223,7 +223,7 @@ def GASPRICE(s: State) -> uint256:
 
 def EXTCODESIZE(s: State, address: uint256) -> uint256:
     """3B - Get size of an account's code."""
-    return s.universe.codesizes[address]
+    return s.universe.codesizes[zextract(159, 0, address)]
 
 
 def EXTCODECOPY(

@@ -384,8 +384,8 @@ def test_EXTCODESIZE() -> None:
     )
     s = make_state()
     s.universe.add_contract(contract)
-    assert simplify(EXTCODESIZE(s, BA(address))) == 9
-    assert simplify(EXTCODESIZE(s, BA(0x1234))) == 0
+    assert simplify(EXTCODESIZE(s, BW(address))) == 9
+    assert simplify(EXTCODESIZE(s, BW(0x1234))) == 0
 
 
 def test_EXTCODECOPY() -> None:
