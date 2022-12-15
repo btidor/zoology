@@ -13,10 +13,10 @@ from sha3 import SHA3
 from state import State
 from symbolic import BW, check, solver_stack, unwrap, unwrap_bytes, zeval
 from vm import (
-    concrete_CALL,
     concrete_CALLCODE,
     concrete_DELEGATECALL,
     concrete_STATICCALL,
+    hybrid_CALL,
     step,
 )
 
@@ -62,7 +62,7 @@ def _universal_transaction(start: State) -> Iterator[State]:
                 symbolic_GAS(state)
                 continue
             elif action == "CALL":
-                for substate in concrete_CALL(state):
+                for substate in hybrid_CALL(state):
                     for end in _universal_transaction(substate):
                         yield end
             elif action == "CALLCODE":

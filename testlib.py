@@ -14,12 +14,12 @@ from state import State
 from symbolic import BA, BW, Constraint, check, solver_stack, uint160, uint256
 from universal import constrain_to_goal
 from vm import (
-    concrete_CALL,
     concrete_CALLCODE,
     concrete_DELEGATECALL,
     concrete_GAS,
     concrete_JUMPI,
     concrete_STATICCALL,
+    hybrid_CALL,
     step,
 )
 
@@ -216,7 +216,7 @@ def execute(state: State) -> None:
         elif action == "GAS":
             concrete_GAS(state)
         elif action == "CALL":
-            for substate in concrete_CALL(state):
+            for substate in hybrid_CALL(state):
                 execute(substate)
         elif action == "CALLCODE":
             with concrete_CALLCODE(state) as substate:

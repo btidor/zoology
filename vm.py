@@ -126,7 +126,7 @@ def printable_execution(state: State) -> Iterator[str]:
         elif action == "GAS":
             concrete_GAS(state)
         elif action == "CALL":
-            for substate in concrete_CALL(state):
+            for substate in hybrid_CALL(state):
                 for line in printable_execution(substate):
                     yield "  " + line
         elif action == "CALLCODE":
@@ -175,7 +175,7 @@ def concrete_GAS(state: State) -> None:
     state.stack.append(BW(0x00A500A500A500A500A5))
 
 
-def concrete_CALL(state: State) -> Iterator[State]:
+def hybrid_CALL(state: State) -> Iterator[State]:
     """Handle a CALL action. May yield a single state, or none."""
     gas = state.stack.pop()
     address = zextract(159, 0, state.stack.pop())
