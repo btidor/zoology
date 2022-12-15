@@ -90,7 +90,7 @@ def step(
 
         result: Optional[uint256] = fn(*args)
         if result is not None:
-            state.stack.append(result)
+            state.stack.append(simplify(result))
             if len(state.stack) > 1024:
                 raise Exception("evm stack overflow")
 

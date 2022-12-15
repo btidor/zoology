@@ -635,15 +635,10 @@ def test_elevator() -> None:
     assert state.success is True
     assert state.returndata.require_concrete() == b""
 
-    for start, end in universal_transaction(program, SHA3(), ""):
-        for line in printable_transition(start, end):
-            print(line)
-
-    assert False  # TODO: finish this test case
-
     universal = universal_transaction(program, SHA3(), "")
     check_transition(*next(universal), 0xD, "VIEW", "floor()")
     check_transition(*next(universal), 0x67F, "VIEW", "goTo(uint256)")
+    check_transition(*next(universal), 0x33F7, "SAVE", "goTo(uint256)")
     check_transition(*next(universal), 0x31, "VIEW", "top()")
 
     with pytest.raises(StopIteration):

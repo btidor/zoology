@@ -61,7 +61,18 @@ def is_bitvector(value: Any) -> TypeGuard[z3.BitVecRef]:
 
 def simplify(value: z3.BitVecRef) -> z3.BitVecRef:
     """Simplify a bitvector expression."""
-    return cast(z3.BitVecRef, z3.simplify(value))
+    return cast(
+        z3.BitVecRef,
+        z3.simplify(
+            value,
+            blast_select_store=True,
+            bv_extract_prop=True,
+            bv_ineq_consistency_test_max=4,
+            bv_ite2id=True,
+            bv_le_extra=True,
+            bv_not_simpl=True,
+        ),
+    )
 
 
 def unwrap(value: z3.BitVecRef, msg: Optional[str] = None) -> int:
