@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+import subprocess
 from typing import (
     Any,
     Dict,
@@ -13,10 +15,12 @@ from typing import (
     TypeVar,
     Union,
     cast,
+    overload,
 )
 
 import z3
 from Crypto.Hash import keccak
+from z3 import z3util
 
 K = TypeVar("K")
 
@@ -188,29 +192,90 @@ class Solver:
         for i, assumption in enumerate(assumptions):
             solver.assert_and_track(assumption, f"EXTRA{i}")
 
-        check = solver.check()
-        if check == z3.sat:
-            return Model(solver)
-        elif check == z3.unsat:
+        proc = subprocess.Popen(
+            ["z3", "-in"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        assert proc.stdin is not None
+        assert proc.stdout is not None
+
+        expression = solver.sexpr()
+        vars = set(re.findall("\\(declare-fun \\|?([^ |]+)\\|? ", expression))
+        proc.stdin.write(expression)
+        proc.stdin.flush()
+
+        result = proc.stdout.readline().strip()
+
+        # Always create a Model. Its destructor will handle proc cleanup.
+        model = Model(proc, vars)
+
+        if result == "sat":
+            return model
+        elif result == "unsat":
             return None
         else:
-            raise Exception(f"z3 failure: {solver.reason_unknown()}")
+            raise Exception(f"z3 failure: {result}")
 
 
 class Model:
     """The result of SMT checking."""
 
-    def __init__(self, solver: z3.Optimize) -> None:
+    def __init__(self, proc: subprocess.Popen[str], vars: set[str]) -> None:
         """Create a new Model. Only for use by Solver."""
-        self.solver = solver
-        self.model: Optional[z3.ModelRef] = None
+        self.proc = proc
+        self.vars = vars
+
+    @overload
+    def evaluate(
+        self, value: z3.BitVecRef, model_completion: Literal[True]
+    ) -> z3.BitVecRef:
+        ...
+
+    @overload
+    def evaluate(
+        self, value: z3.BitVecRef, model_completion: bool = False
+    ) -> Optional[z3.BitVecRef]:
+        ...
 
     def evaluate(
         self, value: z3.BitVecRef, model_completion: bool = False
-    ) -> z3.BitVecRef:
+    ) -> Optional[z3.BitVecRef]:
         """Evaluate a given bitvector expression with the given model."""
         if not is_bitvector(value):
             raise ValueError("unexpected non-bitvector")
-        if self.model is None:
-            self.model = self.solver.model()
-        return cast(z3.BitVecRef, self.model.eval(value, model_completion))
+
+        assert self.proc.stdin is not None
+        assert self.proc.stdout is not None
+
+        for var in z3util.get_vars(value):
+            name = var.decl().name()
+            if name in self.vars:
+                continue
+            self.vars.add(name)
+            self.proc.stdin.write(var.decl().sexpr())
+
+        self.proc.stdin.write(
+            f"(eval {value.sexpr()} :completion {str(model_completion).lower()})\n"
+        )
+        self.proc.stdin.flush()
+
+        result = self.proc.stdout.readline().strip()
+        if result.startswith("#x"):
+            b = bytes.fromhex(result[2:])
+            return z3.BitVecVal(int.from_bytes(b, "big"), len(b) * 8)
+        elif result.startswith("(error "):
+            raise Exception(f"z3 error: {result}")
+        else:
+            assert model_completion is False
+            return None
+
+    def __del__(self) -> None:
+        """Clean up the subprocess when Model is garbage collected."""
+        try:
+            self.proc.kill()
+        except OSError:
+            pass
+        self.proc.wait()

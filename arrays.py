@@ -183,7 +183,7 @@ class Bytes(abc.ABC):
         result = ""
         for i in range(length):
             b = model.evaluate(self[BW(i)], model_completion)
-            result += unwrap_bytes(b).hex() if is_concrete(b) else "??"
+            result += unwrap_bytes(b).hex() if b is not None else "??"
         return result
 
 

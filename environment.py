@@ -16,7 +16,6 @@ from symbolic import (
     Model,
     Solver,
     is_bitvector,
-    is_concrete,
     uint160,
     uint256,
     unwrap,
@@ -76,7 +75,7 @@ class Transaction:
                 del r[k]
             elif is_bitvector(r[k]):
                 v = model.evaluate(r[k])
-                if is_concrete(v) and unwrap(v) > 0:
+                if v is not None and unwrap(v) > 0:
                     r[k] = "0x" + unwrap_bytes(v).hex()
                 else:
                     del r[k]

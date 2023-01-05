@@ -142,7 +142,7 @@ class State:
         """
         r: OrderedDict[str, str] = OrderedDict()
         a = model.evaluate(self.contract.address)
-        if is_concrete(a) and unwrap(a) > 0:
+        if a is not None and unwrap(a) > 0:
             r["Address"] = "0x" + unwrap_bytes(a).hex()
         returndata = self.returndata.evaluate(model, True)
         if returndata:

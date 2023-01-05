@@ -31,10 +31,10 @@ def test_symbolic() -> None:
     model = solver.check()
     assert model is not None
 
-    assert unwrap_bytes(model.evaluate(input)) == b"testing"
+    assert unwrap_bytes(model.evaluate(input, True)) == b"testing"
     model = sha3.narrow(solver, model)
     assert (
-        unwrap_bytes(model.evaluate(sha3[input])).hex()
+        unwrap_bytes(model.evaluate(sha3[input], True)).hex()
         == "5f16f4c7f149ac4f9510d9cf8cf384038ad348b3bcdc01915f95de12df9d1b02"
     )
 
@@ -58,7 +58,7 @@ def test_impossible_concrete() -> None:
 
     # The initial `check()` succeeds, but an error is raised when we narrow the
     # SHA3 instance with the model.
-    assert unwrap_bytes(model.evaluate(input)) == b"testing"
+    assert unwrap_bytes(model.evaluate(input, True)) == b"testing"
     with pytest.raises(AssertionError):
         sha3.narrow(solver, model)
 
