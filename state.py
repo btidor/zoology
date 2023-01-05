@@ -109,13 +109,15 @@ class State:
         check(solver)
         return self.sha3.narrow(solver, model)
 
-    def is_changed(self, solver: z3.Optimize, since: State) -> bool:
+    def is_changed(self, since: State) -> bool:
         """Check if any permanent state changes have been made."""
         # TODO: constrain further to eliminate no-op writes?
         if len(self.contract.storage.written) > 0:
             return True
 
         # Check if any address other than the contract itself has increased
+        solver = z3.Optimize()
+        self.constrain(solver, minimize=True)
         for addr in self.universe.balances.written:
             if check(
                 solver,

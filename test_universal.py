@@ -5,7 +5,7 @@ import z3
 
 from disassembler import disassemble
 from sha3 import SHA3
-from symbolic import check, solver_stack
+from symbolic import check
 from testlib import check_transition
 from universal import constrain_to_goal, printable_transition, universal_transaction
 
@@ -20,16 +20,18 @@ def test_basic() -> None:
     start, end = next(universal)
     assert end.success == True
 
-    solver = z3.Optimize()
     end.path_constraints.append(
         # This extra constraint makes the test deterministic
         start.universe.balances[end.contract.address]
         == 0x8000000000001
     )
+    solver = z3.Optimize()
     end.constrain(solver)
-    with solver_stack(solver):
-        constrain_to_goal(solver, start, end)
-        assert not check(solver)
+    constrain_to_goal(solver, start, end)
+    assert not check(solver)
+
+    solver = z3.Optimize()
+    end.constrain(solver)
     assert check(solver)
 
     raw = """

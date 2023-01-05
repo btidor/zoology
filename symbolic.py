@@ -158,16 +158,6 @@ def describe(value: z3.BitVecRef) -> str:
         return "#" + digest[:3].hex()
 
 
-@contextlib.contextmanager
-def solver_stack(solver: z3.Optimize) -> Iterator[None]:
-    """Create a nested Z3 context using push()/pop()."""
-    solver.push()
-    try:
-        yield
-    finally:
-        solver.pop()
-
-
 def check(solver: z3.Optimize, *assumptions: Any) -> bool:
     """
     Check whether the given Z3 solver state is satisfiable.

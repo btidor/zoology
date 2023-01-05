@@ -11,7 +11,7 @@ from disassembler import Program, disassemble
 from environment import Block, Contract, Transaction, Universe
 from sha3 import SHA3
 from state import State
-from symbolic import BW, check, solver_stack, unwrap, unwrap_bytes, zeval
+from symbolic import BW, check, unwrap, unwrap_bytes, zeval
 from vm import (
     concrete_CALLCODE,
     concrete_DELEGATECALL,
@@ -205,19 +205,22 @@ def printable_transition(start: State, end: State) -> Iterable[str]:
     end.constrain(solver, minimize=True)
     assert check(solver)
 
-    with solver_stack(solver):
-        constrain_to_goal(solver, start, end)
-        if check(solver):
-            for line in _printable_transition(solver, start, end, "🚩 GOAL"):
-                yield line
-            return
+    constrain_to_goal(solver, start, end)
+    if check(solver):
+        for line in _printable_transition(solver, start, end, "🚩 GOAL"):
+            yield line
+        return
 
-    if end.is_changed(solver, start):
+    if end.is_changed(start):
         kind = "📒 SAVE"
     else:
         kind = "  VIEW"
 
-    check(solver)  # reset so we can extract the model
+    # Reset so we can extract the model
+    solver = z3.Optimize()
+    end.constrain(solver, minimize=True)
+    assert check(solver)
+
     for line in _printable_transition(solver, start, end, kind):
         yield line
 

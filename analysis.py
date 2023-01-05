@@ -9,7 +9,7 @@ from Crypto.Hash import keccak
 from disassembler import Program, disassemble
 from sha3 import SHA3
 from state import State
-from symbolic import check, describe, is_concrete, simplify, solver_stack, unwrap, zand
+from symbolic import check, describe, is_concrete, simplify, unwrap, zand
 from universal import constrain_to_goal, universal_transaction
 
 
@@ -38,23 +38,21 @@ def analyze(program: Program) -> None:
     print()
     print("Ownership: Elimination")
     for start, end in universal_transaction(program, sha3, "^"):
-        solver = z3.Optimize()
-        end.constrain(solver, minimize=True)
-
-        if not end.is_changed(solver, start):
+        if not end.is_changed(start):
             continue  # ignore no-ops
 
         # (2) In order to be a valid safety predicate, there must be no STEP
         # transition from P -> ~P
         for candidate in ownership:
-            with solver_stack(solver):
-                candidate.state.constrain(solver)
-                solver.assert_and_track(candidate.eval(start), "SAFE.PRE")
-                solver.assert_and_track(z3.Not(candidate.eval(end)), "UNSAFE.POST")
-                if check(solver):
-                    # STEP transition found: constraint is eliminated
-                    print(f" - {candidate}")
-                    print(f"   {describe_state(solver, end)}")
+            solver = z3.Optimize()
+            end.constrain(solver, minimize=True)
+            candidate.state.constrain(solver)
+            solver.assert_and_track(candidate.eval(start), "SAFE.PRE")
+            solver.assert_and_track(z3.Not(candidate.eval(end)), "UNSAFE.POST")
+            if check(solver):
+                # STEP transition found: constraint is eliminated
+                print(f" - {candidate}")
+                print(f"   {describe_state(solver, end)}")
 
     print()
     print("Balance: Universal Analysis")
@@ -84,26 +82,23 @@ def analyze(program: Program) -> None:
     print()
     print("Balance: Elimination")
     for start, end in universal_transaction(program, sha3, "^"):
-        solver = z3.Optimize()
-        end.constrain(solver, minimize=True)
-
-        if not end.is_changed(solver, start):
+        if not end.is_changed(start):
             continue  # ignore no-ops
-
-        for predicate in ownership:
-            solver.assert_and_track(predicate.eval(start), f"SAFE{predicate}")
 
         # (2) In order to be a valid safety predicate, there must be no STEP
         # transition from P -> ~P
         for candidate in balance:
-            with solver_stack(solver):
-                candidate.state.constrain(solver)
-                solver.assert_and_track(candidate.eval(start), "SAFE.PRE")
-                solver.assert_and_track(z3.Not(candidate.eval(end)), "UNSAFE.POST")
-                if check(solver):
-                    # STEP transition found: constraint is eliminated
-                    print(f" - {candidate}")
-                    print(f"   {describe_state(solver, end)}")
+            solver = z3.Optimize()
+            end.constrain(solver, minimize=True)
+            for predicate in ownership:
+                solver.assert_and_track(predicate.eval(start), f"SAFE{predicate}")
+            candidate.state.constrain(solver)
+            solver.assert_and_track(candidate.eval(start), "SAFE.PRE")
+            solver.assert_and_track(z3.Not(candidate.eval(end)), "UNSAFE.POST")
+            if check(solver):
+                # STEP transition found: constraint is eliminated
+                print(f" - {candidate}")
+                print(f"   {describe_state(solver, end)}")
 
 
 class Predicate:
