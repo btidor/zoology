@@ -12,7 +12,7 @@ from arrays import Array
 from symbolic import (
     BW,
     Constraint,
-    check,
+    Solver,
     describe,
     is_concrete,
     simplify,
@@ -71,7 +71,7 @@ class SHA3:
             for key in arr.accessed:
                 yield (n, key, zget(arr.array, key))
 
-    def constrain(self, solver: z3.Optimize) -> None:
+    def constrain(self, solver: Solver) -> None:
         """Apply computed SHA3 constraints to the given solver instance."""
         for n, key, val in self.items():
             fp = describe(key)
@@ -98,7 +98,7 @@ class SHA3:
             solver.assert_and_track(constraint, f"SHA3.DIGEST{i}{self.suffix}")
             pass
 
-    def narrow(self, solver: z3.Optimize, model: z3.ModelRef) -> z3.ModelRef:
+    def narrow(self, solver: Solver, model: z3.ModelRef) -> z3.ModelRef:
         """Apply concrete SHA3 constraints to a given model instance."""
         hashes: Dict[bytes, bytes] = {}
         for n, key, val in self.items():
@@ -112,7 +112,7 @@ class SHA3:
                 val == BW(digest),
                 f"SHAVAL{n}{self.suffix}",
             )
-            assert check(solver)
+            assert solver.check()
             model = solver.model()
         return model
 

@@ -2,18 +2,7 @@
 
 from __future__ import annotations
 
-import contextlib
-from typing import (
-    Any,
-    Iterator,
-    Literal,
-    Optional,
-    TypeAlias,
-    TypeGuard,
-    TypeVar,
-    Union,
-    cast,
-)
+from typing import Any, Literal, Optional, TypeAlias, TypeGuard, TypeVar, Union, cast
 
 import z3
 from Crypto.Hash import keccak
@@ -113,6 +102,11 @@ def zextract(high: int, low: int, value: z3.BitVecRef) -> z3.BitVecRef:
     return cast(z3.BitVecRef, z3.Extract(high, low, value))
 
 
+def znot(constraint: Constraint) -> z3.BoolRef:
+    """Return the inverse of the given symbolic constraint."""
+    return cast(z3.BoolRef, z3.Not(constraint))
+
+
 def zand(*constraints: Constraint) -> z3.BoolRef:
     """Return the union of the given symbolic constraints."""
     return cast(z3.BoolRef, z3.And(*constraints))
@@ -158,16 +152,35 @@ def describe(value: z3.BitVecRef) -> str:
         return "#" + digest[:3].hex()
 
 
-def check(solver: z3.Optimize, *assumptions: Any) -> bool:
-    """
-    Check whether the given Z3 solver state is satisfiable.
+class Solver:
+    """A generic interface to the SMT solver."""
 
-    Returns true or false. Raises an error if Z3 fails.
-    """
-    check = solver.check(*assumptions)
-    if check == z3.sat:
-        return True
-    elif check == z3.unsat:
-        return False
-    else:
-        raise Exception(f"z3 failure: {solver.reason_unknown()}")
+    def __init__(self) -> None:
+        """Create a new Solver."""
+        self.solver = z3.Optimize()
+
+    def assert_and_track(self, constraint: Constraint, name: str) -> None:
+        """Track a new constraint."""
+        self.solver.assert_and_track(constraint, name)
+
+    def minimize(self, constraint: Constraint) -> None:
+        """Add a new minimiziation objective."""
+        self.solver.minimize(constraint)
+
+    def check(self, *assumptions: Constraint) -> bool:
+        """
+        Check whether the given Z3 solver state is satisfiable.
+
+        Returns true or false. Raises an error if Z3 fails.
+        """
+        check = self.solver.check(*assumptions)
+        if check == z3.sat:
+            return True
+        elif check == z3.unsat:
+            return False
+        else:
+            raise Exception(f"z3 failure: {self.solver.reason_unknown()}")
+
+    def model(self) -> z3.ModelRef:
+        """Extract the model. Must be called immediately after `check`."""
+        return self.solver.model()

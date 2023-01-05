@@ -11,7 +11,7 @@ from disassembler import Program, disassemble
 from environment import Block, Contract, Transaction, Universe
 from sha3 import SHA3
 from state import State
-from symbolic import BW, check, unwrap, unwrap_bytes, zeval
+from symbolic import BW, Solver, unwrap, unwrap_bytes, zeval
 from vm import (
     concrete_CALLCODE,
     concrete_DELEGATECALL,
@@ -88,7 +88,7 @@ def _universal_transaction(start: State) -> Iterator[State]:
 
 def symbolic_JUMPI(program: Program, state: State) -> Iterator[State]:
     """Handle a JUMPI action with a symbolic condition. Yields next states."""
-    solver = z3.Optimize()
+    solver = Solver()
     state.constrain(solver)
 
     counter = unwrap(state.stack.pop(), "JUMPI requires concrete counter")
@@ -96,14 +96,14 @@ def symbolic_JUMPI(program: Program, state: State) -> Iterator[State]:
         raise ValueError(f"illegal JUMPI target: 0x{counter:x}")
     b = state.stack.pop()
 
-    if check(solver, b == 0):
+    if solver.check(b == 0):
         next = copy.deepcopy(state)
         next.pc += 1
         next.path = (next.path << 1) | 0
         next.path_constraints.append(b == 0)
         yield next
 
-    if check(solver, b != 0):
+    if solver.check(b != 0):
         next = copy.deepcopy(state)
         next.pc = program.jumps[counter]
         next.path = (next.path << 1) | 1
@@ -181,7 +181,7 @@ def symbolic_start(program: Program, sha3: SHA3, suffix: str) -> State:
     )
 
 
-def constrain_to_goal(solver: z3.Optimize, start: State, end: State) -> None:
+def constrain_to_goal(solver: Solver, start: State, end: State) -> None:
     """
     Apply goal constraints to the given solver instance.
 
@@ -201,12 +201,12 @@ def constrain_to_goal(solver: z3.Optimize, start: State, end: State) -> None:
 
 def printable_transition(start: State, end: State) -> Iterable[str]:
     """Produce a human-readable description of a given state transition."""
-    solver = z3.Optimize()
+    solver = Solver()
     end.constrain(solver, minimize=True)
-    assert check(solver)
+    assert solver.check()
 
     constrain_to_goal(solver, start, end)
-    if check(solver):
+    if solver.check():
         for line in _printable_transition(solver, start, end, "🚩 GOAL"):
             yield line
         return
@@ -217,16 +217,16 @@ def printable_transition(start: State, end: State) -> Iterable[str]:
         kind = "  VIEW"
 
     # Reset so we can extract the model
-    solver = z3.Optimize()
+    solver = Solver()
     end.constrain(solver, minimize=True)
-    assert check(solver)
+    assert solver.check()
 
     for line in _printable_transition(solver, start, end, kind):
         yield line
 
 
 def _printable_transition(
-    solver: z3.Optimize, start: State, end: State, kind: str
+    solver: Solver, start: State, end: State, kind: str
 ) -> Iterable[str]:
     model = solver.model()
     model = end.narrow(solver, model)

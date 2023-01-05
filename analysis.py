@@ -9,7 +9,7 @@ from Crypto.Hash import keccak
 from disassembler import Program, disassemble
 from sha3 import SHA3
 from state import State
-from symbolic import check, describe, is_concrete, simplify, unwrap, zand
+from symbolic import Solver, describe, is_concrete, simplify, unwrap, zand, znot
 from universal import constrain_to_goal, universal_transaction
 
 
@@ -18,18 +18,18 @@ def analyze(program: Program) -> None:
     sha3 = SHA3()
     ownership: List[Predicate] = []
     for start, end in universal_transaction(program, sha3, ""):
-        solver = z3.Optimize()
+        solver = Solver()
         end.constrain(solver, minimize=True)
 
         description = describe_state(solver, end)
 
         constrain_to_goal(solver, start, end)
-        if not check(solver):
+        if not solver.check():
             continue
 
         print(f" - {description}")
         for candidate in ownership_safety_predicates(end):
-            if not check(solver, candidate.eval(start)):
+            if not solver.check(candidate.eval(start)):
                 # (1) In order to be a valid safety predicate, it must preclude
                 # this transaction when applied to the start state
                 print(f"   {candidate}")
@@ -44,12 +44,12 @@ def analyze(program: Program) -> None:
         # (2) In order to be a valid safety predicate, there must be no STEP
         # transition from P -> ~P
         for candidate in ownership:
-            solver = z3.Optimize()
+            solver = Solver()
             end.constrain(solver, minimize=True)
             candidate.state.constrain(solver)
             solver.assert_and_track(candidate.eval(start), "SAFE.PRE")
-            solver.assert_and_track(z3.Not(candidate.eval(end)), "UNSAFE.POST")
-            if check(solver):
+            solver.assert_and_track(znot(candidate.eval(end)), "UNSAFE.POST")
+            if solver.check():
                 # STEP transition found: constraint is eliminated
                 print(f" - {candidate}")
                 print(f"   {describe_state(solver, end)}")
@@ -59,7 +59,7 @@ def analyze(program: Program) -> None:
     additional: List[str] = []
     balance: List[Predicate] = []
     for start, end in universal_transaction(program, sha3, "^"):
-        solver = z3.Optimize()
+        solver = Solver()
         end.constrain(solver, minimize=True)
 
         description = describe_state(solver, end)
@@ -67,13 +67,13 @@ def analyze(program: Program) -> None:
         constrain_to_goal(solver, start, end)
         for predicate in ownership:
             solver.assert_and_track(predicate.eval(start), f"SAFE{predicate}")
-        if not check(solver):
+        if not solver.check():
             continue
 
         print(f" - {description}")
         additional.append(description)
         for candidate in balance_safety_predicates(end):
-            if not check(solver, candidate.eval(start)):
+            if not solver.check(candidate.eval(start)):
                 # (1) In order to be a valid safety predicate, it must preclude
                 # this transaction when applied to the start state
                 print(f"   {candidate}")
@@ -88,14 +88,14 @@ def analyze(program: Program) -> None:
         # (2) In order to be a valid safety predicate, there must be no STEP
         # transition from P -> ~P
         for candidate in balance:
-            solver = z3.Optimize()
+            solver = Solver()
             end.constrain(solver, minimize=True)
             for predicate in ownership:
                 solver.assert_and_track(predicate.eval(start), f"SAFE{predicate}")
             candidate.state.constrain(solver)
             solver.assert_and_track(candidate.eval(start), "SAFE.PRE")
-            solver.assert_and_track(z3.Not(candidate.eval(end)), "UNSAFE.POST")
-            if check(solver):
+            solver.assert_and_track(znot(candidate.eval(end)), "UNSAFE.POST")
+            if solver.check():
                 # STEP transition found: constraint is eliminated
                 print(f" - {candidate}")
                 print(f"   {describe_state(solver, end)}")
@@ -162,11 +162,11 @@ def balance_safety_predicates(state: State) -> Iterator[Predicate]:
         )
 
 
-def describe_state(solver: z3.Optimize, state: State) -> str:
+def describe_state(solver: Solver, state: State) -> str:
     # Re-adding these objectives increases performance by 2x?!
     solver.minimize(state.transaction.callvalue)
     solver.minimize(state.transaction.calldata.length)
-    assert check(solver)
+    assert solver.check()
     assert state.success is True
 
     model = solver.model()

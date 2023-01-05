@@ -11,7 +11,7 @@ from disassembler import Program, disassemble
 from environment import Block, Contract, Transaction, Universe
 from sha3 import SHA3
 from state import State
-from symbolic import BA, BW, Constraint, check, uint160, uint256
+from symbolic import BA, BW, Constraint, Solver, uint160, uint256
 from universal import constrain_to_goal
 from vm import (
     concrete_CALLCODE,
@@ -244,17 +244,17 @@ def check_transition(
     assert end.path == path, f"unexpected path: Px{hex(end.path)[2:]}"
     assert end.success is True
 
-    solver = z3.Optimize()
+    solver = Solver()
     end.constrain(solver, minimize=True)
     constrain_to_goal(solver, start, end)
-    assert check(solver) == (kind == "GOAL")
+    assert solver.check() == (kind == "GOAL")
 
     if kind != "GOAL":
         assert end.is_changed(start) == (kind == "SAVE")
 
-    solver = z3.Optimize()
+    solver = Solver()
     end.constrain(solver, minimize=True)
-    assert check(solver)
+    assert solver.check()
 
     model = end.narrow(solver, solver.model())
     transaction = end.transaction.evaluate(model)

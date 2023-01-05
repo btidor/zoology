@@ -4,7 +4,7 @@ import pytest
 import z3
 
 from sha3 import SHA3
-from symbolic import BW, check, unwrap_bytes, zeval
+from symbolic import BW, Solver, unwrap_bytes, zeval
 
 
 def bytes_to_bitvector(data: bytes) -> z3.BitVecRef:
@@ -25,10 +25,10 @@ def test_symbolic() -> None:
     input = z3.BitVec("INPUT", 8 * 7)
     assert str(sha3[input]) == "SHA3(7)*[INPUT]"
 
-    solver = z3.Optimize()
+    solver = Solver()
     sha3.constrain(solver)
     solver.assert_and_track(input == bytes_to_bitvector(b"testing"), "TEST1")
-    assert check(solver)
+    assert solver.check()
 
     model = solver.model()
     assert unwrap_bytes(zeval(model, input)) == b"testing"
@@ -45,7 +45,7 @@ def test_impossible_concrete() -> None:
     digest = sha3[input]
     assert str(digest) == "SHA3(7)*[INPUT]"
 
-    solver = z3.Optimize()
+    solver = Solver()
     sha3.constrain(solver)
     solver.assert_and_track(input == bytes_to_bitvector(b"testing"), "TEST1")
     solver.assert_and_track(
@@ -53,7 +53,7 @@ def test_impossible_concrete() -> None:
         == BW(0x0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF),
         "TEST2",
     )
-    assert check(solver)
+    assert solver.check()
 
     # The initial `check()` succeeds, but an error is raised when we narrow the
     # SHA3 instance with the model.
@@ -67,14 +67,14 @@ def test_impossible_symbolic() -> None:
     sha3 = SHA3()
     digest = sha3[bytes_to_bitvector(b"testing")]
 
-    solver = z3.Optimize()
+    solver = Solver()
     sha3.constrain(solver)
     solver.assert_and_track(
         digest
         == BW(0x0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF),
         "TEST1",
     )
-    assert not check(solver)
+    assert not solver.check()
 
 
 def test_items() -> None:
@@ -95,7 +95,7 @@ def test_printable() -> None:
     sha3 = SHA3()
     sha3[bytes_to_bitvector(b"testing")]
 
-    solver = z3.Optimize()
+    solver = Solver()
     sha3.constrain(solver)
     model = solver.model()
     model = sha3.narrow(solver, model)

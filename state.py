@@ -15,7 +15,7 @@ from sha3 import SHA3
 from symbolic import (
     BA,
     Constraint,
-    check,
+    Solver,
     is_concrete,
     uint256,
     unwrap,
@@ -63,7 +63,7 @@ class State:
     # taken, 0 if not. MSB-first with a leading 1 prepended.
     path: int
 
-    def constrain(self, solver: z3.Optimize, minimize: bool = False) -> None:
+    def constrain(self, solver: Solver, minimize: bool = False) -> None:
         """Apply accumulated constraints to the given solver instance."""
         if minimize:
             solver.minimize(self.transaction.callvalue)
@@ -88,25 +88,25 @@ class State:
         self.sha3.constrain(solver)
         self.universe.constrain(solver)
 
-    def narrow(self, solver: z3.Optimize, model: z3.ModelRef) -> z3.ModelRef:
+    def narrow(self, solver: Solver, model: z3.ModelRef) -> z3.ModelRef:
         """Apply concrete constraints to a given model instance."""
         constraint = self.contract.address == BA(
             0xADADADADADADADADADADADADADADADADADADADAD
         )
-        if check(solver, constraint):
+        if solver.check(constraint):
             solver.assert_and_track(constraint, "DEFAULT.ADDRESS")
-            assert check(solver)
+            assert solver.check()
             model = solver.model()
 
         constraint = self.transaction.caller == BA(
             0xCACACACACACACACACACACACACACACACACACACACA
         )
-        if check(solver, constraint):
+        if solver.check(constraint):
             solver.assert_and_track(constraint, "DEFAULT.CALLER")
-            assert check(solver)
+            assert solver.check()
             model = solver.model()
 
-        check(solver)
+        solver.check()
         return self.sha3.narrow(solver, model)
 
     def is_changed(self, since: State) -> bool:
@@ -116,11 +116,10 @@ class State:
             return True
 
         # Check if any address other than the contract itself has increased
-        solver = z3.Optimize()
+        solver = Solver()
         self.constrain(solver, minimize=True)
         for addr in self.universe.balances.written:
-            if check(
-                solver,
+            if solver.check(
                 zand(
                     addr != self.contract.address,
                     z3.UGT(

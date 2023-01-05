@@ -6,7 +6,7 @@ import z3
 from arrays import FrozenBytes, MutableBytes
 from disassembler import Instruction, disassemble
 from ops import *
-from symbolic import BA, BW, check, simplify
+from symbolic import BA, BW, Solver, simplify
 from testlib import make_block, make_contract, make_state, make_transaction
 
 
@@ -255,9 +255,9 @@ def test_SHA3() -> None:
     s = make_state(memory=MutableBytes.concrete(b"\xff\xff\xff\xff"))
     digest = SHA3(s, BW(0), BW(4))
 
-    solver = z3.Optimize()
+    solver = Solver()
     s.sha3.constrain(solver)
-    assert check(solver)
+    assert solver.check()
     assert (
         solver.model().eval(digest)
         == 0x29045A592007D0C246EF02C2223570DA9522D0CF0F73282C79A1BC8F0BB2C238

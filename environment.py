@@ -13,6 +13,7 @@ from disassembler import Program
 from symbolic import (
     BW,
     Constraint,
+    Solver,
     is_bitvector,
     is_concrete,
     uint160,
@@ -143,7 +144,7 @@ class Universe:
         )
         self.contribution += cont
 
-    def constrain(self, solver: z3.Optimize) -> None:
+    def constrain(self, solver: Solver) -> None:
         """Apply accumulated constraints to the given solver instance."""
         for i, constraint in enumerate(self.transfer_constraints):
             solver.assert_and_track(constraint, f"XFER{i}{self.suffix}")
