@@ -185,8 +185,10 @@ class Solver:
             solver.assert_and_track(constraint, name)
         for objective in self.objectives:
             solver.minimize(objective)
+        for i, assumption in enumerate(assumptions):
+            solver.assert_and_track(assumption, f"EXTRA{i}")
 
-        check = solver.check(*assumptions)
+        check = solver.check()
         if check == z3.sat:
             return Model(solver)
         elif check == z3.unsat:
