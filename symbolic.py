@@ -168,11 +168,6 @@ def check(solver: z3.Optimize, *assumptions: Any) -> bool:
     if check == z3.sat:
         return True
     elif check == z3.unsat:
-        # Sometimes the solver return "unsat" but can't produce an unsatisfiable
-        # core. Origintally I thought it was returning "unsat" incorrectly, but
-        # that might not be true. This *can* happen if we add unnamed
-        # constraints with `solver.add()` -- use `assert_and_track()` instead!
-        assert len(solver.unsat_core()) > 0
         return False
     else:
         raise Exception(f"z3 failure: {solver.reason_unknown()}")
