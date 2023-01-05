@@ -6,7 +6,7 @@ import z3
 
 from disassembler import disassemble
 from sha3 import SHA3
-from symbolic import BA, BW, Solver, zeval
+from symbolic import BA, BW, Solver
 from testlib import make_state
 from universal import symbolic_start
 
@@ -15,9 +15,10 @@ def test_transaction_evaluate() -> None:
     state = make_state()
     solver = Solver()
     state.constrain(solver)
-    assert solver.check()
+    model = solver.check()
+    assert model is not None
 
-    values = state.transaction.evaluate(solver.model())
+    values = state.transaction.evaluate(model)
     assert values == {
         "Caller": "0xcacacacacacacacacacacacacacacacacacacaca",
         "Gas": "0x0000000000000000000000000000000000000000000000000000000000000012",
@@ -35,11 +36,11 @@ def test_transfer() -> None:
     end.constrain(solver)
     solver.assert_and_track(start.universe.balances[src] == 0xAAA, "TEST1")
     solver.assert_and_track(start.universe.balances[dst] == 0x0, "TEST2")
-    assert solver.check()
+    model = solver.check()
+    assert model is not None
 
-    model = solver.model()
-    assert zeval(model, end.universe.balances[src]) == 0x9AA
-    assert zeval(model, end.universe.balances[dst]) == 0x100
+    assert model.evaluate(end.universe.balances[src]) == 0x9AA
+    assert model.evaluate(end.universe.balances[dst]) == 0x100
 
 
 def test_impossible_transfer() -> None:

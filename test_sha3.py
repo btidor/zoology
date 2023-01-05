@@ -4,7 +4,7 @@ import pytest
 import z3
 
 from sha3 import SHA3
-from symbolic import BW, Solver, unwrap_bytes, zeval
+from symbolic import BW, Solver, unwrap_bytes
 
 
 def bytes_to_bitvector(data: bytes) -> z3.BitVecRef:
@@ -28,13 +28,13 @@ def test_symbolic() -> None:
     solver = Solver()
     sha3.constrain(solver)
     solver.assert_and_track(input == bytes_to_bitvector(b"testing"), "TEST1")
-    assert solver.check()
+    model = solver.check()
+    assert model is not None
 
-    model = solver.model()
-    assert unwrap_bytes(zeval(model, input)) == b"testing"
+    assert unwrap_bytes(model.evaluate(input)) == b"testing"
     model = sha3.narrow(solver, model)
     assert (
-        unwrap_bytes(zeval(model, sha3[input])).hex()
+        unwrap_bytes(model.evaluate(sha3[input])).hex()
         == "5f16f4c7f149ac4f9510d9cf8cf384038ad348b3bcdc01915f95de12df9d1b02"
     )
 
@@ -53,12 +53,12 @@ def test_impossible_concrete() -> None:
         == BW(0x0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF),
         "TEST2",
     )
-    assert solver.check()
+    model = solver.check()
+    assert model is not None
 
     # The initial `check()` succeeds, but an error is raised when we narrow the
     # SHA3 instance with the model.
-    model = solver.model()
-    assert unwrap_bytes(zeval(model, input)) == b"testing"
+    assert unwrap_bytes(model.evaluate(input)) == b"testing"
     with pytest.raises(AssertionError):
         sha3.narrow(solver, model)
 
@@ -97,8 +97,8 @@ def test_printable() -> None:
 
     solver = Solver()
     sha3.constrain(solver)
-    solver.check()
-    model = solver.model()
+    model = solver.check()
+    assert model is not None
     model = sha3.narrow(solver, model)
 
     fixture = [

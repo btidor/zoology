@@ -15,13 +15,13 @@ from sha3 import SHA3
 from symbolic import (
     BA,
     Constraint,
+    Model,
     Solver,
     is_concrete,
     uint256,
     unwrap,
     unwrap_bytes,
     zand,
-    zeval,
 )
 
 
@@ -88,23 +88,25 @@ class State:
         self.sha3.constrain(solver)
         self.universe.constrain(solver)
 
-    def narrow(self, solver: Solver, model: z3.ModelRef) -> z3.ModelRef:
+    def narrow(self, solver: Solver, model: Model) -> Model:
         """Apply concrete constraints to a given model instance."""
         constraint = self.contract.address == BA(
             0xADADADADADADADADADADADADADADADADADADADAD
         )
         if solver.check(constraint):
             solver.assert_and_track(constraint, "DEFAULT.ADDRESS")
-            assert solver.check()
-            model = solver.model()
+            _model = solver.check()
+            assert _model is not None
+            model = _model
 
         constraint = self.transaction.caller == BA(
             0xCACACACACACACACACACACACACACACACACACACACA
         )
         if solver.check(constraint):
             solver.assert_and_track(constraint, "DEFAULT.CALLER")
-            assert solver.check()
-            model = solver.model()
+            _model = solver.check()
+            assert _model is not None
+            model = _model
 
         solver.check()
         return self.sha3.narrow(solver, model)
@@ -132,14 +134,14 @@ class State:
 
         return False
 
-    def evaluate(self, model: z3.ModelRef) -> OrderedDict[str, str]:
+    def evaluate(self, model: Model) -> OrderedDict[str, str]:
         """
         Use a model to evaluate this instance as a dictionary of attributes.
 
         Only attributes present in the model will be included.
         """
         r: OrderedDict[str, str] = OrderedDict()
-        a = zeval(model, self.contract.address)
+        a = model.evaluate(self.contract.address)
         if is_concrete(a) and unwrap(a) > 0:
             r["Address"] = "0x" + unwrap_bytes(a).hex()
         returndata = self.returndata.evaluate(model, True)

@@ -88,15 +88,6 @@ def unwrap_bytes(value: z3.BitVecRef, msg: Optional[str] = None) -> bytes:
     return unwrap(value, msg).to_bytes(value.size() // 8, "big")
 
 
-def zeval(
-    model: z3.ModelRef, value: z3.BitVecRef, model_completion: bool = False
-) -> z3.BitVecRef:
-    """Evaluate a given bitvector expression with the given model."""
-    if not is_bitvector(value):
-        raise ValueError("unexpected non-bitvector")
-    return cast(z3.BitVecRef, model.eval(value, model_completion))
-
-
 def zif(condition: Constraint, then: z3.BitVecRef, else_: z3.BitVecRef) -> z3.BitVecRef:
     """Return a symbolic if statement over bitvectors."""
     return cast(z3.BitVecRef, z3.If(condition, then, else_))
@@ -168,13 +159,11 @@ class Solver:
 
     def __init__(self) -> None:
         """Create a new Solver."""
-        self.solver: Optional[z3.Optimize] = None
         self.constraints: Dict[str, Constraint] = {}
         self.objectives: List[Constraint] = []
 
     def assert_and_track(self, constraint: Constraint, name: str) -> None:
         """Track a new constraint."""
-        self.solver = None
         if name in self.constraints:
             return
             # TODO: raise ValueError(f"duplicate constraint: {name}")
@@ -182,14 +171,14 @@ class Solver:
 
     def minimize(self, objective: Constraint) -> None:
         """Add a new minimiziation objective."""
-        self.solver = None
         self.objectives.append(objective)
 
-    def check(self, *assumptions: Constraint) -> bool:
+    def check(self, *assumptions: Constraint) -> Optional[Model]:
         """
         Check whether the given Z3 solver state is satisfiable.
 
-        Returns true or false. Raises an error if Z3 fails.
+        Returns a model (if sat) or None (if unsat). Raises an error if Z3
+        fails.
         """
         solver = z3.Optimize()
         for name, constraint in self.constraints.items():
@@ -199,14 +188,27 @@ class Solver:
 
         check = solver.check(*assumptions)
         if check == z3.sat:
-            self.solver = solver
-            return True
+            return Model(solver)
         elif check == z3.unsat:
-            return False
+            return None
         else:
             raise Exception(f"z3 failure: {solver.reason_unknown()}")
 
-    def model(self) -> z3.ModelRef:
-        """Extract the model. Must be called immediately after `check`."""
-        assert self.solver is not None
-        return self.solver.model()
+
+class Model:
+    """The result of SMT checking."""
+
+    def __init__(self, solver: z3.Optimize) -> None:
+        """Create a new Model. Only for use by Solver."""
+        self.solver = solver
+        self.model: Optional[z3.ModelRef] = None
+
+    def evaluate(
+        self, value: z3.BitVecRef, model_completion: bool = False
+    ) -> z3.BitVecRef:
+        """Evaluate a given bitvector expression with the given model."""
+        if not is_bitvector(value):
+            raise ValueError("unexpected non-bitvector")
+        if self.model is None:
+            self.model = self.solver.model()
+        return cast(z3.BitVecRef, self.model.eval(value, model_completion))

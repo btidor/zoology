@@ -247,16 +247,17 @@ def check_transition(
     solver = Solver()
     end.constrain(solver, minimize=True)
     constrain_to_goal(solver, start, end)
-    assert solver.check() == (kind == "GOAL")
+    assert (solver.check() is not None) == (kind == "GOAL")
 
     if kind != "GOAL":
         assert end.is_changed(start) == (kind == "SAVE")
 
     solver = Solver()
     end.constrain(solver, minimize=True)
-    assert solver.check()
+    model = solver.check()
+    assert model is not None
 
-    model = end.narrow(solver, solver.model())
+    model = end.narrow(solver, model)
     transaction = end.transaction.evaluate(model)
 
     actual = bytes.fromhex(transaction.get("Data", "")[2:10])

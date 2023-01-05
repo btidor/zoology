@@ -13,6 +13,7 @@ from disassembler import Program
 from symbolic import (
     BW,
     Constraint,
+    Model,
     Solver,
     is_bitvector,
     is_concrete,
@@ -20,7 +21,6 @@ from symbolic import (
     uint256,
     unwrap,
     unwrap_bytes,
-    zeval,
     zif,
     zor,
 )
@@ -58,7 +58,7 @@ class Transaction:
     calldata: FrozenBytes
     gasprice: uint256
 
-    def evaluate(self, model: z3.ModelRef) -> OrderedDict[str, str]:
+    def evaluate(self, model: Model) -> OrderedDict[str, str]:
         """
         Use a model to evaluate this instance as a dictionary of attributes.
 
@@ -75,7 +75,7 @@ class Transaction:
             if r[k] is None:
                 del r[k]
             elif is_bitvector(r[k]):
-                v = zeval(model, r[k])
+                v = model.evaluate(r[k])
                 if is_concrete(v) and unwrap(v) > 0:
                     r[k] = "0x" + unwrap_bytes(v).hex()
                 else:

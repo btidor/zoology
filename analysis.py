@@ -166,10 +166,11 @@ def describe_state(solver: Solver, state: State) -> str:
     # Re-adding these objectives increases performance by 2x?!
     solver.minimize(state.transaction.callvalue)
     solver.minimize(state.transaction.calldata.length)
-    assert solver.check()
+
+    model = solver.check()
+    assert model is not None
     assert state.success is True
 
-    model = solver.model()
     return "0x" + state.transaction.calldata.evaluate(model)
 
 

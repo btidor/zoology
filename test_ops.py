@@ -257,9 +257,10 @@ def test_SHA3() -> None:
 
     solver = Solver()
     s.sha3.constrain(solver)
-    assert solver.check()
+    model = solver.check()
+    assert model is not None
     assert (
-        solver.model().eval(digest)
+        model.evaluate(digest)
         == 0x29045A592007D0C246EF02C2223570DA9522D0CF0F73282C79A1BC8F0BB2C238
     )
 

@@ -12,12 +12,12 @@ from arrays import Array
 from symbolic import (
     BW,
     Constraint,
+    Model,
     Solver,
     describe,
     is_concrete,
     simplify,
     unwrap,
-    zeval,
     zget,
 )
 
@@ -98,11 +98,11 @@ class SHA3:
             solver.assert_and_track(constraint, f"SHA3.DIGEST{i}{self.suffix}")
             pass
 
-    def narrow(self, solver: Solver, model: z3.ModelRef) -> z3.ModelRef:
+    def narrow(self, solver: Solver, model: Model) -> Model:
         """Apply concrete SHA3 constraints to a given model instance."""
         hashes: Dict[bytes, bytes] = {}
         for n, key, val in self.items():
-            ckey = unwrap(zeval(model, key, True))
+            ckey = unwrap(model.evaluate(key, True))
             data = ckey.to_bytes(n, "big")
             hash = keccak.new(data=data, digest_bits=256)
             digest = int.from_bytes(hash.digest(), "big")
@@ -112,23 +112,24 @@ class SHA3:
                 val == BW(digest),
                 f"SHAVAL{n}{self.suffix}",
             )
-            assert solver.check()
-            model = solver.model()
+            _model = solver.check()
+            assert _model is not None
+            model = _model
         return model
 
-    def printable(self, model: z3.ModelRef) -> Iterable[str]:
+    def printable(self, model: Model) -> Iterable[str]:
         """Yield a human-readable evaluation using the given model."""
         line = "SHA3"
         seen = set()
         for _, key, val in self.items():
-            k = describe(zeval(model, key, True))
+            k = describe(model.evaluate(key, True))
             if k in seen:
                 continue
             line += f"\t{k} "
             if len(k) > 34:
                 yield line
                 line = "\t"
-            v = describe(zeval(model, val, True))
+            v = describe(model.evaluate(val, True))
             line += f"-> {v}"
             yield line
             line = ""

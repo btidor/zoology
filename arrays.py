@@ -11,6 +11,7 @@ import z3
 from symbolic import (
     BW,
     BY,
+    Model,
     describe,
     is_bitvector,
     is_concrete,
@@ -21,7 +22,6 @@ from symbolic import (
     unwrap_bytes,
     zand,
     zconcat,
-    zeval,
     zget,
     zif,
     zstore,
@@ -63,9 +63,7 @@ class Array:
         """Look up the given symbolic key, but don't track the lookup."""
         return zget(self.array, key)
 
-    def printable_diff(
-        self, name: str, model: z3.ModelRef, original: Array
-    ) -> Iterable[str]:
+    def printable_diff(self, name: str, model: Model, original: Array) -> Iterable[str]:
         """
         Evaluate a diff of this array against another.
 
@@ -80,9 +78,9 @@ class Array:
         for prefix, rows in diffs:
             concrete = {}
             for key, value, prior in rows:
-                k = describe(zeval(model, key, True))
-                v = describe(zeval(model, value, True))
-                p = describe(zeval(model, prior, True)) if prior is not None else None
+                k = describe(model.evaluate(key, True))
+                v = describe(model.evaluate(value, True))
+                p = describe(model.evaluate(prior, True)) if prior is not None else None
                 if v != p:
                     concrete[k] = (v, p)
 
@@ -179,12 +177,12 @@ class Bytes(abc.ABC):
         """
         return bytes(unwrap(self[BW(i)]) for i in range(unwrap(self.length)))
 
-    def evaluate(self, model: z3.ModelRef, model_completion: bool = False) -> str:
+    def evaluate(self, model: Model, model_completion: bool = False) -> str:
         """Use a model to evaluate this instance as a hexadecimal string."""
-        length = unwrap(zeval(model, self.length, True))
+        length = unwrap(model.evaluate(self.length, True))
         result = ""
         for i in range(length):
-            b = zeval(model, self[BW(i)], model_completion)
+            b = model.evaluate(self[BW(i)], model_completion)
             result += unwrap_bytes(b).hex() if is_concrete(b) else "??"
         return result
 

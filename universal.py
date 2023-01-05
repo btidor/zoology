@@ -11,7 +11,7 @@ from disassembler import Program, disassemble
 from environment import Block, Contract, Transaction, Universe
 from sha3 import SHA3
 from state import State
-from symbolic import BW, Solver, unwrap, unwrap_bytes, zeval
+from symbolic import BW, Model, Solver, unwrap, unwrap_bytes
 from vm import (
     concrete_CALLCODE,
     concrete_DELEGATECALL,
@@ -206,8 +206,9 @@ def printable_transition(start: State, end: State) -> Iterable[str]:
     assert solver.check()
 
     constrain_to_goal(solver, start, end)
-    if solver.check():
-        for line in _printable_transition(solver, start, end, "🚩 GOAL"):
+    model = solver.check()
+    if model is not None:
+        for line in _printable_transition(solver, model, start, end, "🚩 GOAL"):
             yield line
         return
 
@@ -219,16 +220,16 @@ def printable_transition(start: State, end: State) -> Iterable[str]:
     # Reset so we can extract the model
     solver = Solver()
     end.constrain(solver, minimize=True)
-    assert solver.check()
+    model = solver.check()
+    assert model is not None
 
-    for line in _printable_transition(solver, start, end, kind):
+    for line in _printable_transition(solver, model, start, end, kind):
         yield line
 
 
 def _printable_transition(
-    solver: Solver, start: State, end: State, kind: str
+    solver: Solver, model: Model, start: State, end: State, kind: str
 ) -> Iterable[str]:
-    model = solver.model()
     model = end.narrow(solver, model)
 
     if end.success is True:
@@ -252,15 +253,15 @@ def _printable_transition(
     if len(values) > 0:
         yield ""
 
-    a = unwrap_bytes(zeval(model, start.universe.contribution, True)).hex()
-    b = unwrap_bytes(zeval(model, end.universe.contribution, True)).hex()
+    a = unwrap_bytes(model.evaluate(start.universe.contribution, True)).hex()
+    b = unwrap_bytes(model.evaluate(end.universe.contribution, True)).hex()
     if a != b:
         yield f"Contrib\tETH 0x{a}"
         yield f"\t->  0x{b}"
         yield f""
 
-    a = unwrap_bytes(zeval(model, start.universe.extraction, True)).hex()
-    b = unwrap_bytes(zeval(model, end.universe.extraction, True)).hex()
+    a = unwrap_bytes(model.evaluate(start.universe.extraction, True)).hex()
+    b = unwrap_bytes(model.evaluate(end.universe.extraction, True)).hex()
     if a != b:
         yield f"Extract\tETH 0x{a}"
         yield f"\t->  0x{b}"
