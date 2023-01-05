@@ -2,7 +2,18 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal, Optional, TypeAlias, TypeGuard, TypeVar, Union, cast
+from typing import (
+    Any,
+    Dict,
+    List,
+    Literal,
+    Optional,
+    TypeAlias,
+    TypeGuard,
+    TypeVar,
+    Union,
+    cast,
+)
 
 import z3
 from Crypto.Hash import keccak
@@ -157,15 +168,22 @@ class Solver:
 
     def __init__(self) -> None:
         """Create a new Solver."""
-        self.solver = z3.Optimize()
+        self.solver: Optional[z3.Optimize] = None
+        self.constraints: Dict[str, Constraint] = {}
+        self.objectives: List[Constraint] = []
 
     def assert_and_track(self, constraint: Constraint, name: str) -> None:
         """Track a new constraint."""
-        self.solver.assert_and_track(constraint, name)
+        self.solver = None
+        if name in self.constraints:
+            return
+            # TODO: raise ValueError(f"duplicate constraint: {name}")
+        self.constraints[name] = constraint
 
-    def minimize(self, constraint: Constraint) -> None:
+    def minimize(self, objective: Constraint) -> None:
         """Add a new minimiziation objective."""
-        self.solver.minimize(constraint)
+        self.solver = None
+        self.objectives.append(objective)
 
     def check(self, *assumptions: Constraint) -> bool:
         """
@@ -173,14 +191,22 @@ class Solver:
 
         Returns true or false. Raises an error if Z3 fails.
         """
-        check = self.solver.check(*assumptions)
+        solver = z3.Optimize()
+        for name, constraint in self.constraints.items():
+            solver.assert_and_track(constraint, name)
+        for objective in self.objectives:
+            solver.minimize(objective)
+
+        check = solver.check(*assumptions)
         if check == z3.sat:
+            self.solver = solver
             return True
         elif check == z3.unsat:
             return False
         else:
-            raise Exception(f"z3 failure: {self.solver.reason_unknown()}")
+            raise Exception(f"z3 failure: {solver.reason_unknown()}")
 
     def model(self) -> z3.ModelRef:
         """Extract the model. Must be called immediately after `check`."""
+        assert self.solver is not None
         return self.solver.model()

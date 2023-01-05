@@ -97,6 +97,7 @@ def test_printable() -> None:
 
     solver = Solver()
     sha3.constrain(solver)
+    solver.check()
     model = solver.model()
     model = sha3.narrow(solver, model)
 
