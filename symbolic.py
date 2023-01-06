@@ -185,12 +185,16 @@ class Solver:
         fails.
         """
         solver = z3.Optimize()
+        names = set()
         for name, constraint in self.constraints.items():
             solver.assert_and_track(constraint, name)
+            names.add(name)
         for objective in self.objectives:
             solver.minimize(objective)
         for i, assumption in enumerate(assumptions):
-            solver.assert_and_track(assumption, f"EXTRA{i}")
+            name = f"EXTRA{i}"
+            solver.assert_and_track(assumption, name)
+            names.add(name)
 
         proc = subprocess.Popen(
             ["z3", "-in"],
@@ -202,9 +206,16 @@ class Solver:
         assert proc.stdin is not None
         assert proc.stdout is not None
 
-        expression = solver.sexpr()
-        vars = set(re.findall("\\(declare-fun \\|?([^ |]+)\\|? ", expression))
-        proc.stdin.write(expression)
+        vars = set(re.findall("\\(declare-fun \\|?([^ |]+)\\|? ", solver.sexpr()))
+
+        expression = cast(str, solver.sexpr()).splitlines()
+        assert expression[-1] == "(check-sat)"
+        expression = expression[:-1]
+        expression.extend(f"(assert |{name}|)" for name in names)
+        expression.append("(check-sat)")
+
+        for line in expression:
+            proc.stdin.write(line + "\n")
         proc.stdin.flush()
 
         result = proc.stdout.readline().strip()
