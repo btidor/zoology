@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import abc
 import copy
-from typing import Any, Iterable, List, Tuple, TypeAlias, Union
+from typing import Any, Iterable, List, Tuple, TypeAlias, Union, cast
 
 import z3
 
 from symbolic import (
     BW,
     BY,
-    Model,
+    Solver,
     describe,
     is_bitvector,
     is_concrete,
@@ -63,7 +63,9 @@ class Array:
         """Look up the given symbolic key, but don't track the lookup."""
         return zget(self.array, key)
 
-    def printable_diff(self, name: str, model: Model, original: Array) -> Iterable[str]:
+    def printable_diff(
+        self, name: str, solver: Solver, original: Array
+    ) -> Iterable[str]:
         """
         Evaluate a diff of this array against another.
 
@@ -78,9 +80,13 @@ class Array:
         for prefix, rows in diffs:
             concrete = {}
             for key, value, prior in rows:
-                k = describe(model.evaluate(key, True))
-                v = describe(model.evaluate(value, True))
-                p = describe(model.evaluate(prior, True)) if prior is not None else None
+                k = describe(solver.evaluate(cast(z3.BitVecRef, key), True))
+                v = describe(solver.evaluate(cast(z3.BitVecRef, value), True))
+                p = (
+                    describe(solver.evaluate(cast(z3.BitVecRef, prior), True))
+                    if prior is not None
+                    else None
+                )
                 if v != p:
                     concrete[k] = (v, p)
 
@@ -177,12 +183,12 @@ class Bytes(abc.ABC):
         """
         return bytes(unwrap(self[BW(i)]) for i in range(unwrap(self.length)))
 
-    def evaluate(self, model: Model, model_completion: bool = False) -> str:
+    def evaluate(self, solver: Solver, model_completion: bool = False) -> str:
         """Use a model to evaluate this instance as a hexadecimal string."""
-        length = unwrap(model.evaluate(self.length, True))
+        length = unwrap(solver.evaluate(self.length, True))
         result = ""
         for i in range(length):
-            b = model.evaluate(self[BW(i)], model_completion)
+            b = solver.evaluate(self[BW(i)], model_completion)
             result += unwrap_bytes(b).hex() if b is not None else "??"
         return result
 

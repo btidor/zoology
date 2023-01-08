@@ -167,11 +167,10 @@ def describe_state(solver: Solver, state: State) -> str:
     solver.minimize(state.transaction.callvalue)
     solver.minimize(state.transaction.calldata.length)
 
-    model = solver.check()
-    assert model is not None
+    assert solver.check()
     assert state.success is True
 
-    return "0x" + state.transaction.calldata.evaluate(model)
+    return "0x" + state.transaction.calldata.evaluate(solver)
 
 
 if __name__ == "__main__":

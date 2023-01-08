@@ -10,6 +10,7 @@ from typing import (
     List,
     Literal,
     Optional,
+    Set,
     TypeAlias,
     TypeGuard,
     TypeVar,
@@ -163,81 +164,85 @@ class Solver:
 
     def __init__(self) -> None:
         """Create a new Solver."""
-        self.constraints: Dict[str, Constraint] = {}
         self.objectives: List[Constraint] = []
-
-    def assert_and_track(self, constraint: Constraint, name: str) -> None:
-        """Track a new constraint."""
-        if name in self.constraints:
-            return
-            # TODO: raise ValueError(f"duplicate constraint: {name}")
-        self.constraints[name] = constraint
-
-    def minimize(self, objective: Constraint) -> None:
-        """Add a new minimiziation objective."""
-        self.objectives.append(objective)
-
-    def check(self, *assumptions: Constraint) -> Optional[Model]:
-        """
-        Check whether the given Z3 solver state is satisfiable.
-
-        Returns a model (if sat) or None (if unsat). Raises an error if Z3
-        fails.
-        """
-        solver = z3.Optimize()
-        names = set()
-        for name, constraint in self.constraints.items():
-            solver.assert_and_track(constraint, name)
-            names.add(name)
-        for objective in self.objectives:
-            solver.minimize(objective)
-        for i, assumption in enumerate(assumptions):
-            name = f"EXTRA{i}"
-            solver.assert_and_track(assumption, name)
-            names.add(name)
-
-        proc = subprocess.Popen(
+        self.proc: subprocess.Popen[str] = subprocess.Popen(
             ["z3", "-in"],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
         )
-        assert proc.stdin is not None
-        assert proc.stdout is not None
+        self.state = 0
+        self.vars: Set[str] = set()
+        self.extra: Set[str] = set()
 
-        vars = set(re.findall("\\(declare-fun \\|?([^ |]+)\\|? ", solver.sexpr()))
+    def assert_and_track(self, constraint: Constraint, name: str) -> None:
+        """Track a new constraint."""
+        self._reset()
+        self._write("assert", constraint)
 
-        expression = cast(str, solver.sexpr()).splitlines()
-        assert expression[-1] == "(check-sat)"
-        expression = expression[:-1]
-        expression.extend(f"(assert |{name}|)" for name in names)
-        expression.append("(check-sat)")
+    def minimize(self, objective: Constraint) -> None:
+        """Add a new minimiziation objective."""
+        self._reset()
+        self._write("minimize", objective)
 
-        for line in expression:
-            proc.stdin.write(line + "\n")
-        proc.stdin.flush()
+    def _write(self, key: str, constraint: Constraint, extra: bool = False) -> None:
+        assert self.proc.stdin is not None
 
-        result = proc.stdout.readline().strip()
+        if constraint is True or constraint is False:
+            sexpr = str(constraint).lower()
+        else:
+            sexpr = constraint.sexpr()
 
-        # Always create a Model. Its destructor will handle proc cleanup.
-        model = Model(proc, vars)
+        for var in z3util.get_vars(constraint):
+            name = var.decl().name()
+            if name in self.vars or name in self.extra:
+                continue
+            if extra:
+                self.extra.add(name)
+            else:
+                self.vars.add(name)
+            self.proc.stdin.write(var.decl().sexpr())
 
+        self.proc.stdin.write(f"({key} {sexpr})\n")
+
+    def _reset(self) -> None:
+        assert self.proc.stdin is not None
+        if self.state == 2:
+            self.proc.stdin.write(f"(pop 1)\n")
+        self.state = 0
+        self.extra = set()
+
+    def check(self, *assumptions: Constraint) -> bool:
+        """
+        Check whether the given Z3 solver state is satisfiable.
+
+        Returns a model (if sat) or None (if unsat). Raises an error if Z3
+        fails.
+        """
+        assert self.proc.stdin is not None
+        assert self.proc.stdout is not None
+
+        self._reset()
+
+        if len(assumptions) > 0:
+            self.proc.stdin.write(f"(push 1)\n")
+            for assumption in assumptions:
+                self._write("assert", assumption, True)
+
+        self.proc.stdin.write(f"(check-sat)\n")
+        self.proc.stdin.flush()
+
+        result = self.proc.stdout.readline().strip()
         if result == "sat":
-            return model
+            self.state = 1 if len(assumptions) == 0 else 2
+            return True
         elif result == "unsat":
-            return None
+            if len(assumptions) > 0:
+                self.proc.stdin.write(f"(pop 1)\n")
+            return False
         else:
             raise Exception(f"z3 failure: {result}")
-
-
-class Model:
-    """The result of SMT checking."""
-
-    def __init__(self, proc: subprocess.Popen[str], vars: set[str]) -> None:
-        """Create a new Model. Only for use by Solver."""
-        self.proc = proc
-        self.vars = vars
 
     @overload
     def evaluate(
@@ -258,6 +263,7 @@ class Model:
         if not is_bitvector(value):
             raise ValueError("unexpected non-bitvector")
 
+        assert self.state > 0
         assert self.proc.stdin is not None
         assert self.proc.stdout is not None
 
@@ -282,11 +288,3 @@ class Model:
         else:
             assert model_completion is False
             return None
-
-    def __del__(self) -> None:
-        """Clean up the subprocess when Model is garbage collected."""
-        try:
-            self.proc.kill()
-        except OSError:
-            pass
-        self.proc.wait()

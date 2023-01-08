@@ -12,7 +12,6 @@ from arrays import Array
 from symbolic import (
     BW,
     Constraint,
-    Model,
     Solver,
     describe,
     is_concrete,
@@ -98,11 +97,11 @@ class SHA3:
             solver.assert_and_track(constraint, f"SHA3.DIGEST{i}{self.suffix}")
             pass
 
-    def narrow(self, solver: Solver, model: Model) -> Model:
+    def narrow(self, solver: Solver) -> None:
         """Apply concrete SHA3 constraints to a given model instance."""
         hashes: Dict[bytes, bytes] = {}
         for n, key, val in self.items():
-            ckey = unwrap(model.evaluate(key, True))
+            ckey = unwrap(solver.evaluate(key, True))
             data = ckey.to_bytes(n, "big")
             hash = keccak.new(data=data, digest_bits=256)
             digest = int.from_bytes(hash.digest(), "big")
@@ -112,24 +111,21 @@ class SHA3:
                 val == BW(digest),
                 f"SHAVAL{n}{self.suffix}",
             )
-            _model = solver.check()
-            assert _model is not None
-            model = _model
-        return model
+            assert solver.check()
 
-    def printable(self, model: Model) -> Iterable[str]:
+    def printable(self, solver: Solver) -> Iterable[str]:
         """Yield a human-readable evaluation using the given model."""
         line = "SHA3"
         seen = set()
         for _, key, val in self.items():
-            k = describe(model.evaluate(key, True))
+            k = describe(solver.evaluate(key, True))
             if k in seen:
                 continue
             line += f"\t{k} "
             if len(k) > 34:
                 yield line
                 line = "\t"
-            v = describe(model.evaluate(val, True))
+            v = describe(solver.evaluate(val, True))
             line += f"-> {v}"
             yield line
             line = ""

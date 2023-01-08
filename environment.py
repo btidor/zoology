@@ -13,7 +13,6 @@ from disassembler import Program
 from symbolic import (
     BW,
     Constraint,
-    Model,
     Solver,
     is_bitvector,
     uint160,
@@ -57,14 +56,14 @@ class Transaction:
     calldata: FrozenBytes
     gasprice: uint256
 
-    def evaluate(self, model: Model) -> OrderedDict[str, str]:
+    def evaluate(self, solver: Solver) -> OrderedDict[str, str]:
         """
         Use a model to evaluate this instance as a dictionary of attributes.
 
         Only attributes present in the model will be included.
         """
         r: OrderedDict[str, Any] = OrderedDict()
-        calldata = self.calldata.evaluate(model, True)
+        calldata = self.calldata.evaluate(solver, True)
         r["Data"] = f"0x{calldata[:8]} {calldata[8:]}".strip() if calldata else None
         r["Value"] = self.callvalue
         r["Caller"] = self.caller
@@ -74,7 +73,7 @@ class Transaction:
             if r[k] is None:
                 del r[k]
             elif is_bitvector(r[k]):
-                v = model.evaluate(r[k])
+                v = solver.evaluate(r[k])
                 if v is not None and unwrap(v) > 0:
                     r[k] = "0x" + unwrap_bytes(v).hex()
                 else:

@@ -11,7 +11,7 @@ from disassembler import Program, disassemble
 from environment import Block, Contract, Transaction, Universe
 from sha3 import SHA3
 from state import State
-from symbolic import BW, Model, Solver, unwrap, unwrap_bytes
+from symbolic import BW, Solver, unwrap, unwrap_bytes
 from vm import (
     concrete_CALLCODE,
     concrete_DELEGATECALL,
@@ -206,9 +206,8 @@ def printable_transition(start: State, end: State) -> Iterable[str]:
     assert solver.check()
 
     constrain_to_goal(solver, start, end)
-    model = solver.check()
-    if model is not None:
-        for line in _printable_transition(solver, model, start, end, "🚩 GOAL"):
+    if solver.check():
+        for line in _printable_transition(solver, start, end, "🚩 GOAL"):
             yield line
         return
 
@@ -220,17 +219,16 @@ def printable_transition(start: State, end: State) -> Iterable[str]:
     # Reset so we can extract the model
     solver = Solver()
     end.constrain(solver, minimize=True)
-    model = solver.check()
-    assert model is not None
+    assert solver.check()
 
-    for line in _printable_transition(solver, model, start, end, kind):
+    for line in _printable_transition(solver, start, end, kind):
         yield line
 
 
 def _printable_transition(
-    solver: Solver, model: Model, start: State, end: State, kind: str
+    solver: Solver, start: State, end: State, kind: str
 ) -> Iterable[str]:
-    model = end.narrow(solver, model)
+    end.narrow(solver)
 
     if end.success is True:
         result = "RETURN"
@@ -241,43 +239,43 @@ def _printable_transition(
     yield f"---  {kind}\t{result}\tPx{hex(end.path)[2:].upper()}\t".ljust(80, "-")
     yield ""
 
-    values = end.transaction.evaluate(model)
+    values = end.transaction.evaluate(solver)
     for k, v in values.items():
         yield f"{k}\t{v}"
     if len(values) > 0:
         yield ""
 
-    values = end.evaluate(model)
+    values = end.evaluate(solver)
     for k, v in values.items():
         yield f"{k}\t{v}"
     if len(values) > 0:
         yield ""
 
-    a = unwrap_bytes(model.evaluate(start.universe.contribution, True)).hex()
-    b = unwrap_bytes(model.evaluate(end.universe.contribution, True)).hex()
+    a = unwrap_bytes(solver.evaluate(start.universe.contribution, True)).hex()
+    b = unwrap_bytes(solver.evaluate(end.universe.contribution, True)).hex()
     if a != b:
         yield f"Contrib\tETH 0x{a}"
         yield f"\t->  0x{b}"
         yield f""
 
-    a = unwrap_bytes(model.evaluate(start.universe.extraction, True)).hex()
-    b = unwrap_bytes(model.evaluate(end.universe.extraction, True)).hex()
+    a = unwrap_bytes(solver.evaluate(start.universe.extraction, True)).hex()
+    b = unwrap_bytes(solver.evaluate(end.universe.extraction, True)).hex()
     if a != b:
         yield f"Extract\tETH 0x{a}"
         yield f"\t->  0x{b}"
         yield f""
 
     for line in end.universe.balances.printable_diff(
-        "Balance", model, start.universe.balances
+        "Balance", solver, start.universe.balances
     ):
         yield line
 
     for line in end.contract.storage.printable_diff(
-        "Storage", model, start.contract.storage
+        "Storage", solver, start.contract.storage
     ):
         yield line
 
-    for line in end.sha3.printable(model):
+    for line in end.sha3.printable(solver):
         yield line
 
 

@@ -12,17 +12,7 @@ import z3
 from arrays import FrozenBytes, MutableBytes
 from environment import Block, Contract, Transaction, Universe
 from sha3 import SHA3
-from symbolic import (
-    BA,
-    Constraint,
-    Model,
-    Solver,
-    is_concrete,
-    uint256,
-    unwrap,
-    unwrap_bytes,
-    zand,
-)
+from symbolic import BA, Constraint, Solver, uint256, unwrap, unwrap_bytes, zand
 
 
 @dataclass
@@ -88,28 +78,21 @@ class State:
         self.sha3.constrain(solver)
         self.universe.constrain(solver)
 
-    def narrow(self, solver: Solver, model: Model) -> Model:
+    def narrow(self, solver: Solver) -> None:
         """Apply concrete constraints to a given model instance."""
         constraint = self.contract.address == BA(
             0xADADADADADADADADADADADADADADADADADADADAD
         )
         if solver.check(constraint):
             solver.assert_and_track(constraint, "DEFAULT.ADDRESS")
-            _model = solver.check()
-            assert _model is not None
-            model = _model
 
         constraint = self.transaction.caller == BA(
             0xCACACACACACACACACACACACACACACACACACACACA
         )
         if solver.check(constraint):
             solver.assert_and_track(constraint, "DEFAULT.CALLER")
-            _model = solver.check()
-            assert _model is not None
-            model = _model
 
-        solver.check()
-        return self.sha3.narrow(solver, model)
+        assert solver.check()
 
     def is_changed(self, since: State) -> bool:
         """Check if any permanent state changes have been made."""
@@ -134,17 +117,17 @@ class State:
 
         return False
 
-    def evaluate(self, model: Model) -> OrderedDict[str, str]:
+    def evaluate(self, solver: Solver) -> OrderedDict[str, str]:
         """
         Use a model to evaluate this instance as a dictionary of attributes.
 
         Only attributes present in the model will be included.
         """
         r: OrderedDict[str, str] = OrderedDict()
-        a = model.evaluate(self.contract.address)
+        a = solver.evaluate(self.contract.address)
         if a is not None and unwrap(a) > 0:
             r["Address"] = "0x" + unwrap_bytes(a).hex()
-        returndata = self.returndata.evaluate(model, True)
+        returndata = self.returndata.evaluate(solver, True)
         if returndata:
             r["Return"] = "0x" + returndata
         return r

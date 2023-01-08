@@ -15,10 +15,9 @@ def test_transaction_evaluate() -> None:
     state = make_state()
     solver = Solver()
     state.constrain(solver)
-    model = solver.check()
-    assert model is not None
+    assert solver.check()
 
-    values = state.transaction.evaluate(model)
+    values = state.transaction.evaluate(solver)
     assert values == {
         "Caller": "0xcacacacacacacacacacacacacacacacacacacaca",
         "Gas": "0x0000000000000000000000000000000000000000000000000000000000000012",
@@ -36,11 +35,10 @@ def test_transfer() -> None:
     end.constrain(solver)
     solver.assert_and_track(start.universe.balances[src] == 0xAAA, "TEST1")
     solver.assert_and_track(start.universe.balances[dst] == 0x0, "TEST2")
-    model = solver.check()
-    assert model is not None
+    assert solver.check()
 
-    assert model.evaluate(end.universe.balances[src]) == 0x9AA
-    assert model.evaluate(end.universe.balances[dst]) == 0x100
+    assert solver.evaluate(end.universe.balances[src]) == 0x9AA
+    assert solver.evaluate(end.universe.balances[dst]) == 0x100
 
 
 def test_impossible_transfer() -> None:
