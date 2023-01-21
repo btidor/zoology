@@ -236,7 +236,7 @@ def _printable_transition(
         result = "REVERT"
     else:
         result = "PENDING"
-    yield f"---  {kind}\t{result}\tPx{hex(end.path)[2:].upper()}\t".ljust(80, "-")
+    yield f"---  {kind}\t{result}\t{end.px()}\t".ljust(80, "-")
     yield ""
 
     values = end.transaction.evaluate(solver)

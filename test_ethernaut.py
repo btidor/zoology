@@ -5,12 +5,13 @@ import copy
 import pytest
 
 from arrays import FrozenBytes
-from disassembler import disassemble
+from disassembler import Program, disassemble
 from sha3 import SHA3
 from symbolic import BA, BW, unwrap, unwrap_bytes, zstore
 from testlib import (
     Solidity,
     abiencode,
+    check_paths,
     check_transition,
     compile_solidity,
     execute,
@@ -18,15 +19,11 @@ from testlib import (
     make_state,
     make_transaction,
 )
-from universal import (
-    _universal_transaction,
-    printable_transition,
-    symbolic_start,
-    universal_transaction,
-)
+from universal import _universal_transaction, symbolic_start, universal_transaction
 
 
-def test_fallback() -> None:
+@pytest.fixture
+def fallback() -> Program:
     source = """
         // SPDX-License-Identifier: MIT
         pragma solidity ^0.8.0;
@@ -72,10 +69,12 @@ def test_fallback() -> None:
         }
     """
     code = compile_solidity(source)
-    program = disassemble(code)
+    return disassemble(code)
 
+
+def test_execute_fallback(fallback: Program) -> None:
     state = make_state(
-        contract=make_contract(program=program),
+        contract=make_contract(program=fallback),
         transaction=make_transaction(
             callvalue=BW(0),
             calldata=FrozenBytes.concrete(abiencode("owner()")),
@@ -85,7 +84,15 @@ def test_fallback() -> None:
     assert state.success is True
     assert state.returndata.require_concrete() == unwrap_bytes(BW(0))
 
-    universal = universal_transaction(program, SHA3(), "")
+
+def test_explore_fallback(fallback: Program) -> None:
+    check_paths(
+        fallback, set(["Px19", "Px2F", "Px4F", "Px23", "Px10F", "Px10E", "Px83"])
+    )
+
+
+def test_analyze_fallback(fallback: Program) -> None:
+    universal = universal_transaction(fallback, SHA3(), "")
     check_transition(*next(universal), 0x19, "SAVE", None, 1)
     check_transition(*next(universal), 0x2F, "GOAL", "withdraw()")
     check_transition(*next(universal), 0x4F, "VIEW", "contributions(address)")
@@ -98,7 +105,8 @@ def test_fallback() -> None:
         next(universal)
 
 
-def test_fallout() -> None:
+@pytest.fixture
+def fallout() -> Program:
     source = """
         // SPDX-License-Identifier: MIT
         pragma solidity ^0.8.0;
@@ -140,10 +148,12 @@ def test_fallout() -> None:
         }
     """
     code = compile_solidity(source)
-    program = disassemble(code)
+    return disassemble(code)
 
+
+def test_execute_fallout(fallout: Program) -> None:
     state = make_state(
-        contract=make_contract(program=program),
+        contract=make_contract(program=fallout),
         transaction=make_transaction(
             callvalue=BW(0),
             calldata=FrozenBytes.concrete(abiencode("Fal1out()")),
@@ -155,7 +165,13 @@ def test_fallout() -> None:
         BW(0xCACACACACACACACACACACACACACACACACACACACA)
     )
 
-    universal = universal_transaction(program, SHA3(), "")
+
+def test_explore_fallout(fallout: Program) -> None:
+    check_paths(fallout, set(["Px5", "Px4F", "Px23", "Px43F", "Px83", "Px40F"]))
+
+
+def test_analyze_fallout(fallout: Program) -> None:
+    universal = universal_transaction(fallout, SHA3(), "")
     check_transition(*next(universal), 0x5, "SAVE", "Fal1out()")
     check_transition(*next(universal), 0x4F, "GOAL", "collectAllocations()")
     check_transition(*next(universal), 0x23, "VIEW", "owner()")
@@ -167,7 +183,8 @@ def test_fallout() -> None:
         next(universal)
 
 
-def test_coinflip() -> None:
+@pytest.fixture
+def coinflip() -> Program:
     source = """
         // SPDX-License-Identifier: MIT
         pragma solidity ^0.8.0;
@@ -204,10 +221,12 @@ def test_coinflip() -> None:
         }
     """
     code = compile_solidity(source)
-    program = disassemble(code)
+    return disassemble(code)
 
+
+def test_execute_coinflip(coinflip: Program) -> None:
     state = make_state(
-        contract=make_contract(program=program),
+        contract=make_contract(program=coinflip),
         transaction=make_transaction(
             callvalue=BW(0),
             calldata=FrozenBytes.concrete(
@@ -223,12 +242,20 @@ def test_coinflip() -> None:
     assert state.success is True
     assert unwrap_bytes(state.contract.storage[BW(1)]) == unwrap_bytes(BW(0))
 
-    universal = universal_transaction(program, SHA3(), "")
+
+def test_explore_coinflip(coinflip: Program) -> None:
+    check_paths(coinflip, set(["Px19", "Px6FD", "Px6FF", "PxDF9", "PxDFD"]))
+
+
+def test_analyze_coinflip(coinflip: Program) -> None:
+    universal = universal_transaction(coinflip, SHA3(), "")
     check_transition(*next(universal), 0x6FF, "SAVE", "flip(bool)")
     check_transition(*next(universal), 0xDFD, "SAVE", "flip(bool)")
+    # TODO: there are more???
 
 
-def test_telephone() -> None:
+@pytest.fixture
+def telephone() -> Program:
     source = """
         // SPDX-License-Identifier: MIT
         pragma solidity ^0.8.0;
@@ -249,10 +276,12 @@ def test_telephone() -> None:
         }
     """
     code = compile_solidity(source)
-    program = disassemble(code)
+    return disassemble(code)
 
+
+def test_execute_telephone(telephone: Program) -> None:
     state = make_state(
-        contract=make_contract(program=program),
+        contract=make_contract(program=telephone),
         transaction=make_transaction(
             caller=BA(0xB1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1),
             callvalue=BW(0),
@@ -266,7 +295,13 @@ def test_telephone() -> None:
     assert state.success is True
     assert state.returndata.require_concrete() == b""
 
-    universal = universal_transaction(program, SHA3(), "")
+
+def test_explore_telephone(telephone: Program) -> None:
+    check_paths(telephone, set(["PxD", "PxCF", "PxCE"]))
+
+
+def test_analyze_telephone(telephone: Program) -> None:
+    universal = universal_transaction(telephone, SHA3(), "")
     check_transition(*next(universal), 0xD, "VIEW", "owner()")
     check_transition(*next(universal), 0xCF, "VIEW", "changeOwner(address)")
     check_transition(*next(universal), 0xCE, "SAVE", "changeOwner(address)")
@@ -275,7 +310,8 @@ def test_telephone() -> None:
         next(universal)
 
 
-def test_token() -> None:
+@pytest.fixture
+def token() -> Program:
     source = """
         // SPDX-License-Identifier: MIT
         pragma solidity ^0.6.0;
@@ -302,10 +338,12 @@ def test_token() -> None:
         }
     """
     code = compile_solidity(source, version=Solidity.v06)
-    program = disassemble(code)
+    return disassemble(code)
 
+
+def test_execute_token(token: Program) -> None:
     state = make_state(
-        contract=make_contract(program=program),
+        contract=make_contract(program=token),
         transaction=make_transaction(
             callvalue=BW(0),
             calldata=FrozenBytes.concrete(
@@ -319,7 +357,13 @@ def test_token() -> None:
     assert state.success is True
     assert state.returndata.require_concrete() == unwrap_bytes(BW(1))
 
-    universal = universal_transaction(program, SHA3(), "")
+
+def test_explore_token(token: Program) -> None:
+    check_paths(token, set(["PxD", "Px33", "PxC7"]))
+
+
+def test_analyze_token(token: Program) -> None:
+    universal = universal_transaction(token, SHA3(), "")
     check_transition(*next(universal), 0xD, "VIEW", "totalSupply()")
     check_transition(*next(universal), 0x33, "VIEW", "balanceOf(address)")
     check_transition(*next(universal), 0xC7, "SAVE", "transfer(address,uint256)")
@@ -328,44 +372,46 @@ def test_token() -> None:
         next(universal)
 
 
-def test_delegation() -> None:
-    source = """
-        // SPDX-License-Identifier: MIT
-        pragma solidity ^0.8.0;
+delegation_source = """
+    // SPDX-License-Identifier: MIT
+    pragma solidity ^0.8.0;
 
-        contract Delegate {
+    contract Delegate {
 
-            address public owner;
+        address public owner;
 
-            constructor(address _owner) {
-                owner = _owner;
-            }
-
-            function pwn() public {
-                owner = msg.sender;
-            }
+        constructor(address _owner) {
+            owner = _owner;
         }
 
-        contract Delegation {
+        function pwn() public {
+            owner = msg.sender;
+        }
+    }
 
-            address public owner;
-            Delegate delegate;
+    contract Delegation {
 
-            constructor(address _delegateAddress) {
-                delegate = Delegate(_delegateAddress);
-                owner = msg.sender;
-            }
+        address public owner;
+        Delegate delegate;
 
-            fallback() external {
-                (bool result,) = address(delegate).delegatecall(msg.data);
-                if (result) {
-                    this;
-                }
+        constructor(address _delegateAddress) {
+            delegate = Delegate(_delegateAddress);
+            owner = msg.sender;
+        }
+
+        fallback() external {
+            (bool result,) = address(delegate).delegatecall(msg.data);
+            if (result) {
+                this;
             }
         }
-    """
-    delegate = disassemble(compile_solidity(source, contract="Delegate"))
-    delegation = disassemble(compile_solidity(source, contract="Delegation"))
+    }
+"""
+
+
+def test_execute_delegation() -> None:
+    delegate = disassemble(compile_solidity(delegation_source, contract="Delegate"))
+    delegation = disassemble(compile_solidity(delegation_source, contract="Delegation"))
 
     other = make_contract(address=BA(0xABCDEF), program=delegate)
     state = make_state(
@@ -383,6 +429,29 @@ def test_delegation() -> None:
     assert state.success is True
     assert state.returndata.require_concrete() == b""
 
+
+def test_explore_delegation() -> None:
+    delegate = disassemble(compile_solidity(delegation_source, contract="Delegate"))
+    delegation = disassemble(compile_solidity(delegation_source, contract="Delegation"))
+
+    other = make_contract(address=BA(0xABCDEF), program=delegate)
+    start = symbolic_start(delegation, SHA3(), "")
+    init = copy.deepcopy(start)
+    init.universe.transfer(
+        init.transaction.caller, init.contract.address, init.transaction.callvalue
+    )
+    init.universe.add_contract(other)
+    init.contract.storage.array = zstore(
+        init.contract.storage.array, BW(1), BW(unwrap(other.address))
+    )
+    check_paths(init, set(["PxF", "PxD", "PxC9", "Px19"]))
+
+
+def test_analyze_delegation() -> None:
+    delegate = disassemble(compile_solidity(delegation_source, contract="Delegate"))
+    delegation = disassemble(compile_solidity(delegation_source, contract="Delegation"))
+
+    other = make_contract(address=BA(0xABCDEF), program=delegate)
     start = symbolic_start(delegation, SHA3(), "")
     init = copy.deepcopy(start)
     init.universe.transfer(
@@ -404,14 +473,17 @@ def test_delegation() -> None:
         next(universal)
 
 
-def test_force() -> None:
+@pytest.fixture
+def force() -> Program:
     code = bytes.fromhex(
         "6080604052600080fdfea26469706673582212203717ccea65e207051915ebdbec707aead0330450f3d14318591e16cc74fd06bc64736f6c634300080c0033"
     )
-    program = disassemble(code)
+    return disassemble(code)
 
+
+def test_execute_force(force: Program) -> None:
     state = make_state(
-        contract=make_contract(program=program),
+        contract=make_contract(program=force),
         transaction=make_transaction(
             callvalue=BW(0x1234),
             calldata=FrozenBytes.concrete(b""),
@@ -421,13 +493,13 @@ def test_force() -> None:
     assert state.success is False
     assert state.returndata.require_concrete() == b""
 
-    universal = universal_transaction(program, SHA3(), "")
 
-    with pytest.raises(StopIteration):
-        next(universal)
+def test_explore_force(force: Program) -> None:
+    check_paths(force, set())
 
 
-def test_vault() -> None:
+@pytest.fixture
+def vault() -> Program:
     source = """
         // SPDX-License-Identifier: MIT
         pragma solidity ^0.8.0;
@@ -449,10 +521,12 @@ def test_vault() -> None:
         }
     """
     code = compile_solidity(source)
-    program = disassemble(code)
+    return disassemble(code)
 
+
+def test_execute_vault(vault: Program) -> None:
     state = make_state(
-        contract=make_contract(program=program),
+        contract=make_contract(program=vault),
         transaction=make_transaction(
             callvalue=BW(0),
             calldata=FrozenBytes.concrete(
@@ -464,7 +538,13 @@ def test_vault() -> None:
     assert state.success is True
     assert state.returndata.require_concrete() == b""
 
-    universal = universal_transaction(program, SHA3(), "")
+
+def test_explore_vault(vault: Program) -> None:
+    check_paths(vault, set(["PxD", "PxCF", "PxCE"]))
+
+
+def test_analyze_value(vault: Program) -> None:
+    universal = universal_transaction(vault, SHA3(), "")
     check_transition(*next(universal), 0xD, "VIEW", "locked()")
     check_transition(*next(universal), 0xCF, "VIEW", "unlock(bytes32)")
     check_transition(*next(universal), 0xCE, "SAVE", "unlock(bytes32)")
@@ -473,8 +553,8 @@ def test_vault() -> None:
         next(universal)
 
 
-@pytest.mark.skip("slow")
-def test_king() -> None:
+@pytest.fixture
+def king() -> Program:
     source = """
         // SPDX-License-Identifier: MIT
         pragma solidity ^0.8.0;
@@ -504,10 +584,12 @@ def test_king() -> None:
         }
     """
     code = compile_solidity(source)
-    program = disassemble(code)
+    return disassemble(code)
 
+
+def test_execute_king(king: Program) -> None:
     state = make_state(
-        contract=make_contract(program=program),
+        contract=make_contract(program=king),
         transaction=make_transaction(
             callvalue=BW(0x1234),
             calldata=FrozenBytes.concrete(b""),
@@ -517,7 +599,15 @@ def test_king() -> None:
     assert state.success is True
     assert state.returndata.require_concrete() == b""
 
-    universal = universal_transaction(program, SHA3(), "")
+
+@pytest.mark.skip("slow?")
+def test_explore_king(king: Program) -> None:
+    check_paths(king, set(["Px37", "Px33", "PxB", "Px13", "Px23"]))
+
+
+@pytest.mark.skip("slow")
+def test_analyze_king(king: Program) -> None:
+    universal = universal_transaction(king, SHA3(), "")
     check_transition(*next(universal), 0x37, "SAVE", None, None)
     check_transition(*next(universal), 0x33, "SAVE", None, None)
     check_transition(*next(universal), 0xB, "VIEW", "_king()")
@@ -528,7 +618,8 @@ def test_king() -> None:
         next(universal)
 
 
-def test_reentrancy() -> None:
+@pytest.fixture
+def reentrancy() -> Program:
     source = """
         // SPDX-License-Identifier: MIT
         pragma solidity ^0.8.0;
@@ -559,10 +650,12 @@ def test_reentrancy() -> None:
         }
     """
     code = compile_solidity(source)
-    program = disassemble(code)
+    return disassemble(code)
 
+
+def test_execute_reentrancy(reentrancy: Program) -> None:
     state = make_state(
-        contract=make_contract(program=program),
+        contract=make_contract(program=reentrancy),
         transaction=make_transaction(
             callvalue=BW(0x1234),
             calldata=FrozenBytes.concrete(
@@ -574,7 +667,15 @@ def test_reentrancy() -> None:
     assert state.success is True
     assert state.returndata.require_concrete() == b""
 
-    universal = universal_transaction(program, SHA3(), "")
+
+def test_explore_reentrancy(reentrancy: Program) -> None:
+    check_paths(
+        reentrancy, set(["Px6", "Px2F", "Px4F", "Px11F", "Px47B", "Px479", "Px10F"])
+    )
+
+
+def test_analyze_reentrancy(reentrancy: Program) -> None:
+    universal = universal_transaction(reentrancy, SHA3(), "")
     check_transition(*next(universal), 0x6, "VIEW", None)
     check_transition(*next(universal), 0x2F, "SAVE", "donate(address)")
     check_transition(*next(universal), 0x4F, "VIEW", "balances(address)")
@@ -587,40 +688,42 @@ def test_reentrancy() -> None:
         next(universal)
 
 
-def test_elevator() -> None:
-    source = """
-        // SPDX-License-Identifier: MIT
-        pragma solidity ^0.8.0;
+elevator_source = """
+    // SPDX-License-Identifier: MIT
+    pragma solidity ^0.8.0;
 
-        interface Building {
-            function isLastFloor(uint) external returns (bool);
-        }
+    interface Building {
+        function isLastFloor(uint) external returns (bool);
+    }
 
-        contract Elevator {
-            bool public top;
-            uint public floor;
+    contract Elevator {
+        bool public top;
+        uint public floor;
 
-            function goTo(uint _floor) public {
-                Building building = Building(msg.sender);
+        function goTo(uint _floor) public {
+            Building building = Building(msg.sender);
 
-                if (! building.isLastFloor(_floor)) {
-                    floor = _floor;
-                    top = building.isLastFloor(floor);
-                }
+            if (! building.isLastFloor(_floor)) {
+                floor = _floor;
+                top = building.isLastFloor(floor);
             }
         }
+    }
 
-        contract TestBuilding is Building {
-            function isLastFloor(uint floor) external pure returns (bool) {
-                return floor == 12;
-            }
+    contract TestBuilding is Building {
+        function isLastFloor(uint floor) external pure returns (bool) {
+            return floor == 12;
         }
-    """
-    program = disassemble(compile_solidity(source, "Elevator"))
-    building = disassemble(compile_solidity(source, "TestBuilding"))
+    }
+"""
+
+
+def test_execute_elevator() -> None:
+    elevator = disassemble(compile_solidity(elevator_source, "Elevator"))
+    building = disassemble(compile_solidity(elevator_source, "TestBuilding"))
 
     state = make_state(
-        contract=make_contract(program=program),
+        contract=make_contract(program=elevator),
         transaction=make_transaction(
             caller=BA(0x76543210),
             callvalue=BW(0),
@@ -635,7 +738,16 @@ def test_elevator() -> None:
     assert state.success is True
     assert state.returndata.require_concrete() == b""
 
-    universal = universal_transaction(program, SHA3(), "")
+
+def test_explore_elevator() -> None:
+    elevator = disassemble(compile_solidity(elevator_source, "Elevator"))
+    check_paths(elevator, set(["PxD", "Px67F", "Px33F7", "Px31"]))
+
+
+def test_analyze_elevator() -> None:
+    elevator = disassemble(compile_solidity(elevator_source, "Elevator"))
+
+    universal = universal_transaction(elevator, SHA3(), "")
     check_transition(*next(universal), 0xD, "VIEW", "floor()")
     check_transition(*next(universal), 0x67F, "VIEW", "goTo(uint256)")
     check_transition(*next(universal), 0x33F7, "SAVE", "goTo(uint256)")
@@ -645,14 +757,17 @@ def test_elevator() -> None:
         next(universal)
 
 
-def test_privacy() -> None:
+@pytest.fixture
+def privacy() -> Program:
     code = bytes.fromhex(
         "6080604052348015600f57600080fd5b5060043610603c5760003560e01c8063b3cea217146041578063cf30901214605c578063e1afb08c146077575b600080fd5b604960015481565b6040519081526020015b60405180910390f35b60005460689060ff1681565b60405190151581526020016053565b6086608236600460b8565b6088565b005b6005546fffffffffffffffffffffffffffffffff1982811691161460ab57600080fd5b506000805460ff19169055565b60006020828403121560c957600080fd5b81356fffffffffffffffffffffffffffffffff198116811460e957600080fd5b939250505056fea2646970667358221220199fe33db58ed15b2bbeab277974ecd5658987f1e54e16ba5130d3be0834910e64736f6c634300080c0033"
     )
-    program = disassemble(code)
+    return disassemble(code)
 
+
+def test_execute_privacy(privacy: Program) -> None:
     state = make_state(
-        contract=make_contract(program=program),
+        contract=make_contract(program=privacy),
         transaction=make_transaction(
             callvalue=BW(0),
             calldata=FrozenBytes.concrete(
@@ -667,7 +782,13 @@ def test_privacy() -> None:
     assert state.success is True
     assert state.returndata.require_concrete() == b""
 
-    universal = universal_transaction(program, SHA3(), "")
+
+def test_explore_privacy(privacy: Program) -> None:
+    check_paths(privacy, set(["PxD", "Px19", "Px18F"]))
+
+
+def test_analyze_privacy(privacy: Program) -> None:
+    universal = universal_transaction(privacy, SHA3(), "")
     check_transition(*next(universal), 0xD, "VIEW", "ID()")
     check_transition(*next(universal), 0x19, "VIEW", "locked()")
     check_transition(*next(universal), 0x18F, "SAVE", "unlock(bytes16)")
@@ -676,7 +797,8 @@ def test_privacy() -> None:
         next(universal)
 
 
-def test_gatekeeper_one() -> None:
+@pytest.fixture
+def gatekeeper_one() -> Program:
     source = """
         // SPDX-License-Identifier: MIT
         pragma solidity ^0.8.0;
@@ -709,11 +831,19 @@ def test_gatekeeper_one() -> None:
         }
     """
     code = compile_solidity(source)
-    program = disassemble(code)
+    return disassemble(code)
 
-    # We can't test execute() because concrete gas is not implemented.
 
-    universal = universal_transaction(program, SHA3(), "")
+# Gatekeeper One: we can't test execute() because concrete gas is not
+# implemented.
+
+
+def test_explore_gatekeeper_one(gatekeeper_one: Program) -> None:
+    check_paths(gatekeeper_one, set(["PxDFF", "Px19"]))
+
+
+def test_analyze_gatekeeper_one(gatekeeper_one: Program) -> None:
+    universal = universal_transaction(gatekeeper_one, SHA3(), "")
     check_transition(*next(universal), 0xDFF, "SAVE", "enter(bytes8)")
     check_transition(*next(universal), 0x19, "VIEW", "entrant()")
 
@@ -721,7 +851,8 @@ def test_gatekeeper_one() -> None:
         next(universal)
 
 
-def test_gatekeeper_two() -> None:
+@pytest.fixture
+def gatekeeper_two() -> Program:
     source = """
         // SPDX-License-Identifier: MIT
         pragma solidity ^0.8.0;
@@ -754,10 +885,12 @@ def test_gatekeeper_two() -> None:
         }
     """
     code = compile_solidity(source)
-    program = disassemble(code)
+    return disassemble(code)
 
+
+def test_execute_gatekeeper_two(gatekeeper_two: Program) -> None:
     state = make_state(
-        contract=make_contract(program=program),
+        contract=make_contract(program=gatekeeper_two),
         transaction=make_transaction(
             callvalue=BW(0),
             calldata=FrozenBytes.concrete(
@@ -772,7 +905,13 @@ def test_gatekeeper_two() -> None:
     assert state.success is True
     assert state.returndata.require_concrete() == unwrap_bytes(BW(1))
 
-    universal = universal_transaction(program, SHA3(), "")
+
+def test_explore_gatekeeper_two(gatekeeper_two: Program) -> None:
+    check_paths(gatekeeper_two, set(["Px1BF", "Px19"]))
+
+
+def test_analyze_gatekeeper_two(gatekeeper_two: Program) -> None:
+    universal = universal_transaction(gatekeeper_two, SHA3(), "")
     check_transition(*next(universal), 0x1BF, "SAVE", "enter(bytes8)")
     check_transition(*next(universal), 0x19, "VIEW", "entrant()")
 
@@ -785,57 +924,58 @@ def test_naughtcoin() -> None:
     raise NotImplementedError("openzeppelin erc-20")
 
 
-def test_preservation() -> None:
-    source = """
-        // SPDX-License-Identifier: MIT
-        pragma solidity ^0.8.0;
+preservation_source = """
+    // SPDX-License-Identifier: MIT
+    pragma solidity ^0.8.0;
 
-        contract Preservation {
+    contract Preservation {
 
-            // public library contracts
-            address public timeZone1Library;
-            address public timeZone2Library;
-            address public owner;
-            uint storedTime;
-            // Sets the function signature for delegatecall
-            bytes4 constant setTimeSignature = bytes4(keccak256("setTime(uint256)"));
+        // public library contracts
+        address public timeZone1Library;
+        address public timeZone2Library;
+        address public owner;
+        uint storedTime;
+        // Sets the function signature for delegatecall
+        bytes4 constant setTimeSignature = bytes4(keccak256("setTime(uint256)"));
 
-            constructor(address _timeZone1LibraryAddress, address _timeZone2LibraryAddress) {
-                timeZone1Library = _timeZone1LibraryAddress;
-                timeZone2Library = _timeZone2LibraryAddress;
-                owner = msg.sender;
-            }
-
-            // set the time for timezone 1
-            function setFirstTime(uint _timeStamp) public {
-                timeZone1Library.delegatecall(abi.encodePacked(setTimeSignature, _timeStamp));
-            }
-
-            // set the time for timezone 2
-            function setSecondTime(uint _timeStamp) public {
-                timeZone2Library.delegatecall(abi.encodePacked(setTimeSignature, _timeStamp));
-            }
+        constructor(address _timeZone1LibraryAddress, address _timeZone2LibraryAddress) {
+            timeZone1Library = _timeZone1LibraryAddress;
+            timeZone2Library = _timeZone2LibraryAddress;
+            owner = msg.sender;
         }
 
-        // Simple library contract to set the time
-        contract LibraryContract {
-
-            // stores a timestamp
-            uint storedTime;
-
-            function setTime(uint _time) public {
-                storedTime = _time;
-            }
+        // set the time for timezone 1
+        function setFirstTime(uint _timeStamp) public {
+            timeZone1Library.delegatecall(abi.encodePacked(setTimeSignature, _timeStamp));
         }
-    """
+
+        // set the time for timezone 2
+        function setSecondTime(uint _timeStamp) public {
+            timeZone2Library.delegatecall(abi.encodePacked(setTimeSignature, _timeStamp));
+        }
+    }
+
+    // Simple library contract to set the time
+    contract LibraryContract {
+
+        // stores a timestamp
+        uint storedTime;
+
+        function setTime(uint _time) public {
+            storedTime = _time;
+        }
+    }
+"""
+
+
+def test_execute_preservation() -> None:
     preservation = make_contract(
-        program=disassemble(compile_solidity(source, "Preservation"))
+        program=disassemble(compile_solidity(preservation_source, "Preservation"))
     )
     library = make_contract(
         address=BA(0x1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B),
-        program=disassemble(compile_solidity(source, "LibraryContract")),
+        program=disassemble(compile_solidity(preservation_source, "LibraryContract")),
     )
-
     state = make_state(
         contract=preservation,
         transaction=make_transaction(
@@ -857,6 +997,41 @@ def test_preservation() -> None:
     assert state.success is True
     assert state.returndata.require_concrete() == b""
 
+
+def test_explore_preservation() -> None:
+    preservation = make_contract(
+        program=disassemble(compile_solidity(preservation_source, "Preservation"))
+    )
+    library = make_contract(
+        address=BA(0x1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B),
+        program=disassemble(compile_solidity(preservation_source, "LibraryContract")),
+    )
+    start = symbolic_start(preservation.program, SHA3(), "")
+    init = copy.deepcopy(start)
+    init.universe.transfer(
+        init.transaction.caller, init.contract.address, init.transaction.callvalue
+    )
+    init.universe.add_contract(library)
+    init.contract.storage.array = zstore(
+        init.contract.storage.array, BW(0), BW(unwrap(library.address))
+    )
+    init.contract.storage.array = zstore(
+        init.contract.storage.array, BW(1), BW(unwrap(library.address))
+    )
+
+    check_paths(
+        init, set(["PxD", "Px19", "PxC737", "PxC73", "Px61", "Px30737", "Px3073"])
+    )
+
+
+def test_analyze_preservation() -> None:
+    preservation = make_contract(
+        program=disassemble(compile_solidity(preservation_source, "Preservation"))
+    )
+    library = make_contract(
+        address=BA(0x1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B),
+        program=disassemble(compile_solidity(preservation_source, "LibraryContract")),
+    )
     start = symbolic_start(preservation.program, SHA3(), "")
     init = copy.deepcopy(start)
     init.universe.transfer(
@@ -885,7 +1060,8 @@ def test_preservation() -> None:
         next(universal)
 
 
-def test_recovery() -> None:
+@pytest.fixture
+def recovery() -> Program:
     source = """
         // SPDX-License-Identifier: MIT
         pragma solidity ^0.8.0;
@@ -928,9 +1104,12 @@ def test_recovery() -> None:
             }
         }
     """
-    program = disassemble(compile_solidity(source, "SimpleToken"))
+    return disassemble(compile_solidity(source, "SimpleToken"))
+
+
+def test_execute_recovery(recovery: Program) -> None:
     state = make_state(
-        contract=make_contract(program=program),
+        contract=make_contract(program=recovery),
         transaction=make_transaction(
             callvalue=BW(0x1000),
             calldata=FrozenBytes.concrete(b""),
@@ -940,7 +1119,14 @@ def test_recovery() -> None:
     assert state.success is True
     assert state.returndata.require_concrete() == b""
 
-    universal = universal_transaction(program, SHA3(), "")
+
+@pytest.mark.skip("SELFDESTRUCT not implemented")
+def test_explore_recovery(recovery: Program) -> None:
+    check_paths(recovery, set(["PxD"]))
+
+
+def test_analyze_recovery(recovery: Program) -> None:
+    universal = universal_transaction(recovery, SHA3(), "")
     check_transition(*next(universal), 0xD, "SAVE", None)
 
     with pytest.raises(NotImplementedError):  # DELEGATECALL

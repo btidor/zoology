@@ -53,6 +53,10 @@ class State:
     # taken, 0 if not. MSB-first with a leading 1 prepended.
     path: int
 
+    def px(self) -> str:
+        """Return a human-readable version of the path."""
+        return "Px" + hex(self.path)[2:].upper()
+
     def constrain(self, solver: Solver, minimize: bool = False) -> None:
         """Apply accumulated constraints to the given solver instance."""
         if minimize:

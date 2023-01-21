@@ -1,7 +1,7 @@
 import os
 import subprocess
 from enum import Enum
-from typing import Dict, List, Literal, Optional, Tuple, assert_never
+from typing import Dict, List, Literal, Optional, Set, Tuple, Union, assert_never
 
 import z3
 from Crypto.Hash import keccak
@@ -12,7 +12,7 @@ from environment import Block, Contract, Transaction, Universe
 from sha3 import SHA3
 from state import State
 from symbolic import BA, BW, Constraint, Solver, uint160, uint256
-from universal import constrain_to_goal
+from universal import _universal_transaction, constrain_to_goal, symbolic_start
 from vm import (
     concrete_CALLCODE,
     concrete_DELEGATECALL,
@@ -233,6 +233,16 @@ def execute(state: State) -> None:
             assert_never(action)
 
 
+def check_paths(input: Union[Program, State], expected: Set[str]) -> None:
+    if isinstance(input, Program):
+        input = symbolic_start(input, SHA3(), "")
+    actual = set()
+    for end in _universal_transaction(input):
+        assert end.px() not in actual, "duplicate path"
+        actual.add(end.px())
+    assert actual == expected
+
+
 def check_transition(
     start: State,
     end: State,
@@ -241,7 +251,7 @@ def check_transition(
     method: Optional[str],
     value: Optional[int] = None,
 ) -> None:
-    assert end.path == path, f"unexpected path: Px{hex(end.path)[2:]}"
+    assert end.path == path, f"unexpected path: Px{end.px()}"
     assert end.success is True
 
     solver = Solver()
