@@ -1,6 +1,8 @@
 pycryptodome
 pytest
 pytest_profiling
+pytest-benchmark
+pytest-timeout
 pytest-xdist
 solc-select
 z3-solver

@@ -1,6 +1,7 @@
 #!/usr/bin/env pytest
 
 import copy
+from typing import Any, Callable, Protocol, TypeVar
 
 import pytest
 
@@ -20,6 +21,15 @@ from testlib import (
     make_transaction,
 )
 from universal import _universal_transaction, symbolic_start, universal_transaction
+
+# TODO: separate timings for `narrow()` step
+
+
+class Benchmark(Protocol):
+    T = TypeVar("T")
+
+    def __call__(self, fn: Callable[..., T], *args: Any) -> T:
+        ...
 
 
 @pytest.fixture
@@ -72,7 +82,7 @@ def fallback() -> Program:
     return disassemble(code)
 
 
-def test_execute_fallback(fallback: Program) -> None:
+def test_execute_fallback(benchmark: Benchmark, fallback: Program) -> None:
     state = make_state(
         contract=make_contract(program=fallback),
         transaction=make_transaction(
@@ -80,14 +90,18 @@ def test_execute_fallback(fallback: Program) -> None:
             calldata=FrozenBytes.concrete(abiencode("owner()")),
         ),
     )
-    execute(state)
+
+    benchmark(execute, state)
+
     assert state.success is True
     assert state.returndata.require_concrete() == unwrap_bytes(BW(0))
 
 
-def test_explore_fallback(fallback: Program) -> None:
-    check_paths(
-        fallback, set(["Px19", "Px2F", "Px4F", "Px23", "Px10F", "Px10E", "Px83"])
+def test_explore_fallback(benchmark: Benchmark, fallback: Program) -> None:
+    benchmark(
+        check_paths,
+        fallback,
+        set(["Px19", "Px2F", "Px4F", "Px23", "Px10F", "Px10E", "Px83"]),
     )
 
 
@@ -151,7 +165,7 @@ def fallout() -> Program:
     return disassemble(code)
 
 
-def test_execute_fallout(fallout: Program) -> None:
+def test_execute_fallout(benchmark: Benchmark, fallout: Program) -> None:
     state = make_state(
         contract=make_contract(program=fallout),
         transaction=make_transaction(
@@ -159,15 +173,19 @@ def test_execute_fallout(fallout: Program) -> None:
             calldata=FrozenBytes.concrete(abiencode("Fal1out()")),
         ),
     )
-    execute(state)
+
+    benchmark(execute, state)
+
     assert state.success is True
     assert unwrap_bytes(state.contract.storage[BW(1)]) == unwrap_bytes(
         BW(0xCACACACACACACACACACACACACACACACACACACACA)
     )
 
 
-def test_explore_fallout(fallout: Program) -> None:
-    check_paths(fallout, set(["Px5", "Px4F", "Px23", "Px43F", "Px83", "Px40F"]))
+def test_explore_fallout(benchmark: Benchmark, fallout: Program) -> None:
+    benchmark(
+        check_paths, fallout, set(["Px5", "Px4F", "Px23", "Px43F", "Px83", "Px40F"])
+    )
 
 
 def test_analyze_fallout(fallout: Program) -> None:
@@ -224,7 +242,7 @@ def coinflip() -> Program:
     return disassemble(code)
 
 
-def test_execute_coinflip(coinflip: Program) -> None:
+def test_execute_coinflip(benchmark: Benchmark, coinflip: Program) -> None:
     state = make_state(
         contract=make_contract(program=coinflip),
         transaction=make_transaction(
@@ -238,13 +256,14 @@ def test_execute_coinflip(coinflip: Program) -> None:
     state.contract.storage[BW(2)] = BW(
         57896044618658097711785492504343953926634992332820282019728792003956564819968
     )
-    execute(state)
+
+    benchmark(execute, state)
     assert state.success is True
     assert unwrap_bytes(state.contract.storage[BW(1)]) == unwrap_bytes(BW(0))
 
 
-def test_explore_coinflip(coinflip: Program) -> None:
-    check_paths(coinflip, set(["Px19", "Px6FD", "Px6FF", "PxDF9", "PxDFD"]))
+def test_explore_coinflip(benchmark: Benchmark, coinflip: Program) -> None:
+    benchmark(check_paths, coinflip, set(["Px19", "Px6FD", "Px6FF", "PxDF9", "PxDFD"]))
 
 
 def test_analyze_coinflip(coinflip: Program) -> None:
@@ -279,7 +298,7 @@ def telephone() -> Program:
     return disassemble(code)
 
 
-def test_execute_telephone(telephone: Program) -> None:
+def test_execute_telephone(benchmark: Benchmark, telephone: Program) -> None:
     state = make_state(
         contract=make_contract(program=telephone),
         transaction=make_transaction(
@@ -291,13 +310,15 @@ def test_execute_telephone(telephone: Program) -> None:
             ),
         ),
     )
-    execute(state)
+
+    benchmark(execute, state)
+
     assert state.success is True
     assert state.returndata.require_concrete() == b""
 
 
-def test_explore_telephone(telephone: Program) -> None:
-    check_paths(telephone, set(["PxD", "PxCF", "PxCE"]))
+def test_explore_telephone(benchmark: Benchmark, telephone: Program) -> None:
+    benchmark(check_paths, telephone, set(["PxD", "PxCF", "PxCE"]))
 
 
 def test_analyze_telephone(telephone: Program) -> None:
@@ -341,7 +362,7 @@ def token() -> Program:
     return disassemble(code)
 
 
-def test_execute_token(token: Program) -> None:
+def test_execute_token(benchmark: Benchmark, token: Program) -> None:
     state = make_state(
         contract=make_contract(program=token),
         transaction=make_transaction(
@@ -353,13 +374,15 @@ def test_execute_token(token: Program) -> None:
             ),
         ),
     )
-    execute(state)
+
+    benchmark(execute, state)
+
     assert state.success is True
     assert state.returndata.require_concrete() == unwrap_bytes(BW(1))
 
 
-def test_explore_token(token: Program) -> None:
-    check_paths(token, set(["PxD", "Px33", "PxC7"]))
+def test_explore_token(benchmark: Benchmark, token: Program) -> None:
+    benchmark(check_paths, token, set(["PxD", "Px33", "PxC7"]))
 
 
 def test_analyze_token(token: Program) -> None:
@@ -409,7 +432,7 @@ delegation_source = """
 """
 
 
-def test_execute_delegation() -> None:
+def test_execute_delegation(benchmark: Benchmark) -> None:
     delegate = disassemble(compile_solidity(delegation_source, contract="Delegate"))
     delegation = disassemble(compile_solidity(delegation_source, contract="Delegation"))
 
@@ -425,12 +448,14 @@ def test_execute_delegation() -> None:
     state.contract.storage.array = zstore(
         state.contract.storage.array, BW(1), BW(unwrap(other.address))
     )
-    execute(state)
+
+    benchmark(execute, state)
+
     assert state.success is True
     assert state.returndata.require_concrete() == b""
 
 
-def test_explore_delegation() -> None:
+def test_explore_delegation(benchmark: Benchmark) -> None:
     delegate = disassemble(compile_solidity(delegation_source, contract="Delegate"))
     delegation = disassemble(compile_solidity(delegation_source, contract="Delegation"))
 
@@ -444,7 +469,8 @@ def test_explore_delegation() -> None:
     init.contract.storage.array = zstore(
         init.contract.storage.array, BW(1), BW(unwrap(other.address))
     )
-    check_paths(init, set(["PxF", "PxD", "PxC9", "Px19"]))
+
+    benchmark(check_paths, init, set(["PxF", "PxD", "PxC9", "Px19"]))
 
 
 def test_analyze_delegation() -> None:
@@ -481,7 +507,7 @@ def force() -> Program:
     return disassemble(code)
 
 
-def test_execute_force(force: Program) -> None:
+def test_execute_force(benchmark: Benchmark, force: Program) -> None:
     state = make_state(
         contract=make_contract(program=force),
         transaction=make_transaction(
@@ -489,7 +515,9 @@ def test_execute_force(force: Program) -> None:
             calldata=FrozenBytes.concrete(b""),
         ),
     )
-    execute(state)
+
+    benchmark(execute, state)
+
     assert state.success is False
     assert state.returndata.require_concrete() == b""
 
@@ -524,7 +552,7 @@ def vault() -> Program:
     return disassemble(code)
 
 
-def test_execute_vault(vault: Program) -> None:
+def test_execute_vault(benchmark: Benchmark, vault: Program) -> None:
     state = make_state(
         contract=make_contract(program=vault),
         transaction=make_transaction(
@@ -534,13 +562,15 @@ def test_execute_vault(vault: Program) -> None:
             ),
         ),
     )
-    execute(state)
+
+    benchmark(execute, state)
+
     assert state.success is True
     assert state.returndata.require_concrete() == b""
 
 
-def test_explore_vault(vault: Program) -> None:
-    check_paths(vault, set(["PxD", "PxCF", "PxCE"]))
+def test_explore_vault(benchmark: Benchmark, vault: Program) -> None:
+    benchmark(check_paths, vault, set(["PxD", "PxCF", "PxCE"]))
 
 
 def test_analyze_value(vault: Program) -> None:
@@ -587,7 +617,7 @@ def king() -> Program:
     return disassemble(code)
 
 
-def test_execute_king(king: Program) -> None:
+def test_execute_king(benchmark: Benchmark, king: Program) -> None:
     state = make_state(
         contract=make_contract(program=king),
         transaction=make_transaction(
@@ -595,14 +625,16 @@ def test_execute_king(king: Program) -> None:
             calldata=FrozenBytes.concrete(b""),
         ),
     )
-    execute(state)
+
+    benchmark(execute, state)
+
     assert state.success is True
     assert state.returndata.require_concrete() == b""
 
 
-@pytest.mark.skip("slow?")
-def test_explore_king(king: Program) -> None:
-    check_paths(king, set(["Px37", "Px33", "PxB", "Px13", "Px23"]))
+# @pytest.mark.skip("slow?") TODO
+def test_explore_king(benchmark: Benchmark, king: Program) -> None:
+    benchmark(check_paths, king, set(["Px37", "Px33", "PxB", "Px13", "Px23"]))
 
 
 @pytest.mark.skip("slow")
@@ -653,7 +685,7 @@ def reentrancy() -> Program:
     return disassemble(code)
 
 
-def test_execute_reentrancy(reentrancy: Program) -> None:
+def test_execute_reentrancy(benchmark: Benchmark, reentrancy: Program) -> None:
     state = make_state(
         contract=make_contract(program=reentrancy),
         transaction=make_transaction(
@@ -663,14 +695,18 @@ def test_execute_reentrancy(reentrancy: Program) -> None:
             ),
         ),
     )
-    execute(state)
+
+    benchmark(execute, state)
+
     assert state.success is True
     assert state.returndata.require_concrete() == b""
 
 
-def test_explore_reentrancy(reentrancy: Program) -> None:
-    check_paths(
-        reentrancy, set(["Px6", "Px2F", "Px4F", "Px11F", "Px47B", "Px479", "Px10F"])
+def test_explore_reentrancy(benchmark: Benchmark, reentrancy: Program) -> None:
+    benchmark(
+        check_paths,
+        reentrancy,
+        set(["Px6", "Px2F", "Px4F", "Px11F", "Px47B", "Px479", "Px10F"]),
     )
 
 
@@ -718,7 +754,7 @@ elevator_source = """
 """
 
 
-def test_execute_elevator() -> None:
+def test_execute_elevator(benchmark: Benchmark) -> None:
     elevator = disassemble(compile_solidity(elevator_source, "Elevator"))
     building = disassemble(compile_solidity(elevator_source, "TestBuilding"))
 
@@ -734,14 +770,16 @@ def test_execute_elevator() -> None:
     )
     state.universe.add_contract(make_contract(address=BA(0x76543210), program=building))
 
-    execute(state)
+    benchmark(execute, state)
+
     assert state.success is True
     assert state.returndata.require_concrete() == b""
 
 
-def test_explore_elevator() -> None:
+def test_explore_elevator(benchmark: Benchmark) -> None:
     elevator = disassemble(compile_solidity(elevator_source, "Elevator"))
-    check_paths(elevator, set(["PxD", "Px67F", "Px33F7", "Px31"]))
+
+    benchmark(check_paths, elevator, set(["PxD", "Px67F", "Px33F7", "Px31"]))
 
 
 def test_analyze_elevator() -> None:
@@ -765,7 +803,7 @@ def privacy() -> Program:
     return disassemble(code)
 
 
-def test_execute_privacy(privacy: Program) -> None:
+def test_execute_privacy(benchmark: Benchmark, privacy: Program) -> None:
     state = make_state(
         contract=make_contract(program=privacy),
         transaction=make_transaction(
@@ -778,7 +816,9 @@ def test_execute_privacy(privacy: Program) -> None:
     state.contract.storage.array = zstore(
         state.contract.storage.array, BW(5), BW(0x4321 << 128)
     )
-    execute(state)
+
+    benchmark(execute, state)
+
     assert state.success is True
     assert state.returndata.require_concrete() == b""
 
@@ -838,8 +878,8 @@ def gatekeeper_one() -> Program:
 # implemented.
 
 
-def test_explore_gatekeeper_one(gatekeeper_one: Program) -> None:
-    check_paths(gatekeeper_one, set(["PxDFF", "Px19"]))
+def test_explore_gatekeeper_one(benchmark: Benchmark, gatekeeper_one: Program) -> None:
+    benchmark(check_paths, gatekeeper_one, set(["PxDFF", "Px19"]))
 
 
 def test_analyze_gatekeeper_one(gatekeeper_one: Program) -> None:
@@ -888,7 +928,7 @@ def gatekeeper_two() -> Program:
     return disassemble(code)
 
 
-def test_execute_gatekeeper_two(gatekeeper_two: Program) -> None:
+def test_execute_gatekeeper_two(benchmark: Benchmark, gatekeeper_two: Program) -> None:
     state = make_state(
         contract=make_contract(program=gatekeeper_two),
         transaction=make_transaction(
@@ -901,13 +941,15 @@ def test_execute_gatekeeper_two(gatekeeper_two: Program) -> None:
             ),
         ),
     )
-    execute(state)
+
+    benchmark(execute, state)
+
     assert state.success is True
     assert state.returndata.require_concrete() == unwrap_bytes(BW(1))
 
 
-def test_explore_gatekeeper_two(gatekeeper_two: Program) -> None:
-    check_paths(gatekeeper_two, set(["Px1BF", "Px19"]))
+def test_explore_gatekeeper_two(benchmark: Benchmark, gatekeeper_two: Program) -> None:
+    benchmark(check_paths, gatekeeper_two, set(["Px1BF", "Px19"]))
 
 
 def test_analyze_gatekeeper_two(gatekeeper_two: Program) -> None:
@@ -968,7 +1010,7 @@ preservation_source = """
 """
 
 
-def test_execute_preservation() -> None:
+def test_execute_preservation(benchmark: Benchmark) -> None:
     preservation = make_contract(
         program=disassemble(compile_solidity(preservation_source, "Preservation"))
     )
@@ -993,12 +1035,13 @@ def test_execute_preservation() -> None:
         state.contract.storage.array, BW(1), BW(unwrap(library.address))
     )
 
-    execute(state)
+    benchmark(execute, state)
+
     assert state.success is True
     assert state.returndata.require_concrete() == b""
 
 
-def test_explore_preservation() -> None:
+def test_explore_preservation(benchmark: Benchmark) -> None:
     preservation = make_contract(
         program=disassemble(compile_solidity(preservation_source, "Preservation"))
     )
@@ -1019,8 +1062,10 @@ def test_explore_preservation() -> None:
         init.contract.storage.array, BW(1), BW(unwrap(library.address))
     )
 
-    check_paths(
-        init, set(["PxD", "Px19", "PxC737", "PxC73", "Px61", "Px30737", "Px3073"])
+    benchmark(
+        check_paths,
+        init,
+        set(["PxD", "Px19", "PxC737", "PxC73", "Px61", "Px30737", "Px3073"]),
     )
 
 
@@ -1107,7 +1152,7 @@ def recovery() -> Program:
     return disassemble(compile_solidity(source, "SimpleToken"))
 
 
-def test_execute_recovery(recovery: Program) -> None:
+def test_execute_recovery(benchmark: Benchmark, recovery: Program) -> None:
     state = make_state(
         contract=make_contract(program=recovery),
         transaction=make_transaction(
@@ -1115,14 +1160,16 @@ def test_execute_recovery(recovery: Program) -> None:
             calldata=FrozenBytes.concrete(b""),
         ),
     )
-    execute(state)
+
+    benchmark(execute, state)
+
     assert state.success is True
     assert state.returndata.require_concrete() == b""
 
 
 @pytest.mark.skip("SELFDESTRUCT not implemented")
-def test_explore_recovery(recovery: Program) -> None:
-    check_paths(recovery, set(["PxD"]))
+def test_explore_recovery(benchmark: Benchmark, recovery: Program) -> None:
+    benchmark(check_paths, recovery, set(["PxD"]))
 
 
 def test_analyze_recovery(recovery: Program) -> None:
