@@ -10,6 +10,7 @@ from disassembler import Program, disassemble
 from sha3 import SHA3
 from symbolic import BA, BW, unwrap, unwrap_bytes, zstore
 from testlib import (
+    Benchmark,
     Solidity,
     abiencode,
     check_paths,
@@ -23,78 +24,6 @@ from testlib import (
 from universal import _universal_transaction, symbolic_start, universal_transaction
 
 # TODO: separate timings for `narrow()` step
-
-
-class Benchmark(Protocol):
-    T = TypeVar("T")
-
-    def __call__(self, fn: Callable[..., T], *args: Any) -> T:
-        ...
-
-
-@pytest.fixture
-def fallback() -> Program:
-    source = """
-        // SPDX-License-Identifier: MIT
-        pragma solidity ^0.8.0;
-
-        contract Fallback {
-
-            mapping(address => uint) public contributions;
-            address public owner;
-
-            constructor() {
-                owner = msg.sender;
-                contributions[msg.sender] = 1000 * (1 ether);
-            }
-
-            modifier onlyOwner {
-                require(
-                    msg.sender == owner,
-                    "caller is not the owner"
-                );
-                _;
-            }
-
-            function contribute() public payable {
-                require(msg.value < 0.001 ether);
-                contributions[msg.sender] += msg.value;
-                if(contributions[msg.sender] > contributions[owner]) {
-                    owner = msg.sender;
-                }
-            }
-
-            function getContribution() public view returns (uint) {
-                return contributions[msg.sender];
-            }
-
-            function withdraw() public onlyOwner {
-                payable(owner).transfer(address(this).balance);
-            }
-
-            receive() external payable {
-                require(msg.value > 0 && contributions[msg.sender] > 0);
-                owner = msg.sender;
-            }
-        }
-    """
-    code = compile_solidity(source)
-    return disassemble(code)
-
-
-def test_execute_fallback(benchmark: Benchmark, fallback: Program) -> None:
-    state = make_state(
-        contract=make_contract(program=fallback),
-        transaction=make_transaction(
-            callvalue=BW(0),
-            calldata=FrozenBytes.concrete(abiencode("owner()")),
-        ),
-    )
-
-    benchmark(execute, state)
-
-    assert state.success is True
-    assert state.returndata.require_concrete() == unwrap_bytes(BW(0))
 
 
 def test_explore_fallback(benchmark: Benchmark, fallback: Program) -> None:
@@ -119,69 +48,6 @@ def test_analyze_fallback(fallback: Program) -> None:
         next(universal)
 
 
-@pytest.fixture
-def fallout() -> Program:
-    source = """
-        // SPDX-License-Identifier: MIT
-        pragma solidity ^0.8.0;
-
-        contract Fallout {
-            mapping(address => uint) allocations;
-            address payable public owner;
-
-            /* constructor */
-            function Fal1out() public payable {
-                owner = payable(msg.sender);
-                allocations[owner] = msg.value;
-            }
-
-            modifier onlyOwner {
-                require(
-                    msg.sender == owner,
-                    "caller is not the owner"
-                );
-                _;
-            }
-
-            function allocate() public payable {
-                allocations[msg.sender] += msg.value;
-            }
-
-            function sendAllocation(address payable allocator) public {
-                require(allocations[allocator] > 0);
-                allocator.transfer(allocations[allocator]);
-            }
-
-            function collectAllocations() public onlyOwner {
-                payable(msg.sender).transfer(address(this).balance);
-            }
-
-            function allocatorBalance(address allocator) public view returns(uint) {
-                return allocations[allocator];
-            }
-        }
-    """
-    code = compile_solidity(source)
-    return disassemble(code)
-
-
-def test_execute_fallout(benchmark: Benchmark, fallout: Program) -> None:
-    state = make_state(
-        contract=make_contract(program=fallout),
-        transaction=make_transaction(
-            callvalue=BW(0),
-            calldata=FrozenBytes.concrete(abiencode("Fal1out()")),
-        ),
-    )
-
-    benchmark(execute, state)
-
-    assert state.success is True
-    assert unwrap_bytes(state.contract.storage[BW(1)]) == unwrap_bytes(
-        BW(0xCACACACACACACACACACACACACACACACACACACACA)
-    )
-
-
 def test_explore_fallout(benchmark: Benchmark, fallout: Program) -> None:
     benchmark(
         check_paths, fallout, set(["Px5", "Px4F", "Px23", "Px43F", "Px83", "Px40F"])
@@ -201,67 +67,6 @@ def test_analyze_fallout(fallout: Program) -> None:
         next(universal)
 
 
-@pytest.fixture
-def coinflip() -> Program:
-    source = """
-        // SPDX-License-Identifier: MIT
-        pragma solidity ^0.8.0;
-
-        contract CoinFlip {
-
-            uint256 public consecutiveWins;
-            uint256 lastHash;
-            uint256 FACTOR = 57896044618658097711785492504343953926634992332820282019728792003956564819968;
-
-            constructor() {
-                consecutiveWins = 0;
-            }
-
-            function flip(bool _guess) public returns (bool) {
-                uint256 blockValue = uint256(blockhash(block.number - 1));
-
-                if (lastHash == blockValue) {
-                    revert();
-                }
-
-                lastHash = blockValue;
-                uint256 coinFlip = blockValue / FACTOR;
-                bool side = coinFlip == 1 ? true : false;
-
-                if (side == _guess) {
-                    consecutiveWins++;
-                    return true;
-                } else {
-                    consecutiveWins = 0;
-                    return false;
-                }
-            }
-        }
-    """
-    code = compile_solidity(source)
-    return disassemble(code)
-
-
-def test_execute_coinflip(benchmark: Benchmark, coinflip: Program) -> None:
-    state = make_state(
-        contract=make_contract(program=coinflip),
-        transaction=make_transaction(
-            callvalue=BW(0),
-            calldata=FrozenBytes.concrete(
-                abiencode("flip(bool)") + unwrap_bytes(BW(0))
-            ),
-        ),
-    )
-    state.contract.storage[BW(1)] = BW(0xFEDC)
-    state.contract.storage[BW(2)] = BW(
-        57896044618658097711785492504343953926634992332820282019728792003956564819968
-    )
-
-    benchmark(execute, state)
-    assert state.success is True
-    assert unwrap_bytes(state.contract.storage[BW(1)]) == unwrap_bytes(BW(0))
-
-
 def test_explore_coinflip(benchmark: Benchmark, coinflip: Program) -> None:
     benchmark(check_paths, coinflip, set(["Px19", "Px6FD", "Px6FF", "PxDF9", "PxDFD"]))
 
@@ -271,50 +76,6 @@ def test_analyze_coinflip(coinflip: Program) -> None:
     check_transition(*next(universal), 0x6FF, "SAVE", "flip(bool)")
     check_transition(*next(universal), 0xDFD, "SAVE", "flip(bool)")
     # TODO: there are more???
-
-
-@pytest.fixture
-def telephone() -> Program:
-    source = """
-        // SPDX-License-Identifier: MIT
-        pragma solidity ^0.8.0;
-
-        contract Telephone {
-
-            address public owner;
-
-            constructor() {
-                owner = msg.sender;
-            }
-
-            function changeOwner(address _owner) public {
-                if (tx.origin != msg.sender) {
-                    owner = _owner;
-                }
-            }
-        }
-    """
-    code = compile_solidity(source)
-    return disassemble(code)
-
-
-def test_execute_telephone(benchmark: Benchmark, telephone: Program) -> None:
-    state = make_state(
-        contract=make_contract(program=telephone),
-        transaction=make_transaction(
-            caller=BA(0xB1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1),
-            callvalue=BW(0),
-            calldata=FrozenBytes.concrete(
-                abiencode("changeOwner(address)")
-                + unwrap_bytes(BW(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF))
-            ),
-        ),
-    )
-
-    benchmark(execute, state)
-
-    assert state.success is True
-    assert state.returndata.require_concrete() == b""
 
 
 def test_explore_telephone(benchmark: Benchmark, telephone: Program) -> None:
@@ -331,56 +92,6 @@ def test_analyze_telephone(telephone: Program) -> None:
         next(universal)
 
 
-@pytest.fixture
-def token() -> Program:
-    source = """
-        // SPDX-License-Identifier: MIT
-        pragma solidity ^0.6.0;
-
-        contract Token {
-
-            mapping(address => uint) balances;
-            uint public totalSupply;
-
-            constructor(uint _initialSupply) public {
-                balances[msg.sender] = totalSupply = _initialSupply;
-            }
-
-            function transfer(address _to, uint _value) public returns (bool) {
-                require(balances[msg.sender] - _value >= 0);
-                balances[msg.sender] -= _value;
-                balances[_to] += _value;
-                return true;
-            }
-
-            function balanceOf(address _owner) public view returns (uint balance) {
-                return balances[_owner];
-            }
-        }
-    """
-    code = compile_solidity(source, version=Solidity.v06)
-    return disassemble(code)
-
-
-def test_execute_token(benchmark: Benchmark, token: Program) -> None:
-    state = make_state(
-        contract=make_contract(program=token),
-        transaction=make_transaction(
-            callvalue=BW(0),
-            calldata=FrozenBytes.concrete(
-                abiencode("transfer(address,uint256)")
-                + unwrap_bytes(BW(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF))
-                + unwrap_bytes(BW(0xEEEE))
-            ),
-        ),
-    )
-
-    benchmark(execute, state)
-
-    assert state.success is True
-    assert state.returndata.require_concrete() == unwrap_bytes(BW(1))
-
-
 def test_explore_token(benchmark: Benchmark, token: Program) -> None:
     benchmark(check_paths, token, set(["PxD", "Px33", "PxC7"]))
 
@@ -393,43 +104,6 @@ def test_analyze_token(token: Program) -> None:
 
     with pytest.raises(StopIteration):
         next(universal)
-
-
-delegation_source = """
-    // SPDX-License-Identifier: MIT
-    pragma solidity ^0.8.0;
-
-    contract Delegate {
-
-        address public owner;
-
-        constructor(address _owner) {
-            owner = _owner;
-        }
-
-        function pwn() public {
-            owner = msg.sender;
-        }
-    }
-
-    contract Delegation {
-
-        address public owner;
-        Delegate delegate;
-
-        constructor(address _delegateAddress) {
-            delegate = Delegate(_delegateAddress);
-            owner = msg.sender;
-        }
-
-        fallback() external {
-            (bool result,) = address(delegate).delegatecall(msg.data);
-            if (result) {
-                this;
-            }
-        }
-    }
-"""
 
 
 def test_execute_delegation(benchmark: Benchmark) -> None:
@@ -526,49 +200,6 @@ def test_explore_force(force: Program) -> None:
     check_paths(force, set())
 
 
-@pytest.fixture
-def vault() -> Program:
-    source = """
-        // SPDX-License-Identifier: MIT
-        pragma solidity ^0.8.0;
-
-        contract Vault {
-            bool public locked;
-            bytes32 private password;
-
-            constructor(bytes32 _password) {
-                locked = true;
-                password = _password;
-            }
-
-            function unlock(bytes32 _password) public {
-                if (password == _password) {
-                    locked = false;
-                }
-            }
-        }
-    """
-    code = compile_solidity(source)
-    return disassemble(code)
-
-
-def test_execute_vault(benchmark: Benchmark, vault: Program) -> None:
-    state = make_state(
-        contract=make_contract(program=vault),
-        transaction=make_transaction(
-            callvalue=BW(0),
-            calldata=FrozenBytes.concrete(
-                abiencode("unlock(bytes32)") + unwrap_bytes(BW(0))
-            ),
-        ),
-    )
-
-    benchmark(execute, state)
-
-    assert state.success is True
-    assert state.returndata.require_concrete() == b""
-
-
 def test_explore_vault(benchmark: Benchmark, vault: Program) -> None:
     benchmark(check_paths, vault, set(["PxD", "PxCF", "PxCE"]))
 
@@ -581,55 +212,6 @@ def test_analyze_value(vault: Program) -> None:
 
     with pytest.raises(StopIteration):
         next(universal)
-
-
-@pytest.fixture
-def king() -> Program:
-    source = """
-        // SPDX-License-Identifier: MIT
-        pragma solidity ^0.8.0;
-
-        contract King {
-
-            address king;
-            uint public prize;
-            address public owner;
-
-            constructor() payable {
-                owner = msg.sender;
-                king = msg.sender;
-                prize = msg.value;
-            }
-
-            receive() external payable {
-                require(msg.value >= prize || msg.sender == owner);
-                payable(king).transfer(msg.value);
-                king = msg.sender;
-                prize = msg.value;
-            }
-
-            function _king() public view returns (address) {
-                return king;
-            }
-        }
-    """
-    code = compile_solidity(source)
-    return disassemble(code)
-
-
-def test_execute_king(benchmark: Benchmark, king: Program) -> None:
-    state = make_state(
-        contract=make_contract(program=king),
-        transaction=make_transaction(
-            callvalue=BW(0x1234),
-            calldata=FrozenBytes.concrete(b""),
-        ),
-    )
-
-    benchmark(execute, state)
-
-    assert state.success is True
-    assert state.returndata.require_concrete() == b""
 
 
 # @pytest.mark.skip("slow?") TODO
@@ -648,58 +230,6 @@ def test_analyze_king(king: Program) -> None:
 
     with pytest.raises(StopIteration):
         next(universal)
-
-
-@pytest.fixture
-def reentrancy() -> Program:
-    source = """
-        // SPDX-License-Identifier: MIT
-        pragma solidity ^0.8.0;
-
-        contract Reentrance {
-
-            mapping(address => uint) public balances;
-
-            function donate(address _to) public payable {
-                balances[_to] += msg.value;
-            }
-
-            function balanceOf(address _who) public view returns (uint balance) {
-                return balances[_who];
-            }
-
-            function withdraw(uint _amount) public {
-                if(balances[msg.sender] >= _amount) {
-                    (bool result,) = msg.sender.call{value:_amount}("");
-                    if(result) {
-                        _amount;
-                    }
-                    balances[msg.sender] -= _amount;
-                }
-            }
-
-            receive() external payable {}
-        }
-    """
-    code = compile_solidity(source)
-    return disassemble(code)
-
-
-def test_execute_reentrancy(benchmark: Benchmark, reentrancy: Program) -> None:
-    state = make_state(
-        contract=make_contract(program=reentrancy),
-        transaction=make_transaction(
-            callvalue=BW(0x1234),
-            calldata=FrozenBytes.concrete(
-                abiencode("donate(address)") + unwrap_bytes(BW(1))
-            ),
-        ),
-    )
-
-    benchmark(execute, state)
-
-    assert state.success is True
-    assert state.returndata.require_concrete() == b""
 
 
 def test_explore_reentrancy(benchmark: Benchmark, reentrancy: Program) -> None:
@@ -722,36 +252,6 @@ def test_analyze_reentrancy(reentrancy: Program) -> None:
 
     with pytest.raises(StopIteration):
         next(universal)
-
-
-elevator_source = """
-    // SPDX-License-Identifier: MIT
-    pragma solidity ^0.8.0;
-
-    interface Building {
-        function isLastFloor(uint) external returns (bool);
-    }
-
-    contract Elevator {
-        bool public top;
-        uint public floor;
-
-        function goTo(uint _floor) public {
-            Building building = Building(msg.sender);
-
-            if (! building.isLastFloor(_floor)) {
-                floor = _floor;
-                top = building.isLastFloor(floor);
-            }
-        }
-    }
-
-    contract TestBuilding is Building {
-        function isLastFloor(uint floor) external pure returns (bool) {
-            return floor == 12;
-        }
-    }
-"""
 
 
 def test_execute_elevator(benchmark: Benchmark) -> None:
@@ -837,47 +337,6 @@ def test_analyze_privacy(privacy: Program) -> None:
         next(universal)
 
 
-@pytest.fixture
-def gatekeeper_one() -> Program:
-    source = """
-        // SPDX-License-Identifier: MIT
-        pragma solidity ^0.8.0;
-
-        contract GatekeeperOne {
-
-            address public entrant;
-
-            modifier gateOne() {
-                require(msg.sender != tx.origin);
-                _;
-            }
-
-            modifier gateTwo() {
-                require(gasleft() % 8191 == 0);
-                _;
-            }
-
-            modifier gateThree(bytes8 _gateKey) {
-                require(uint32(uint64(_gateKey)) == uint16(uint64(_gateKey)), "GatekeeperOne: invalid gateThree part one");
-                require(uint32(uint64(_gateKey)) != uint64(_gateKey), "GatekeeperOne: invalid gateThree part two");
-                require(uint32(uint64(_gateKey)) == uint16(uint160(tx.origin)), "GatekeeperOne: invalid gateThree part three");
-                _;
-            }
-
-            function enter(bytes8 _gateKey) public gateOne gateTwo gateThree(_gateKey) returns (bool) {
-                entrant = tx.origin;
-                return true;
-            }
-        }
-    """
-    code = compile_solidity(source)
-    return disassemble(code)
-
-
-# Gatekeeper One: we can't test execute() because concrete gas is not
-# implemented.
-
-
 def test_explore_gatekeeper_one(benchmark: Benchmark, gatekeeper_one: Program) -> None:
     benchmark(check_paths, gatekeeper_one, set(["PxDFF", "Px19"]))
 
@@ -889,63 +348,6 @@ def test_analyze_gatekeeper_one(gatekeeper_one: Program) -> None:
 
     with pytest.raises(StopIteration):
         next(universal)
-
-
-@pytest.fixture
-def gatekeeper_two() -> Program:
-    source = """
-        // SPDX-License-Identifier: MIT
-        pragma solidity ^0.8.0;
-
-        contract GatekeeperTwo {
-
-            address public entrant;
-
-            modifier gateOne() {
-                require(msg.sender != tx.origin);
-                _;
-            }
-
-            modifier gateTwo() {
-                uint x;
-                assembly { x := extcodesize(caller()) }
-                require(x == 0);
-                _;
-            }
-
-            modifier gateThree(bytes8 _gateKey) {
-                require(uint64(bytes8(keccak256(abi.encodePacked(msg.sender)))) ^ uint64(_gateKey) == type(uint64).max);
-                _;
-            }
-
-            function enter(bytes8 _gateKey) public gateOne gateTwo gateThree(_gateKey) returns (bool) {
-                entrant = tx.origin;
-                return true;
-            }
-        }
-    """
-    code = compile_solidity(source)
-    return disassemble(code)
-
-
-def test_execute_gatekeeper_two(benchmark: Benchmark, gatekeeper_two: Program) -> None:
-    state = make_state(
-        contract=make_contract(program=gatekeeper_two),
-        transaction=make_transaction(
-            callvalue=BW(0),
-            calldata=FrozenBytes.concrete(
-                abiencode("enter(bytes8)")
-                + bytes.fromhex(
-                    "65d5bd2c953ab27b000000000000000000000000000000000000000000000000"
-                )
-            ),
-        ),
-    )
-
-    benchmark(execute, state)
-
-    assert state.success is True
-    assert state.returndata.require_concrete() == unwrap_bytes(BW(1))
 
 
 def test_explore_gatekeeper_two(benchmark: Benchmark, gatekeeper_two: Program) -> None:
@@ -964,50 +366,6 @@ def test_analyze_gatekeeper_two(gatekeeper_two: Program) -> None:
 @pytest.mark.skip("TODO")
 def test_naughtcoin() -> None:
     raise NotImplementedError("openzeppelin erc-20")
-
-
-preservation_source = """
-    // SPDX-License-Identifier: MIT
-    pragma solidity ^0.8.0;
-
-    contract Preservation {
-
-        // public library contracts
-        address public timeZone1Library;
-        address public timeZone2Library;
-        address public owner;
-        uint storedTime;
-        // Sets the function signature for delegatecall
-        bytes4 constant setTimeSignature = bytes4(keccak256("setTime(uint256)"));
-
-        constructor(address _timeZone1LibraryAddress, address _timeZone2LibraryAddress) {
-            timeZone1Library = _timeZone1LibraryAddress;
-            timeZone2Library = _timeZone2LibraryAddress;
-            owner = msg.sender;
-        }
-
-        // set the time for timezone 1
-        function setFirstTime(uint _timeStamp) public {
-            timeZone1Library.delegatecall(abi.encodePacked(setTimeSignature, _timeStamp));
-        }
-
-        // set the time for timezone 2
-        function setSecondTime(uint _timeStamp) public {
-            timeZone2Library.delegatecall(abi.encodePacked(setTimeSignature, _timeStamp));
-        }
-    }
-
-    // Simple library contract to set the time
-    contract LibraryContract {
-
-        // stores a timestamp
-        uint storedTime;
-
-        function setTime(uint _time) public {
-            storedTime = _time;
-        }
-    }
-"""
 
 
 def test_execute_preservation(benchmark: Benchmark) -> None:
@@ -1104,67 +462,6 @@ def test_analyze_preservation() -> None:
     with pytest.raises(StopIteration):
         next(universal)
 
-
-@pytest.fixture
-def recovery() -> Program:
-    source = """
-        // SPDX-License-Identifier: MIT
-        pragma solidity ^0.8.0;
-
-        contract Recovery {
-
-            //generate tokens
-            function generateToken(string memory _name, uint256 _initialSupply) public {
-                new SimpleToken(_name, msg.sender, _initialSupply);
-
-            }
-        }
-
-        contract SimpleToken {
-
-            string public name;
-            mapping (address => uint) public balances;
-
-            // constructor
-            constructor(string memory _name, address _creator, uint256 _initialSupply) {
-                name = _name;
-                balances[_creator] = _initialSupply;
-            }
-
-            // collect ether in return for tokens
-            receive() external payable {
-                balances[msg.sender] = msg.value * 10;
-            }
-
-            // allow transfers of tokens
-            function transfer(address _to, uint _amount) public {
-                require(balances[msg.sender] >= _amount);
-                balances[msg.sender] = balances[msg.sender] - _amount;
-                balances[_to] = _amount;
-            }
-
-            // clean up after ourselves
-            function destroy(address payable _to) public {
-                selfdestruct(_to);
-            }
-        }
-    """
-    return disassemble(compile_solidity(source, "SimpleToken"))
-
-
-def test_execute_recovery(benchmark: Benchmark, recovery: Program) -> None:
-    state = make_state(
-        contract=make_contract(program=recovery),
-        transaction=make_transaction(
-            callvalue=BW(0x1000),
-            calldata=FrozenBytes.concrete(b""),
-        ),
-    )
-
-    benchmark(execute, state)
-
-    assert state.success is True
-    assert state.returndata.require_concrete() == b""
 
 
 @pytest.mark.skip("SELFDESTRUCT not implemented")

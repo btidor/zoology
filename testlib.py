@@ -1,7 +1,21 @@
 import os
+import re
 import subprocess
 from enum import Enum
-from typing import Dict, List, Literal, Optional, Set, Tuple, Union, assert_never
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    Literal,
+    Optional,
+    Protocol,
+    Set,
+    Tuple,
+    TypeVar,
+    Union,
+    assert_never,
+)
 
 import z3
 from Crypto.Hash import keccak
@@ -22,6 +36,21 @@ from vm import (
     hybrid_CALL,
     step,
 )
+
+
+class Benchmark(Protocol):
+    T = TypeVar("T")
+
+    def __call__(self, fn: Callable[..., T], *args: Any) -> T:
+        ...
+
+    def pedantic(
+        self,
+        fn: Callable[..., T],
+        setup: Callable[[], Tuple[Tuple[Any, ...], Dict[str, Any]]],
+        rounds: int,
+    ) -> T:
+        ...
 
 
 class Solidity(Enum):
@@ -161,6 +190,24 @@ def make_state(
     )
 
 
+def load_solidity(path: str, contract: Optional[str] = None) -> Program:
+    with open(path) as f:
+        data = f.read()
+
+    match = re.search("^pragma solidity (.*);$", data, re.M)
+    if match is None:
+        raise ValueError(f"could not extract compiler version: {path}")
+    elif match.group(1) == "^0.8.0":
+        version = Solidity.v08
+    elif match.group(1) == "^0.6.0":
+        version = Solidity.v06
+    else:
+        raise ValueError(f"unknown solidity version: {match.group(1)}")
+
+    code = compile_solidity(data, contract, version)
+    return disassemble(code)
+
+
 def compile_solidity(
     source: str,
     contract: Optional[str] = None,
@@ -206,7 +253,7 @@ def abiencode(signature: str) -> bytes:
     return keccak.new(data=signature.encode(), digest_bits=256).digest()[:4]
 
 
-def execute(state: State) -> None:
+def execute(state: State) -> State:
     while True:
         action = step(state)
         if action == "CONTINUE":
@@ -228,7 +275,7 @@ def execute(state: State) -> None:
             with concrete_STATICCALL(state) as substate:
                 execute(substate)
         elif action == "TERMINATE":
-            return
+            return state
         else:
             assert_never(action)
 
