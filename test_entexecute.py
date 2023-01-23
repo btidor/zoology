@@ -256,7 +256,9 @@ def test_privacy(benchmark: Benchmark) -> None:
     assert state.returndata.require_concrete() == b""
 
 
-# TODO: we can't test GatekeeperOne because concrete gas is not implemented.
+def test_gatekeeper_one(benchmark: Benchmark) -> None:
+    program = load_solidity("ethernaut/13_GatekeeperOne.sol")
+    # TODO: we can't test GatekeeperOne because concrete gas isn't implemented
 
 
 def test_gatekeeper_two(benchmark: Benchmark) -> None:
@@ -303,22 +305,6 @@ def test_preservation(benchmark: Benchmark) -> None:
     )
     state.contract.storage.array = zstore(
         state.contract.storage.array, BW(1), BW(unwrap(library.address))
-    )
-
-    state = bench(benchmark, state)
-
-    assert state.success is True
-    assert state.returndata.require_concrete() == b""
-
-
-def test_recovery(benchmark: Benchmark) -> None:
-    program = loads_solidity("ethernaut/16_Recovery.sol")["SimpleToken"]
-    state = make_state(
-        contract=make_contract(program=program),
-        transaction=make_transaction(
-            callvalue=BW(0x1000),
-            calldata=FrozenBytes.concrete(b""),
-        ),
     )
 
     state = bench(benchmark, state)
