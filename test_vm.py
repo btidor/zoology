@@ -137,7 +137,7 @@ def test_execute_solidity() -> None:
         }
     """
     code = compile_solidity(source)
-    program = disassemble(code)
+    program = disassemble(code["Fallback"])
 
     state = make_state(
         contract=make_contract(program=program),

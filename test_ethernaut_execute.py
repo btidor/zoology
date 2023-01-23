@@ -4,12 +4,14 @@ import copy
 
 from arrays import FrozenBytes
 from state import State
-from symbolic import BA, BW, unwrap_bytes
+from symbolic import BA, BW, unwrap, unwrap_bytes, zstore
 from testlib import (
     Benchmark,
     abiencode,
     execute,
+    load_binary,
     load_solidity,
+    loads_solidity,
     make_contract,
     make_state,
     make_transaction,
@@ -120,6 +122,44 @@ def test_token(benchmark: Benchmark) -> None:
     assert state.returndata.require_concrete() == unwrap_bytes(BW(1))
 
 
+def test_delegation(benchmark: Benchmark) -> None:
+    programs = loads_solidity("ethernaut/06_Delegation.sol")
+
+    other = make_contract(address=BA(0xABCDEF), program=programs["Delegate"])
+    state = make_state(
+        contract=make_contract(program=programs["Delegation"]),
+        transaction=make_transaction(
+            callvalue=BW(0),
+            calldata=FrozenBytes.concrete(abiencode("pwn()")),
+        ),
+    )
+    state.universe.add_contract(other)
+    state.contract.storage.array = zstore(
+        state.contract.storage.array, BW(1), BW(unwrap(other.address))
+    )
+
+    state = bench(benchmark, state)
+
+    assert state.success is True
+    assert state.returndata.require_concrete() == b""
+
+
+def test_force(benchmark: Benchmark) -> None:
+    program = load_binary("ethernaut/07_Force.bin")
+    state = make_state(
+        contract=make_contract(program=program),
+        transaction=make_transaction(
+            callvalue=BW(0x1234),
+            calldata=FrozenBytes.concrete(b""),
+        ),
+    )
+
+    state = bench(benchmark, state)
+
+    assert state.success is False
+    assert state.returndata.require_concrete() == b""
+
+
 def test_vault(benchmark: Benchmark) -> None:
     program = load_solidity("ethernaut/08_Vault.sol")
     state = make_state(
@@ -172,7 +212,51 @@ def test_reentrancy(benchmark: Benchmark) -> None:
     assert state.returndata.require_concrete() == b""
 
 
-# TODO: we can't test bench(benchmark, ) because concrete gas is not implemented.
+def test_elevator(benchmark: Benchmark) -> None:
+    programs = loads_solidity("ethernaut/11_Elevator.sol")
+
+    state = make_state(
+        contract=make_contract(program=programs["Elevator"]),
+        transaction=make_transaction(
+            caller=BA(0x76543210),
+            callvalue=BW(0),
+            calldata=FrozenBytes.concrete(
+                abiencode("goTo(uint256)") + unwrap_bytes(BW(1))
+            ),
+        ),
+    )
+    state.universe.add_contract(
+        make_contract(address=BA(0x76543210), program=programs["TestBuilding"])
+    )
+
+    state = bench(benchmark, state)
+
+    assert state.success is True
+    assert state.returndata.require_concrete() == b""
+
+
+def test_privacy(benchmark: Benchmark) -> None:
+    program = load_binary("ethernaut/12_Privacy.bin")
+    state = make_state(
+        contract=make_contract(program=program),
+        transaction=make_transaction(
+            callvalue=BW(0),
+            calldata=FrozenBytes.concrete(
+                abiencode("unlock(bytes16)") + unwrap_bytes(BW(0x4321 << 128))
+            ),
+        ),
+    )
+    state.contract.storage.array = zstore(
+        state.contract.storage.array, BW(5), BW(0x4321 << 128)
+    )
+
+    state = bench(benchmark, state)
+
+    assert state.success is True
+    assert state.returndata.require_concrete() == b""
+
+
+# TODO: we can't test GatekeeperOne because concrete gas is not implemented.
 
 
 def test_gatekeeper_two(benchmark: Benchmark) -> None:
@@ -196,8 +280,39 @@ def test_gatekeeper_two(benchmark: Benchmark) -> None:
     assert state.returndata.require_concrete() == unwrap_bytes(BW(1))
 
 
+def test_preservation(benchmark: Benchmark) -> None:
+    programs = loads_solidity("ethernaut/15_Preservation.sol")
+    preservation = make_contract(program=programs["Preservation"])
+    library = make_contract(
+        address=BA(0x1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B),
+        program=programs["LibraryContract"],
+    )
+
+    state = make_state(
+        contract=preservation,
+        transaction=make_transaction(
+            callvalue=BW(0),
+            calldata=FrozenBytes.concrete(
+                abiencode("setFirstTime(uint256)") + unwrap_bytes(BW(0x5050))
+            ),
+        ),
+    )
+    state.universe.add_contract(library)
+    state.contract.storage.array = zstore(
+        state.contract.storage.array, BW(0), BW(unwrap(library.address))
+    )
+    state.contract.storage.array = zstore(
+        state.contract.storage.array, BW(1), BW(unwrap(library.address))
+    )
+
+    state = bench(benchmark, state)
+
+    assert state.success is True
+    assert state.returndata.require_concrete() == b""
+
+
 def test_recovery(benchmark: Benchmark) -> None:
-    program = load_solidity("ethernaut/16_Recovery.sol", "SimpleToken")
+    program = loads_solidity("ethernaut/16_Recovery.sol")["SimpleToken"]
     state = make_state(
         contract=make_contract(program=program),
         transaction=make_transaction(

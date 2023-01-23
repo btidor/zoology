@@ -190,29 +190,37 @@ def make_state(
     )
 
 
-def load_solidity(path: str, contract: Optional[str] = None) -> Program:
-    with open(path) as f:
-        data = f.read()
+def load_solidity(path: str) -> Program:
+    assert path.endswith(".sol")
+    with open(path, "r") as f:
+        source = f.read()
 
-    match = re.search("^pragma solidity (.*);$", data, re.M)
-    if match is None:
-        raise ValueError(f"could not extract compiler version: {path}")
-    elif match.group(1) == "^0.8.0":
-        version = Solidity.v08
-    elif match.group(1) == "^0.6.0":
-        version = Solidity.v06
-    else:
-        raise ValueError(f"unknown solidity version: {match.group(1)}")
+    codes = compile_solidity(source)
+    assert len(codes) == 1
+    code = list(codes.values())[0]
 
-    code = compile_solidity(data, contract, version)
     return disassemble(code)
 
 
-def compile_solidity(
-    source: str,
-    contract: Optional[str] = None,
-    version: Solidity = Solidity.v08,
-) -> bytes:
+def loads_solidity(path: str) -> Dict[str, Program]:
+    assert path.endswith(".sol")
+    with open(path, "r") as f:
+        source = f.read()
+
+    codes = compile_solidity(source)
+    return dict((name, disassemble(code)) for name, code in codes.items())
+
+
+def load_binary(path: str) -> Program:
+    assert path.endswith(".bin")
+    with open(path, "rb") as f:
+        code = f.read()
+    return disassemble(code)
+
+
+def compile_solidity(source: str) -> Dict[str, bytes]:
+    version = detect_version(source)
+
     env = os.environ.copy()
     env["SOLC_VERSION"] = version.value
     output = subprocess.check_output(
@@ -226,12 +234,20 @@ def compile_solidity(
             current = output[i].split(b" ")[1][8:].decode()
         if output[i] == b"Binary of the runtime part:":
             matches[current] = bytes.fromhex(output[i + 1].decode())
+    return matches
 
-    if contract is None:
-        assert len(matches) == 1
-        return list(matches.values())[0]
-    else:
-        return matches[contract]
+
+def detect_version(source: str) -> Solidity:
+    match = re.search("^\\s*pragma solidity (.*);$", source, re.M)
+    if match is None:
+        raise ValueError(f"could not extract compiler version")
+
+    version = match.group(1)
+    if version.startswith("^0.8."):
+        return Solidity.v08
+    elif version.startswith("^0.6."):
+        return Solidity.v06
+    raise ValueError(f"unknown solidity version: {version}")
 
 
 def install_solidity() -> None:

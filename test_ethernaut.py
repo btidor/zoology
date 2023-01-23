@@ -1,25 +1,18 @@
 #!/usr/bin/env pytest
 
 import copy
-from typing import Any, Callable, Protocol, TypeVar
 
 import pytest
 
-from arrays import FrozenBytes
 from disassembler import Program, disassemble
 from sha3 import SHA3
-from symbolic import BA, BW, unwrap, unwrap_bytes, zstore
+from symbolic import BA, BW, unwrap, zstore
 from testlib import (
     Benchmark,
-    Solidity,
-    abiencode,
     check_paths,
     check_transition,
     compile_solidity,
-    execute,
     make_contract,
-    make_state,
-    make_transaction,
 )
 from universal import _universal_transaction, symbolic_start, universal_transaction
 
@@ -106,27 +99,7 @@ def test_analyze_token(token: Program) -> None:
         next(universal)
 
 
-def test_execute_delegation(benchmark: Benchmark) -> None:
-    delegate = disassemble(compile_solidity(delegation_source, contract="Delegate"))
-    delegation = disassemble(compile_solidity(delegation_source, contract="Delegation"))
-
-    other = make_contract(address=BA(0xABCDEF), program=delegate)
-    state = make_state(
-        contract=make_contract(program=delegation),
-        transaction=make_transaction(
-            callvalue=BW(0),
-            calldata=FrozenBytes.concrete(abiencode("pwn()")),
-        ),
-    )
-    state.universe.add_contract(other)
-    state.contract.storage.array = zstore(
-        state.contract.storage.array, BW(1), BW(unwrap(other.address))
-    )
-
-    benchmark(execute, state)
-
-    assert state.success is True
-    assert state.returndata.require_concrete() == b""
+z
 
 
 def test_explore_delegation(benchmark: Benchmark) -> None:
@@ -171,29 +144,6 @@ def test_analyze_delegation() -> None:
 
     with pytest.raises(StopIteration):
         next(universal)
-
-
-@pytest.fixture
-def force() -> Program:
-    code = bytes.fromhex(
-        "6080604052600080fdfea26469706673582212203717ccea65e207051915ebdbec707aead0330450f3d14318591e16cc74fd06bc64736f6c634300080c0033"
-    )
-    return disassemble(code)
-
-
-def test_execute_force(benchmark: Benchmark, force: Program) -> None:
-    state = make_state(
-        contract=make_contract(program=force),
-        transaction=make_transaction(
-            callvalue=BW(0x1234),
-            calldata=FrozenBytes.concrete(b""),
-        ),
-    )
-
-    benchmark(execute, state)
-
-    assert state.success is False
-    assert state.returndata.require_concrete() == b""
 
 
 def test_explore_force(force: Program) -> None:
@@ -254,28 +204,6 @@ def test_analyze_reentrancy(reentrancy: Program) -> None:
         next(universal)
 
 
-def test_execute_elevator(benchmark: Benchmark) -> None:
-    elevator = disassemble(compile_solidity(elevator_source, "Elevator"))
-    building = disassemble(compile_solidity(elevator_source, "TestBuilding"))
-
-    state = make_state(
-        contract=make_contract(program=elevator),
-        transaction=make_transaction(
-            caller=BA(0x76543210),
-            callvalue=BW(0),
-            calldata=FrozenBytes.concrete(
-                abiencode("goTo(uint256)") + unwrap_bytes(BW(1))
-            ),
-        ),
-    )
-    state.universe.add_contract(make_contract(address=BA(0x76543210), program=building))
-
-    benchmark(execute, state)
-
-    assert state.success is True
-    assert state.returndata.require_concrete() == b""
-
-
 def test_explore_elevator(benchmark: Benchmark) -> None:
     elevator = disassemble(compile_solidity(elevator_source, "Elevator"))
 
@@ -293,34 +221,6 @@ def test_analyze_elevator() -> None:
 
     with pytest.raises(StopIteration):
         next(universal)
-
-
-@pytest.fixture
-def privacy() -> Program:
-    code = bytes.fromhex(
-        "6080604052348015600f57600080fd5b5060043610603c5760003560e01c8063b3cea217146041578063cf30901214605c578063e1afb08c146077575b600080fd5b604960015481565b6040519081526020015b60405180910390f35b60005460689060ff1681565b60405190151581526020016053565b6086608236600460b8565b6088565b005b6005546fffffffffffffffffffffffffffffffff1982811691161460ab57600080fd5b506000805460ff19169055565b60006020828403121560c957600080fd5b81356fffffffffffffffffffffffffffffffff198116811460e957600080fd5b939250505056fea2646970667358221220199fe33db58ed15b2bbeab277974ecd5658987f1e54e16ba5130d3be0834910e64736f6c634300080c0033"
-    )
-    return disassemble(code)
-
-
-def test_execute_privacy(benchmark: Benchmark, privacy: Program) -> None:
-    state = make_state(
-        contract=make_contract(program=privacy),
-        transaction=make_transaction(
-            callvalue=BW(0),
-            calldata=FrozenBytes.concrete(
-                abiencode("unlock(bytes16)") + unwrap_bytes(BW(0x4321 << 128))
-            ),
-        ),
-    )
-    state.contract.storage.array = zstore(
-        state.contract.storage.array, BW(5), BW(0x4321 << 128)
-    )
-
-    benchmark(execute, state)
-
-    assert state.success is True
-    assert state.returndata.require_concrete() == b""
 
 
 def test_explore_privacy(privacy: Program) -> None:
@@ -366,37 +266,6 @@ def test_analyze_gatekeeper_two(gatekeeper_two: Program) -> None:
 @pytest.mark.skip("TODO")
 def test_naughtcoin() -> None:
     raise NotImplementedError("openzeppelin erc-20")
-
-
-def test_execute_preservation(benchmark: Benchmark) -> None:
-    preservation = make_contract(
-        program=disassemble(compile_solidity(preservation_source, "Preservation"))
-    )
-    library = make_contract(
-        address=BA(0x1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B),
-        program=disassemble(compile_solidity(preservation_source, "LibraryContract")),
-    )
-    state = make_state(
-        contract=preservation,
-        transaction=make_transaction(
-            callvalue=BW(0),
-            calldata=FrozenBytes.concrete(
-                abiencode("setFirstTime(uint256)") + unwrap_bytes(BW(0x5050))
-            ),
-        ),
-    )
-    state.universe.add_contract(library)
-    state.contract.storage.array = zstore(
-        state.contract.storage.array, BW(0), BW(unwrap(library.address))
-    )
-    state.contract.storage.array = zstore(
-        state.contract.storage.array, BW(1), BW(unwrap(library.address))
-    )
-
-    benchmark(execute, state)
-
-    assert state.success is True
-    assert state.returndata.require_concrete() == b""
 
 
 def test_explore_preservation(benchmark: Benchmark) -> None:
@@ -461,7 +330,6 @@ def test_analyze_preservation() -> None:
 
     with pytest.raises(StopIteration):
         next(universal)
-
 
 
 @pytest.mark.skip("SELFDESTRUCT not implemented")
