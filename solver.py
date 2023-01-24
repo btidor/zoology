@@ -82,6 +82,7 @@ class Z3PySolver(Solver):
         Returns a model (if sat) or None (if unsat). Raises an error if the
         solver fails.
         """
+        self.model = None
         result = self.solver.check(*assumptions)
         if result == z3.sat:
             self.model = self.solver.model()

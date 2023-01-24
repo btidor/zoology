@@ -15,6 +15,7 @@ from symbolic import (
     BW,
     Constraint,
     is_bitvector,
+    is_concrete,
     uint160,
     uint256,
     unwrap,
@@ -74,7 +75,7 @@ class Transaction:
                 del r[k]
             elif is_bitvector(r[k]):
                 v = solver.evaluate(r[k])
-                if v is not None and unwrap(v) > 0:
+                if v is not None and is_concrete(v) and unwrap(v) > 0:
                     r[k] = "0x" + unwrap_bytes(v).hex()
                 else:
                     del r[k]

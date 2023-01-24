@@ -315,7 +315,7 @@ def check_transition(
     method: Optional[str],
     value: Optional[int] = None,
 ) -> None:
-    assert end.path == path, f"unexpected path: Px{end.px()}"
+    assert end.path == path, f"unexpected path: {end.px()}"
     assert end.success is True
 
     solver = DefaultSolver()
