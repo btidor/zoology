@@ -48,43 +48,42 @@ def universal_transaction(
         yield start, end
 
 
-def _universal_transaction(start: State) -> Iterator[State]:
-    states = [start]
-    while len(states) > 0:
-        state = states.pop()
-        while True:
-            action = step(state)
-            if action == "CONTINUE":
-                continue
-            elif action == "JUMPI":
-                states.extend(symbolic_JUMPI(state.contract.program, state))
-                break
-            elif action == "GAS":
-                symbolic_GAS(state)
-                continue
-            elif action == "CALL":
-                for substate in hybrid_CALL(state):
-                    for end in _universal_transaction(substate):
-                        yield end
-            elif action == "CALLCODE":
-                with concrete_CALLCODE(state) as substate:
-                    for end in _universal_transaction(substate):
-                        yield end
-            elif action == "DELEGATECALL":
-                with concrete_DELEGATECALL(state) as substate:
-                    for end in _universal_transaction(substate):
-                        yield end
-            elif action == "STATICCALL":
-                with concrete_STATICCALL(state) as substate:
-                    for end in _universal_transaction(substate):
-                        yield end
-            elif action == "TERMINATE":
-                assert state.success is not None
-                if state.success:
-                    yield state
-                break
-            else:
-                assert_never(action)
+def _universal_transaction(state: State) -> Iterator[State]:
+    while True:
+        action = step(state)
+        if action == "CONTINUE":
+            continue
+        elif action == "JUMPI":
+            for branch in symbolic_JUMPI(state.contract.program, state):
+                for end in _universal_transaction(branch):
+                    yield end
+            return
+        elif action == "GAS":
+            symbolic_GAS(state)
+            continue
+        elif action == "CALL":
+            for substate in hybrid_CALL(state):
+                for end in _universal_transaction(substate):
+                    yield end
+        elif action == "CALLCODE":
+            with concrete_CALLCODE(state) as substate:
+                for end in _universal_transaction(substate):
+                    yield end
+        elif action == "DELEGATECALL":
+            with concrete_DELEGATECALL(state) as substate:
+                for end in _universal_transaction(substate):
+                    yield end
+        elif action == "STATICCALL":
+            with concrete_STATICCALL(state) as substate:
+                for end in _universal_transaction(substate):
+                    yield end
+        elif action == "TERMINATE":
+            assert state.success is not None
+            if state.success:
+                yield state
+            return
+        else:
+            assert_never(action)
 
 
 def symbolic_JUMPI(program: Program, state: State) -> Iterator[State]:
