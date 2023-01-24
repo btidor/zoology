@@ -24,8 +24,9 @@ from arrays import Array, FrozenBytes, MutableBytes
 from disassembler import Program, disassemble
 from environment import Block, Contract, Transaction, Universe
 from sha3 import SHA3
+from solver import DefaultSolver
 from state import State
-from symbolic import BA, BW, Constraint, Solver, uint160, uint256
+from symbolic import BA, BW, Constraint, uint160, uint256
 from universal import _universal_transaction, constrain_to_goal, symbolic_start
 from vm import (
     concrete_CALLCODE,
@@ -317,7 +318,7 @@ def check_transition(
     assert end.path == path, f"unexpected path: Px{end.px()}"
     assert end.success is True
 
-    solver = Solver()
+    solver = DefaultSolver()
     end.constrain(solver, minimize=True)
     constrain_to_goal(solver, start, end)
     assert solver.check() == (kind == "GOAL")
@@ -325,7 +326,7 @@ def check_transition(
     if kind != "GOAL":
         assert end.is_changed(start) == (kind == "SAVE")
 
-    solver = Solver()
+    solver = DefaultSolver()
     end.constrain(solver, minimize=True)
     assert solver.check()
 

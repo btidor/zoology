@@ -10,10 +10,10 @@ import z3
 
 from arrays import Array, FrozenBytes
 from disassembler import Program
+from solver import Solver
 from symbolic import (
     BW,
     Constraint,
-    Solver,
     is_bitvector,
     uint160,
     uint256,

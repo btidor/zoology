@@ -10,4 +10,7 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
 
 RUN ln -sf /usr/bin/python3.11 /usr/bin/python3
 
+RUN wget https://github.com/cvc5/cvc5/releases/latest/download/cvc5-Linux -O /usr/local/bin/cvc5 && \
+    chmod +x /usr/local/bin/cvc5
+
 RUN pip install black mypy pydocstyle

@@ -4,7 +4,7 @@ import pytest
 
 from disassembler import disassemble
 from sha3 import SHA3
-from symbolic import Solver
+from solver import DefaultSolver
 from testlib import check_transition
 from universal import constrain_to_goal, printable_transition, universal_transaction
 
@@ -24,12 +24,12 @@ def test_basic() -> None:
         start.universe.balances[end.contract.address]
         == 0x8000000000001
     )
-    solver = Solver()
+    solver = DefaultSolver()
     end.constrain(solver)
     constrain_to_goal(solver, start, end)
     assert not solver.check()
 
-    solver = Solver()
+    solver = DefaultSolver()
     end.constrain(solver)
     assert solver.check()
 

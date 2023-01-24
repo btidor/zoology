@@ -9,16 +9,8 @@ import z3
 from Crypto.Hash import keccak
 
 from arrays import Array
-from symbolic import (
-    BW,
-    Constraint,
-    Solver,
-    describe,
-    is_concrete,
-    simplify,
-    unwrap,
-    zget,
-)
+from solver import Solver
+from symbolic import BW, Constraint, describe, is_concrete, simplify, unwrap, zget
 
 
 @dataclass

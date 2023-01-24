@@ -12,7 +12,8 @@ import z3
 from arrays import FrozenBytes, MutableBytes
 from environment import Block, Contract, Transaction, Universe
 from sha3 import SHA3
-from symbolic import BA, Constraint, Solver, uint256, unwrap, unwrap_bytes, zand
+from solver import DefaultSolver, Solver
+from symbolic import BA, Constraint, uint256, unwrap, unwrap_bytes, zand
 
 
 @dataclass
@@ -105,7 +106,7 @@ class State:
             return True
 
         # Check if any address other than the contract itself has increased
-        solver = Solver()
+        solver = DefaultSolver()
         self.constrain(solver, minimize=True)
         for addr in self.universe.balances.written:
             if solver.check(

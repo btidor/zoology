@@ -8,8 +8,9 @@ from Crypto.Hash import keccak
 
 from disassembler import Program, disassemble
 from sha3 import SHA3
+from solver import DefaultSolver, Solver
 from state import State
-from symbolic import Solver, describe, is_concrete, simplify, unwrap, zand, znot
+from symbolic import describe, is_concrete, simplify, unwrap, zand, znot
 from universal import constrain_to_goal, universal_transaction
 
 
@@ -18,7 +19,7 @@ def analyze(program: Program) -> None:
     sha3 = SHA3()
     ownership: List[Predicate] = []
     for start, end in universal_transaction(program, sha3, ""):
-        solver = Solver()
+        solver = DefaultSolver()
         end.constrain(solver, minimize=True)
 
         description = describe_state(solver, end)
@@ -44,7 +45,7 @@ def analyze(program: Program) -> None:
         # (2) In order to be a valid safety predicate, there must be no STEP
         # transition from P -> ~P
         for candidate in ownership:
-            solver = Solver()
+            solver = DefaultSolver()
             end.constrain(solver, minimize=True)
             candidate.state.constrain(solver)
             solver.assert_and_track(candidate.eval(start), "SAFE.PRE")
@@ -59,7 +60,7 @@ def analyze(program: Program) -> None:
     additional: List[str] = []
     balance: List[Predicate] = []
     for start, end in universal_transaction(program, sha3, "^"):
-        solver = Solver()
+        solver = DefaultSolver()
         end.constrain(solver, minimize=True)
 
         description = describe_state(solver, end)
@@ -88,7 +89,7 @@ def analyze(program: Program) -> None:
         # (2) In order to be a valid safety predicate, there must be no STEP
         # transition from P -> ~P
         for candidate in balance:
-            solver = Solver()
+            solver = DefaultSolver()
             end.constrain(solver, minimize=True)
             for predicate in ownership:
                 solver.assert_and_track(predicate.eval(start), f"SAFE{predicate}")

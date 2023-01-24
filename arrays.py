@@ -8,10 +8,10 @@ from typing import Any, Iterable, List, Tuple, TypeAlias, Union, cast
 
 import z3
 
+from solver import Solver
 from symbolic import (
     BW,
     BY,
-    Solver,
     describe,
     is_bitvector,
     is_concrete,

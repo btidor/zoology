@@ -29,7 +29,10 @@ Fallout = (
 CoinFlip = (
     ("Px6FF", "SAVE", "flip(bool)"),
     ("PxDFD", "SAVE", "flip(bool)"),
-    # TODO: there are more???
+    ("Px6FD", "TODO", ""),
+    ("PxDF9", "TODO", ""),
+    ("PxDFD", "TODO", ""),
+    ("Px19", "TODO", ""),
 )
 
 Telephone = (

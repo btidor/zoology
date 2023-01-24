@@ -10,8 +10,9 @@ from arrays import Array, FrozenBytes, MutableBytes
 from disassembler import Program, disassemble
 from environment import Block, Contract, Transaction, Universe
 from sha3 import SHA3
+from solver import DefaultSolver, Solver
 from state import State
-from symbolic import BW, Solver, unwrap, unwrap_bytes
+from symbolic import BW, unwrap, unwrap_bytes
 from vm import (
     concrete_CALLCODE,
     concrete_DELEGATECALL,
@@ -88,7 +89,7 @@ def _universal_transaction(start: State) -> Iterator[State]:
 
 def symbolic_JUMPI(program: Program, state: State) -> Iterator[State]:
     """Handle a JUMPI action with a symbolic condition. Yields next states."""
-    solver = Solver()
+    solver = DefaultSolver()
     state.constrain(solver)
 
     counter = unwrap(state.stack.pop(), "JUMPI requires concrete counter")
@@ -201,7 +202,7 @@ def constrain_to_goal(solver: Solver, start: State, end: State) -> None:
 
 def printable_transition(start: State, end: State) -> Iterable[str]:
     """Produce a human-readable description of a given state transition."""
-    solver = Solver()
+    solver = DefaultSolver()
     end.constrain(solver, minimize=True)
     assert solver.check()
 
@@ -217,7 +218,7 @@ def printable_transition(start: State, end: State) -> Iterable[str]:
         kind = "  VIEW"
 
     # Reset so we can extract the model
-    solver = Solver()
+    solver = DefaultSolver()
     end.constrain(solver, minimize=True)
     assert solver.check()
 
