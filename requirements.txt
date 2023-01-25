@@ -2,6 +2,7 @@ pycryptodome
 pytest
 pytest_profiling
 pytest-benchmark
+pytest-profiling
 pytest-timeout
 pytest-xdist
 solc-select
