@@ -7,13 +7,11 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Iterator, List, Optional, Tuple
 
-import z3
-
 from arrays import FrozenBytes, MutableBytes
 from environment import Block, Contract, Transaction, Universe
 from sha3 import SHA3
-from solver import DefaultSolver, Solver
-from symbolic import BA, Constraint, uint256, unwrap, unwrap_bytes, zand
+from smt import Constraint, Uint160, Uint256
+from solver import Solver
 
 
 @dataclass
@@ -29,7 +27,7 @@ class State:
     sha3: SHA3
 
     pc: int
-    stack: List[uint256]
+    stack: List[Uint256]
     memory: MutableBytes
 
     returndata: FrozenBytes
@@ -39,11 +37,11 @@ class State:
 
     # Every time the GAS instruction is invoked we return a symbolic result,
     # tracked here. These should be monotonically decreasing.
-    gas_variables: List[z3.BitVecRef]
+    gas_variables: List[Uint256]
 
     # Every time the CALL instruction is invoked we return a symbolic result,
     # tracked here.
-    call_variables: List[Tuple[FrozenBytes, z3.BoolRef]]
+    call_variables: List[Tuple[FrozenBytes, Constraint]]
 
     # List of Z3 expressions that must be satisfied in order for the program to
     # reach this state. Based on the JUMPI instructions (if statements) seen so
@@ -58,44 +56,48 @@ class State:
         """Return a human-readable version of the path."""
         return "Px" + hex(self.path)[2:].upper()
 
-    def constrain(self, solver: Solver, minimize: bool = False) -> None:
+    def constrain(self, solver: Solver) -> None:
         """Apply accumulated constraints to the given solver instance."""
-        if minimize:
-            solver.minimize(self.transaction.callvalue)
-            solver.minimize(self.transaction.calldata.length)
-
-            for returndata, _ in self.call_variables:
-                solver.minimize(returndata.length)
-
         for i, constraint in enumerate(self.path_constraints):
-            solver.assert_and_track(constraint, f"PC{i}{self.suffix}")
+            solver.assert_and_track(constraint)
 
         # ASSUMPTION: the current block number is at least 256. This prevents
         # the BLOCKHASH instruction from overflowing.
-        solver.assert_and_track(z3.UGE(self.block.number, 256), f"NUMLIM{self.suffix}")
+        solver.assert_and_track(self.block.number >= Uint256(256))
 
         for i in range(1, len(self.gas_variables)):
-            solver.assert_and_track(
-                z3.UGE(self.gas_variables[i - 1], self.gas_variables[i]),
-                f"MONOGAS{i}{self.suffix}",
-            )
+            solver.assert_and_track(self.gas_variables[i - 1] >= self.gas_variables[i])
 
         self.sha3.constrain(solver)
         self.universe.constrain(solver)
 
     def narrow(self, solver: Solver) -> None:
         """Apply concrete constraints to a given model instance."""
-        constraint = self.contract.address == BA(
+        constraint = self.contract.address == Uint160(
             0xADADADADADADADADADADADADADADADADADADADAD
         )
         if solver.check(constraint):
-            solver.assert_and_track(constraint, "DEFAULT.ADDRESS")
+            solver.assert_and_track(constraint)
 
-        constraint = self.transaction.caller == BA(
+        constraint = self.transaction.caller == Uint160(
             0xCACACACACACACACACACACACACACACACACACACACA
         )
+
         if solver.check(constraint):
-            solver.assert_and_track(constraint, "DEFAULT.CALLER")
+            solver.assert_and_track(constraint)
+
+        constraint = self.transaction.callvalue == Uint256(0)
+        if solver.check(constraint):
+            solver.assert_and_track(constraint)
+
+        # Minimize calldata length
+        i = 0
+        while True:
+            constraint = self.transaction.calldata.length == Uint256(i)
+            if solver.check(constraint):
+                solver.assert_and_track(constraint)
+                break
+            i += 1
 
         assert solver.check()
 
@@ -106,17 +108,12 @@ class State:
             return True
 
         # Check if any address other than the contract itself has increased
-        solver = DefaultSolver()
-        self.constrain(solver, minimize=True)
+        solver = Solver()
+        self.constrain(solver)
         for addr in self.universe.balances.written:
             if solver.check(
-                zand(
-                    addr != self.contract.address,
-                    z3.UGT(
-                        self.universe.balances.peek(addr),
-                        since.universe.balances.peek(addr),
-                    ),
-                ),
+                addr != self.contract.address,
+                self.universe.balances.peek(addr) > since.universe.balances.peek(addr),
             ):
                 return True
 
@@ -130,8 +127,8 @@ class State:
         """
         r: OrderedDict[str, str] = OrderedDict()
         a = solver.evaluate(self.contract.address)
-        if a is not None and unwrap(a) > 0:
-            r["Address"] = "0x" + unwrap_bytes(a).hex()
+        if a is not None and a.unwrap() > 0:
+            r["Address"] = "0x" + a.unwrap(bytes).hex()
         returndata = self.returndata.evaluate(solver, True)
         if returndata:
             r["Return"] = "0x" + returndata

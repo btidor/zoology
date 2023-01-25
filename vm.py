@@ -6,26 +6,13 @@ import inspect
 from contextlib import contextmanager
 from typing import Iterator, List, Literal, Optional, assert_never
 
-import z3
-
 import ops
 from arrays import Array, FrozenBytes, MutableBytes
 from disassembler import Instruction, Program, disassemble
 from environment import Block, Contract, Transaction, Universe
 from sha3 import SHA3
+from smt import Constraint, Uint160, Uint256
 from state import State
-from symbolic import (
-    BA,
-    BW,
-    is_concrete,
-    simplify,
-    uint256,
-    unwrap,
-    unwrap_bytes,
-    zextract,
-    zif,
-    zor,
-)
 
 
 def step(
@@ -77,9 +64,8 @@ def step(
         args: List[object] = []
         for name in sig.parameters:
             kls = sig.parameters[name].annotation
-            if kls == uint256:
+            if kls == Uint256:
                 val = state.stack.pop()
-                assert val.size() == 256
                 args.append(val)
             elif kls == State:
                 args.append(state)
@@ -88,9 +74,9 @@ def step(
             else:
                 raise TypeError(f"unknown arg class: {kls}")
 
-        result: Optional[uint256] = fn(*args)
+        result: Optional[Uint256] = fn(*args)
         if result is not None:
-            state.stack.append(simplify(result))
+            state.stack.append(result)
             if len(state.stack) > 1024:
                 raise Exception("evm stack overflow")
 
@@ -146,22 +132,22 @@ def printable_execution(state: State) -> Iterator[str]:
 
         # Print stack
         for x in state.stack:
-            yield "  " + unwrap_bytes(x).hex()
+            yield "  " + x.unwrap(bytes).hex()
         yield ""
 
         if action == "TERMINATE":
             break
 
     yield ("RETURN" if state.success else "REVERT") + " " + str(
-        state.returndata.require_concrete()
+        state.returndata.unwrap()
     )
 
 
 def concrete_JUMPI(state: State) -> None:
     """Handle a JUMPI action with concrete arguments. Mutates state."""
     program = state.contract.program
-    counter = unwrap(state.stack.pop(), "JUMPI requires concrete counter")
-    b = unwrap(state.stack.pop(), "JUMPI requires concrete b")
+    counter = state.stack.pop().unwrap(int, "JUMPI requires concrete counter")
+    b = state.stack.pop().unwrap(int, "JUMPI requires concrete b")
     if counter not in program.jumps:
         raise ValueError(f"illegal JUMPI target: 0x{counter:x}")
     if b == 0:
@@ -172,13 +158,13 @@ def concrete_JUMPI(state: State) -> None:
 
 def concrete_GAS(state: State) -> None:
     """Handle a GAS action using a concrete dummy value. Mutates state."""
-    state.stack.append(BW(0x00A500A500A500A500A5))
+    state.stack.append(Uint256(0x00A500A500A500A500A5))
 
 
 def hybrid_CALL(state: State) -> Iterator[State]:
     """Handle a CALL action. May yield a single state, or none."""
     gas = state.stack.pop()
-    address = zextract(159, 0, state.stack.pop())
+    address = state.stack.pop().into(Uint160)
     value = state.stack.pop()
     argsOffset = state.stack.pop()
     argsSize = state.stack.pop()
@@ -187,13 +173,13 @@ def hybrid_CALL(state: State) -> Iterator[State]:
 
     # TODO: handle calls that mutate storage, including self-calls
 
-    codesize = simplify(state.universe.codesizes[address])
-    if is_concrete(codesize) and unwrap(codesize) == 0:
+    codesize = state.universe.codesizes[address]
+    if codesize.maybe_unwrap() == 0:
         # Simple transfer to an EOA: always succeeds.
         state.universe.transfer(state.contract.address, address, value)
         returndata = FrozenBytes.concrete(b"")
-        ok = BW(1)
-    elif is_concrete(address):
+        ok = Uint256(1)
+    elif (ua := address.maybe_unwrap()) is not None:
         # Call to a concrete address: simulate the full execution.
         transaction = Transaction(
             origin=state.transaction.origin,
@@ -203,37 +189,33 @@ def hybrid_CALL(state: State) -> Iterator[State]:
             gasprice=state.transaction.gasprice,
         )
 
-        contract = state.universe.contracts.get(unwrap(address), None)
+        contract = state.universe.contracts.get(ua, None)
         if not contract:
-            raise ValueError("CALL to unknown contract: " + hex(unwrap(address)))
+            raise ValueError(f"CALL to unknown contract: {hex(ua)}")
 
         with state.descend(contract, transaction) as substate:
             yield substate
 
             returndata = substate.returndata
-            ok = BW(1) if substate.success else BW(0)
+            ok = Uint256(1) if substate.success else Uint256(0)
     else:
         # Call to a symbolic address: return a fully-symbolic response.
-        prefix = f"RETURNDATA{len(state.call_variables)}{state.suffix}"
-        returndata = FrozenBytes(
-            zif(
-                state.universe.codesizes[address] == 0,
-                BW(0),
-                z3.BitVec(f"{prefix}.length", 256),
-            ),
-            z3.Array(prefix, z3.BitVecSort(256), z3.BitVecSort(8)),
+        returndata = FrozenBytes.conditional(
+            f"RETURNDATA{len(state.call_variables)}{state.suffix}",
+            state.universe.codesizes[address] == Uint256(0),
         )
-        success = zor(
-            z3.Bool(f"RETURNOK{len(state.call_variables)}{state.suffix}"),
+        success = Constraint.any(
             # Calls (transfers) to an EOA always succeed.
-            state.universe.codesizes[address] == 0,
+            (state.universe.codesizes[address] == Uint256(0)),
+            # Create a variable for if the call succeeded.
+            Constraint(f"RETURNOK{len(state.call_variables)}{state.suffix}"),
         )
-        ok = zif(success, BW(1), BW(0))
+        ok = (success).ite(Uint256(1), Uint256(0))
         state.universe.transfer(state.contract.address, address, value)
         state.call_variables.append((state.returndata, success))
 
     state.returndata = returndata
-    state.memory.graft(returndata.slice(BW(0), retSize), retOffset)
+    state.memory.graft(returndata.slice(Uint256(0), retSize), retOffset)
     state.stack.append(ok)
 
 
@@ -241,7 +223,7 @@ def hybrid_CALL(state: State) -> Iterator[State]:
 def concrete_CALLCODE(state: State) -> Iterator[State]:
     """Handle a CALLCODE action. Yields a single state."""
     gas = state.stack.pop()
-    address = unwrap(state.stack.pop(), "CALLCODE requires concrete address")
+    address = state.stack.pop().unwrap(int, "CALLCODE requires concrete address")
     value = state.stack.pop()
     argsOffset = state.stack.pop()
     argsSize = state.stack.pop()
@@ -265,15 +247,15 @@ def concrete_CALLCODE(state: State) -> Iterator[State]:
         yield substate
 
         state.contract.storage = contract.storage
-        state.memory.graft(substate.returndata.slice(BW(0), retSize), retOffset)
-        state.stack.append(BW(1) if substate.success else BW(0))
+        state.memory.graft(substate.returndata.slice(Uint256(0), retSize), retOffset)
+        state.stack.append(Uint256(1) if substate.success else Uint256(0))
 
 
 @contextmanager
 def concrete_DELEGATECALL(state: State) -> Iterator[State]:
     """Handle a DELEGATECALL action. Yields a single state."""
     gas = state.stack.pop()
-    address = unwrap(state.stack.pop(), "DELEGATECALL requires concrete address")
+    address = state.stack.pop().unwrap(int, "DELEGATECALL requires concrete address")
     argsOffset = state.stack.pop()
     argsSize = state.stack.pop()
     retOffset = state.stack.pop()
@@ -296,15 +278,15 @@ def concrete_DELEGATECALL(state: State) -> Iterator[State]:
         yield substate
 
         state.contract.storage = contract.storage
-        state.memory.graft(substate.returndata.slice(BW(0), retSize), retOffset)
-        state.stack.append(BW(1) if substate.success else BW(0))
+        state.memory.graft(substate.returndata.slice(Uint256(0), retSize), retOffset)
+        state.stack.append(Uint256(1) if substate.success else Uint256(0))
 
 
 @contextmanager
 def concrete_STATICCALL(state: State) -> Iterator[State]:
     """Handle a STATICCALL action. Yields a single state."""
     gas = state.stack.pop()
-    address = unwrap(state.stack.pop(), "STATICCALL requires concrete address")
+    address = state.stack.pop().unwrap(int, "STATICCALL requires concrete address")
     argsOffset = state.stack.pop()
     argsSize = state.stack.pop()
     retOffset = state.stack.pop()
@@ -313,45 +295,44 @@ def concrete_STATICCALL(state: State) -> Iterator[State]:
     raise NotImplementedError("STATICCALL")
 
 
-def concrete_start(program: Program, value: uint256, data: bytes) -> State:
+def concrete_start(program: Program, value: Uint256, data: bytes) -> State:
     """Return a concrete start state with realistic values."""
-    assert value.size() == 256
     block = Block(
-        number=BW(16030969),
-        coinbase=BA(0xDAFEA492D9C6733AE3D56B7ED1ADB60692C98BC5),
-        timestamp=BW(1669214471),
-        prevrandao=BW(
+        number=Uint256(16030969),
+        coinbase=Uint160(0xDAFEA492D9C6733AE3D56B7ED1ADB60692C98BC5),
+        timestamp=Uint256(1669214471),
+        prevrandao=Uint256(
             0xCC7E0A66B3B9E3F54B7FDB9DCF98D57C03226D73BFFBB4E0BA7B08F92CE00D19
         ),
-        gaslimit=BW(30000000000000000),
-        chainid=BW(1),
-        basefee=BW(12267131109),
+        gaslimit=Uint256(30000000000000000),
+        chainid=Uint256(1),
+        basefee=Uint256(12267131109),
     )
     contract = Contract(
-        address=BA(0xADADADADADADADADADADADADADADADADADADADAD),
+        address=Uint160(0xADADADADADADADADADADADADADADADADADADADAD),
         program=program,
-        storage=Array("STORAGE", z3.BitVecSort(256), BW(0)),
+        storage=Array.concrete(Uint256, Uint256(0)),
     )
     transaction = Transaction(
-        origin=BA(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0),
-        caller=BA(0xCACACACACACACACACACACACACACACACACACACACA),
+        origin=Uint160(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0),
+        caller=Uint160(0xCACACACACACACACACACACACACACACACACACACACA),
         callvalue=value,
         calldata=FrozenBytes.concrete(data),
-        gasprice=BW(0x12),
+        gasprice=Uint256(0x12),
     )
     universe = Universe(
         suffix="",
-        balances=Array("BALANCE", z3.BitVecSort(160), BW(0)),
+        balances=Array.concrete(Uint160, Uint256(0)),
         transfer_constraints=[],
         contracts={},
-        codesizes=Array("CODESIZE", z3.BitVecSort(160), BW(0)),
-        blockhashes=Array("BLOCKHASH", z3.BitVecSort(256), BW(0)),
+        codesizes=Array.concrete(Uint160, Uint256(0)),
+        blockhashes=Array.concrete(Uint256, Uint256(0)),
         agents=[],
-        contribution=BW(0),
-        extraction=BW(0),
+        contribution=Uint256(0),
+        extraction=Uint256(0),
     )
     universe.codesizes[contract.address] = contract.program.code.length
-    universe.codesizes[BA(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0)] = BW(0)
+    universe.codesizes[Uint160(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0)] = Uint256(0)
     return State(
         suffix="",
         block=block,
@@ -377,7 +358,7 @@ if __name__ == "__main__":
         "6080604052600436106100655760003560e01c8063a2dea26f11610043578063a2dea26f146100ba578063abaa9916146100ed578063ffd40b56146100f557610065565b80636fab5ddf1461006a5780638aa96f38146100745780638da5cb5b14610089575b600080fd5b61007261013a565b005b34801561008057600080fd5b50610072610182565b34801561009557600080fd5b5061009e610210565b604080516001600160a01b039092168252519081900360200190f35b3480156100c657600080fd5b50610072600480360360208110156100dd57600080fd5b50356001600160a01b031661021f565b610072610285565b34801561010157600080fd5b506101286004803603602081101561011857600080fd5b50356001600160a01b03166102b1565b60408051918252519081900360200190f35b600180547fffffffffffffffffffffffff0000000000000000000000000000000000000000163317908190556001600160a01b03166000908152602081905260409020349055565b6001546001600160a01b031633146101e1576040805162461bcd60e51b815260206004820152601760248201527f63616c6c6572206973206e6f7420746865206f776e6572000000000000000000604482015290519081900360640190fd5b60405133904780156108fc02916000818181858888f1935050505015801561020d573d6000803e3d6000fd5b50565b6001546001600160a01b031681565b6001600160a01b03811660009081526020819052604090205461024157600080fd5b6001600160a01b03811660008181526020819052604080822054905181156108fc0292818181858888f19350505050158015610281573d6000803e3d6000fd5b5050565b3360009081526020819052604090205461029f90346102cc565b33600090815260208190526040902055565b6001600160a01b031660009081526020819052604090205490565b600082820183811015610326576040805162461bcd60e51b815260206004820152601b60248201527f536166654d6174683a206164646974696f6e206f766572666c6f770000000000604482015290519081900360640190fd5b939250505056fea264697066735822122008472e24693cfb431a0cbec77ce1c2c19216911e421de2df4e138648a9ce11c764736f6c634300060c0033"
     )
     program = disassemble(code)
-    start = concrete_start(program, BW(0), b"\x6f\xab\x5d\xdf")
+    start = concrete_start(program, Uint256(0), b"\x6f\xab\x5d\xdf")
 
     for line in printable_execution(start):
         print(line)

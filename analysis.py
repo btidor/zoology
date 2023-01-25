@@ -3,14 +3,13 @@
 
 from typing import Callable, Iterator, List, Optional, Set
 
-import z3
 from Crypto.Hash import keccak
 
 from disassembler import Program, disassemble
 from sha3 import SHA3
-from solver import DefaultSolver, Solver
+from smt import Constraint, Uint160, Uint256
+from solver import Solver
 from state import State
-from symbolic import describe, is_concrete, simplify, unwrap, zand, znot
 from universal import constrain_to_goal, universal_transaction
 
 
@@ -19,8 +18,8 @@ def analyze(program: Program) -> None:
     sha3 = SHA3()
     ownership: List[Predicate] = []
     for start, end in universal_transaction(program, sha3, ""):
-        solver = DefaultSolver()
-        end.constrain(solver, minimize=True)
+        solver = Solver()
+        end.constrain(solver)
 
         description = describe_state(solver, end)
 
@@ -45,11 +44,11 @@ def analyze(program: Program) -> None:
         # (2) In order to be a valid safety predicate, there must be no STEP
         # transition from P -> ~P
         for candidate in ownership:
-            solver = DefaultSolver()
-            end.constrain(solver, minimize=True)
+            solver = Solver()
+            end.constrain(solver)
             candidate.state.constrain(solver)
-            solver.assert_and_track(candidate.eval(start), "SAFE.PRE")
-            solver.assert_and_track(znot(candidate.eval(end)), "UNSAFE.POST")
+            solver.assert_and_track(candidate.eval(start))
+            solver.assert_and_track(~candidate.eval(end))
             if solver.check():
                 # STEP transition found: constraint is eliminated
                 print(f" - {candidate}")
@@ -60,14 +59,14 @@ def analyze(program: Program) -> None:
     additional: List[str] = []
     balance: List[Predicate] = []
     for start, end in universal_transaction(program, sha3, "^"):
-        solver = DefaultSolver()
-        end.constrain(solver, minimize=True)
+        solver = Solver()
+        end.constrain(solver)
 
         description = describe_state(solver, end)
 
         constrain_to_goal(solver, start, end)
         for predicate in ownership:
-            solver.assert_and_track(predicate.eval(start), f"SAFE{predicate}")
+            solver.assert_and_track(predicate.eval(start))
         if not solver.check():
             continue
 
@@ -89,13 +88,13 @@ def analyze(program: Program) -> None:
         # (2) In order to be a valid safety predicate, there must be no STEP
         # transition from P -> ~P
         for candidate in balance:
-            solver = DefaultSolver()
-            end.constrain(solver, minimize=True)
+            solver = Solver()
+            end.constrain(solver)
             for predicate in ownership:
-                solver.assert_and_track(predicate.eval(start), f"SAFE{predicate}")
+                solver.assert_and_track(predicate.eval(start))
             candidate.state.constrain(solver)
-            solver.assert_and_track(candidate.eval(start), "SAFE.PRE")
-            solver.assert_and_track(znot(candidate.eval(end)), "UNSAFE.POST")
+            solver.assert_and_track(candidate.eval(start))
+            solver.assert_and_track(~candidate.eval(end))
             if solver.check():
                 # STEP transition found: constraint is eliminated
                 print(f" - {candidate}")
@@ -105,17 +104,17 @@ def analyze(program: Program) -> None:
 class Predicate:
     def __init__(
         self,
-        expression: Callable[[State], z3.BoolRef],
+        expression: Callable[[State], Constraint],
         description: str,
         state: State,
-        storage_key: Optional[z3.BitVecRef] = None,
+        storage_key: Optional[Uint256] = None,
     ) -> None:
         self.expression = expression
         self.description = description
         self.state = state
         self.storage_key = storage_key
 
-    def eval(self, state: State) -> z3.BoolRef:
+    def eval(self, state: State) -> Constraint:
         return self.expression(state)
 
     def __repr__(self) -> str:
@@ -124,25 +123,25 @@ class Predicate:
 
 def ownership_safety_predicates(state: State) -> Iterator[Predicate]:
     for key in state.contract.storage.accessed:
-        k = simplify(key)
-        if is_concrete(k):
-            yield Predicate(
-                lambda state: zand(
-                    state.transaction.origin
-                    != z3.Extract(159, 0, state.contract.storage.peek(k)),
-                    state.transaction.caller
-                    != z3.Extract(159, 0, state.contract.storage.peek(k)),
-                ),
-                f"$OWNER[{describe(k)}]",
-                state,
-            )
+        if key.maybe_unwrap() is None:
+            continue
+        yield Predicate(
+            lambda state: Constraint.all(
+                state.transaction.origin
+                != state.contract.storage.peek(key).into(Uint160),
+                state.transaction.caller
+                != state.contract.storage.peek(key).into(Uint160),
+            ),
+            f"$OWNER[{key.describe()}]",
+            state,
+        )
 
 
 def balance_safety_predicates(state: State) -> Iterator[Predicate]:
     used: Set[str] = set()
     for key in state.contract.storage.accessed:
-        if is_concrete(key):
-            index = hex(unwrap(key))[2:]
+        if u := key.maybe_unwrap():
+            index = hex(u)[2:]
         else:
             hash = keccak.new(data=str(key).encode(), digest_bits=256).hexdigest()
             if hash in used:
@@ -150,12 +149,10 @@ def balance_safety_predicates(state: State) -> Iterator[Predicate]:
             used.add(hash)
             index = hash[:8] + "?"
         yield Predicate(
-            lambda state: zand(
-                z3.UGE(state.universe.contribution, state.universe.extraction),
-                z3.UGE(
-                    state.universe.contribution - state.universe.extraction,
-                    state.contract.storage.peek(key),
-                ),
+            lambda state: Constraint.all(
+                state.universe.contribution >= state.universe.extraction,
+                state.universe.contribution - state.universe.extraction
+                >= state.contract.storage.peek(key),
             ),
             f"$BALANCE[{index}]",
             state,
@@ -164,10 +161,6 @@ def balance_safety_predicates(state: State) -> Iterator[Predicate]:
 
 
 def describe_state(solver: Solver, state: State) -> str:
-    # Re-adding these objectives increases performance by 2x?!
-    solver.minimize(state.transaction.callvalue)
-    solver.minimize(state.transaction.calldata.length)
-
     assert solver.check()
     assert state.success is True
 

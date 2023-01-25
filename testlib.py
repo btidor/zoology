@@ -17,16 +17,15 @@ from typing import (
     assert_never,
 )
 
-import z3
 from Crypto.Hash import keccak
 
 from arrays import Array, FrozenBytes, MutableBytes
 from disassembler import Program, disassemble
 from environment import Block, Contract, Transaction, Universe
 from sha3 import SHA3
-from solver import DefaultSolver
+from smt import BitVector, Constraint, Uint160, Uint256
+from solver import Solver
 from state import State
-from symbolic import BA, BW, Constraint, uint160, uint256
 from universal import _universal_transaction, constrain_to_goal, symbolic_start
 from vm import (
     concrete_CALLCODE,
@@ -37,6 +36,12 @@ from vm import (
     hybrid_CALL,
     step,
 )
+
+
+def concretize(value: Optional[BitVector]) -> Optional[int]:
+    if value is None:
+        return None
+    return value.unwrap()
 
 
 class Benchmark(Protocol):
@@ -60,96 +65,92 @@ class Solidity(Enum):
 
 
 def make_block(
-    number: Optional[uint256] = None,
-    coinbase: Optional[uint256] = None,
-    timestamp: Optional[uint256] = None,
-    prevrandao: Optional[uint256] = None,
-    gaslimit: Optional[uint256] = None,
-    chainid: Optional[uint256] = None,
-    basefee: Optional[uint256] = None,
+    number: Optional[Uint256] = None,
+    coinbase: Optional[Uint160] = None,
+    timestamp: Optional[Uint256] = None,
+    prevrandao: Optional[Uint256] = None,
+    gaslimit: Optional[Uint256] = None,
+    chainid: Optional[Uint256] = None,
+    basefee: Optional[Uint256] = None,
 ) -> Block:
     return Block(
-        number=BW(16030969) if number is None else number,
-        coinbase=BA(0xDAFEA492D9C6733AE3D56B7ED1ADB60692C98BC5)
+        number=Uint256(16030969) if number is None else number,
+        coinbase=Uint160(0xDAFEA492D9C6733AE3D56B7ED1ADB60692C98BC5)
         if coinbase is None
         else coinbase,
-        timestamp=BW(1669214471) if timestamp is None else timestamp,
-        prevrandao=BW(
+        timestamp=Uint256(1669214471) if timestamp is None else timestamp,
+        prevrandao=Uint256(
             0xCC7E0A66B3B9E3F54B7FDB9DCF98D57C03226D73BFFBB4E0BA7B08F92CE00D19
         )
         if prevrandao is None
         else prevrandao,
-        gaslimit=BW(30000000000000000) if gaslimit is None else gaslimit,
-        chainid=BW(1) if chainid is None else chainid,
-        basefee=BW(12267131109) if basefee is None else basefee,
+        gaslimit=Uint256(30000000000000000) if gaslimit is None else gaslimit,
+        chainid=Uint256(1) if chainid is None else chainid,
+        basefee=Uint256(12267131109) if basefee is None else basefee,
     )
 
 
 def make_contract(
-    address: Optional[uint160] = None,
+    address: Optional[Uint160] = None,
     program: Optional[Program] = None,
-    storage: Optional[Array] = None,
+    storage: Optional[Array[Uint256, Uint256]] = None,
 ) -> Contract:
     return Contract(
-        address=BA(0xADADADADADADADADADADADADADADADADADADADAD)
+        address=Uint160(0xADADADADADADADADADADADADADADADADADADADAD)
         if address is None
         else address,
         program=disassemble(b"") if program is None else program,
-        storage=Array("STORAGE", z3.BitVecSort(256), BW(0))
-        if storage is None
-        else storage,
+        storage=Array.concrete(Uint256, Uint256(0)) if storage is None else storage,
     )
 
 
 def make_transaction(
-    origin: Optional[uint160] = None,
-    caller: Optional[uint160] = None,
-    callvalue: Optional[uint256] = None,
+    origin: Optional[Uint160] = None,
+    caller: Optional[Uint160] = None,
+    callvalue: Optional[Uint256] = None,
     calldata: Optional[FrozenBytes] = None,
-    gasprice: Optional[uint256] = None,
+    gasprice: Optional[Uint256] = None,
 ) -> Transaction:
     return Transaction(
-        origin=BA(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0)
+        origin=Uint160(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0)
         if origin is None
         else origin,
-        caller=BA(0xCACACACACACACACACACACACACACACACACACACACA)
+        caller=Uint160(0xCACACACACACACACACACACACACACACACACACACACA)
         if caller is None
         else caller,
-        callvalue=BW(0) if callvalue is None else callvalue,
+        callvalue=Uint256(0) if callvalue is None else callvalue,
         calldata=FrozenBytes.concrete(b"") if calldata is None else calldata,
-        gasprice=BW(0x12) if gasprice is None else gasprice,
+        gasprice=Uint256(0x12) if gasprice is None else gasprice,
     )
 
 
 def make_universe(
     suffix: Optional[str] = None,
-    balances: Optional[Array] = None,
+    balances: Optional[Array[Uint160, Uint256]] = None,
     transfer_constraints: Optional[List[Constraint]] = None,
     contracts: Optional[Dict[int, Contract]] = None,
-    codesizes: Optional[Array] = None,
-    blockhashes: Optional[Array] = None,
-    agents: Optional[List[uint160]] = None,
-    contribution: Optional[uint256] = None,
-    extraction: Optional[uint256] = None,
+    codesizes: Optional[Array[Uint160, Uint256]] = None,
+    blockhashes: Optional[Array[Uint256, Uint256]] = None,
+    agents: Optional[List[Uint160]] = None,
+    contribution: Optional[Uint256] = None,
+    extraction: Optional[Uint256] = None,
 ) -> Universe:
     return Universe(
         suffix="" if suffix is None else suffix,
-        balances=Array("BALANCE", z3.BitVecSort(160), BW(0))
-        if balances is None
-        else balances,
+        balances=Array.concrete(Uint160, Uint256(0)) if balances is None else balances,
         transfer_constraints=[]
         if transfer_constraints is None
         else transfer_constraints,
         contracts={} if contracts is None else contracts,
-        codesizes=Array("CODESIZE", z3.BitVecSort(160), BW(0))
+        codesizes=Array.concrete(Uint160, Uint256(0))
         if codesizes is None
         else codesizes,
-        blockhashes=Array("BLOCKHASH", z3.BitVecSort(256), BW(0))
+        blockhashes=Array.concrete(Uint256, Uint256(0))
         if blockhashes is None
         else blockhashes,
         agents=[] if agents is None else agents,
-        contribution=BW(0) if contribution is None else contribution,
-        extraction=BW(0) if extraction is None else extraction,
+        contribution=Uint256(0) if contribution is None else contribution,
+        extraction=Uint256(0) if extraction is None else extraction,
     )
 
 
@@ -161,13 +162,13 @@ def make_state(
     universe: Optional[Universe] = None,
     sha3: Optional[SHA3] = None,
     pc: Optional[int] = None,
-    stack: Optional[List[uint256]] = None,
+    stack: Optional[List[Uint256]] = None,
     memory: Optional[MutableBytes] = None,
     returndata: Optional[FrozenBytes] = None,
     success: Optional[bool] = None,
     subcontexts: Optional[List[State]] = None,
-    gas_variables: Optional[List[uint256]] = None,
-    call_variables: Optional[List[Tuple[FrozenBytes, z3.BoolRef]]] = None,
+    gas_variables: Optional[List[Uint256]] = None,
+    call_variables: Optional[List[Tuple[FrozenBytes, Constraint]]] = None,
     path_constraints: Optional[List[Constraint]] = None,
     path: Optional[int] = None,
 ) -> State:
@@ -318,16 +319,16 @@ def check_transition(
     assert end.path == path, f"unexpected path: {end.px()}"
     assert end.success is True
 
-    solver = DefaultSolver()
-    end.constrain(solver, minimize=True)
+    solver = Solver()
+    end.constrain(solver)
     constrain_to_goal(solver, start, end)
     assert solver.check() == (kind == "GOAL")
 
     if kind != "GOAL":
         assert end.is_changed(start) == (kind == "SAVE")
 
-    solver = DefaultSolver()
-    end.constrain(solver, minimize=True)
+    solver = Solver()
+    end.constrain(solver)
     assert solver.check()
 
     end.narrow(solver)

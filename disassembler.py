@@ -8,7 +8,7 @@ from typing import Dict, Iterable, List, Optional
 
 from arrays import FrozenBytes
 from opcodes import REFERENCE, UNIMPLEMENTED
-from symbolic import BW, uint256, unwrap
+from smt import Uint256
 
 
 @dataclass
@@ -23,7 +23,7 @@ class Program:
     jumps: Dict[int, int]
 
 
-@dataclass
+@dataclass(frozen=True)
 class Instruction:
     """A single disassembled EVM instruction."""
 
@@ -40,14 +40,14 @@ class Instruction:
     suffix: Optional[int] = None
 
     # Operand (PUSH only)
-    operand: Optional[uint256] = None
+    operand: Optional[Uint256] = None
 
     def __str__(self) -> str:
         msg = f"{self.offset:04x}  {self.name}"
         if self.suffix is not None:
             msg += str(self.suffix)
         if self.operand is not None and self.suffix is not None:
-            operand = unwrap(self.operand).to_bytes(self.suffix, "big")
+            operand = self.operand.unwrap().to_bytes(self.suffix)
             msg += "\t0x" + operand.hex()
         return msg
 
@@ -104,10 +104,10 @@ def _decode_instruction(code: bytes, offset: int) -> Instruction:
     elif opref.name == "PUSH":
         # PUSH is the only opcode that takes an operand
         suffix = opref.code - 0x5F
-        operand = 0
+        buf = 0
         for i in range(suffix):
-            operand = (operand << 8) | code[offset + i + 1]
-        operand = BW(operand)
+            buf = (buf << 8) | code[offset + i + 1]
+        operand = Uint256(buf)
         size = suffix + 1
     elif opref.name == "DUP":
         suffix = opref.code - 0x7F

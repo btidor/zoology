@@ -4,15 +4,13 @@
 import copy
 from typing import Iterable, Iterator, Tuple, assert_never
 
-import z3
-
 from arrays import Array, FrozenBytes, MutableBytes
 from disassembler import Program, disassemble
 from environment import Block, Contract, Transaction, Universe
 from sha3 import SHA3
-from solver import DefaultSolver, Solver
+from smt import Uint160, Uint256
+from solver import Solver
 from state import State
-from symbolic import BW, unwrap, unwrap_bytes
 from vm import (
     concrete_CALLCODE,
     concrete_DELEGATECALL,
@@ -88,32 +86,32 @@ def _universal_transaction(state: State) -> Iterator[State]:
 
 def symbolic_JUMPI(program: Program, state: State) -> Iterator[State]:
     """Handle a JUMPI action with a symbolic condition. Yields next states."""
-    solver = DefaultSolver()
+    solver = Solver()
     state.constrain(solver)
 
-    counter = unwrap(state.stack.pop(), "JUMPI requires concrete counter")
+    counter = state.stack.pop().unwrap(int, "JUMPI requires concrete counter")
     if counter not in program.jumps:
         raise ValueError(f"illegal JUMPI target: 0x{counter:x}")
     b = state.stack.pop()
 
-    if solver.check(b == 0):
+    if solver.check(b == Uint256(0)):
         next = copy.deepcopy(state)
         next.pc += 1
         next.path = (next.path << 1) | 0
-        next.path_constraints.append(b == 0)
+        next.path_constraints.append(b == Uint256(0))
         yield next
 
-    if solver.check(b != 0):
+    if solver.check(b != Uint256(0)):
         next = copy.deepcopy(state)
         next.pc = program.jumps[counter]
         next.path = (next.path << 1) | 1
-        next.path_constraints.append(b != 0)
+        next.path_constraints.append(b != Uint256(0))
         yield next
 
 
 def symbolic_GAS(state: State) -> None:
     """Handle a GAS action using a symbolic value. Mutates state."""
-    gas = z3.BitVec(f"GAS{len(state.gas_variables)}{state.suffix}", 256)
+    gas = Uint256(f"GAS{len(state.gas_variables)}{state.suffix}")
     state.gas_variables.append(gas)
     state.stack.append(gas)
 
@@ -121,46 +119,46 @@ def symbolic_GAS(state: State) -> None:
 def symbolic_start(program: Program, sha3: SHA3, suffix: str) -> State:
     """Return a fully-symbolic start state."""
     block = Block(
-        number=z3.BitVec(f"NUMBER{suffix}", 256),
-        coinbase=z3.BitVec(f"COINBASE{suffix}", 160),
-        timestamp=z3.BitVec(f"TIMESTAMP{suffix}", 256),
-        prevrandao=z3.BitVec(f"PREVRANDAO{suffix}", 256),
-        gaslimit=z3.BitVec(f"GASLIMIT{suffix}", 256),
-        chainid=z3.BitVec(f"CHAINID", 256),
-        basefee=z3.BitVec(f"BASEFEE{suffix}", 256),
+        number=Uint256(f"NUMBER{suffix}"),
+        coinbase=Uint160(f"COINBASE{suffix}"),
+        timestamp=Uint256(f"TIMESTAMP{suffix}"),
+        prevrandao=Uint256(f"PREVRANDAO{suffix}"),
+        gaslimit=Uint256(f"GASLIMIT{suffix}"),
+        chainid=Uint256(f"CHAINID"),
+        basefee=Uint256(f"BASEFEE{suffix}"),
     )
     contract = Contract(
-        address=z3.BitVec("ADDRESS", 160),
+        address=Uint160("ADDRESS"),
         program=program,
-        storage=Array(f"STORAGE{suffix}", z3.BitVecSort(256), z3.BitVecSort(256)),
+        storage=Array.symbolic(f"STORAGE{suffix}", Uint256, Uint256),
     )
-    origin, caller = z3.BitVec(f"ORIGIN", 160), z3.BitVec(f"CALLER", 160)
+    origin, caller = Uint160(f"ORIGIN"), Uint160(f"CALLER")
     transaction = Transaction(
         # TODO: properly constrain ORIGIN to be an EOA and CALLER to either be
         # equal to ORIGIN or else be a non-EOA; handle the case where ORIGIN and
         # CALLER vary across transactions.
         origin=origin,
         caller=caller,
-        callvalue=z3.BitVec(f"CALLVALUE{suffix}", 256),
+        callvalue=Uint256(f"CALLVALUE{suffix}"),
         calldata=FrozenBytes.symbolic(f"CALLDATA{suffix}"),
-        gasprice=z3.BitVec(f"GASPRICE{suffix}", 256),
+        gasprice=Uint256(f"GASPRICE{suffix}"),
     )
     universe = Universe(
         suffix=suffix,
         # TODO: the balances of other accounts can change between transactions
         # (and the balance of this contract account too, via SELFDESTRUCT). How
         # do we model this?
-        balances=Array(f"BALANCE{suffix}", z3.BitVecSort(160), z3.BitVecSort(256)),
+        balances=Array.symbolic(f"BALANCE{suffix}", Uint160, Uint256),
         transfer_constraints=[],
         contracts={},
-        codesizes=Array(f"CODESIZE{suffix}", z3.BitVecSort(160), z3.BitVecSort(256)),
-        blockhashes=Array(f"BLOCKHASH{suffix}", z3.BitVecSort(256), z3.BitVecSort(256)),
+        codesizes=Array.symbolic(f"CODESIZE{suffix}", Uint160, Uint256),
+        blockhashes=Array.symbolic(f"BLOCKHASH{suffix}", Uint256, Uint256),
         agents=[origin, caller],
-        contribution=z3.BitVec(f"CONTRIBUTION{suffix}", 256),
-        extraction=z3.BitVec(f"EXTRACTION{suffix}", 256),
+        contribution=Uint256(f"CONTRIBUTION{suffix}"),
+        extraction=Uint256(f"EXTRACTION{suffix}"),
     )
     universe.codesizes[contract.address] = contract.program.code.length
-    universe.codesizes[origin] = BW(0)
+    universe.codesizes[origin] = Uint256(0)
     return State(
         suffix=suffix,
         block=block,
@@ -189,20 +187,14 @@ def constrain_to_goal(solver: Solver, start: State, end: State) -> None:
     state tranisition that results in our agent extracting net value from the
     contract.
     """
-    solver.assert_and_track(
-        z3.ULE(start.universe.extraction, start.universe.contribution),
-        "GOAL.PRE",
-    )
-    solver.assert_and_track(
-        z3.UGT(end.universe.extraction, end.universe.contribution),
-        "GOAL.POST",
-    )
+    solver.assert_and_track(start.universe.extraction <= start.universe.contribution)
+    solver.assert_and_track(end.universe.extraction > end.universe.contribution)
 
 
 def printable_transition(start: State, end: State) -> Iterable[str]:
     """Produce a human-readable description of a given state transition."""
-    solver = DefaultSolver()
-    end.constrain(solver, minimize=True)
+    solver = Solver()
+    end.constrain(solver)
     assert solver.check()
 
     constrain_to_goal(solver, start, end)
@@ -217,8 +209,8 @@ def printable_transition(start: State, end: State) -> Iterable[str]:
         kind = "  VIEW"
 
     # Reset so we can extract the model
-    solver = DefaultSolver()
-    end.constrain(solver, minimize=True)
+    solver = Solver()
+    end.constrain(solver)
     assert solver.check()
 
     for line in _printable_transition(solver, start, end, kind):
@@ -251,15 +243,15 @@ def _printable_transition(
     if len(values) > 0:
         yield ""
 
-    a = unwrap_bytes(solver.evaluate(start.universe.contribution, True)).hex()
-    b = unwrap_bytes(solver.evaluate(end.universe.contribution, True)).hex()
+    a = solver.evaluate(start.universe.contribution, True).unwrap(bytes).hex()
+    b = solver.evaluate(end.universe.contribution, True).unwrap(bytes).hex()
     if a != b:
         yield f"Contrib\tETH 0x{a}"
         yield f"\t->  0x{b}"
         yield f""
 
-    a = unwrap_bytes(solver.evaluate(start.universe.extraction, True)).hex()
-    b = unwrap_bytes(solver.evaluate(end.universe.extraction, True)).hex()
+    a = solver.evaluate(start.universe.extraction, True).unwrap(bytes).hex()
+    b = solver.evaluate(end.universe.extraction, True).unwrap(bytes).hex()
     if a != b:
         yield f"Extract\tETH 0x{a}"
         yield f"\t->  0x{b}"

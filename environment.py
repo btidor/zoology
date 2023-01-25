@@ -4,58 +4,45 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from dataclasses import dataclass
-from typing import Any, Dict, List
-
-import z3
+from typing import Dict, List, Optional, Union
 
 from arrays import Array, FrozenBytes
 from disassembler import Program
+from smt import BitVector, Constraint, Uint160, Uint256
 from solver import Solver
-from symbolic import (
-    BW,
-    Constraint,
-    is_bitvector,
-    is_concrete,
-    uint160,
-    uint256,
-    unwrap,
-    unwrap_bytes,
-    zif,
-    zor,
-)
 
 
 @dataclass(frozen=True)
 class Block:
     """A block in the blockchain."""
 
-    number: uint256
-    coinbase: uint160
-    timestamp: uint256
-    prevrandao: uint256
-    gaslimit: uint256
-    chainid: uint256
-    basefee: uint256
+    number: Uint256
+    coinbase: Uint160
+    timestamp: Uint256
+    prevrandao: Uint256
+    gaslimit: Uint256
+    chainid: Uint256
+    basefee: Uint256
 
 
 @dataclass
 class Contract:
     """A deployed contract account with code and symbolic storage."""
 
-    address: uint160
+    address: Uint160
     program: Program
-    storage: Array
+    storage: Array[Uint256, Uint256]
 
 
 @dataclass(frozen=True)
 class Transaction:
     """The inputs to a contract call."""
 
-    origin: uint160
-    caller: uint160
-    callvalue: uint256
+    origin: Uint160
+    caller: Uint160
+    callvalue: Uint256
     calldata: FrozenBytes
-    gasprice: uint256
+    gasprice: Uint256
 
     def evaluate(self, solver: Solver) -> OrderedDict[str, str]:
         """
@@ -63,27 +50,30 @@ class Transaction:
 
         Only attributes present in the model will be included.
         """
-        r: OrderedDict[str, Any] = OrderedDict()
+        r: OrderedDict[str, Optional[Union[BitVector, str]]] = OrderedDict()
         calldata = self.calldata.evaluate(solver, True)
         r["Data"] = f"0x{calldata[:8]} {calldata[8:]}".strip() if calldata else None
         r["Value"] = self.callvalue
         r["Caller"] = self.caller
         r["Gas"] = self.gasprice
 
+        s: OrderedDict[str, str] = OrderedDict()
         for k in list(r.keys()):
-            if r[k] is None:
-                del r[k]
-            elif is_bitvector(r[k]):
-                v = solver.evaluate(r[k])
-                if v is not None and is_concrete(v) and unwrap(v) > 0:
-                    r[k] = "0x" + unwrap_bytes(v).hex()
-                else:
-                    del r[k]
-            elif isinstance(r[k], str):
+            v = r[k]
+            if v is None:
                 pass
+            elif isinstance(v, BitVector):
+                if v.maybe_unwrap():
+                    s[k] = "0x" + v.unwrap(bytes).hex()
+                else:
+                    v = solver.evaluate(v)
+                    if v is not None and v.maybe_unwrap():
+                        s[k] = "0x" + v.unwrap(bytes).hex()
+            elif isinstance(v, str):
+                s[k] = v
             else:
                 raise TypeError(f"unknown value type: {type(r[k])}")
-        return r
+        return s
 
 
 @dataclass
@@ -92,21 +82,21 @@ class Universe:
 
     suffix: str
 
-    balances: Array
+    balances: Array[Uint160, Uint256]  # address -> balance in wei
     transfer_constraints: List[Constraint]
 
     contracts: Dict[int, Contract]  # address -> Contract
-    codesizes: Array  # address -> code size
+    codesizes: Array[Uint160, Uint256]  # address -> code size
 
-    blockhashes: Array
+    blockhashes: Array[Uint256, Uint256]
 
     # These variables track how much value has been moved from the contracts
     # under test to our agent's accounts. To avoid overflow errors, we track
     # value contributed to and value extracted from the contracts under test as
     # two separate unsigned (nonnegative) integers.
-    agents: List[uint160]
-    contribution: uint256
-    extraction: uint256
+    agents: List[Uint160]
+    contribution: Uint256
+    extraction: Uint256
 
     def add_contract(self, contract: Contract) -> None:
         """
@@ -114,36 +104,36 @@ class Universe:
 
         The contract must have a concrete address.
         """
-        self.contracts[unwrap(contract.address)] = contract
+        self.contracts[contract.address.unwrap()] = contract
         self.codesizes[contract.address] = contract.program.code.length
 
-    def transfer(self, src: uint160, dst: uint160, val: uint256) -> None:
+    def transfer(self, src: Uint160, dst: Uint160, val: Uint256) -> None:
         """Transfer value from one account to another."""
+        # ASSUMPTION: If `balances[src]` drops below zero, execution will
+        # revert. Therefore, `balances[src] >= val`.
         self.transfer_constraints.append(
-            # If `balances[src]` drops below zero, execution will revert.
-            # Therefore, `balances[src] >= 0`.
-            z3.BVSubNoUnderflow(self.balances[src], val, False)
-        )
-        self.transfer_constraints.append(
-            # There isn't enough ETH in existence to overflow an account's
-            # balance.
-            z3.BVAddNoOverflow(self.balances[dst], val, False)
+            Uint256.underflow_safe(self.balances[src], val)
         )
         self.balances[src] -= val
+
+        # ASSUMPTION: There isn't enough ETH in existence to overflow an
+        # account's balance; all balances are less than 2^255 wei.
+        self.transfer_constraints.append(Uint256.overflow_safe(self.balances[dst], val))
         self.balances[dst] += val
 
-        ext = zif(zor(False, *[dst == agent for agent in self.agents]), val, BW(0))
-        self.transfer_constraints.append(
-            z3.BVAddNoOverflow(self.extraction, ext, False)
+        de = Constraint.any(*[dst == agent for agent in self.agents]).ite(
+            val, Uint256(0)
         )
-        self.extraction += ext
-        cont = zif(zor(False, *[src == agent for agent in self.agents]), val, BW(0))
-        self.transfer_constraints.append(
-            z3.BVAddNoOverflow(self.contribution, cont, False)
+        self.transfer_constraints.append(Uint256.overflow_safe(self.extraction, de))
+        self.extraction += de
+
+        dc = Constraint.any(*[src == agent for agent in self.agents]).ite(
+            val, Uint256(0)
         )
-        self.contribution += cont
+        self.transfer_constraints.append(Uint256.overflow_safe(self.contribution, dc))
+        self.contribution += dc
 
     def constrain(self, solver: Solver) -> None:
         """Apply accumulated constraints to the given solver instance."""
         for i, constraint in enumerate(self.transfer_constraints):
-            solver.assert_and_track(constraint, f"XFER{i}{self.suffix}")
+            solver.assert_and_track(constraint)

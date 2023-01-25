@@ -2,19 +2,17 @@
 
 import copy
 
-import z3
-
 from disassembler import disassemble
 from sha3 import SHA3
-from solver import DefaultSolver
-from symbolic import BA, BW
-from testlib import make_state
+from smt import Uint160, Uint256
+from solver import Solver
+from testlib import concretize, make_state
 from universal import symbolic_start
 
 
 def test_transaction_evaluate() -> None:
     state = make_state()
-    solver = DefaultSolver()
+    solver = Solver()
     state.constrain(solver)
     assert solver.check()
 
@@ -28,28 +26,28 @@ def test_transaction_evaluate() -> None:
 def test_transfer() -> None:
     start = symbolic_start(disassemble(b""), SHA3(), "")
     end = copy.deepcopy(start)
-    src, dst = BA(0x1234), BA(0x5678)
+    src, dst = Uint160(0x1234), Uint160(0x5678)
 
-    end.universe.transfer(src, dst, BW(0x100))
+    end.universe.transfer(src, dst, Uint256(0x100))
 
-    solver = DefaultSolver()
+    solver = Solver()
     end.constrain(solver)
-    solver.assert_and_track(start.universe.balances[src] == 0xAAA, "TEST1")
-    solver.assert_and_track(start.universe.balances[dst] == 0x0, "TEST2")
+    solver.assert_and_track(start.universe.balances[src] == Uint256(0xAAA))
+    solver.assert_and_track(start.universe.balances[dst] == Uint256(0x0))
     assert solver.check()
 
-    assert solver.evaluate(end.universe.balances[src]) == 0x9AA
-    assert solver.evaluate(end.universe.balances[dst]) == 0x100
+    assert concretize(solver.evaluate(end.universe.balances[src])) == 0x9AA
+    assert concretize(solver.evaluate(end.universe.balances[dst])) == 0x100
 
 
 def test_impossible_transfer() -> None:
     start = symbolic_start(disassemble(b""), SHA3(), "")
     end = copy.deepcopy(start)
-    src, dst = BA(0x1234), BA(0x5678)
+    src, dst = Uint160(0x1234), Uint160(0x5678)
 
-    end.universe.transfer(src, dst, BW(0x100))
+    end.universe.transfer(src, dst, Uint256(0x100))
 
-    solver = DefaultSolver()
+    solver = Solver()
     end.constrain(solver)
-    solver.assert_and_track(z3.ULE(start.universe.balances[src], 0xF), "TEST1")
+    solver.assert_and_track(start.universe.balances[src] <= Uint256(0xF))
     assert not solver.check()

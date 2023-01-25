@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, Iterator, List, Tuple
+from typing import Any, Dict, Iterable, Iterator, List, Tuple
 
-import z3
 from Crypto.Hash import keccak
+from pysmt.fnode import FNode
+from pysmt.shortcuts import BV, BVExtract, Equals, Implies, NotEquals, Select, Symbol
+from pysmt.typing import ArrayType, BVType
 
-from arrays import Array
+from arrays import Bytes
+from smt import Constraint, Uint256
 from solver import Solver
-from symbolic import BW, Constraint, describe, is_concrete, simplify, unwrap, zget
 
 
 @dataclass
@@ -30,79 +33,89 @@ class SHA3:
     # We model the SHA-3 function as a symbolic uninterpreted function from
     # n-byte inputs to 32-byte outputs. Z3 requires n to be constant for any
     # given function, so we store a mapping from `n -> func_n(x)`.
-    hashes: Dict[int, Array] = field(default_factory=dict)
+    hashes: Dict[int, FNode] = field(default_factory=dict)
+    accessed: Dict[int, List[Bytes]] = field(default_factory=dict)
 
     digest_constraints: List[Constraint] = field(default_factory=list)
 
-    def __getitem__(self, key: z3.BitVecRef) -> z3.BitVecRef:
+    def __deepcopy__(self, memo: Any) -> SHA3:
+        return SHA3(
+            suffix=self.suffix,
+            hashes=copy.copy(self.hashes),
+            accessed=copy.deepcopy(self.accessed, memo),
+            digest_constraints=copy.deepcopy(self.digest_constraints, memo),
+        )
+
+    def __getitem__(self, key: Bytes) -> Uint256:
         """Compute the SHA3 hash of a given key."""
-        size = key.size() // 8
-        assert key.size() % 8 == 0
+        size = key.length.unwrap(int, "can't hash symbolic-length bytes")
+
+        if size == 0:
+            digest = keccak.new(data=b"", digest_bits=256).digest()
+            return Uint256(int.from_bytes(digest))
+
         if size not in self.hashes:
-            self.hashes[size] = Array(
-                f"SHA3({size}){self.suffix}",
-                z3.BitVecSort(size * 8),
-                z3.BitVecSort(256),
+            self.hashes[size] = Symbol(
+                f"SHA3({size}){self.suffix}", ArrayType(BVType(size * 8), BVType(256))
             )
+            self.accessed[size] = []
 
-        key = simplify(key)
-        if is_concrete(key):
-            digest = keccak.new(
-                data=unwrap(key).to_bytes(size, "big"), digest_bits=256
-            ).digest()
-            symbolic = BW(int.from_bytes(digest, "big"))
-            self.digest_constraints.append(self.hashes[size][key] == symbolic)
+        self.accessed[size].append(key)
+
+        if (data := key.maybe_unwrap()) is not None:
+            digest = keccak.new(data=data, digest_bits=256).digest()
+            symbolic = Uint256(int.from_bytes(digest))
+            self.digest_constraints.append(
+                Constraint(
+                    Equals(Select(self.hashes[size], key._bigvector()), symbolic.node)
+                )
+            )
             return symbolic
+        else:
+            return Uint256(Select(self.hashes[size], key._bigvector()))
 
-        return self.hashes[size][key]
-
-    def items(self) -> Iterator[Tuple[int, z3.BitVecRef, z3.BitVecRef]]:
+    def items(self) -> Iterator[Tuple[int, Bytes, Uint256]]:
         """Iterate over (n, key, value) tuples."""
-        for n, arr in self.hashes.items():
-            for key in arr.accessed:
-                yield (n, key, zget(arr.array, key))
+        for n, array in self.hashes.items():
+            for key in self.accessed[n]:
+                yield (n, key, Uint256(Select(array, key._bigvector())))
 
     def constrain(self, solver: Solver) -> None:
         """Apply computed SHA3 constraints to the given solver instance."""
-        for n, key, val in self.items():
-            fp = describe(key)
-
+        for _, key1, val1 in self.items():
             # Assumption: no hash may have more than 128 leading zero bits. This
             # avoids hash collisions between maps/arrays and ordinary storage
             # slots.
             solver.assert_and_track(
-                z3.Extract(255, 128, val) != 0,
-                f"SHA3({n}).NLZ[{fp}]{self.suffix}",
+                Constraint(NotEquals(BVExtract(val1.node, 128, 255), BV(0, 128)))
             )
 
             for _, key2, val2 in self.items():
-                fp2 = describe(key2)
-
                 # Assumption: every hash digest is distinct, there are no
                 # collisions ever.
                 solver.assert_and_track(
-                    z3.Implies(key != key2, val != val2),
-                    f"SHA3({n}).DISTINCT[{fp},{fp2}]{self.suffix}",
+                    Constraint(
+                        Implies(
+                            NotEquals(key1._bigvector(), key2._bigvector()),
+                            NotEquals(val1.node, val2.node),
+                        )
+                    )
                 )
 
-        for i, constraint in enumerate(self.digest_constraints):
-            solver.assert_and_track(constraint, f"SHA3.DIGEST{i}{self.suffix}")
-            pass
+        for constraint in self.digest_constraints:
+            solver.assert_and_track(constraint)
 
     def narrow(self, solver: Solver) -> None:
         """Apply concrete SHA3 constraints to a given model instance."""
         hashes: Dict[bytes, bytes] = {}
         for n, key, val in self.items():
-            ckey = unwrap(solver.evaluate(key, True))
-            data = ckey.to_bytes(n, "big")
+            data = bytes.fromhex(key.evaluate(solver))
             hash = keccak.new(data=data, digest_bits=256)
-            digest = int.from_bytes(hash.digest(), "big")
             hashes[data] = hash.digest()
-            solver.assert_and_track(key == ckey, f"SHAKEY{n}{self.suffix}")
             solver.assert_and_track(
-                val == BW(digest),
-                f"SHAVAL{n}{self.suffix}",
+                Constraint(Equals(key._bigvector(), BV(int.from_bytes(data), n * 8)))
             )
+            solver.assert_and_track(val == Uint256(int.from_bytes(hash.digest())))
             assert solver.check()
 
     def printable(self, solver: Solver) -> Iterable[str]:
@@ -110,14 +123,14 @@ class SHA3:
         line = "SHA3"
         seen = set()
         for _, key, val in self.items():
-            k = describe(solver.evaluate(key, True))
+            k = "0x" + key.evaluate(solver)
             if k in seen:
                 continue
             line += f"\t{k} "
             if len(k) > 34:
                 yield line
                 line = "\t"
-            v = describe(solver.evaluate(val, True))
+            v = solver.evaluate(val, True).describe()
             line += f"-> {v}"
             yield line
             line = ""

@@ -1,11 +1,9 @@
 """A library of EVM instruction implementations."""
 
-import z3
-
 from arrays import FrozenBytes
 from disassembler import Instruction
+from smt import Constraint, Uint8, Uint160, Uint256, Uint257, Uint512
 from state import State
-from symbolic import BW, uint256, unwrap, zand, zconcat, zextract, zif
 
 
 def STOP(s: State) -> None:
@@ -14,174 +12,181 @@ def STOP(s: State) -> None:
     s.success = True
 
 
-def ADD(a: uint256, b: uint256) -> uint256:
+def ADD(a: Uint256, b: Uint256) -> Uint256:
     """01 - Addition operation."""
     return a + b
 
 
-def MUL(a: uint256, b: uint256) -> uint256:
+def MUL(a: Uint256, b: Uint256) -> Uint256:
     """02 - Multiplication operation."""
     return a * b
 
 
-def SUB(a: uint256, b: uint256) -> uint256:
+def SUB(a: Uint256, b: Uint256) -> Uint256:
     """03 - Subtraction operation."""
     return a - b
 
 
-def DIV(a: uint256, b: uint256) -> uint256:
+def DIV(a: Uint256, b: Uint256) -> Uint256:
     """04 - Integer division operation."""
-    return zif(b == 0, BW(0), z3.UDiv(a, b))
+    return (b == Uint256(0)).ite(Uint256(0), a // b)
 
 
-def SDIV(a: uint256, b: uint256) -> uint256:
+def SDIV(a: Uint256, b: Uint256) -> Uint256:
     """05 - Signed integer division operation (truncated)."""
-    return zif(b == 0, BW(0), a / b)
+    return (b == Uint256(0)).ite(
+        Uint256(0), (a.as_signed() // b.as_signed()).as_unsigned()
+    )
 
 
-def MOD(a: uint256, b: uint256) -> uint256:
+def MOD(a: Uint256, b: Uint256) -> Uint256:
     """06 - Modulo remainder operation."""
-    return zif(b == 0, BW(0), z3.URem(a, b))
+    return (b == Uint256(0)).ite(Uint256(0), a % b)
 
 
-def SMOD(a: uint256, b: uint256) -> uint256:
+def SMOD(a: Uint256, b: Uint256) -> Uint256:
     """07 - Signed modulo remainder operation."""
-    return zif(b == 0, BW(0), a % b)
+    return (b == Uint256(0)).ite(
+        Uint256(0), (a.as_signed() % b.as_signed()).as_unsigned()
+    )
 
 
-def ADDMOD(a: uint256, b: uint256, N: uint256) -> uint256:
+def ADDMOD(a: Uint256, b: Uint256, N: Uint256) -> Uint256:
     """08 - Modulo addition operation."""
-    a, b, N = z3.ZeroExt(1, a), z3.ZeroExt(1, b), z3.ZeroExt(1, N)
-    return zif(N == 0, BW(0), zextract(255, 0, z3.URem(a + b, N)))
+    return (N == Uint256(0)).ite(
+        Uint256(0),
+        ((a.into(Uint257) + b.into(Uint257)) % N.into(Uint257)).into(Uint256),
+    )
 
 
-def MULMOD(a: uint256, b: uint256, N: uint256) -> uint256:
+def MULMOD(a: Uint256, b: Uint256, N: Uint256) -> Uint256:
     """09 - Modulo multiplication operation."""
-    a, b, N = z3.ZeroExt(256, a), z3.ZeroExt(256, b), z3.ZeroExt(256, N)
-    return zif(N == 0, BW(0), zextract(255, 0, z3.URem(a * b, N)))
+    return (N == Uint256(0)).ite(
+        Uint256(0),
+        (a.into(Uint512) * b.into(Uint512) % N.into(Uint512)).into(Uint256),
+    )
 
 
-def EXP(a: uint256, _exponent: uint256) -> uint256:
+def EXP(a: Uint256, _exponent: Uint256) -> Uint256:
     """0A - Exponential operation."""
-    exponent = unwrap(_exponent, "EXP requires concrete exponent")
+    exponent = _exponent.unwrap(int, "EXP requires concrete exponent")
     if exponent == 0:
-        return BW(1)
+        return Uint256(1)
     for i in range(exponent - 1):
         a = a * a
     return a
 
 
-def SIGNEXTEND(b: uint256, x: uint256) -> uint256:
+def SIGNEXTEND(b: Uint256, x: Uint256) -> Uint256:
     """0B - Extend length of two's complement signed integer."""
-    signoffset = 8 * b + 7
-    signbit = (x >> signoffset) & 0x1
-    mask = ~((1 << signoffset) - 1)
-    return zif(zand(z3.ULT(b, 32), signbit == 1), x | mask, x)
+    signoffset = Uint256(8) * b + Uint256(7)
+    signbit = (x >> signoffset) & Uint256(0x1)
+    mask = ~((Uint256(1) << signoffset) - Uint256(1))
+    return Constraint.all(b < Uint256(32), signbit == Uint256(1)).ite(x | mask, x)
 
 
-def LT(a: uint256, b: uint256) -> uint256:
+def LT(a: Uint256, b: Uint256) -> Uint256:
     """10 - Less-than comparison."""
-    return zif(z3.ULT(a, b), BW(1), BW(0))
+    return (a < b).ite(Uint256(1), Uint256(0))
 
 
-def GT(a: uint256, b: uint256) -> uint256:
+def GT(a: Uint256, b: Uint256) -> Uint256:
     """11 - Greater-than comparison."""
-    return zif(z3.UGT(a, b), BW(1), BW(0))
+    return (a > b).ite(Uint256(1), Uint256(0))
 
 
-def SLT(a: uint256, b: uint256) -> uint256:
+def SLT(a: Uint256, b: Uint256) -> Uint256:
     """12 - Signed less-than comparison."""
-    return zif(a < b, BW(1), BW(0))
+    return (a.as_signed() < b.as_signed()).ite(Uint256(1), Uint256(0))
 
 
-def SGT(a: uint256, b: uint256) -> uint256:
+def SGT(a: Uint256, b: Uint256) -> Uint256:
     """13 - Signed greater-than comparison."""
-    return zif(a > b, BW(1), BW(0))
+    return (a.as_signed() > b.as_signed()).ite(Uint256(1), Uint256(0))
 
 
-def EQ(a: uint256, b: uint256) -> uint256:
-    """14 - Equality comparison."""
-    return zif(a == b, BW(1), BW(0))
+def EQ(a: Uint256, b: Uint256) -> Uint256:
+    """14 -     ity comparison."""
+    return (a == b).ite(Uint256(1), Uint256(0))
 
 
-def ISZERO(a: uint256) -> uint256:
+def ISZERO(a: Uint256) -> Uint256:
     """15 - Simple not operator."""
-    return zif(a == 0, BW(1), BW(0))
+    return (a == Uint256(0)).ite(Uint256(1), Uint256(0))
 
 
-def AND(a: uint256, b: uint256) -> uint256:
+def AND(a: Uint256, b: Uint256) -> Uint256:
     """16 - Bitwise AND operation."""
     return a & b
 
 
-def OR(a: uint256, b: uint256) -> uint256:
+def OR(a: Uint256, b: Uint256) -> Uint256:
     """17 - Bitwise OR operation."""
     return a | b
 
 
-def XOR(a: uint256, b: uint256) -> uint256:
+def XOR(a: Uint256, b: Uint256) -> Uint256:
     """18 - Bitwise XOR operation."""
     return a ^ b
 
 
-def NOT(a: uint256) -> uint256:
+def NOT(a: Uint256) -> Uint256:
     """19 - Bitwise NOT operation."""
     return ~a
 
 
-def BYTE(i: uint256, x: uint256) -> uint256:
+def BYTE(i: Uint256, x: Uint256) -> Uint256:
     """1A - Retrieve single bytes from word."""
-    return zif(
-        z3.ULT(i, 32),
-        BW(0xFF) & (x >> (8 * (31 - i))),
-        BW(0),
+    return (i < Uint256(32)).ite(
+        Uint256(0xFF) & (x >> (Uint256(8) * (Uint256(31) - i))),
+        Uint256(0),
     )
 
 
-def SHL(shift: uint256, value: uint256) -> uint256:
+def SHL(shift: Uint256, value: Uint256) -> Uint256:
     """1B - Left shift operation."""
     return value << shift
 
 
-def SHR(shift: uint256, value: uint256) -> uint256:
+def SHR(shift: Uint256, value: Uint256) -> Uint256:
     """1C - Logical right shift operation."""
-    return z3.LShR(value, shift)
-
-
-def SAR(shift: uint256, value: uint256) -> uint256:
-    """1D - Arithmetic (signed) right shift operation."""
     return value >> shift
 
 
-def SHA3(s: State, offset: uint256, _size: uint256) -> uint256:
-    """20 - Compute Keccak-256 hash."""
-    size = unwrap(_size, "SHA3 requires concrete size")
+def SAR(shift: Uint256, value: Uint256) -> Uint256:
+    """1D - Arithmetic (signed) right shift operation."""
+    return (value.as_signed() >> shift).as_unsigned()
 
-    data = zconcat(*[s.memory[offset + BW(i)] for i in range(size)])
+
+def SHA3(s: State, offset: Uint256, _size: Uint256) -> Uint256:
+    """20 - Compute Keccak-256 hash."""
+    size = _size.unwrap(int, "SHA3 requires concrete size")
+
+    data = FrozenBytes.concrete([s.memory[offset + Uint256(i)] for i in range(size)])
     return s.sha3[data]
 
 
-def ADDRESS(s: State) -> uint256:
+def ADDRESS(s: State) -> Uint256:
     """30 - Get address of currently executing account."""
-    return z3.ZeroExt(96, s.contract.address)
+    return s.contract.address.into(Uint256)
 
 
-def BALANCE(s: State, address: uint256) -> uint256:
+def BALANCE(s: State, address: Uint256) -> Uint256:
     """31 - Get balance of the given account."""
-    return s.universe.balances[zextract(159, 0, address)]
+    return s.universe.balances[address.into(Uint160)]
 
 
-def ORIGIN(s: State) -> uint256:
+def ORIGIN(s: State) -> Uint256:
     """32 - Get execution origination address."""
-    return z3.ZeroExt(96, s.transaction.origin)
+    return s.transaction.origin.into(Uint256)
 
 
-def CALLER(s: State) -> uint256:
+def CALLER(s: State) -> Uint256:
     """33 - Get caller address."""
-    return z3.ZeroExt(96, s.transaction.caller)
+    return s.transaction.caller.into(Uint256)
 
 
-def CALLVALUE(s: State) -> uint256:
+def CALLVALUE(s: State) -> Uint256:
     """
     34.
 
@@ -191,57 +196,59 @@ def CALLVALUE(s: State) -> uint256:
     return s.transaction.callvalue
 
 
-def CALLDATALOAD(s: State, i: uint256) -> uint256:
+def CALLDATALOAD(s: State, i: Uint256) -> Uint256:
     """35 - Get input data of current environment."""
-    return zconcat(*[s.transaction.calldata[i + BW(j)] for j in range(32)])
+    return Uint256.from_bytes(
+        *[s.transaction.calldata[i + Uint256(j)] for j in range(32)]
+    )
 
 
-def CALLDATASIZE(s: State) -> uint256:
+def CALLDATASIZE(s: State) -> Uint256:
     """36 - Get size of input data in current environment."""
     return s.transaction.calldata.length
 
 
-def CALLDATACOPY(s: State, destOffset: uint256, offset: uint256, size: uint256) -> None:
+def CALLDATACOPY(s: State, destOffset: Uint256, offset: Uint256, size: Uint256) -> None:
     """37 - Copy input data in current environment to memory."""
     s.memory.graft(s.transaction.calldata.slice(offset, size), destOffset)
 
 
-def CODESIZE(s: State) -> uint256:
+def CODESIZE(s: State) -> Uint256:
     """38 - Get size of code running in current environment."""
     return s.contract.program.code.length
 
 
-def CODECOPY(s: State, destOffset: uint256, offset: uint256, size: uint256) -> None:
+def CODECOPY(s: State, destOffset: Uint256, offset: Uint256, size: Uint256) -> None:
     """39 - Copy code running in current environment to memory."""
     s.memory.graft(s.contract.program.code.slice(offset, size), destOffset)
 
 
-def GASPRICE(s: State) -> uint256:
+def GASPRICE(s: State) -> Uint256:
     """3A - Get price of gas in current environment."""
     return s.transaction.gasprice
 
 
-def EXTCODESIZE(s: State, address: uint256) -> uint256:
+def EXTCODESIZE(s: State, address: Uint256) -> Uint256:
     """3B - Get size of an account's code."""
-    return s.universe.codesizes[zextract(159, 0, address)]
+    return s.universe.codesizes[address.into(Uint160)]
 
 
 def EXTCODECOPY(
     s: State,
-    _address: uint256,
-    destOffset: uint256,
-    offset: uint256,
-    size: uint256,
+    _address: Uint256,
+    destOffset: Uint256,
+    offset: Uint256,
+    size: Uint256,
 ) -> None:
     """3C - Copy an account's code to memory."""
-    address = unwrap(_address, "EXTCODECOPY requires concrete address")
+    address = _address.unwrap(int, "EXTCODECOPY requires concrete address")
 
     contract = s.universe.contracts.get(address, None)
     code = contract.program.code if contract else FrozenBytes.concrete(b"")
     s.memory.graft(code.slice(offset, size), destOffset)
 
 
-def RETURNDATASIZE(s: State) -> uint256:
+def RETURNDATASIZE(s: State) -> Uint256:
     """
     3D.
 
@@ -251,112 +258,110 @@ def RETURNDATASIZE(s: State) -> uint256:
 
 
 def RETURNDATACOPY(
-    s: State, destOffset: uint256, offset: uint256, size: uint256
+    s: State, destOffset: Uint256, offset: Uint256, size: Uint256
 ) -> None:
     """3E - Copy output data from the previous call to memory."""
     s.memory.graft(s.returndata.slice(offset, size), destOffset)
 
 
-def EXTCODEHASH(s: State, _address: uint256) -> uint256:
+def EXTCODEHASH(s: State, _address: Uint256) -> Uint256:
     """3F - Get hash of an account's code."""
-    address = unwrap(_address, "EXTCODEHASH requires concrete address")
+    address = _address.unwrap(int, "EXTCODEHASH requires concrete address")
 
     contract = s.universe.contracts.get(address, None)
     if contract is None:
         # TODO: for EOAs we should actually return the empty hash
-        return BW(0)
+        return Uint256(0)
 
-    return s.sha3[contract.program.code.bigvector()]
+    return s.sha3[contract.program.code]
 
 
-def BLOCKHASH(s: State, blockNumber: uint256) -> uint256:
+def BLOCKHASH(s: State, blockNumber: Uint256) -> Uint256:
     """40 - Get the hash of one of the 256 most recent complete blocks."""
-    return zif(
-        z3.ULT(blockNumber, s.block.number - 256),
-        BW(0),
-        zif(
-            z3.UGE(blockNumber, s.block.number),
-            BW(0),
+    return (blockNumber < s.block.number - Uint256(256)).ite(
+        Uint256(0),
+        (blockNumber >= s.block.number).ite(
+            Uint256(0),
             s.universe.blockhashes[blockNumber],
         ),
     )
 
 
-def COINBASE(s: State) -> uint256:
+def COINBASE(s: State) -> Uint256:
     """41 - Get the block's beneficiary address."""
-    return z3.ZeroExt(96, s.block.coinbase)
+    return s.block.coinbase.into(Uint256)
 
 
-def TIMESTAMP(s: State) -> uint256:
+def TIMESTAMP(s: State) -> Uint256:
     """42 - Get the block's timestamp."""
     return s.block.timestamp
 
 
-def NUMBER(s: State) -> uint256:
+def NUMBER(s: State) -> Uint256:
     """43 - Get the block's number."""
     return s.block.number
 
 
-def PREVRANDAO(s: State) -> uint256:
+def PREVRANDAO(s: State) -> Uint256:
     """44 - Get the previous block's RANDAO mix."""
     return s.block.prevrandao
 
 
-def GASLIMIT(s: State) -> uint256:
+def GASLIMIT(s: State) -> Uint256:
     """45 - Get the block's gas limit."""
     return s.block.gaslimit
 
 
-def CHAINID(s: State) -> uint256:
+def CHAINID(s: State) -> Uint256:
     """46 - Get the chain ID."""
     return s.block.chainid
 
 
-def SELFBALANCE(s: State) -> uint256:
+def SELFBALANCE(s: State) -> Uint256:
     """47 - Get balance of currently executing account."""
     return s.universe.balances[s.contract.address]
 
 
-def BASEFEE(s: State) -> uint256:
+def BASEFEE(s: State) -> Uint256:
     """48 - Get the base fee."""
     return s.block.basefee
 
 
-def POP(y: uint256) -> None:
+def POP(y: Uint256) -> None:
     """50 - Remove item from stack."""
     pass
 
 
-def MLOAD(s: State, offset: uint256) -> uint256:
+def MLOAD(s: State, offset: Uint256) -> Uint256:
     """51 - Load word from memory."""
-    return zconcat(*[s.memory[offset + BW(i)] for i in range(32)])
+    return Uint256.from_bytes(*[s.memory[offset + Uint256(i)] for i in range(32)])
 
 
-def MSTORE(s: State, offset: uint256, value: uint256) -> None:
+def MSTORE(s: State, offset: Uint256, value: Uint256) -> None:
     """52 - Save word to memory."""
     for i in range(31, -1, -1):
-        s.memory[offset + BW(i)] = zextract(7, 0, value)
-        value = value >> 8
+        s.memory[offset + Uint256(i)] = value.into(Uint8)
+        value = value >> Uint256(8)
 
 
-def MSTORE8(s: State, offset: uint256, value: uint256) -> None:
+def MSTORE8(s: State, offset: Uint256, value: Uint256) -> None:
     """53 - Save byte to memory."""
-    s.memory[offset] = zextract(7, 0, value)
+    s.memory[offset] = value.into(Uint8)
 
 
-def SLOAD(s: State, key: uint256) -> uint256:
+def SLOAD(s: State, key: Uint256) -> Uint256:
     """54 - Load word from storage."""
     return s.contract.storage[key]
 
 
-def SSTORE(s: State, key: uint256, value: uint256) -> None:
+def SSTORE(s: State, key: Uint256, value: Uint256) -> None:
     """55 - Save word to storage."""
     s.contract.storage[key] = value
 
 
-def JUMP(s: State, _counter: uint256) -> None:
+def JUMP(s: State, _counter: Uint256) -> None:
     """56 - Alter the program counter."""
-    counter = unwrap(_counter, "JUMP requires concrete counter")
+    counter = _counter.unwrap(int, "JUMP requires concrete counter")
     # In theory, JUMP should revert if counter is not a valid jump target.
     # Instead, raise an error and fail the whole analysis. This lets us prove
     # that all jump targets are valid and within the body of the code, which is
@@ -364,7 +369,7 @@ def JUMP(s: State, _counter: uint256) -> None:
     s.pc = s.contract.program.jumps[counter]
 
 
-def JUMPI(s: State, counter: uint256, b: uint256) -> None:
+def JUMPI(s: State, counter: Uint256, b: Uint256) -> None:
     """
     57 - Conditionally alter the program counter.
 
@@ -374,22 +379,22 @@ def JUMPI(s: State, counter: uint256, b: uint256) -> None:
     raise NotImplementedError("JUMPI")
 
 
-def PC(ins: Instruction) -> uint256:
+def PC(ins: Instruction) -> Uint256:
     """
     58.
 
     Get the value of the program counter prior to the increment corresponding to
     this instruction.
     """
-    return BW(ins.offset)
+    return Uint256(ins.offset)
 
 
-def MSIZE(s: State) -> uint256:
+def MSIZE(s: State) -> Uint256:
     """59 - Get the size of active memory in bytes."""
     return s.memory.length
 
 
-def GAS(s: State) -> uint256:
+def GAS(s: State) -> Uint256:
     """
     5A.
 
@@ -408,14 +413,14 @@ def JUMPDEST() -> None:
     pass
 
 
-def PUSH(ins: Instruction) -> uint256:
+def PUSH(ins: Instruction) -> Uint256:
     """6X/7X - Place N byte item on stack."""
     if ins.operand is None:
         raise ValueError("somehow got a PUSH without an operand")
     return ins.operand
 
 
-def DUP(ins: Instruction, s: State) -> uint256:
+def DUP(ins: Instruction, s: State) -> Uint256:
     """8X - Duplicate Nth stack item."""
     if ins.suffix is None:
         raise ValueError("somehow got a DUP without a suffix")
@@ -430,56 +435,56 @@ def SWAP(ins: Instruction, s: State) -> None:
     s.stack[-1], s.stack[-m] = s.stack[-m], s.stack[-1]
 
 
-def LOG0(offset: uint256, size: uint256) -> None:
+def LOG0(offset: Uint256, size: Uint256) -> None:
     """A0 - Append log record with no topics."""
     # Ignore log records for now, they're mostly for debugging.
     pass
 
 
-def LOG1(offset: uint256, size: uint256, topic1: uint256) -> None:
+def LOG1(offset: Uint256, size: Uint256, topic1: Uint256) -> None:
     """A1 - Append log record with one topic."""
     pass
 
 
-def LOG2(offset: uint256, size: uint256, topic1: uint256, topic2: uint256) -> None:
+def LOG2(offset: Uint256, size: Uint256, topic1: Uint256, topic2: Uint256) -> None:
     """A2 - Append log record with two topics."""
     pass
 
 
 def LOG3(
-    offset: uint256, size: uint256, topic1: uint256, topic2: uint256, topic3: uint256
+    offset: Uint256, size: Uint256, topic1: Uint256, topic2: Uint256, topic3: Uint256
 ) -> None:
     """A3 - Append log record with three topics."""
     pass
 
 
 def LOG4(
-    offset: uint256,
-    size: uint256,
-    topic1: uint256,
-    topic2: uint256,
-    topic3: uint256,
-    topic4: uint256,
+    offset: Uint256,
+    size: Uint256,
+    topic1: Uint256,
+    topic2: Uint256,
+    topic3: Uint256,
+    topic4: Uint256,
 ) -> None:
     """A4 - Append log record with four topics."""
     pass
 
 
-def CREATE(value: uint256, offset: uint256, size: uint256) -> uint256:
+def CREATE(value: Uint256, offset: Uint256, size: Uint256) -> Uint256:
     """F0 - Create a new account with associated code."""
     raise NotImplementedError("CREATE")
 
 
 def CALL(
     s: State,
-    gas: uint256,
-    address: uint256,
-    value: uint256,
-    argsOffset: uint256,
-    argsSize: uint256,
-    retOffset: uint256,
-    retSize: uint256,
-) -> uint256:
+    gas: Uint256,
+    address: Uint256,
+    value: Uint256,
+    argsOffset: Uint256,
+    argsSize: Uint256,
+    retOffset: Uint256,
+    retSize: Uint256,
+) -> Uint256:
     """
     F1 - Message-call into an account.
 
@@ -489,14 +494,14 @@ def CALL(
 
 
 def CALLCODE(
-    gas: uint256,
-    address: uint256,
-    value: uint256,
-    argsOffset: uint256,
-    argsSize: uint256,
-    retOffset: uint256,
-    retSize: uint256,
-) -> uint256:
+    gas: Uint256,
+    address: Uint256,
+    value: Uint256,
+    argsOffset: Uint256,
+    argsSize: Uint256,
+    retOffset: Uint256,
+    retSize: Uint256,
+) -> Uint256:
     """
     F2 - Message-call into this account with alternative account's code.
 
@@ -505,20 +510,20 @@ def CALLCODE(
     raise NotImplementedError("CALLCODE")
 
 
-def RETURN(s: State, offset: uint256, size: uint256) -> None:
+def RETURN(s: State, offset: Uint256, size: Uint256) -> None:
     """F3 - Halts execution returning output data."""
     s.returndata = s.memory.slice(offset, size)
     s.success = True
 
 
 def DELEGATECALL(
-    gas: uint256,
-    address: uint256,
-    argsOffset: uint256,
-    argsSize: uint256,
-    retOffset: uint256,
-    retSize: uint256,
-) -> uint256:
+    gas: Uint256,
+    address: Uint256,
+    argsOffset: Uint256,
+    argsSize: Uint256,
+    retOffset: Uint256,
+    retSize: Uint256,
+) -> Uint256:
     """
     F4.
 
@@ -530,19 +535,19 @@ def DELEGATECALL(
     raise NotImplementedError("DELEGATECALL")
 
 
-def CREATE2(value: uint256, offset: uint256, size: uint256, salt: uint256) -> uint256:
+def CREATE2(value: Uint256, offset: Uint256, size: Uint256, salt: Uint256) -> Uint256:
     """F5 - Create a new account with associated code at a predictable address."""
     raise NotImplementedError("CREATE2")
 
 
 def STATICCALL(
-    gas: uint256,
-    address: uint256,
-    argsOffset: uint256,
-    argsSize: uint256,
-    retOffset: uint256,
-    retSize: uint256,
-) -> uint256:
+    gas: Uint256,
+    address: Uint256,
+    argsOffset: Uint256,
+    argsSize: Uint256,
+    retOffset: Uint256,
+    retSize: Uint256,
+) -> Uint256:
     """
     FA - Static message-call into an account.
 
@@ -551,7 +556,7 @@ def STATICCALL(
     raise NotImplementedError("STATICCALL")
 
 
-def REVERT(s: State, offset: uint256, size: uint256) -> None:
+def REVERT(s: State, offset: Uint256, size: Uint256) -> None:
     """
     FD.
 

@@ -1,30 +1,31 @@
 #!/usr/bin/env pytest
 
 import pytest
-import z3
 
-from arrays import FrozenBytes, MutableBytes
+from arrays import Array, FrozenBytes, MutableBytes
 from disassembler import Instruction, disassemble
 from ops import *
-from solver import DefaultSolver
-from symbolic import BA, BW, simplify
-from testlib import make_block, make_contract, make_state, make_transaction
+from smt import Uint160, Uint256
+from solver import Solver
+from testlib import concretize, make_block, make_contract, make_state, make_transaction
 
 
 def test_STOP() -> None:
     s = make_state(returndata=FrozenBytes.concrete(b"\x12\x34"))
     STOP(s)
     assert s.success is True
-    assert s.returndata.require_concrete() == b""
+    assert s.returndata.unwrap() == b""
 
 
 def test_ADD() -> None:
-    assert simplify(ADD(BW(10), BW(10))) == 20
+    assert concretize(ADD(Uint256(10), Uint256(10))) == 20
     assert (
-        simplify(
+        concretize(
             ADD(
-                BW(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF),
-                BW(1),
+                Uint256(
+                    0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+                ),
+                Uint256(1),
             )
         )
         == 0
@@ -32,12 +33,14 @@ def test_ADD() -> None:
 
 
 def test_MUL() -> None:
-    assert simplify(MUL(BW(10), BW(10))) == 100
+    assert concretize(MUL(Uint256(10), Uint256(10))) == 100
     assert (
-        simplify(
+        concretize(
             MUL(
-                BW(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF),
-                BW(2),
+                Uint256(
+                    0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+                ),
+                Uint256(2),
             )
         )
         == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE
@@ -45,61 +48,71 @@ def test_MUL() -> None:
 
 
 def test_SUB() -> None:
-    assert simplify(SUB(BW(10), BW(10))) == 0
+    assert concretize(SUB(Uint256(10), Uint256(10))) == 0
     assert (
-        simplify(SUB(BW(0), BW(1)))
+        concretize(SUB(Uint256(0), Uint256(1)))
         == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
     )
 
 
 def test_DIV() -> None:
-    assert simplify(DIV(BW(10), BW(10))) == 1
-    assert simplify(DIV(BW(1), BW(2))) == 0
-    assert simplify(DIV(BW(10), BW(0))) == 0
+    assert concretize(DIV(Uint256(10), Uint256(10))) == 1
+    assert concretize(DIV(Uint256(1), Uint256(2))) == 0
+    assert concretize(DIV(Uint256(10), Uint256(0))) == 0
 
 
 def test_SDIV() -> None:
-    assert simplify(SDIV(BW(10), BW(10))) == 1
+    assert concretize(SDIV(Uint256(10), Uint256(10))) == 1
     assert (
-        simplify(
+        concretize(
             SDIV(
-                BW(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE),
-                BW(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF),
+                Uint256(
+                    0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE
+                ),
+                Uint256(
+                    0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+                ),
             )
         )
         == 2
     )
-    assert simplify(SDIV(BW(10), BW(0))) == 0
+    assert concretize(SDIV(Uint256(10), Uint256(0))) == 0
 
 
 def test_MOD() -> None:
-    assert simplify(MOD(BW(10), BW(3))) == 1
-    assert simplify(MOD(BW(17), BW(5))) == 2
-    assert simplify(MOD(BW(10), BW(0))) == 0
+    assert concretize(MOD(Uint256(10), Uint256(3))) == 1
+    assert concretize(MOD(Uint256(17), Uint256(5))) == 2
+    assert concretize(MOD(Uint256(10), Uint256(0))) == 0
 
 
 def test_SMOD() -> None:
-    assert simplify(SMOD(BW(10), BW(3))) == 1
+    assert concretize(SMOD(Uint256(10), Uint256(3))) == 1
     assert (
-        simplify(
+        concretize(
             SMOD(
-                BW(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF8),
-                BW(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFD),
+                Uint256(
+                    0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF8
+                ),
+                Uint256(
+                    0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFD
+                ),
             )
         )
         == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE
     )
-    assert simplify(SMOD(BW(10), BW(0))) == 0
+    assert concretize(SMOD(Uint256(10), Uint256(0))) == 0
 
 
 def test_ADDMOD() -> None:
-    assert simplify(ADDMOD(BW(10), BW(10), BW(8))) == 4
+    assert concretize(ADDMOD(Uint256(10), Uint256(10), Uint256(8))) == 4
     assert (
-        simplify(
+        concretize(
             ADDMOD(
-                BW(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF),
-                BW(2),
-                BW(2),
+                Uint256(
+                    0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+                ),
+                Uint256(2),
+                Uint256(2),
             )
         )
         == 1
@@ -107,13 +120,17 @@ def test_ADDMOD() -> None:
 
 
 def test_MULMOD() -> None:
-    assert simplify(MULMOD(BW(10), BW(10), BW(8))) == 4
+    assert concretize(MULMOD(Uint256(10), Uint256(10), Uint256(8))) == 4
     assert (
-        simplify(
+        concretize(
             MULMOD(
-                BW(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF),
-                BW(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF),
-                BW(12),
+                Uint256(
+                    0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+                ),
+                Uint256(
+                    0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+                ),
+                Uint256(12),
             )
         )
         == 9
@@ -121,112 +138,118 @@ def test_MULMOD() -> None:
 
 
 def test_EXP() -> None:
-    assert simplify(EXP(BW(10), BW(2))) == 100
-    assert simplify(EXP(BW(2), BW(2))) == 4
+    assert concretize(EXP(Uint256(10), Uint256(2))) == 100
+    assert concretize(EXP(Uint256(2), Uint256(2))) == 4
 
 
 def test_SIGNEXTEND() -> None:
     assert (
-        simplify(SIGNEXTEND(BW(0), BW(0xFF)))
+        concretize(SIGNEXTEND(Uint256(0), Uint256(0xFF)))
         == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
     )
     assert (
-        simplify(SIGNEXTEND(BW(0), BW(0xAAAA)))
+        concretize(SIGNEXTEND(Uint256(0), Uint256(0xAAAA)))
         == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFAA
     )
     assert (
-        simplify(SIGNEXTEND(BW(1), BW(0xABCD)))
+        concretize(SIGNEXTEND(Uint256(1), Uint256(0xABCD)))
         == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFABCD
     )
-    assert simplify(SIGNEXTEND(BW(0), BW(0x7F))) == 0x7F
-    assert simplify(SIGNEXTEND(BW(1), BW(0x5BCD))) == 0x5BCD
-    assert simplify(SIGNEXTEND(BW(2), BW(0xFF))) == 0xFF
-    assert simplify(SIGNEXTEND(BW(2), BW(0xABCD))) == 0xABCD
-    assert simplify(SIGNEXTEND(BW(0x7F), BW(0x7F))) == 0x7F
+    assert concretize(SIGNEXTEND(Uint256(0), Uint256(0x7F))) == 0x7F
+    assert concretize(SIGNEXTEND(Uint256(1), Uint256(0x5BCD))) == 0x5BCD
+    assert concretize(SIGNEXTEND(Uint256(2), Uint256(0xFF))) == 0xFF
+    assert concretize(SIGNEXTEND(Uint256(2), Uint256(0xABCD))) == 0xABCD
+    assert concretize(SIGNEXTEND(Uint256(0x7F), Uint256(0x7F))) == 0x7F
 
 
 def test_LT() -> None:
-    assert simplify(LT(BW(8), BW(10))) == 1
-    assert simplify(LT(BW(10), BW(10))) == 0
+    assert concretize(LT(Uint256(8), Uint256(10))) == 1
+    assert concretize(LT(Uint256(10), Uint256(10))) == 0
 
 
 def test_GT() -> None:
-    assert simplify(GT(BW(10), BW(8))) == 1
-    assert simplify(GT(BW(10), BW(10))) == 0
+    assert concretize(GT(Uint256(10), Uint256(8))) == 1
+    assert concretize(GT(Uint256(10), Uint256(10))) == 0
 
 
 def test_SLT() -> None:
     assert (
-        simplify(
+        concretize(
             SLT(
-                BW(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF),
-                BW(0),
+                Uint256(
+                    0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+                ),
+                Uint256(0),
             )
         )
         == 1
     )
-    assert simplify(SLT(BW(10), BW(10))) == 0
+    assert concretize(SLT(Uint256(10), Uint256(10))) == 0
 
 
 def test_SGT() -> None:
     assert (
-        simplify(
+        concretize(
             SGT(
-                BW(0),
-                BW(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF),
+                Uint256(0),
+                Uint256(
+                    0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+                ),
             )
         )
         == 1
     )
-    assert simplify(SGT(BW(10), BW(10))) == 0
+    assert concretize(SGT(Uint256(10), Uint256(10))) == 0
 
 
 def test_EQ() -> None:
-    assert simplify(EQ(BW(10), BW(10))) == 1
-    assert simplify(EQ(BW(10), BW(8))) == 0
+    assert concretize(EQ(Uint256(10), Uint256(10))) == 1
+    assert concretize(EQ(Uint256(10), Uint256(8))) == 0
 
 
 def test_ISZERO() -> None:
-    assert simplify(ISZERO(BW(10))) == 0
-    assert simplify(ISZERO(BW(0))) == 1
+    assert concretize(ISZERO(Uint256(10))) == 0
+    assert concretize(ISZERO(Uint256(0))) == 1
 
 
 def test_AND() -> None:
-    assert simplify(AND(BW(0x0F), BW(0x0F))) == 0xF
-    assert simplify(AND(BW(0xFF), BW(0))) == 0
+    assert concretize(AND(Uint256(0x0F), Uint256(0x0F))) == 0xF
+    assert concretize(AND(Uint256(0xFF), Uint256(0))) == 0
 
 
 def test_OR() -> None:
-    assert simplify(OR(BW(0xF0), BW(0x0F))) == 0xFF
-    assert simplify(OR(BW(0xFF), BW(0xFF))) == 0xFF
+    assert concretize(OR(Uint256(0xF0), Uint256(0x0F))) == 0xFF
+    assert concretize(OR(Uint256(0xFF), Uint256(0xFF))) == 0xFF
 
 
 def test_XOR() -> None:
-    assert simplify(XOR(BW(0xF0), BW(0x0F))) == 0xFF
-    assert simplify(XOR(BW(0xFF), BW(0xFF))) == 0
+    assert concretize(XOR(Uint256(0xF0), Uint256(0x0F))) == 0xFF
+    assert concretize(XOR(Uint256(0xFF), Uint256(0xFF))) == 0
 
 
 def test_NOT() -> None:
     assert (
-        simplify(NOT(BW(0)))
+        concretize(NOT(Uint256(0)))
         == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
     )
 
 
 def test_BYTE() -> None:
-    assert simplify(BYTE(BW(31), BW(0xFF))) == BW(0xFF)
-    assert simplify(BYTE(BW(30), BW(0x8800))) == BW(0x88)
-    assert simplify(BYTE(BW(30), BW(0xAABBCC))) == BW(0xBB)
-    assert simplify(BYTE(BW(123456), BW(0xAABBCC))) == BW(0)
+    assert concretize(BYTE(Uint256(31), Uint256(0xFF))) == 0xFF
+    assert concretize(BYTE(Uint256(30), Uint256(0x8800))) == 0x88
+    assert concretize(BYTE(Uint256(30), Uint256(0xAABBCC))) == 0xBB
+    assert concretize(BYTE(Uint256(123456), Uint256(0xAABBCC))) == 0
 
 
 def test_SHL() -> None:
-    assert simplify(SHL(BW(1), BW(1))) == 2
+    assert concretize(SHL(Uint256(1), Uint256(1))) == 2
     assert (
-        simplify(
+        concretize(
             SHL(
-                BW(4),
-                BW(0xFF00000000000000000000000000000000000000000000000000000000000000),
+                Uint256(4),
+                Uint256(
+                    0xFF00000000000000000000000000000000000000000000000000000000000000
+                ),
             )
         )
         == 0xF000000000000000000000000000000000000000000000000000000000000000
@@ -234,18 +257,20 @@ def test_SHL() -> None:
 
 
 def test_SHR() -> None:
-    assert simplify(SHR(BW(1), BW(2))) == 1
-    assert simplify(SHR(BW(4), BW(0xFF))) == 0xF
-    assert simplify(SHR(BW(123), BW(0xAA))) == 0
+    assert concretize(SHR(Uint256(1), Uint256(2))) == 1
+    assert concretize(SHR(Uint256(4), Uint256(0xFF))) == 0xF
+    assert concretize(SHR(Uint256(123), Uint256(0xAA))) == 0
 
 
 def test_SAR() -> None:
-    assert simplify(SAR(BW(1), BW(2))) == 1
+    assert concretize(SAR(Uint256(1), Uint256(2))) == 1
     assert (
-        simplify(
+        concretize(
             SAR(
-                BW(4),
-                BW(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF0),
+                Uint256(4),
+                Uint256(
+                    0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF0
+                ),
             )
         )
         == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
@@ -254,51 +279,56 @@ def test_SAR() -> None:
 
 def test_SHA3() -> None:
     s = make_state(memory=MutableBytes.concrete(b"\xff\xff\xff\xff"))
-    digest = SHA3(s, BW(0), BW(4))
+    digest = SHA3(s, Uint256(0), Uint256(4))
 
-    solver = DefaultSolver()
+    solver = Solver()
     s.sha3.constrain(solver)
     assert solver.check()
     assert (
-        solver.evaluate(digest)
+        concretize(solver.evaluate(digest, True))
         == 0x29045A592007D0C246EF02C2223570DA9522D0CF0F73282C79A1BC8F0BB2C238
     )
 
 
 def test_ADDRESS() -> None:
-    contract = make_contract(address=BA(0x9BBFED6889322E016E0A02EE459D306FC19545D8))
+    contract = make_contract(
+        address=Uint160(0x9BBFED6889322E016E0A02EE459D306FC19545D8)
+    )
     s = make_state(contract=contract)
-    assert simplify(ADDRESS(s)) == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
+    assert concretize(ADDRESS(s)) == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
 
 
 def test_BALANCE() -> None:
     s = make_state()
-    s.universe.balances[BA(0x9BBFED6889322E016E0A02EE459D306FC19545D8)] = BW(125985)
+    s.universe.balances[Uint160(0x9BBFED6889322E016E0A02EE459D306FC19545D8)] = Uint256(
+        125985
+    )
     assert (
-        simplify(BALANCE(s, BW(0x9BBFED6889322E016E0A02EE459D306FC19545D8))) == 125985
+        concretize(BALANCE(s, Uint256(0x9BBFED6889322E016E0A02EE459D306FC19545D8)))
+        == 125985
     )
 
 
 def test_ORIGIN() -> None:
     transaction = make_transaction(
-        origin=BA(0x9BBFED6889322E016E0A02EE459D306FC19545D8)
+        origin=Uint160(0x9BBFED6889322E016E0A02EE459D306FC19545D8)
     )
     s = make_state(transaction=transaction)
-    assert simplify(ORIGIN(s)) == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
+    assert concretize(ORIGIN(s)) == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
 
 
 def test_CALLER() -> None:
     transaction = make_transaction(
-        caller=BA(0x9BBFED6889322E016E0A02EE459D306FC19545D8)
+        caller=Uint160(0x9BBFED6889322E016E0A02EE459D306FC19545D8)
     )
     s = make_state(transaction=transaction)
-    assert simplify(CALLER(s)) == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
+    assert concretize(CALLER(s)) == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
 
 
 def test_CALLVALUE() -> None:
-    transaction = make_transaction(callvalue=BW(123456789))
+    transaction = make_transaction(callvalue=Uint256(123456789))
     s = make_state(transaction=transaction)
-    assert simplify(CALLVALUE(s)) == 123456789
+    assert concretize(CALLVALUE(s)) == 123456789
 
 
 def test_CALLDATALOAD() -> None:
@@ -309,20 +339,20 @@ def test_CALLDATALOAD() -> None:
     )
     s = make_state(transaction=transaction)
     assert (
-        simplify(CALLDATALOAD(s, BW(0)))
+        concretize(CALLDATALOAD(s, Uint256(0)))
         == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
     )
     assert (
-        simplify(CALLDATALOAD(s, BW(31)))
+        concretize(CALLDATALOAD(s, Uint256(31)))
         == 0xFF00000000000000000000000000000000000000000000000000000000000000
     )
-    assert simplify(CALLDATALOAD(s, BW(32))) == 0
+    assert concretize(CALLDATALOAD(s, Uint256(32))) == 0
 
 
 def test_CALLDATASIZE() -> None:
     transaction = make_transaction(calldata=FrozenBytes.concrete(b"\xff"))
     s = make_state(transaction=transaction)
-    assert simplify(CALLDATASIZE(s)) == 1
+    assert concretize(CALLDATASIZE(s)) == 1
 
 
 def test_CALLDATACOPY() -> None:
@@ -333,15 +363,15 @@ def test_CALLDATACOPY() -> None:
     )
     s = make_state(transaction=transaction)
 
-    CALLDATACOPY(s, BW(0), BW(0), BW(32))
+    CALLDATACOPY(s, Uint256(0), Uint256(0), Uint256(32))
     assert (
-        s.memory.require_concrete().hex()
+        s.memory.unwrap().hex()
         == "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
     )
 
-    CALLDATACOPY(s, BW(0), BW(31), BW(8))
+    CALLDATACOPY(s, Uint256(0), Uint256(31), Uint256(8))
     assert (
-        s.memory.require_concrete().hex()
+        s.memory.unwrap().hex()
         == "ff00000000000000ffffffffffffffffffffffffffffffffffffffffffffffff"
     )
 
@@ -352,7 +382,7 @@ def test_CODESIZE() -> None:
             program=disassemble(bytes.fromhex("66000000000000005B")),
         )
     )
-    assert simplify(CODESIZE(s)) == 9
+    assert concretize(CODESIZE(s)) == 9
 
 
 def test_CODECOPY() -> None:
@@ -362,51 +392,53 @@ def test_CODECOPY() -> None:
         )
     )
 
-    CODECOPY(s, BW(0), BW(0), BW(0x09))
-    assert s.memory.require_concrete().hex() == "66000000000000005b"
+    CODECOPY(s, Uint256(0), Uint256(0), Uint256(0x09))
+    assert s.memory.unwrap().hex() == "66000000000000005b"
 
-    CODECOPY(s, BW(1), BW(8), BW(0x20))
+    CODECOPY(s, Uint256(1), Uint256(8), Uint256(0x20))
     assert (
-        s.memory.require_concrete().hex()
+        s.memory.unwrap().hex()
         == "665b00000000000000000000000000000000000000000000000000000000000000"
     )
 
 
 def test_GASPRICE() -> None:
-    transaction = make_transaction(gasprice=BW(10))
+    transaction = make_transaction(gasprice=Uint256(10))
     s = make_state(transaction=transaction)
-    assert simplify(GASPRICE(s)) == 10
+    assert concretize(GASPRICE(s)) == 10
 
 
 def test_EXTCODESIZE() -> None:
     address = 0xABCDABCDABCDABCDABCDABCDABCDABCDABCDABCD
     contract = make_contract(
-        address=BA(address), program=disassemble(bytes.fromhex("66000000000000005B"))
+        address=Uint160(address),
+        program=disassemble(bytes.fromhex("66000000000000005B")),
     )
     s = make_state()
     s.universe.add_contract(contract)
-    assert simplify(EXTCODESIZE(s, BW(address))) == 9
-    assert simplify(EXTCODESIZE(s, BW(0x1234))) == 0
+    assert concretize(EXTCODESIZE(s, Uint256(address))) == 9
+    assert concretize(EXTCODESIZE(s, Uint256(0x1234))) == 0
 
 
 def test_EXTCODECOPY() -> None:
     address = 0xABCDABCDABCDABCDABCDABCDABCDABCDABCDABCD
     contract = make_contract(
-        address=BA(address), program=disassemble(bytes.fromhex("66000000000000005B"))
+        address=Uint160(address),
+        program=disassemble(bytes.fromhex("66000000000000005B")),
     )
     s = make_state()
     s.universe.add_contract(contract)
 
-    EXTCODECOPY(s, BA(address), BW(3), BW(5), BW(7))
-    assert s.memory.require_concrete().hex() == "0000000000005b000000"
+    EXTCODECOPY(s, Uint256(address), Uint256(3), Uint256(5), Uint256(7))
+    assert s.memory.unwrap().hex() == "0000000000005b000000"
 
-    EXTCODECOPY(s, BA(0x1234), BW(0), BW(0), BW(10))
-    assert s.memory.require_concrete().hex() == "00000000000000000000"
+    EXTCODECOPY(s, Uint256(0x1234), Uint256(0), Uint256(0), Uint256(10))
+    assert s.memory.unwrap().hex() == "00000000000000000000"
 
 
 def test_RETURNDATASIZE() -> None:
     s = make_state(returndata=FrozenBytes.concrete(b"abcdefghijklmnopqrstuvwxyz"))
-    assert simplify(RETURNDATASIZE(s)) == 26
+    assert concretize(RETURNDATASIZE(s)) == 26
 
 
 def test_RETURNDATACOPY() -> None:
@@ -416,15 +448,15 @@ def test_RETURNDATACOPY() -> None:
         )
     )
 
-    RETURNDATACOPY(s, BW(0), BW(0), BW(32))
+    RETURNDATACOPY(s, Uint256(0), Uint256(0), Uint256(32))
     assert (
-        s.memory.require_concrete().hex()
+        s.memory.unwrap().hex()
         == "7dffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f"
     )
 
-    RETURNDATACOPY(s, BW(0), BW(31), BW(8))
+    RETURNDATACOPY(s, Uint256(0), Uint256(31), Uint256(8))
     assert (
-        s.memory.require_concrete().hex()
+        s.memory.unwrap().hex()
         == "7f00000000000000ffffffffffffffffffffffffffffffffffffffffffffff7f"
     )
 
@@ -432,74 +464,75 @@ def test_RETURNDATACOPY() -> None:
 def test_EXTCODEHASH() -> None:
     address = 0xABCDABCDABCDABCDABCDABCDABCDABCDABCDABCD
     contract = make_contract(
-        address=BA(address), program=disassemble(bytes.fromhex("66000000000000005B"))
+        address=Uint160(address),
+        program=disassemble(bytes.fromhex("66000000000000005B")),
     )
     s = make_state()
     s.universe.add_contract(contract)
 
     assert (
-        simplify(EXTCODEHASH(s, BA(address)))
+        concretize(EXTCODEHASH(s, Uint256(address)))
         == 0xD579742AEE22A336CAC42EFE05B2CF1281DB892E213257B929C2338EA0675B00
     )
-    assert simplify(EXTCODEHASH(s, BA(0x1234))) == 0x0
+    assert concretize(EXTCODEHASH(s, Uint256(0x1234))) == 0x0
 
 
 def test_BLOCKHASH() -> None:
     s = make_state()
-    s.universe.blockhashes.array = z3.K(z3.BitVecSort(256), BW(0x9999))
-    assert simplify(BLOCKHASH(s, s.block.number - 10)) == 0x9999
-    assert simplify(BLOCKHASH(s, s.block.number - 256)) == 0x9999
-    assert simplify(BLOCKHASH(s, s.block.number - 257)) == 0
-    assert simplify(BLOCKHASH(s, s.block.number)) == 0
-    assert simplify(BLOCKHASH(s, s.block.number + 10)) == 0
+    s.universe.blockhashes = Array.concrete(Uint256, Uint256(0x9999))
+    assert concretize(BLOCKHASH(s, s.block.number - Uint256(10))) == 0x9999
+    assert concretize(BLOCKHASH(s, s.block.number - Uint256(256))) == 0x9999
+    assert concretize(BLOCKHASH(s, s.block.number - Uint256(257))) == 0
+    assert concretize(BLOCKHASH(s, s.block.number)) == 0
+    assert concretize(BLOCKHASH(s, s.block.number + Uint256(10))) == 0
 
 
 def test_COINBASE() -> None:
-    block = make_block(coinbase=BA(0x9BBFED6889322E016E0A02EE459D306FC19545D8))
+    block = make_block(coinbase=Uint160(0x9BBFED6889322E016E0A02EE459D306FC19545D8))
     s = make_state(block=block)
-    assert simplify(COINBASE(s)) == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
+    assert concretize(COINBASE(s)) == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
 
 
 def test_TIMESTAMP() -> None:
-    block = make_block(timestamp=BW(1636704767))
+    block = make_block(timestamp=Uint256(1636704767))
     s = make_state(block=block)
-    assert simplify(TIMESTAMP(s)) == 1636704767
+    assert concretize(TIMESTAMP(s)) == 1636704767
 
 
 def test_NUMBER() -> None:
-    block = make_block(number=BW(1636704767))
+    block = make_block(number=Uint256(1636704767))
     s = make_state(block=block)
-    assert simplify(NUMBER(s)) == 1636704767
+    assert concretize(NUMBER(s)) == 1636704767
 
 
 def test_PREVRANDAO() -> None:
     block = make_block(
-        prevrandao=BW(
+        prevrandao=Uint256(
             0xCE124DEE50136F3F93F19667FB4198C6B94EECBACFA300469E5280012757BE94
         )
     )
     s = make_state(block=block)
     assert (
-        simplify(PREVRANDAO(s))
+        concretize(PREVRANDAO(s))
         == 0xCE124DEE50136F3F93F19667FB4198C6B94EECBACFA300469E5280012757BE94
     )
 
 
 def test_GASLIMIT() -> None:
-    block = make_block(gaslimit=BW(0xFFFFFFFFFFFF))
+    block = make_block(gaslimit=Uint256(0xFFFFFFFFFFFF))
     s = make_state(block=block)
-    assert simplify(GASLIMIT(s)) == 0xFFFFFFFFFFFF
+    assert concretize(GASLIMIT(s)) == 0xFFFFFFFFFFFF
 
 
 def test_CHAINID() -> None:
     s = make_state()
-    assert simplify(CHAINID(s)) == 1
+    assert concretize(CHAINID(s)) == 1
 
 
 def test_BASEFEE() -> None:
-    block = make_block(basefee=BW(10))
+    block = make_block(basefee=Uint256(10))
     s = make_state(block=block)
-    assert simplify(BASEFEE(s)) == 10
+    assert concretize(BASEFEE(s)) == 10
 
 
 def test_MLOAD() -> None:
@@ -510,50 +543,50 @@ def test_MLOAD() -> None:
             )
         )
     )
-    assert simplify(MLOAD(s, BW(0))) == 0xFF
-    assert simplify(MLOAD(s, BW(1))) == 0xFF00
+    assert concretize(MLOAD(s, Uint256(0))) == 0xFF
+    assert concretize(MLOAD(s, Uint256(1))) == 0xFF00
 
 
 def test_MSTORE() -> None:
     s = make_state()
-    MSTORE(s, BW(0), BW(0xFF))
+    MSTORE(s, Uint256(0), Uint256(0xFF))
     assert (
-        s.memory.require_concrete().hex()
+        s.memory.unwrap().hex()
         == "00000000000000000000000000000000000000000000000000000000000000ff"
     )
-    MSTORE(s, BW(1), BW(0xFF))
+    MSTORE(s, Uint256(1), Uint256(0xFF))
     assert (
-        s.memory.require_concrete().hex()
+        s.memory.unwrap().hex()
         == "0000000000000000000000000000000000000000000000000000000000000000ff"
     )
 
 
 def test_MSTORE8() -> None:
     s = make_state()
-    MSTORE8(s, BW(0), BW(0xFFFF))
+    MSTORE8(s, Uint256(0), Uint256(0xFFFF))
 
-    assert s.memory.require_concrete().hex() == "ff"
-    MSTORE8(s, BW(1), BW(0xAABBCCDDEE))
-    assert s.memory.require_concrete().hex() == "ffee"
+    assert s.memory.unwrap().hex() == "ff"
+    MSTORE8(s, Uint256(1), Uint256(0xAABBCCDDEE))
+    assert s.memory.unwrap().hex() == "ffee"
 
 
 def test_SLOAD() -> None:
     s = make_state()
-    s.contract.storage[BW(0)] = BW(46)
-    assert simplify(SLOAD(s, BW(0))) == 46
+    s.contract.storage[Uint256(0)] = Uint256(46)
+    assert concretize(SLOAD(s, Uint256(0))) == 46
     assert len(s.contract.storage.accessed) == 1
-    assert simplify(s.contract.storage.accessed[0]) == 0
+    assert concretize(s.contract.storage.accessed[0]) == 0
 
 
 def test_SSTORE() -> None:
     s = make_state()
 
-    SSTORE(s, BW(0), BW(0xFFFF))
-    assert simplify(s.contract.storage[BW(0)]) == 0xFFFF
+    SSTORE(s, Uint256(0), Uint256(0xFFFF))
+    assert concretize(s.contract.storage[Uint256(0)]) == 0xFFFF
 
-    SSTORE(s, BW(8965), BW(0xFF))
-    assert simplify(s.contract.storage[BW(0)]) == 0xFFFF
-    assert simplify(s.contract.storage[BW(8965)]) == 0xFF
+    SSTORE(s, Uint256(8965), Uint256(0xFF))
+    assert concretize(s.contract.storage[Uint256(0)]) == 0xFFFF
+    assert concretize(s.contract.storage[Uint256(8965)]) == 0xFF
 
 
 def test_JUMP() -> None:
@@ -561,25 +594,25 @@ def test_JUMP() -> None:
         program=disassemble(bytes.fromhex("66000000000000005B")),
     )
     s = make_state(contract=contract)
-    JUMP(s, BW(8))
+    JUMP(s, Uint256(8))
     assert s.pc == 1
     with pytest.raises(KeyError):
-        JUMP(s, BW(99))
+        JUMP(s, Uint256(99))
 
 
 def test_PC() -> None:
     ins = Instruction(0x12, 1, "PC")
-    assert simplify(PC(ins)) == 0x12
+    assert concretize(PC(ins)) == 0x12
 
 
 def test_MSIZE() -> None:
     s = make_state(memory=MutableBytes.concrete(b"\x00" * 123 + b"\x01"))
-    assert simplify(MSIZE(s)) == 124
+    assert concretize(MSIZE(s)) == 124
 
 
 def test_PUSH() -> None:
-    ins = Instruction(0x0, 2, "PUSH", 1, BW(0x01))
-    assert simplify(PUSH(ins)) == 0x01
+    ins = Instruction(0x0, 2, "PUSH", 1, Uint256(0x01))
+    assert concretize(PUSH(ins)) == 0x01
 
     ins = Instruction(0x1, 2, "PUSH", 1)
     with pytest.raises(ValueError):
@@ -587,10 +620,10 @@ def test_PUSH() -> None:
 
 
 def test_DUP() -> None:
-    s = make_state(stack=[BW(0x1234)])
+    s = make_state(stack=[Uint256(0x1234)])
 
     ins = Instruction(0x0, 1, "DUP", 1)
-    assert simplify(DUP(ins, s)) == 0x1234
+    assert concretize(DUP(ins, s)) == 0x1234
 
     ins = Instruction(0x0, 1, "DUP")
     with pytest.raises(ValueError):
@@ -598,11 +631,11 @@ def test_DUP() -> None:
 
 
 def test_SWAP() -> None:
-    s = make_state(stack=[BW(0x1234), BW(0x5678)])
+    s = make_state(stack=[Uint256(0x1234), Uint256(0x5678)])
 
     ins = Instruction(0x0, 1, "SWAP", 1)
     SWAP(ins, s)
-    stack = [simplify(x) for x in s.stack]
+    stack = [concretize(x) for x in s.stack]
     assert stack == [0x5678, 0x1234]
 
     ins = Instruction(0x0, 1, "SWAP")
@@ -615,9 +648,9 @@ def test_RETURN() -> None:
         returndata=FrozenBytes.concrete(b"\x12\x34"),
         memory=MutableBytes.concrete(b"\xff\x01"),
     )
-    RETURN(s, BW(0), BW(2))
+    RETURN(s, Uint256(0), Uint256(2))
     assert s.success is True
-    assert s.returndata.require_concrete() == b"\xff\x01"
+    assert s.returndata.unwrap() == b"\xff\x01"
 
 
 def test_REVERT() -> None:
@@ -625,16 +658,16 @@ def test_REVERT() -> None:
         returndata=FrozenBytes.concrete(b"\x12\x34"),
         memory=MutableBytes.concrete(b"\xff\x01"),
     )
-    REVERT(s, BW(0), BW(2))
+    REVERT(s, Uint256(0), Uint256(2))
     assert s.success is False
-    assert s.returndata.require_concrete() == b"\xff\x01"
+    assert s.returndata.unwrap() == b"\xff\x01"
 
 
 def test_INVALID() -> None:
     s = make_state(returndata=FrozenBytes.concrete(b"\x12\x34"))
     INVALID(s)
     assert s.success is False
-    assert s.returndata.require_concrete() == b""
+    assert s.returndata.unwrap() == b""
 
 
 def test_SELFDESTRUCT() -> None:

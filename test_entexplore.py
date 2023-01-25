@@ -26,77 +26,77 @@ def bench(
 
 
 def test_fallback(benchmark: Benchmark) -> None:
-    program = load_solidity("ethernaut/01_Fallback.sol")
+    program = load_solidity("fixtures/01_Fallback.sol")
     bench(benchmark, program, cases.Fallback)
 
 
 def test_fallout(benchmark: Benchmark) -> None:
-    program = load_solidity("ethernaut/02_Fallout.sol")
+    program = load_solidity("fixtures/02_Fallout.sol")
     bench(benchmark, program, cases.Fallout)
 
 
 def test_coinflip(benchmark: Benchmark) -> None:
-    program = load_solidity("ethernaut/03_CoinFlip.sol")
+    program = load_solidity("fixtures/03_CoinFlip.sol")
     bench(benchmark, program, cases.CoinFlip)
 
 
 def test_telephone(benchmark: Benchmark) -> None:
-    program = load_solidity("ethernaut/04_Telephone.sol")
+    program = load_solidity("fixtures/04_Telephone.sol")
     bench(benchmark, program, cases.Telephone)
 
 
 def test_token(benchmark: Benchmark) -> None:
-    program = load_solidity("ethernaut/05_Token.sol")
+    program = load_solidity("fixtures/05_Token.sol")
     bench(benchmark, program, cases.Token)
 
 
 def test_delegation(benchmark: Benchmark) -> None:
-    programs = loads_solidity("ethernaut/06_Delegation.sol")
+    programs = loads_solidity("fixtures/06_Delegation.sol")
     start = cases.delegation_start(programs)
     bench(benchmark, start, cases.Delegation)
 
 
 def test_force(benchmark: Benchmark) -> None:
-    program = load_binary("ethernaut/07_Force.bin")
+    program = load_binary("fixtures/07_Force.bin")
     bench(benchmark, program, cases.Force)
 
 
 def test_vault(benchmark: Benchmark) -> None:
-    program = load_solidity("ethernaut/08_Vault.sol")
+    program = load_solidity("fixtures/08_Vault.sol")
     bench(benchmark, program, cases.Vault)
 
 
 def test_king(benchmark: Benchmark) -> None:
-    program = load_solidity("ethernaut/09_King.sol")
+    program = load_solidity("fixtures/09_King.sol")
     bench(benchmark, program, cases.King)
 
 
 def test_reentrancy(benchmark: Benchmark) -> None:
-    program = load_solidity("ethernaut/10_Reentrancy.sol")
+    program = load_solidity("fixtures/10_Reentrancy.sol")
     bench(benchmark, program, cases.Reentrancy)
 
 
 def test_elevator(benchmark: Benchmark) -> None:
-    programs = loads_solidity("ethernaut/11_Elevator.sol")
+    programs = loads_solidity("fixtures/11_Elevator.sol")
     bench(benchmark, programs["Elevator"], cases.Elevator)
 
 
 def test_privacy(benchmark: Benchmark) -> None:
-    program = load_binary("ethernaut/12_Privacy.bin")
+    program = load_binary("fixtures/12_Privacy.bin")
     bench(benchmark, program, cases.Privacy)
 
 
 def test_gatekeeper_one(benchmark: Benchmark) -> None:
-    program = load_solidity("ethernaut/13_GatekeeperOne.sol")
+    program = load_solidity("fixtures/13_GatekeeperOne.sol")
     bench(benchmark, program, cases.GatekeeperOne)
 
 
 def test_gatekeeper_two(benchmark: Benchmark) -> None:
-    program = load_solidity("ethernaut/14_GatekeeperTwo.sol")
+    program = load_solidity("fixtures/14_GatekeeperTwo.sol")
     bench(benchmark, program, cases.GatekeeperTwo)
 
 
 def test_preservation(benchmark: Benchmark) -> None:
-    programs = loads_solidity("ethernaut/15_Preservation.sol")
+    programs = loads_solidity("fixtures/15_Preservation.sol")
     start = cases.preservation_start(programs)
     bench(benchmark, start, cases.Preservation)

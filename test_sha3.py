@@ -1,90 +1,106 @@
 #!/usr/bin/env pytest
 
 import pytest
-import z3
+from pysmt.shortcuts import Equals
 
+from arrays import FrozenBytes
 from sha3 import SHA3
-from solver import DefaultSolver
-from symbolic import BW, unwrap_bytes
-
-
-def bytes_to_bitvector(data: bytes) -> z3.BitVecRef:
-    return z3.BitVecVal(int.from_bytes(data), 8 * len(data))
+from smt import Constraint, Uint256
+from solver import Solver
 
 
 def test_concrete() -> None:
     sha3 = SHA3()
-    input = bytes_to_bitvector(b"testing")
+    input = FrozenBytes.concrete(b"testing")
     assert (
-        unwrap_bytes(sha3[input]).hex()
+        sha3[input].unwrap(bytes).hex()
         == "5f16f4c7f149ac4f9510d9cf8cf384038ad348b3bcdc01915f95de12df9d1b02"
     )
 
 
 def test_symbolic() -> None:
     sha3 = SHA3()
-    input = z3.BitVec("INPUT", 8 * 7)
-    assert str(sha3[input]) == "SHA3(7)*[INPUT]"
+    input = FrozenBytes.symbolic("INPUT", 7)
+    assert sha3[input].maybe_unwrap() is None
 
-    solver = DefaultSolver()
+    solver = Solver()
     sha3.constrain(solver)
-    solver.assert_and_track(input == bytes_to_bitvector(b"testing"), "TEST1")
+    solver.assert_and_track(
+        Constraint(
+            Equals(input._bigvector(), FrozenBytes.concrete(b"testing")._bigvector())
+        )
+    )
     assert solver.check()
 
-    assert unwrap_bytes(solver.evaluate(input, True)) == b"testing"
+    assert input.evaluate(solver) == b"testing".hex()
     sha3.narrow(solver)
     assert (
-        unwrap_bytes(solver.evaluate(sha3[input], True)).hex()
+        solver.evaluate(sha3[input], True).unwrap(bytes).hex()
         == "5f16f4c7f149ac4f9510d9cf8cf384038ad348b3bcdc01915f95de12df9d1b02"
+    )
+
+
+def test_zero() -> None:
+    sha3 = SHA3()
+    assert (
+        sha3[FrozenBytes.symbolic("INPUT", 0)].unwrap(bytes).hex()
+        == "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+    )
+    assert (
+        sha3[FrozenBytes.concrete(b"")].unwrap(bytes).hex()
+        == "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
     )
 
 
 def test_impossible_concrete() -> None:
     sha3 = SHA3()
-    input = z3.BitVec("INPUT", 8 * 7)
+    input = FrozenBytes.symbolic("INPUT", 7)
     digest = sha3[input]
-    assert str(digest) == "SHA3(7)*[INPUT]"
 
-    solver = DefaultSolver()
+    solver = Solver()
     sha3.constrain(solver)
-    solver.assert_and_track(input == bytes_to_bitvector(b"testing"), "TEST1")
+    solver.assert_and_track(
+        Constraint(
+            Equals(input._bigvector(), FrozenBytes.concrete(b"testing")._bigvector())
+        )
+    )
     solver.assert_and_track(
         digest
-        == BW(0x0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF),
-        "TEST2",
+        == Uint256(0x0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF)
     )
     assert solver.check()
 
     # The initial `check()` succeeds, but an error is raised when we narrow the
     # SHA3 instance with the model.
-    assert unwrap_bytes(solver.evaluate(input, True)) == b"testing"
+    assert input.evaluate(solver) == b"testing".hex()
     with pytest.raises(AssertionError):
         sha3.narrow(solver)
 
 
 def test_impossible_symbolic() -> None:
     sha3 = SHA3()
-    digest = sha3[bytes_to_bitvector(b"testing")]
+    digest = sha3[FrozenBytes.concrete(b"testing")]
 
-    solver = DefaultSolver()
+    solver = Solver()
     sha3.constrain(solver)
     solver.assert_and_track(
         digest
-        == BW(0x0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF),
-        "TEST1",
+        == Uint256(0x0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF)
     )
     assert not solver.check()
 
 
 def test_items() -> None:
     sha3 = SHA3()
-    sha3[bytes_to_bitvector(b"hello")]
-    sha3[bytes_to_bitvector(b"testing")]
+    sha3[FrozenBytes.concrete(b"hello")]
+    sha3[FrozenBytes.concrete(b"testing")]
 
     items = sha3.items()
-    first, second = next(items), next(items)
-    assert first[:2] == (5, bytes_to_bitvector(b"hello"))
-    assert second[:2] == (7, bytes_to_bitvector(b"testing"))
+    n, k, _ = next(items)
+    assert (n, k.maybe_unwrap()) == (5, b"hello")
+
+    n, k, _ = next(items)
+    assert (n, k.maybe_unwrap()) == (7, b"testing")
 
     with pytest.raises(StopIteration):
         next(items)
@@ -92,9 +108,9 @@ def test_items() -> None:
 
 def test_printable() -> None:
     sha3 = SHA3()
-    sha3[bytes_to_bitvector(b"testing")]
+    sha3[FrozenBytes.concrete(b"testing")]
 
-    solver = DefaultSolver()
+    solver = Solver()
     sha3.constrain(solver)
     assert solver.check()
     sha3.narrow(solver)

@@ -3,14 +3,15 @@ FROM mcr.microsoft.com/vscode/devcontainers/base:0-jammy
 COPY *.gpg /usr/share/keyrings/
 COPY *.list /etc/apt/sources.list.d/
 
-RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
-    && apt-get -y upgrade \
-    && apt-get -y install --no-install-recommends \
-        nodejs python3-pip python3-pydot python3.11 yices2
+RUN apt update && apt -y upgrade
 
+RUN apt -y install python3.11 python3.11-dev python3-pip
 RUN ln -sf /usr/bin/python3.11 /usr/bin/python3
 
-RUN wget https://github.com/cvc5/cvc5/releases/latest/download/cvc5-Linux -O /usr/local/bin/cvc5 && \
-    chmod +x /usr/local/bin/cvc5
+RUN apt -y install autoconf build-essential cmake default-jre gperf \
+    libgmp3-dev python3-gmpy2 swig
+RUN pip install cython pysmt
+RUN sudo -u vscode -- pysmt-install --all --confirm-agreement
 
+RUN apt -y install nodejs python3-pydot
 RUN pip install black mypy pydocstyle

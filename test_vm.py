@@ -4,8 +4,8 @@ from typing import List
 
 from arrays import FrozenBytes
 from disassembler import disassemble
+from smt import Uint256
 from state import State
-from symbolic import BW, unwrap
 from testlib import (
     abiencode,
     compile_solidity,
@@ -18,7 +18,7 @@ from vm import printable_execution, step
 
 
 def concretize_stack(state: State) -> List[int]:
-    return [unwrap(x) for x in state.stack]
+    return [x.unwrap() for x in state.stack]
 
 
 def test_execute_basic() -> None:
@@ -27,7 +27,7 @@ def test_execute_basic() -> None:
     state = make_state(
         contract=make_contract(program=program),
         transaction=make_transaction(
-            callvalue=BW(0),
+            callvalue=Uint256(0),
             calldata=FrozenBytes.concrete(b""),
         ),
     )
@@ -87,7 +87,7 @@ def test_execute_basic() -> None:
     action = step(state)
     assert action == "TERMINATE"
     assert state.success is False
-    assert state.returndata.require_concrete() == b""
+    assert state.returndata.unwrap() == b""
     assert concretize_stack(state) == []
 
 
@@ -142,49 +142,49 @@ def test_execute_solidity() -> None:
     state = make_state(
         contract=make_contract(program=program),
         transaction=make_transaction(
-            callvalue=BW(0),
+            callvalue=Uint256(0),
             calldata=FrozenBytes.concrete(abiencode("owner()")),
         ),
     )
     execute(state)
     assert state.success is True
-    assert state.returndata.require_concrete() == b"\x00" * 32
+    assert state.returndata.unwrap() == b"\x00" * 32
 
     state = make_state(
         contract=state.contract,  # carries forward storage
         transaction=make_transaction(
-            callvalue=BW(0),
+            callvalue=Uint256(0),
             calldata=FrozenBytes.concrete(abiencode("withdraw()")),
         ),
         universe=state.universe,
     )
     execute(state)
     assert state.success is False
-    assert state.returndata.require_concrete()[68:91] == b"caller is not the owner"
+    assert state.returndata.unwrap()[68:91] == b"caller is not the owner"
 
     state = make_state(
         contract=state.contract,
         transaction=make_transaction(
-            callvalue=BW(123456),
+            callvalue=Uint256(123456),
             calldata=FrozenBytes.concrete(abiencode("contribute()")),
         ),
         universe=state.universe,
     )
     execute(state)
     assert state.success is True
-    assert state.returndata.require_concrete() == b""
+    assert state.returndata.unwrap() == b""
 
     state = make_state(
         contract=state.contract,
         transaction=make_transaction(
-            callvalue=BW(0),
+            callvalue=Uint256(0),
             calldata=FrozenBytes.concrete(abiencode("owner()")),
         ),
         universe=state.universe,
     )
     execute(state)
     assert state.success is True
-    assert state.returndata.require_concrete()[-20:] == b"\xca" * 20
+    assert state.returndata.unwrap()[-20:] == b"\xca" * 20
 
 
 def test_output_basic() -> None:
@@ -193,7 +193,7 @@ def test_output_basic() -> None:
     state = make_state(
         contract=make_contract(program=program),
         transaction=make_transaction(
-            callvalue=BW(0),
+            callvalue=Uint256(0),
             calldata=FrozenBytes.concrete(b""),
         ),
     )

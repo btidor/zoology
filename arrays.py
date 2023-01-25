@@ -4,31 +4,38 @@ from __future__ import annotations
 
 import abc
 import copy
-from typing import Any, Iterable, List, Tuple, TypeAlias, Union, cast
-
-import z3
-
-from solver import Solver
-from symbolic import (
-    BW,
-    BY,
-    describe,
-    is_bitvector,
-    is_concrete,
-    simplify,
-    uint8,
-    uint256,
-    unwrap,
-    unwrap_bytes,
-    zand,
-    zconcat,
-    zget,
-    zif,
-    zstore,
+from typing import (
+    Any,
+    Dict,
+    Generic,
+    Iterable,
+    List,
+    Optional,
+    Tuple,
+    Type,
+    TypeAlias,
+    TypeGuard,
+    TypeVar,
+    Union,
 )
 
+from pysmt.fnode import FNode
+from pysmt.shortcuts import BV
+from pysmt.shortcuts import Array as BackingArray
+from pysmt.shortcuts import BVConcat, Select, Store, Symbol
+from pysmt.typing import ArrayType, BVType
 
-class Array:
+from smt import BitVector, Constraint, Uint8, Uint256
+from solver import Solver
+
+K = TypeVar("K", bound=BitVector)
+V = TypeVar("V", bound=BitVector)
+
+T = TypeVar("T", bound="Bytes")
+U = TypeVar("U")
+
+
+class Array(Generic[K, V]):
     """
     A symbolic array. Mutable.
 
@@ -38,70 +45,86 @@ class Array:
     Tracks which keys are accessed and written.
     """
 
-    def __init__(
-        self, name: str, key: z3.BitVecSortRef, val: z3.SortRef | z3.BitVecRef
-    ) -> None:
-        """Create a new Array."""
-        if isinstance(val, z3.SortRef):
-            self.array = z3.Array(name, key, val)
-        else:
-            self.array = z3.K(key, val)
-        self.accessed: List[z3.BitVecRef] = []
-        self.written: List[z3.BitVecRef] = []
+    def __init__(self, array: FNode, vtype: Type[V]) -> None:
+        """Create a new Array. For internal use."""
+        self.array = array
+        self.vtype = vtype
+        self.accessed: List[K] = []
+        self.written: List[K] = []
 
-    def __getitem__(self, key: z3.BitVecRef) -> z3.BitVecRef:
+    @classmethod
+    def concrete(cls, key: Type[K], val: V) -> Array[K, V]:
+        """Create a new Array with a concrete default value."""
+        return Array(BackingArray(key._pysmt_type(), val.node), val.__class__)
+
+    @classmethod
+    def symbolic(cls, name: str, key: Type[K], val: Type[V]) -> Array[K, V]:
+        """Create a new Array as an uninterpreted function."""
+        return Array(Symbol(name, ArrayType(key._pysmt_type(), val._pysmt_type())), val)
+
+    def __deepcopy__(self, memo: Any) -> Array[K, V]:
+        result: Array[K, V] = Array(self.array, self.vtype)
+        result.accessed = copy.deepcopy(self.accessed, memo)
+        result.written = copy.deepcopy(self.written, memo)
+        return result
+
+    def __getitem__(self, key: K) -> V:
         """Look up the given symbolic key."""
         self.accessed.append(key)
-        return zget(self.array, key)
+        return self.peek(key)
 
-    def __setitem__(self, key: z3.BitVecRef, val: z3.BitVecRef) -> None:
+    def __setitem__(self, key: K, val: V) -> None:
         """Set the given symbolic key to the given symbolic value."""
         self.written.append(key)
-        self.array = zstore(self.array, key, val)
+        return self.poke(key, val)
 
-    def peek(self, key: z3.BitVecRef) -> z3.BitVecRef:
+    def peek(self, key: K) -> V:
         """Look up the given symbolic key, but don't track the lookup."""
-        return zget(self.array, key)
+        return self.vtype(Select(self.array, key.node))
+
+    def poke(self, key: K, val: V) -> None:
+        """Set up the given symbolic key, but don't track the write."""
+        self.array = Store(self.array, key.node, val.node)
 
     def printable_diff(
-        self, name: str, solver: Solver, original: Array
+        self, name: str, solver: Solver, original: Array[K, V]
     ) -> Iterable[str]:
         """
         Evaluate a diff of this array against another.
 
         Yields a human-readable description of the differences.
         """
-        diffs = [
+        diffs: List[Tuple[str, List[Tuple[K, V, Optional[V]]]]] = [
             ("R", [(key, original.peek(key), None) for key in self.accessed]),
             ("W", [(key, self.peek(key), original.peek(key)) for key in self.written]),
         ]
         line = name
 
         for prefix, rows in diffs:
-            concrete = {}
+            concrete: Dict[str, Tuple[str, Optional[str]]] = {}
             for key, value, prior in rows:
-                k = describe(solver.evaluate(cast(z3.BitVecRef, key), True))
-                v = describe(solver.evaluate(cast(z3.BitVecRef, value), True))
+                k = solver.evaluate(key, True).describe()
+                v = solver.evaluate(value, True).describe()
                 p = (
-                    describe(solver.evaluate(cast(z3.BitVecRef, prior), True))
+                    solver.evaluate(prior, True).describe()
                     if prior is not None
                     else None
                 )
                 if v != p:
                     concrete[k] = (v, p)
 
-            for key in sorted(concrete.keys()):
-                line += f"\t{prefix}: {key} "
-                if len(key) > 34:
+            for k in sorted(concrete.keys()):
+                line += f"\t{prefix}: {k} "
+                if len(k) > 34:
                     yield line
                     line = "\t"
-                value, prior = concrete[key]
-                line += f"-> {value}"
-                if prior is not None:
-                    if len(value) > 34:
+                v, p = concrete[k]
+                line += f"-> {v}"
+                if p is not None:
+                    if len(v) > 34:
                         yield line
                         line = "\t  "
-                    line += f" (from {prior})"
+                    line += f" (from {p})"
                 yield line
                 line = ""
 
@@ -110,52 +133,70 @@ class Array:
 
 
 BytesWrite: TypeAlias = Union[
-    Tuple[uint256, uint8],
-    Tuple[uint256, "ByteSlice"],
+    Tuple[Uint256, Uint8],
+    Tuple[Uint256, "ByteSlice"],
 ]
+
+
+def present(values: List[Optional[U]]) -> TypeGuard[List[U]]:
+    """Return true iff the given list has no Nones."""
+    return all(v is not None for v in values)
 
 
 class Bytes(abc.ABC):
     """A symbolic-length sequence of symbolic bytes."""
 
-    def __init__(self, length: uint256, array: z3.ArrayRef) -> None:
+    def __init__(self, length: Uint256, array: FNode) -> None:
         """Create a new Bytes. For internal use."""
-        assert length.size() == 256
+        assert array.is_array_op() or array.symbol_type().is_array_type()
         self.length = length
 
-        domain, range = array.domain(), array.range()
-        assert isinstance(domain, z3.BitVecSortRef)
-        assert isinstance(range, z3.BitVecSortRef)
-        assert domain.size() == 256
-        assert range.size() == 8
+        assert Select(array, Uint256(0).node).bv_width() == 8
         self.array = array
 
         self.writes: List[BytesWrite] = []  # writes to apply *on top of* array
 
+    @abc.abstractmethod
+    def __deepcopy__(self: T, memo: Any) -> T:
+        # Deep-copying a pySMT Array causes problems. But they're immutable, so
+        # we should pass them through unchanged.
+        raise NotImplementedError
+
     @classmethod
-    def concrete(cls, data: bytes | List[uint8]) -> Any:  # TODO: switch to Self
+    def concrete(cls: Type[T], data: bytes | List[Uint8]) -> T:
         """Create a new Bytes from a concrete list of bytes."""
-        length = BW(len(data))
-        array = z3.K(z3.BitVecSort(256), BY(0))
+        length = Uint256(len(data))
+        array = BackingArray(BVType(256), BV(0, 8))
         for i, b in enumerate(data):
-            if is_bitvector(b):
-                assert b.size() == 8
-                array = zstore(array, BW(i), b)
+            if isinstance(b, Uint8):
+                array = Store(array, Uint256(i).node, b.node)
             else:
                 assert isinstance(b, int)
-                array = zstore(array, BW(i), BY(b))
+                array = Store(array, Uint256(i).node, Uint8(b).node)
         return cls(length, array)
 
     @classmethod
-    def symbolic(cls, name: str) -> Any:
+    def symbolic(cls: Type[T], name: str, length: Optional[int] = None) -> T:
         """Create a new, fully-symbolic Bytes."""
         return cls(
-            z3.BitVec(f"{name}.length", 256),
-            z3.Array(name, z3.BitVecSort(256), z3.BitVecSort(8)),
+            Uint256(length if length is not None else f"{name}.length"),
+            Symbol(name, ArrayType(BVType(256), BVType(8))),
+        )
+
+    @classmethod
+    def conditional(cls: Type[T], name: str, constraint: Constraint) -> T:
+        """
+        Create a new, fully-symbolic Bytes.
+
+        If the constraint is True, the Bytes is empty.
+        """
+        return cls(
+            constraint.ite(Uint256(0), Uint256(f"{name}.length")),
+            Symbol(name, ArrayType(BVType(256), BVType(8))),
         )
 
     @abc.abstractmethod
-    def __getitem__(self, i: uint256) -> uint8:
+    def __getitem__(self, i: Uint256) -> Uint8:
         """
         Return the byte at the given symbolic index.
 
@@ -163,110 +204,123 @@ class Bytes(abc.ABC):
         """
         ...
 
-    def slice(self, offset: uint256, size: uint256) -> ByteSlice:
+    def slice(self, offset: Uint256, size: Uint256) -> ByteSlice:
         """Return a symbolic slice of this instance."""
         return ByteSlice(self, offset, size)
 
-    def bigvector(self) -> z3.BitVecRef:
+    def _bigvector(self) -> FNode:
         """
         Return a single, large bitvector of this instance's bytes.
 
         Requires a concrete length.
         """
-        return zconcat(*[self[BW(i)] for i in range(unwrap(self.length))])
+        return BVConcat(*[self[Uint256(i)].node for i in range(self.length.unwrap())])
 
-    def require_concrete(self) -> bytes:
+    def maybe_unwrap(self) -> Optional[bytes]:
+        """Unwrap this instance to bytes."""
+        if (length := self.length.maybe_unwrap()) is None:
+            return None
+        data = [self[Uint256(i)].maybe_unwrap() for i in range(length)]
+        if not present(data):
+            return None
+        return bytes(data)
+
+    def unwrap(self) -> bytes:
         """
         Unwrap this instance to bytes.
 
         Requires a concrete length and all-concrete values.
         """
-        return bytes(unwrap(self[BW(i)]) for i in range(unwrap(self.length)))
+        if (data := self.maybe_unwrap()) is None:
+            raise ValueError("unexpected symbolic length or data")
+        return data
 
     def evaluate(self, solver: Solver, model_completion: bool = False) -> str:
         """Use a model to evaluate this instance as a hexadecimal string."""
-        length = unwrap(solver.evaluate(self.length, True))
+        length = solver.evaluate(self.length, True).unwrap()
         result = ""
         for i in range(length):
-            b = solver.evaluate(self[BW(i)], model_completion)
-            result += unwrap_bytes(b).hex() if b is not None else "??"
+            b = solver.evaluate(self[Uint256(i)], model_completion)
+            result += b.unwrap(bytes).hex() if b is not None else "??"
         return result
 
 
 class FrozenBytes(Bytes):
     """A symbolic-length sequence of symbolic bytes. Immutable."""
 
-    def __getitem__(self, i: uint256) -> uint8:
-        assert i.size() == 256
-        return zget(self.array, i)
+    def __deepcopy__(self, memo: Any) -> FrozenBytes:
+        return self
+
+    def __getitem__(self, i: Uint256) -> Uint8:
+        return Uint8(Select(self.array, i.node))
 
 
 class ByteSlice(FrozenBytes):
     """A symbolic-length slice of symbolic bytes. Immutable."""
 
-    def __init__(self, inner: Bytes, offset: uint256, size: uint256) -> None:
+    def __init__(self, inner: Bytes, offset: Uint256, size: Uint256) -> None:
         """Create a new ByteSlice."""
-        assert offset.size() == 256
-        assert size.size() == 256
         self.inner = copy.deepcopy(inner)
-        self.length = size
         self.offset = offset
+        self.length = size
 
-    def __getitem__(self, i: uint256) -> uint8:
-        assert i.size() == 256
+    def __deepcopy__(self, memo: Any) -> ByteSlice:
+        return self
+
+    def __getitem__(self, i: Uint256) -> Uint8:
         item = self.inner[self.offset + i]
-        return zif(z3.ULT(i, self.length), item, BY(0))
+        return (i < self.length).ite(item, Uint8(0))
 
 
 class MutableBytes(Bytes):
     """A symbolic-length sequence of symbolic bytes. Mutable."""
 
-    def __getitem__(self, i: uint256) -> uint8:
-        assert i.size() == 256
-        item = zget(self.array, i)
+    def __deepcopy__(self, memo: Any) -> MutableBytes:
+        result = MutableBytes(self.length, self.array)
+        result.writes = copy.copy(self.writes)
+        return result
+
+    def __getitem__(self, i: Uint256) -> Uint8:
+        item = Uint8(Select(self.array, i.node))
         for k, v in self.writes:
             if isinstance(v, ByteSlice):
                 destOffset = k
-                item = zif(
-                    zand(z3.UGE(i, destOffset), z3.ULT(i, destOffset + v.length)),
+                item = Constraint.all(i >= destOffset, i < destOffset + v.length).ite(
                     v[i - destOffset],
                     item,
                 )
             else:
-                item = zif(i == k, v, item)
-        return zif(z3.ULT(i, self.length), item, BY(0))
+                item = (i == k).ite(v, item)
+        return (i < self.length).ite(item, Uint8(0))
 
-    def __setitem__(self, i: uint256, v: uint8) -> None:
-        assert i.size() == 256
-        assert v.size() == 8
-        self.length = simplify(zif(z3.ULT(i, self.length), self.length, i + 1))
+    def __setitem__(self, i: Uint256, v: Uint8) -> None:
+        self.length = (i < self.length).ite(self.length, i + Uint256(1))
         if len(self.writes) == 0:
             # Warning: passing writes through to the underlying array when there
             # are no custom writes is a good optimization (~12% speedup), but it
             # does create a performance cliff.
-            self.array = zstore(self.array, i, v)
+            self.array = Store(self.array, i.node, v.node)
         else:
             self.writes.append((i, v))
 
-    def graft(self, slice: ByteSlice, at: uint256) -> None:
+    def graft(self, slice: ByteSlice, at: Uint256) -> None:
         """Graft another Bytes into this one at the given offset."""
-        assert at.size() == 256
-
-        if is_concrete(slice.length) and unwrap(slice.length) == 0:
+        if slice.length.maybe_unwrap() == 0:
             # Short circuit e.g. in DELEGATECALL when retSize is zero.
             return
 
-        self.length = simplify(
-            zif(
-                z3.ULT(at + slice.length - 1, self.length),
-                self.length,
-                at + slice.length,
-            )
+        self.length = (at + slice.length - Uint256(1) < self.length).ite(
+            self.length,
+            at + slice.length,
         )
-        if len(self.writes) == 0 and is_concrete(slice.length):
+
+        if (
+            len(self.writes) == 0
+            and (length := slice.length.maybe_unwrap()) is not None
+        ):
             # Avoid creating custom writes when possible because of the
             # performance cliff (see above).
-            for i in range(unwrap(slice.length)):
-                self[at + BW(i)] = simplify(slice[BW(i)])
+            for i in range(length):
+                self[at + Uint256(i)] = slice[Uint256(i)]
         else:
             self.writes.append((at, slice))
