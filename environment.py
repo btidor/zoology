@@ -135,5 +135,5 @@ class Universe:
 
     def constrain(self, solver: Solver) -> None:
         """Apply accumulated constraints to the given solver instance."""
-        for i, constraint in enumerate(self.transfer_constraints):
+        for _, constraint in enumerate(self.transfer_constraints):
             solver.assert_and_track(constraint)

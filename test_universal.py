@@ -44,7 +44,7 @@ def test_basic() -> None:
         Balance\tR: 0xadadadadadadadadadadadadadadadadadadadad
         \t-> 0x8000000000001
         \tR: 0xcacacacacacacacacacacacacacacacacacacaca
-        \t-> 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+        \t-> 0x0
 
         Storage\tW: 0xee -> 0xff (from 0x0)
     """.splitlines()
@@ -63,13 +63,13 @@ def test_fallout() -> None:
     )
     program = disassemble(code)
     universal = universal_transaction(program, SHA3(), "")
+
     check_transition(*next(universal), 0x87, "VIEW", "0xffd40b56")
     check_transition(*next(universal), 0x23, "SAVE", "0xabaa9916")
     check_transition(*next(universal), 0x9F, "GOAL", "0xa2dea26f")
     check_transition(*next(universal), 0x53, "VIEW", "0x8da5cb5b")
+    check_transition(*next(universal), 0xAF, "GOAL", "0x8aa96f38")
     check_transition(*next(universal), 0xB, "SAVE", "0x6fab5ddf")
-    # TODO: what happened to this branch?
-    # check_transition(*next(universal), 0xAF, "GOAL", "0x8aa96f38")
 
     with pytest.raises(StopIteration):
         next(universal)

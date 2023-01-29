@@ -298,7 +298,7 @@ class Uint256(Uint):
     @classmethod
     def underflow_safe(cls, a: Uint256, b: Uint256) -> Constraint:
         """Return a constraint asserting that a - b does not underflow."""
-        return a > b
+        return a >= b
 
     def as_signed(self) -> Sint256:
         """Reinterpret as a signed int256."""
