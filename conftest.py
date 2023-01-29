@@ -5,6 +5,6 @@ import pytest
 # https://docs.pytest.org/en/latest/how-to/assert.html#assert-introspection
 pytest.register_assert_rewrite("testlib")
 
-import testlib
+import solidity
 
-testlib.install_solidity()
+solidity.install_solidity()

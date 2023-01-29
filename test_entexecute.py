@@ -4,18 +4,9 @@ import copy
 
 from arrays import FrozenBytes
 from smt import Uint160, Uint256
+from solidity import abiencode, load_binary, load_solidity, loads_solidity
 from state import State
-from testlib import (
-    Benchmark,
-    abiencode,
-    execute,
-    load_binary,
-    load_solidity,
-    loads_solidity,
-    make_contract,
-    make_state,
-    make_transaction,
-)
+from testlib import Benchmark, execute, make_contract, make_state, make_transaction
 from vm import printable_execution
 
 
@@ -257,8 +248,9 @@ def test_privacy(benchmark: Benchmark) -> None:
 
 
 def test_gatekeeper_one(benchmark: Benchmark) -> None:
-    program = load_solidity("fixtures/13_GatekeeperOne.sol")
-    # TODO: we can't test GatekeeperOne because concrete gas isn't implemented
+    # We can't execute GatekeeperOne because concrete gas isn't implemented.
+    # Instead, just check that it compiles.
+    _ = load_solidity("fixtures/13_GatekeeperOne.sol")
 
 
 def test_gatekeeper_two(benchmark: Benchmark) -> None:

@@ -5,15 +5,9 @@ from typing import List
 from arrays import FrozenBytes
 from disassembler import disassemble
 from smt import Uint256
+from solidity import abiencode, compile_solidity
 from state import State
-from testlib import (
-    abiencode,
-    compile_solidity,
-    execute,
-    make_contract,
-    make_state,
-    make_transaction,
-)
+from testlib import execute, make_contract, make_state, make_transaction
 from vm import printable_execution, step
 
 
