@@ -26,6 +26,7 @@ def abiencode(signature: str) -> bytes:
 def load_solidity(path: str) -> Program:
     """Load a Solidity contract into a Program object."""
     assert path.endswith(".sol")
+    path = os.path.join(os.path.dirname(os.path.realpath(__file__)), path)
     with open(path, "r") as f:
         source = f.read()
 
@@ -39,6 +40,7 @@ def load_solidity(path: str) -> Program:
 def loads_solidity(path: str) -> Dict[str, Program]:
     """Load a Solidity file containing multiple programs."""
     assert path.endswith(".sol")
+    path = os.path.join(os.path.dirname(os.path.realpath(__file__)), path)
     with open(path, "r") as f:
         source = f.read()
 
@@ -49,6 +51,7 @@ def loads_solidity(path: str) -> Dict[str, Program]:
 def load_binary(path: str) -> Program:
     """Load a file containing binary EVM contract code."""
     assert path.endswith(".bin")
+    path = os.path.join(os.path.dirname(os.path.realpath(__file__)), path)
     with open(path, "rb") as f:
         code = f.read()
     return disassemble(code)

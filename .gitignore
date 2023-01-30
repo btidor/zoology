@@ -1,7 +1,10 @@
 # Python
+.benchmarks/
+.mypy_cache/
+prof/
 __pycache__/
 *.py[cod]
-prof/
+.pytest_cache/
 
 # Node.js
 node_modules/

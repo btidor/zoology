@@ -4,6 +4,7 @@ import copy
 from typing import Any, Tuple, Union
 
 import test_entcommon as cases
+
 from disassembler import Program
 from solidity import load_binary, load_solidity, loads_solidity
 from state import State

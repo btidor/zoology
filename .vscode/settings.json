@@ -4,9 +4,11 @@
     },
     "editor.formatOnSave": true,
     "files.exclude": {
+        "**/.benchmarks": true,
+        "**/.mypy_cache": true,
         "**/prof": true,
         "**/__pycache__": true,
-        "**/.mypy_cache": true,
+        "**/*.py[cod]": true,
         "**/.pytest_cache": true
     },
     "isort.args": [
