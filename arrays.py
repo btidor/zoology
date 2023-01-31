@@ -5,7 +5,7 @@ from __future__ import annotations
 import abc
 import copy
 from typing import (
-    Any,
+    Callable,
     Dict,
     Generic,
     Iterable,
@@ -20,10 +20,8 @@ from typing import (
 )
 
 from pysmt.fnode import FNode
-from pysmt.shortcuts import BV
-from pysmt.shortcuts import Array as BackingArray
-from pysmt.shortcuts import BVConcat, Select, Store, Symbol
-from pysmt.typing import ArrayType, BVType
+from pysmt.shortcuts import BVConcat, Select, Symbol
+from pysmt.typing import ArrayType
 
 from smt import BitVector, Constraint, Uint8, Uint256
 from solver import Solver
@@ -39,34 +37,26 @@ class Array(Generic[K, V]):
     """
     A symbolic array. Mutable.
 
-    Represented as a Z3 Array, i.e. an uninterpreted function from the given
-    domain to the given codomain.
-
     Tracks which keys are accessed and written.
     """
 
-    def __init__(self, array: FNode, vtype: Type[V]) -> None:
+    def __init__(self, default: Callable[[K], V]) -> None:
         """Create a new Array. For internal use."""
-        self.array = array
-        self.vtype = vtype
+        self.default = default
+        self.writes: List[Tuple[K, V]] = []
         self.accessed: List[K] = []
         self.written: List[K] = []
 
     @classmethod
     def concrete(cls, key: Type[K], val: V) -> Array[K, V]:
         """Create a new Array with a concrete default value."""
-        return Array(BackingArray(key._pysmt_type(), val.node), val.__class__)
+        return Array(lambda k: val)
 
     @classmethod
     def symbolic(cls, name: str, key: Type[K], val: Type[V]) -> Array[K, V]:
         """Create a new Array as an uninterpreted function."""
-        return Array(Symbol(name, ArrayType(key._pysmt_type(), val._pysmt_type())), val)
-
-    def __deepcopy__(self, memo: Any) -> Array[K, V]:
-        result: Array[K, V] = Array(self.array, self.vtype)
-        result.accessed = copy.deepcopy(self.accessed, memo)
-        result.written = copy.deepcopy(self.written, memo)
-        return result
+        array = Symbol(name, ArrayType(key._pysmt_type(), val._pysmt_type()))
+        return Array(lambda k: val(Select(array, k.node)))
 
     def __getitem__(self, key: K) -> V:
         """Look up the given symbolic key."""
@@ -76,15 +66,18 @@ class Array(Generic[K, V]):
     def __setitem__(self, key: K, val: V) -> None:
         """Set the given symbolic key to the given symbolic value."""
         self.written.append(key)
-        return self.poke(key, val)
+        self.writes.append((key, val))
 
     def peek(self, key: K) -> V:
         """Look up the given symbolic key, but don't track the lookup."""
-        return self.vtype(Select(self.array, key.node))
+        r = self.default(key)
+        for k, v in self.writes:
+            r = (k == key).ite(v, r)
+        return r
 
     def poke(self, key: K, val: V) -> None:
         """Set up the given symbolic key, but don't track the write."""
-        self.array = Store(self.array, key.node, val.node)
+        self.writes.append((key, val))
 
     def printable_diff(
         self, name: str, solver: Solver, original: Array[K, V]
@@ -96,7 +89,10 @@ class Array(Generic[K, V]):
         """
         diffs: List[Tuple[str, List[Tuple[K, V, Optional[V]]]]] = [
             ("R", [(key, original.peek(key), None) for key in self.accessed]),
-            ("W", [(key, self.peek(key), original.peek(key)) for key in self.written]),
+            (
+                "W",
+                [(key, self.peek(key), original.peek(key)) for key, _ in self.writes],
+            ),
         ]
         line = name
 
@@ -146,33 +142,23 @@ def present(values: List[Optional[U]]) -> TypeGuard[List[U]]:
 class Bytes(abc.ABC):
     """A symbolic-length sequence of symbolic bytes."""
 
-    def __init__(self, length: Uint256, array: FNode) -> None:
+    def __init__(self, length: Uint256, array: Array[Uint256, Uint8]) -> None:
         """Create a new Bytes. For internal use."""
-        assert array.is_array_op() or array.symbol_type().is_array_type()
         self.length = length
-
-        assert Select(array, Uint256(0).node).bv_width() == 8
         self.array = array
-
         self.writes: List[BytesWrite] = []  # writes to apply *on top of* array
-
-    @abc.abstractmethod
-    def __deepcopy__(self: T, memo: Any) -> T:
-        # Deep-copying a pySMT Array causes problems. But they're immutable, so
-        # we should pass them through unchanged.
-        raise NotImplementedError
 
     @classmethod
     def concrete(cls: Type[T], data: bytes | List[Uint8]) -> T:
         """Create a new Bytes from a concrete list of bytes."""
         length = Uint256(len(data))
-        array = BackingArray(BVType(256), BV(0, 8))
+        array = Array.concrete(Uint256, Uint8(0))
         for i, b in enumerate(data):
             if isinstance(b, Uint8):
-                array = Store(array, Uint256(i).node, b.node)
+                array[Uint256(i)] = b
             else:
                 assert isinstance(b, int)
-                array = Store(array, Uint256(i).node, Uint8(b).node)
+                array[Uint256(i)] = Uint8(b)
         return cls(length, array)
 
     @classmethod
@@ -180,7 +166,7 @@ class Bytes(abc.ABC):
         """Create a new, fully-symbolic Bytes."""
         return cls(
             Uint256(length if length is not None else f"{name}.length"),
-            Symbol(name, ArrayType(BVType(256), BVType(8))),
+            Array.symbolic(name, Uint256, Uint8),
         )
 
     @classmethod
@@ -192,7 +178,7 @@ class Bytes(abc.ABC):
         """
         return cls(
             constraint.ite(Uint256(0), Uint256(f"{name}.length")),
-            Symbol(name, ArrayType(BVType(256), BVType(8))),
+            Array.symbolic(name, Uint256, Uint8),
         )
 
     @abc.abstractmethod
@@ -248,11 +234,8 @@ class Bytes(abc.ABC):
 class FrozenBytes(Bytes):
     """A symbolic-length sequence of symbolic bytes. Immutable."""
 
-    def __deepcopy__(self, memo: Any) -> FrozenBytes:
-        return self
-
     def __getitem__(self, i: Uint256) -> Uint8:
-        return Uint8(Select(self.array, i.node))
+        return self.array[i]
 
 
 class ByteSlice(FrozenBytes):
@@ -264,9 +247,6 @@ class ByteSlice(FrozenBytes):
         self.offset = offset
         self.length = size
 
-    def __deepcopy__(self, memo: Any) -> ByteSlice:
-        return self
-
     def __getitem__(self, i: Uint256) -> Uint8:
         item = self.inner[self.offset + i]
         return (i < self.length).ite(item, Uint8(0))
@@ -275,13 +255,8 @@ class ByteSlice(FrozenBytes):
 class MutableBytes(Bytes):
     """A symbolic-length sequence of symbolic bytes. Mutable."""
 
-    def __deepcopy__(self, memo: Any) -> MutableBytes:
-        result = MutableBytes(self.length, self.array)
-        result.writes = copy.copy(self.writes)
-        return result
-
     def __getitem__(self, i: Uint256) -> Uint8:
-        item = Uint8(Select(self.array, i.node))
+        item = self.array[i]
         for k, v in self.writes:
             if isinstance(v, ByteSlice):
                 destOffset = k
@@ -299,7 +274,7 @@ class MutableBytes(Bytes):
             # Warning: passing writes through to the underlying array when there
             # are no custom writes is a good optimization (~12% speedup), but it
             # does create a performance cliff.
-            self.array = Store(self.array, i.node, v.node)
+            self.array[i] = v
         else:
             self.writes.append((i, v))
 
