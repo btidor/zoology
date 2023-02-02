@@ -20,8 +20,8 @@ from typing import (
 )
 
 from pysmt.fnode import FNode
-from pysmt.shortcuts import BVConcat, Select, Symbol
-from pysmt.typing import ArrayType
+from pysmt.shortcuts import BVConcat, Function, Symbol
+from pysmt.typing import FunctionType
 
 from smt import BitVector, Constraint, Uint8, Uint256
 from solver import Solver
@@ -55,8 +55,8 @@ class Array(Generic[K, V]):
     @classmethod
     def symbolic(cls, name: str, key: Type[K], val: Type[V]) -> Array[K, V]:
         """Create a new Array as an uninterpreted function."""
-        array = Symbol(name, ArrayType(key._pysmt_type(), val._pysmt_type()))
-        return Array(lambda k: val(Select(array, k.node)))
+        array = Symbol(name, FunctionType(val._pysmt_type(), [key._pysmt_type()]))
+        return Array(lambda k: val(Function(array, [k.node])))
 
     def __getitem__(self, key: K) -> V:
         """Look up the given symbolic key."""

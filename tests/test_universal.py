@@ -44,7 +44,7 @@ def test_basic() -> None:
         Balance\tR: 0xadadadadadadadadadadadadadadadadadadadad
         \t-> 0x8000000000001
         \tR: 0xcacacacacacacacacacacacacacacacacacacaca
-        \t-> 0x0
+        \t-> 0x1
 
         Storage\tW: 0xee -> 0xff (from 0x0)
     """.splitlines()
