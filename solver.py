@@ -4,11 +4,14 @@ from __future__ import annotations
 
 from typing import Any, List, Literal, Optional, TypeVar, overload
 
-from pysmt.shortcuts import get_model
+from pysmt import logics
+from pysmt.shortcuts import get_env, get_model
 
 from smt import BitVector, Constraint
 
 T = TypeVar("T", bound=BitVector)
+
+get_env().factory.add_generic_solver("cvc5", "cvc5", [logics.QF_AUFBV])
 
 
 class Solver:

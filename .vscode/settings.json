@@ -4,6 +4,7 @@
     },
     "editor.formatOnSave": true,
     "files.exclude": {
+        "\"stdout\"": true,
         "**/.mypy_cache": true,
         "**/prof": true,
         "**/__pycache__": true,

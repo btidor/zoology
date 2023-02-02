@@ -13,5 +13,8 @@ RUN apt -y install autoconf build-essential cmake default-jre gperf \
 RUN pip install cython pysmt
 RUN sudo -u vscode -- pysmt-install --all --confirm-agreement
 
+RUN wget https://github.com/cvc5/cvc5/releases/download/cvc5-1.0.4/cvc5-Linux \
+    -O /usr/bin/cvc5 && chmod +x /usr/bin/cvc5
+
 RUN apt -y install nodejs python3-pydot
 RUN pip install black mypy pydocstyle
