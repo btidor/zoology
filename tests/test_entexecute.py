@@ -1,24 +1,13 @@
 #!/usr/bin/env pytest
 
-import copy
-
 from arrays import FrozenBytes
 from smt import Uint160, Uint256
 from solidity import abiencode, load_binary, load_solidity, loads_solidity
-from state import State
-from testlib import Benchmark, execute, make_contract, make_state, make_transaction
+from testlib import execute, make_contract, make_state, make_transaction
 from vm import printable_execution
 
 
-def bench(benchmark: Benchmark, state: State) -> State:
-    return benchmark.pedantic(
-        execute,
-        setup=lambda: ((copy.deepcopy(state),), {}),
-        rounds=20,
-    )
-
-
-def test_fallback(benchmark: Benchmark) -> None:
+def test_fallback() -> None:
     program = load_solidity("fixtures/01_Fallback.sol")
     state = make_state(
         contract=make_contract(program=program),
@@ -28,13 +17,13 @@ def test_fallback(benchmark: Benchmark) -> None:
         ),
     )
 
-    state = bench(benchmark, state)
+    state = execute(state)
 
     assert state.success is True
     assert state.returndata.unwrap() == Uint256(0).unwrap(bytes)
 
 
-def test_fallout(benchmark: Benchmark) -> None:
+def test_fallout() -> None:
     program = load_solidity("fixtures/02_Fallout.sol")
     state = make_state(
         contract=make_contract(program=program),
@@ -44,7 +33,7 @@ def test_fallout(benchmark: Benchmark) -> None:
         ),
     )
 
-    state = bench(benchmark, state)
+    state = execute(state)
 
     assert state.success is True
     assert state.contract.storage[Uint256(1)].unwrap(bytes) == Uint256(
@@ -52,7 +41,7 @@ def test_fallout(benchmark: Benchmark) -> None:
     ).unwrap(bytes)
 
 
-def test_coinflip(benchmark: Benchmark) -> None:
+def test_coinflip() -> None:
     program = load_solidity("fixtures/03_CoinFlip.sol")
     state = make_state(
         contract=make_contract(program=program),
@@ -68,13 +57,13 @@ def test_coinflip(benchmark: Benchmark) -> None:
         57896044618658097711785492504343953926634992332820282019728792003956564819968
     )
 
-    state = bench(benchmark, state)
+    state = execute(state)
 
     assert state.success is True
     assert state.contract.storage[Uint256(1)].unwrap(bytes) == Uint256(0).unwrap(bytes)
 
 
-def test_telephone(benchmark: Benchmark) -> None:
+def test_telephone() -> None:
     program = load_solidity("fixtures/04_Telephone.sol")
     state = make_state(
         contract=make_contract(program=program),
@@ -88,13 +77,13 @@ def test_telephone(benchmark: Benchmark) -> None:
         ),
     )
 
-    state = bench(benchmark, state)
+    state = execute(state)
 
     assert state.success is True
     assert state.returndata.unwrap() == b""
 
 
-def test_token(benchmark: Benchmark) -> None:
+def test_token() -> None:
     program = load_solidity("fixtures/05_Token.sol")
     state = make_state(
         contract=make_contract(program=program),
@@ -108,7 +97,7 @@ def test_token(benchmark: Benchmark) -> None:
         ),
     )
 
-    # state = bench(benchmark, state)
+    # state = execute(state)
 
     for line in printable_execution(state):
         print(line)
@@ -117,7 +106,7 @@ def test_token(benchmark: Benchmark) -> None:
     assert state.returndata.unwrap() == Uint256(1).unwrap(bytes)
 
 
-def test_delegation(benchmark: Benchmark) -> None:
+def test_delegation() -> None:
     programs = loads_solidity("fixtures/06_Delegation.sol")
 
     other = make_contract(address=Uint160(0xABCDEF), program=programs["Delegate"])
@@ -131,13 +120,13 @@ def test_delegation(benchmark: Benchmark) -> None:
     state.universe.add_contract(other)
     state.contract.storage.poke(Uint256(1), other.address.into(Uint256))
 
-    state = bench(benchmark, state)
+    state = execute(state)
 
     assert state.success is True
     assert state.returndata.unwrap() == b""
 
 
-def test_force(benchmark: Benchmark) -> None:
+def test_force() -> None:
     program = load_binary("fixtures/07_Force.bin")
     state = make_state(
         contract=make_contract(program=program),
@@ -147,13 +136,13 @@ def test_force(benchmark: Benchmark) -> None:
         ),
     )
 
-    state = bench(benchmark, state)
+    state = execute(state)
 
     assert state.success is False
     assert state.returndata.unwrap() == b""
 
 
-def test_vault(benchmark: Benchmark) -> None:
+def test_vault() -> None:
     program = load_solidity("fixtures/08_Vault.sol")
     state = make_state(
         contract=make_contract(program=program),
@@ -165,13 +154,13 @@ def test_vault(benchmark: Benchmark) -> None:
         ),
     )
 
-    state = bench(benchmark, state)
+    state = execute(state)
 
     assert state.success is True
     assert state.returndata.unwrap() == b""
 
 
-def test_king(benchmark: Benchmark) -> None:
+def test_king() -> None:
     program = load_solidity("fixtures/09_King.sol")
     state = make_state(
         contract=make_contract(program=program),
@@ -181,13 +170,13 @@ def test_king(benchmark: Benchmark) -> None:
         ),
     )
 
-    state = bench(benchmark, state)
+    state = execute(state)
 
     assert state.success is True
     assert state.returndata.unwrap() == b""
 
 
-def test_reentrancy(benchmark: Benchmark) -> None:
+def test_reentrancy() -> None:
     program = load_solidity("fixtures/10_Reentrancy.sol")
     state = make_state(
         contract=make_contract(program=program),
@@ -199,13 +188,13 @@ def test_reentrancy(benchmark: Benchmark) -> None:
         ),
     )
 
-    state = bench(benchmark, state)
+    state = execute(state)
 
     assert state.success is True
     assert state.returndata.unwrap() == b""
 
 
-def test_elevator(benchmark: Benchmark) -> None:
+def test_elevator() -> None:
     programs = loads_solidity("fixtures/11_Elevator.sol")
 
     state = make_state(
@@ -222,13 +211,13 @@ def test_elevator(benchmark: Benchmark) -> None:
         make_contract(address=Uint160(0x76543210), program=programs["TestBuilding"])
     )
 
-    state = bench(benchmark, state)
+    state = execute(state)
 
     assert state.success is True
     assert state.returndata.unwrap() == b""
 
 
-def test_privacy(benchmark: Benchmark) -> None:
+def test_privacy() -> None:
     program = load_binary("fixtures/12_Privacy.bin")
     state = make_state(
         contract=make_contract(program=program),
@@ -241,19 +230,19 @@ def test_privacy(benchmark: Benchmark) -> None:
     )
     state.contract.storage.poke(Uint256(5), Uint256(0x4321 << 128))
 
-    state = bench(benchmark, state)
+    state = execute(state)
 
     assert state.success is True
     assert state.returndata.unwrap() == b""
 
 
-def test_gatekeeper_one(benchmark: Benchmark) -> None:
+def test_gatekeeper_one() -> None:
     # We can't execute GatekeeperOne because concrete gas isn't implemented.
     # Instead, just check that it compiles.
     _ = load_solidity("fixtures/13_GatekeeperOne.sol")
 
 
-def test_gatekeeper_two(benchmark: Benchmark) -> None:
+def test_gatekeeper_two() -> None:
     program = load_solidity("fixtures/14_GatekeeperTwo.sol")
     state = make_state(
         contract=make_contract(program=program),
@@ -268,13 +257,13 @@ def test_gatekeeper_two(benchmark: Benchmark) -> None:
         ),
     )
 
-    state = bench(benchmark, state)
+    state = execute(state)
 
     assert state.success is True
     assert state.returndata.unwrap() == Uint256(1).unwrap(bytes)
 
 
-def test_preservation(benchmark: Benchmark) -> None:
+def test_preservation() -> None:
     programs = loads_solidity("fixtures/15_Preservation.sol")
     preservation = make_contract(program=programs["Preservation"])
     library = make_contract(
@@ -295,7 +284,7 @@ def test_preservation(benchmark: Benchmark) -> None:
     state.contract.storage.poke(Uint256(0), library.address.into(Uint256))
     state.contract.storage.poke(Uint256(1), library.address.into(Uint256))
 
-    state = bench(benchmark, state)
+    state = execute(state)
 
     assert state.success is True
     assert state.returndata.unwrap() == b""

@@ -1,17 +1,4 @@
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    List,
-    Literal,
-    Optional,
-    Protocol,
-    Set,
-    Tuple,
-    TypeVar,
-    Union,
-    assert_never,
-)
+from typing import Any, Dict, List, Literal, Optional, Tuple, Union, assert_never
 
 from arrays import Array, FrozenBytes, MutableBytes
 from disassembler import Program, disassemble
@@ -37,21 +24,6 @@ def concretize(value: Optional[BitVector]) -> Optional[int]:
     if value is None:
         return None
     return value.unwrap()
-
-
-class Benchmark(Protocol):
-    T = TypeVar("T")
-
-    def __call__(self, fn: Callable[..., T], *args: Any) -> T:
-        ...
-
-    def pedantic(
-        self,
-        fn: Callable[..., T],
-        setup: Callable[[], Tuple[Tuple[Any, ...], Dict[str, Any]]],
-        rounds: int,
-    ) -> T:
-        ...
 
 
 def make_block(
@@ -209,7 +181,8 @@ def execute(state: State) -> State:
             assert_never(action)
 
 
-def check_paths(input: Union[Program, State], expected: Set[str]) -> None:
+def check_paths(input: Union[Program, State], branches: Tuple[Any, ...]) -> None:
+    expected = set(b[0] for b in branches)
     if isinstance(input, Program):
         input = symbolic_start(input, SHA3(), "")
     actual = set()

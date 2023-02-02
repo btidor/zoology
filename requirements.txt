@@ -1,7 +1,6 @@
 pycryptodome
 pysmt
 pytest
-pytest-benchmark
 pytest-profiling
 pytest-timeout
 pytest-xdist
