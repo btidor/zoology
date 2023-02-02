@@ -5,7 +5,7 @@ from __future__ import annotations
 import abc
 import copy
 from typing import (
-    Callable,
+    Any,
     Dict,
     Generic,
     Iterable,
@@ -20,8 +20,9 @@ from typing import (
 )
 
 from pysmt.fnode import FNode
-from pysmt.shortcuts import BVConcat, Function, Symbol
-from pysmt.typing import FunctionType
+from pysmt.shortcuts import Array as BackingArray
+from pysmt.shortcuts import BVConcat, Select, Store, Symbol
+from pysmt.typing import ArrayType
 
 from smt import BitVector, Constraint, Uint8, Uint256
 from solver import Solver
@@ -30,7 +31,6 @@ K = TypeVar("K", bound=BitVector)
 V = TypeVar("V", bound=BitVector)
 
 T = TypeVar("T", bound="Bytes")
-U = TypeVar("U")
 
 
 class Array(Generic[K, V]):
@@ -40,23 +40,33 @@ class Array(Generic[K, V]):
     Tracks which keys are accessed and written.
     """
 
-    def __init__(self, default: Callable[[K], V]) -> None:
+    def __init__(self, array: FNode, vtype: Type[V]) -> None:
         """Create a new Array. For internal use."""
-        self.default = default
-        self.writes: List[Tuple[K, V]] = []
+        self.array = array
+        self.vtype = vtype
         self.accessed: List[K] = []
         self.written: List[K] = []
+        self.surface: Dict[int, V] = {}
+
+    def __deepcopy__(self, memo: Any) -> Array[K, V]:
+        result: Array[K, V] = Array(self.array, self.vtype)
+        result.accessed = copy.deepcopy(self.accessed, memo)
+        result.written = copy.deepcopy(self.written, memo)
+        result.surface = copy.deepcopy(self.surface, memo)
+        return result
 
     @classmethod
     def concrete(cls, key: Type[K], val: V) -> Array[K, V]:
         """Create a new Array with a concrete default value."""
-        return Array(lambda k: val)
+        return Array(BackingArray(key._pysmt_type(), val.node), val.__class__)
 
     @classmethod
     def symbolic(cls, name: str, key: Type[K], val: Type[V]) -> Array[K, V]:
         """Create a new Array as an uninterpreted function."""
-        array = Symbol(name, FunctionType(val._pysmt_type(), [key._pysmt_type()]))
-        return Array(lambda k: val(Function(array, [k.node])))
+        return Array(
+            Symbol(name, ArrayType(key._pysmt_type(), val._pysmt_type())),
+            val,
+        )
 
     def __getitem__(self, key: K) -> V:
         """Look up the given symbolic key."""
@@ -66,18 +76,21 @@ class Array(Generic[K, V]):
     def __setitem__(self, key: K, val: V) -> None:
         """Set the given symbolic key to the given symbolic value."""
         self.written.append(key)
-        self.writes.append((key, val))
+        self.poke(key, val)
 
     def peek(self, key: K) -> V:
         """Look up the given symbolic key, but don't track the lookup."""
-        r = self.default(key)
-        for k, v in self.writes:
-            r = (k == key).ite(v, r)
-        return r
+        if (u := key.maybe_unwrap()) is not None and u in self.surface:
+            return self.surface[u]
+        return self.vtype(Select(self.array, key.node))
 
     def poke(self, key: K, val: V) -> None:
         """Set up the given symbolic key, but don't track the write."""
-        self.writes.append((key, val))
+        if (u := key.maybe_unwrap()) is not None:
+            self.surface[u] = val
+        else:
+            self.surface = {}
+        self.array = Store(self.array, key.node, val.node)
 
     def printable_diff(
         self, name: str, solver: Solver, original: Array[K, V]
@@ -91,7 +104,7 @@ class Array(Generic[K, V]):
             ("R", [(key, original.peek(key), None) for key in self.accessed]),
             (
                 "W",
-                [(key, self.peek(key), original.peek(key)) for key, _ in self.writes],
+                [(key, self.peek(key), original.peek(key)) for key in self.written],
             ),
         ]
         line = name
@@ -134,7 +147,7 @@ BytesWrite: TypeAlias = Union[
 ]
 
 
-def present(values: List[Optional[U]]) -> TypeGuard[List[U]]:
+def present(values: List[Optional[int]]) -> TypeGuard[List[int]]:
     """Return true iff the given list has no Nones."""
     return all(v is not None for v in values)
 

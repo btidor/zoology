@@ -8,8 +8,8 @@ from typing import Any, Dict, Iterable, Iterator, List, Tuple
 
 from Crypto.Hash import keccak
 from pysmt.fnode import FNode
-from pysmt.shortcuts import BV, BVExtract, Equals, Function, Implies, NotEquals, Symbol
-from pysmt.typing import BVType, FunctionType
+from pysmt.shortcuts import BV, BVExtract, Equals, Implies, NotEquals, Select, Symbol
+from pysmt.typing import ArrayType, BVType
 
 from arrays import Bytes
 from smt import Constraint, Uint256
@@ -57,7 +57,7 @@ class SHA3:
         if size not in self.hashes:
             self.hashes[size] = Symbol(
                 f"SHA3({size}){self.suffix}",
-                FunctionType(BVType(256), [BVType(size * 8)]),
+                ArrayType(BVType(size * 8), BVType(256)),
             )
             self.accessed[size] = []
 
@@ -68,20 +68,18 @@ class SHA3:
             symbolic = Uint256(int.from_bytes(digest))
             self.digest_constraints.append(
                 Constraint(
-                    Equals(
-                        Function(self.hashes[size], [key._bigvector()]), symbolic.node
-                    )
+                    Equals(Select(self.hashes[size], key._bigvector()), symbolic.node)
                 )
             )
             return symbolic
         else:
-            return Uint256(Function(self.hashes[size], [key._bigvector()]))
+            return Uint256(Select(self.hashes[size], key._bigvector()))
 
     def items(self) -> Iterator[Tuple[int, Bytes, Uint256]]:
         """Iterate over (n, key, value) tuples."""
         for n, array in self.hashes.items():
             for key in self.accessed[n]:
-                yield (n, key, Uint256(Function(array, [key._bigvector()])))
+                yield (n, key, Uint256(Select(array, key._bigvector())))
 
     def constrain(self, solver: Solver) -> None:
         """Apply computed SHA3 constraints to the given solver instance."""
