@@ -46,6 +46,11 @@ class Array(Generic[K, V]):
         self.vtype = vtype
         self.accessed: List[K] = []
         self.written: List[K] = []
+
+        # pySMT can't simplify array expressions, so to perform basic
+        # simplifications we track the "surface" writes: the set of recent
+        # writes to a constant key. Writing to a non-constant key clears the
+        # surface.
         self.surface: Dict[int, V] = {}
 
     def __deepcopy__(self, memo: Any) -> Array[K, V]:

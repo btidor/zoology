@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, List, Literal, Optional, TypeVar, overload
 
 from pysmt import logics
+from pysmt.exceptions import PysmtTypeError
 from pysmt.shortcuts import Portfolio, get_env
 
 from smt import BitVector, Constraint
@@ -60,9 +61,15 @@ class Solver:
             if (result := value.node.constant_value()) is None:
                 return None
         else:
-            result = self.model.get_value(value.node, model_completion)
-            if not result.is_constant():
-                assert model_completion is False
-                return None
+            try:
+                result = self.model.get_value(value.node, model_completion)
+            except PysmtTypeError:
+                result = None
+            if result is None or not result.is_constant():
+                if model_completion is False:
+                    return None
+                else:
+                    print("Warning: filling in invalid evaluation result!")
+                    return value.__class__(0)
             result = result.constant_value()
         return value.__class__(result) if value is not None else None
