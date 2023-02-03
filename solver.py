@@ -5,13 +5,15 @@ from __future__ import annotations
 from typing import Any, List, Literal, Optional, TypeVar, overload
 
 from pysmt import logics
-from pysmt.shortcuts import get_env, get_model
+from pysmt.shortcuts import Portfolio, get_env
 
 from smt import BitVector, Constraint
 
 T = TypeVar("T", bound=BitVector)
 
+
 get_env().factory.add_generic_solver("cvc5", "cvc5", [logics.QF_AUFBV])
+get_env().factory.add_generic_solver("bitwuzla", "bitwuzla", [logics.QF_AUFBV])
 
 
 class Solver:
@@ -34,9 +36,14 @@ class Solver:
         Returns a model (if sat) or None (if unsat). Raises an error if the
         solver fails.
         """
-        formulas = self.constraints + list(assumptions)
-        self.model = get_model(Constraint.all(*formulas).node)
-        return self.model is not None
+        # Bitwuzla is very fast, but can't solve all situations
+        with Portfolio(["bitwuzla", "msat"], logics.QF_ABV) as s:
+            s.add_assertions(c.node for c in self.constraints)
+            s.add_assertions(c.node for c in assumptions)
+            if s.solve():
+                self.model = s.get_model()
+                return True
+            return False
 
     @overload
     def evaluate(self, value: T, model_completion: Literal[True]) -> T:

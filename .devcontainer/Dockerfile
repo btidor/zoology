@@ -16,5 +16,15 @@ RUN sudo -u vscode -- pysmt-install --all --confirm-agreement
 RUN wget https://github.com/cvc5/cvc5/releases/download/cvc5-1.0.4/cvc5-Linux \
     -O /usr/bin/cvc5 && chmod +x /usr/bin/cvc5
 
+RUN git clone https://github.com/bitwuzla/bitwuzla && \
+    cd bitwuzla && \
+    ./contrib/setup-cadical.sh && \
+    ./contrib/setup-btor2tools.sh && \
+    ./contrib/setup-symfpu.sh && \
+    ./configure.sh --python && cd build && make && make install
+
+RUN sed -i '/set_option.*diagnostic-output-channel/d' \
+    /usr/local/lib/python3.11/dist-packages/pysmt/smtlib/solver.py
+
 RUN apt -y install nodejs python3-pydot
 RUN pip install black mypy pydocstyle
