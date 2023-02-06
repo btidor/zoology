@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import OrderedDict
 from contextlib import contextmanager
 from dataclasses import dataclass
+from itertools import count
 from typing import Iterator, List, Optional, Tuple
 
 from arrays import FrozenBytes, MutableBytes
@@ -86,18 +87,19 @@ class State:
         if solver.check(constraint):
             solver.assert_and_track(constraint)
 
-        constraint = self.transaction.callvalue == Uint256(0)
-        if solver.check(constraint):
-            solver.assert_and_track(constraint)
-
         # Minimize calldata length
-        i = 0
-        while True:
+        for i in count():
             constraint = self.transaction.calldata.length == Uint256(i)
             if solver.check(constraint):
                 solver.assert_and_track(constraint)
                 break
-            i += 1
+
+        # Minimize callvalue
+        for i in count():
+            constraint = self.transaction.callvalue == Uint256(i)
+            if solver.check(constraint):
+                solver.assert_and_track(constraint)
+                break
 
         assert solver.check()
 

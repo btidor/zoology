@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Literal, Optional, Tuple, Union, assert_never
+from typing import Dict, List, Literal, Optional, Tuple, assert_never
 
 from arrays import Array, FrozenBytes, MutableBytes
 from disassembler import Program, disassemble
@@ -8,7 +8,7 @@ from smt import BitVector, Constraint, Uint160, Uint256
 from solidity import abiencode
 from solver import Solver
 from state import State
-from universal import _universal_transaction, constrain_to_goal, symbolic_start
+from universal import constrain_to_goal
 from vm import (
     concrete_CALLCODE,
     concrete_DELEGATECALL,
@@ -179,17 +179,6 @@ def execute(state: State) -> State:
             return state
         else:
             assert_never(action)
-
-
-def check_paths(input: Union[Program, State], branches: Tuple[Any, ...]) -> None:
-    expected = set(b[0] for b in branches)
-    if isinstance(input, Program):
-        input = symbolic_start(input, SHA3(), "")
-    actual = set()
-    for end in _universal_transaction(input):
-        assert end.px() not in actual, "duplicate path"
-        actual.add(end.px())
-    assert actual == expected
 
 
 def check_transition(
