@@ -1,0 +1,7 @@
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore:module 'sre_constants' :DeprecationWarning",
+    'ignore:The distutils\.sysconfig module:DeprecationWarning',
+    "ignore:The distutils package :DeprecationWarning",
+    "ignore:the imp module :DeprecationWarning",
+]

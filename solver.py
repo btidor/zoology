@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from typing import Any, List, Literal, Optional, TypeVar, overload
 
 from pysmt import logics
@@ -69,7 +70,7 @@ class Solver:
                 if model_completion is False:
                     return None
                 else:
-                    print("Warning: filling in invalid evaluation result!")
+                    warnings.warn("filling in invalid evaluation result")
                     return value.__class__(0)
             result = result.constant_value()
         return value.__class__(result) if value is not None else None
