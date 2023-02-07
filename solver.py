@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import warnings
-from typing import Any, List, Literal, Optional, TypeVar, overload
+from typing import Dict, List, Literal, Optional, TypeVar, overload
 
 from pysmt import logics
-from pysmt.exceptions import PysmtTypeError
-from pysmt.shortcuts import Portfolio, get_env
+from pysmt.fnode import FNode
+from pysmt.shortcuts import BV, Array, Bool, Portfolio, get_env
 
 from smt import BitVector, Constraint
 
@@ -24,7 +23,7 @@ class Solver:
     def __init__(self) -> None:
         """Create a new Solver."""
         self.constraints: List[Constraint] = []
-        self.model: Optional[Any] = None
+        self.model: Optional[Dict[FNode, FNode]] = None
 
     def assert_and_track(self, constraint: Constraint) -> None:
         """Track a new constraint."""
@@ -43,7 +42,7 @@ class Solver:
             s.add_assertions(c.node for c in self.constraints)
             s.add_assertions(c.node for c in assumptions)
             if s.solve():
-                self.model = s.get_model()
+                self.model = s.get_model().assignment
                 return True
             return False
 
@@ -58,19 +57,26 @@ class Solver:
     def evaluate(self, value: T, model_completion: bool = False) -> Optional[T]:
         """Evaluate a given bitvector expression with the given model."""
         assert self.model is not None
-        if value.node.is_constant():
-            if (result := value.node.constant_value()) is None:
+
+        for var in value.node.get_free_variables():
+            if var in self.model:
+                continue
+
+            if model_completion is False:
                 return None
-        else:
-            try:
-                result = self.model.get_value(value.node, model_completion)
-            except PysmtTypeError:
-                result = None
-            if result is None or not result.is_constant():
-                if model_completion is False:
-                    return None
-                else:
-                    warnings.warn("filling in invalid evaluation result")
-                    return value.__class__(0)
-            result = result.constant_value()
-        return value.__class__(result) if value is not None else None
+
+            # Model Completion (adapted from pysmt:solvers/eager.py)
+            assert var.is_symbol(), f"expected symbol, got {var}"
+            sym = var.symbol_type()
+            if sym.is_bool_type():
+                self.model[var] = Bool(False)
+            elif sym.is_bv_type():
+                self.model[var] = BV(0, var.bv_width())
+            elif sym.is_array_type():
+                self.model[var] = Array(sym.index_type, BV(0, sym.elem_type.width))
+            else:
+                raise TypeError(f"unhandled type: {var.symbol_type()}")
+
+        result = value.__class__(value.node.substitute(self.model).simplify())
+        assert result.node.is_constant()
+        return result
