@@ -4,4 +4,6 @@ pytest
 pytest-profiling
 pytest-timeout
 pytest-xdist
+requests
+types-requests
 solc-select
