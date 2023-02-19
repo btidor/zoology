@@ -13,6 +13,7 @@ from solver import Solver
 from state import State
 from vm import (
     concrete_CALLCODE,
+    concrete_CREATE,
     concrete_DELEGATECALL,
     concrete_STATICCALL,
     hybrid_CALL,
@@ -73,6 +74,10 @@ def _universal_transaction(state: State) -> Iterator[State]:
                     yield end
         elif action == "STATICCALL":
             with concrete_STATICCALL(state) as substate:
+                for end in _universal_transaction(substate):
+                    yield end
+        elif action == "CREATE":
+            with concrete_CREATE(state) as substate:
                 for end in _universal_transaction(substate):
                     yield end
         elif action == "TERMINATE":

@@ -11,6 +11,7 @@ from state import State
 from universal import constrain_to_goal
 from vm import (
     concrete_CALLCODE,
+    concrete_CREATE,
     concrete_DELEGATECALL,
     concrete_GAS,
     concrete_JUMPI,
@@ -174,6 +175,9 @@ def execute(state: State) -> State:
                 execute(substate)
         elif action == "STATICCALL":
             with concrete_STATICCALL(state) as substate:
+                execute(substate)
+        elif action == "CREATE":
+            with concrete_CREATE(state) as substate:
                 execute(substate)
         elif action == "TERMINATE":
             return state

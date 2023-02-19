@@ -5,13 +5,21 @@ import copy
 from collections import defaultdict
 from typing import Dict, List, Tuple
 
+from environment import Contract, Universe
 from rpc import get_code, get_storage_at
 from smt import Uint160, Uint256
 from solidity import abiencode
 from state import State
-from vm import concrete_GAS, concrete_JUMPI, concrete_start, hybrid_CALL, step
+from vm import (
+    concrete_CREATE,
+    concrete_GAS,
+    concrete_JUMPI,
+    concrete_start,
+    hybrid_CALL,
+    step,
+)
 
-PROGRAM = Uint160(0xD2E5E0102E55A5234379DD796B8C641CD5996EFD)
+CONTROLLER = Uint160(0xD2E5E0102E55A5234379DD796B8C641CD5996EFD)
 
 LEVELS = [
     # 00 - Hello Ethernaut
@@ -23,25 +31,28 @@ LEVELS = [
 ]
 
 
-def play(address: Uint160) -> None:
-    """Solve a given Ethernaut level."""
+def setup(address: Uint160) -> Tuple[Contract, Universe]:
+    """Call createLevelInstance to set up the level."""
     calldata = abiencode("createLevelInstance(address)") + address.into(Uint256).unwrap(
         bytes
     )
 
-    entrypoint = get_code(PROGRAM)
-    contracts = {PROGRAM.unwrap(): entrypoint}
+    controller = get_code(CONTROLLER)
+    contracts = {CONTROLLER.unwrap(): controller}
     while True:
-        start = concrete_start(entrypoint.program, Uint256(0), calldata)
-        start.contract = copy.deepcopy(entrypoint)
+        start = concrete_start(controller.program, Uint256(0), calldata)
+        start.contract = copy.deepcopy(controller)
         for contract in contracts.values():
             start.universe.add_contract(copy.deepcopy(contract))
 
         end, accessed = _execute(start)
-        assert end.success is False
-        print(accessed)
+        print("\n********", end.returndata.unwrap(), "\n")
+        if end.success is True:
+            break
 
         for addr, keys in accessed.items():
+            if addr == 0x70D070D070D070D070D070D070D070D070D0:
+                continue
             if addr not in contracts:
                 contracts[addr] = get_code(Uint160(addr))
             for key in keys:
@@ -49,13 +60,33 @@ def play(address: Uint160) -> None:
                     val = get_storage_at(Uint160(addr), key)
                     contracts[addr].storage.poke(key, val)
 
-    raise NotImplementedError
+    level = end.universe.contracts[int.from_bytes(end.returndata.unwrap())]
+    return level, end.universe
 
 
-def _execute(state: State) -> Tuple[State, Dict[int, List[Uint256]]]:
+def check(level: Contract, universe: Universe) -> None:
+    """Call submitLevelInstance to check the solution."""
+    controller = universe.contracts[CONTROLLER.unwrap()]
+    calldata = abiencode("submitLevelInstance(address)") + level.address.into(
+        Uint256
+    ).unwrap(bytes)
+
+    start = concrete_start(controller.program, Uint256(0), calldata)
+    start.universe = copy.deepcopy(universe)
+
+    end, _ = _execute(start)
+    assert end.success is not None
+    if end.success is False:
+        raise RuntimeError(end.returndata.unwrap()[68:].strip(b"\x00").decode())
+
+
+def _execute(state: State, indent: int = 0) -> Tuple[State, Dict[int, List[Uint256]]]:
     accessed: Dict[int, List[Uint256]] = defaultdict(list)
 
     while True:
+        print(" " * indent, end="")
+        print(state.contract.program.instructions[state.pc])
+
         action = step(state)
         if action == "CONTINUE":
             pass
@@ -69,10 +100,14 @@ def _execute(state: State) -> Tuple[State, Dict[int, List[Uint256]]]:
                 accessed[address.unwrap()]
                 return state, accessed
             for substate in hybrid_CALL(state):
-                state, subaccessed = _execute(substate)
-                for k, v in subaccessed.items():
-                    accessed[k].extend(v)
-                break
+                _, subaccessed = _execute(substate, indent + 2)
+                for s, v in subaccessed.items():
+                    accessed[s].extend(v)
+        elif action == "CREATE":
+            with concrete_CREATE(state) as substate:
+                _, subaccessed = _execute(substate, indent + 2)
+                for s, v in subaccessed.items():
+                    accessed[s].extend(v)
         elif action == "TERMINATE":
             break
         else:
@@ -85,5 +120,6 @@ def _execute(state: State) -> Tuple[State, Dict[int, List[Uint256]]]:
 
 
 if __name__ == "__main__":
-    for level in LEVELS:
-        play(level)
+    for address in LEVELS:
+        level, universe = setup(address)
+        check(level, universe)

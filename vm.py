@@ -8,7 +8,7 @@ from typing import Iterator, List, Literal, Optional, assert_never
 
 import ops
 from arrays import Array, FrozenBytes, MutableBytes
-from disassembler import Instruction, Program
+from disassembler import Instruction, Program, disassemble
 from environment import Block, Contract, Transaction, Universe
 from sha3 import SHA3
 from smt import Constraint, Uint160, Uint256
@@ -26,6 +26,7 @@ def step(
     "CALLCODE",
     "DELEGATECALL",
     "STATICCALL",
+    "CREATE",
     "TERMINATE",
 ]:
     """
@@ -59,6 +60,9 @@ def step(
     elif ins.name == "STATICCALL":
         state.pc += 1
         return "STATICCALL"
+    elif ins.name == "CREATE":
+        state.pc += 1
+        return "CREATE"
     elif hasattr(ops, ins.name):
         fn = getattr(ops, ins.name)
         sig = inspect.signature(fn)
@@ -126,6 +130,10 @@ def printable_execution(state: State) -> Iterator[str]:
                     yield "  " + line
         elif action == "STATICCALL":
             with concrete_STATICCALL(state) as substate:
+                for line in printable_execution(substate):
+                    yield "  " + line
+        elif action == "CREATE":
+            with concrete_CREATE(state) as substate:
                 for line in printable_execution(substate):
                     yield "  " + line
         else:
@@ -294,6 +302,42 @@ def concrete_STATICCALL(state: State) -> Iterator[State]:
     retSize = state.stack.pop()
 
     raise NotImplementedError("STATICCALL")
+
+
+@contextmanager
+def concrete_CREATE(state: State) -> Iterator[State]:
+    """Handle a CREATE action. Yields a single state."""
+    value = state.stack.pop()
+    offset = state.stack.pop()
+    size = state.stack.pop()
+
+    # TODO: this isn't quite right
+    init = state.memory.slice(offset, size).unwrap()
+    address = Uint160(0x70D070D070D070D070D070D070D070D070D0)
+    program = disassemble(init)
+    contract = Contract(address, program, Array.concrete(Uint256, Uint256(0)))
+    transaction = Transaction(
+        origin=state.transaction.origin,
+        caller=state.transaction.caller,
+        calldata=FrozenBytes.concrete(b""),
+        callvalue=value,
+        gasprice=state.transaction.gasprice,
+    )
+
+    with state.descend(contract, transaction) as substate:
+        yield substate
+
+    assert substate.success is not None
+    if substate.success is False:
+        state.stack.append(Uint256(0))
+    else:
+        code = substate.returndata.unwrap()
+        program = disassemble(code)
+
+        contract = Contract(address, program, substate.contract.storage)
+        state.universe.add_contract(contract)
+
+        state.stack.append(address.into(Uint256))
 
 
 def concrete_start(program: Program, value: Uint256, data: bytes) -> State:

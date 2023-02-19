@@ -437,25 +437,24 @@ def SWAP(ins: Instruction, s: State) -> None:
 
 def LOG0(offset: Uint256, size: Uint256) -> None:
     """A0 - Append log record with no topics."""
-    # Ignore log records for now, they're mostly for debugging.
-    pass
+    raise NotImplementedError("LOG")
 
 
 def LOG1(offset: Uint256, size: Uint256, topic1: Uint256) -> None:
     """A1 - Append log record with one topic."""
-    pass
+    raise NotImplementedError("LOG")
 
 
 def LOG2(offset: Uint256, size: Uint256, topic1: Uint256, topic2: Uint256) -> None:
     """A2 - Append log record with two topics."""
-    pass
+    raise NotImplementedError("LOG")
 
 
 def LOG3(
     offset: Uint256, size: Uint256, topic1: Uint256, topic2: Uint256, topic3: Uint256
 ) -> None:
     """A3 - Append log record with three topics."""
-    pass
+    raise NotImplementedError("LOG")
 
 
 def LOG4(
@@ -467,11 +466,15 @@ def LOG4(
     topic4: Uint256,
 ) -> None:
     """A4 - Append log record with four topics."""
-    pass
+    raise NotImplementedError("LOG")
 
 
 def CREATE(value: Uint256, offset: Uint256, size: Uint256) -> Uint256:
-    """F0 - Create a new account with associated code."""
+    """
+    F0 - Create a new account with associated code.
+
+    This opcode should be implemented by the VM.
+    """
     raise NotImplementedError("CREATE")
 
 
