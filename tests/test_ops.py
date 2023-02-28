@@ -595,7 +595,7 @@ def test_JUMP() -> None:
     )
     s = make_state(contract=contract)
     JUMP(s, Uint256(8))
-    assert s.pc == 1
+    assert s.pc == 0
     with pytest.raises(KeyError):
         JUMP(s, Uint256(99))
 

@@ -3,7 +3,7 @@
 
 import copy
 from collections import defaultdict
-from typing import Dict, List, Tuple, cast
+from typing import Dict, List, Optional, Tuple, cast
 
 from environment import Contract, Universe
 from rpc import get_code, get_storage_at
@@ -38,10 +38,11 @@ def setup(address: Uint160) -> Tuple[Contract, Universe]:
     )
 
     controller = get_code(CONTROLLER)
-    contracts = {CONTROLLER.unwrap(): controller}
+    contracts: Dict[int, Contract] = {}
     while True:
         start = concrete_start(controller.program, Uint256(0), calldata)
         start.contract = copy.deepcopy(controller)
+        start.universe.add_contract(start.contract)
         for contract in contracts.values():
             start.universe.add_contract(copy.deepcopy(contract))
 
@@ -52,14 +53,24 @@ def setup(address: Uint160) -> Tuple[Contract, Universe]:
         for addr, keys in accessed.items():
             if addr == 0x70D070D070D070D070D070D070D070D070D070D0:
                 continue
-            if addr not in contracts:
-                contracts[addr] = get_code(Uint160(addr))
+            if addr == CONTROLLER.unwrap():
+                contract = controller
+            else:
+                if addr not in contracts:
+                    contracts[addr] = get_code(Uint160(addr))
+                contract = contracts[addr]
             for key in keys:
-                if key.unwrap() not in contracts[addr].storage.surface:
+                if key.unwrap() not in contract.storage.surface:
                     val = get_storage_at(Uint160(addr), key)
-                    contracts[addr].storage.poke(key, val)
+                    contract.storage.poke(key, val)
 
-    level = end.universe.contracts[int.from_bytes(end.returndata.unwrap())]
+    assert len(end.logs) == 1
+    assert len(end.logs[0].topics) == 4
+    address = end.logs[0].topics[2].into(Uint160)
+    level = end.universe.contracts[address.unwrap()]
+
+    assert id(end.contract) == id(end.universe.contracts[CONTROLLER.unwrap()])
+
     return level, end.universe
 
 
@@ -71,31 +82,30 @@ def check(level: Contract, universe: Universe) -> None:
     ).unwrap(bytes)
 
     start = concrete_start(controller.program, Uint256(0), calldata)
-    start.universe = copy.deepcopy(universe)
+    start.contract = controller
+    start.universe = universe
 
-    end, _ = _execute(start)
+    end, _ = _execute(start, 0)
     assert end.success is not None
     if end.success is False:
         raise RuntimeError(end.returndata.unwrap()[68:].strip(b"\x00").decode())
 
 
-def _execute(state: State, indent: int = 0) -> Tuple[State, Dict[int, List[Uint256]]]:
+def _execute(
+    state: State, indent: Optional[int] = None
+) -> Tuple[State, Dict[int, List[Uint256]]]:
     accessed: Dict[int, List[Uint256]] = defaultdict(list)
 
     while True:
         instr = state.contract.program.instructions[state.pc]
-        # print(" " * indent, instr)
+        if indent is not None:
+            print(" " * indent, instr)
 
         if instr.name == "EXTCODESIZE":
             address = state.stack[-1].into(Uint160)
             if address.unwrap() not in state.universe.contracts:
                 accessed[address.unwrap()]
                 return state, accessed
-        elif instr.name == "LOG":
-            state.pc += 1
-            for _ in range(2 + cast(int, instr.suffix)):
-                state.stack.pop()
-            continue
 
         action = step(state)
         if action == "CONTINUE":
@@ -110,7 +120,9 @@ def _execute(state: State, indent: int = 0) -> Tuple[State, Dict[int, List[Uint2
                 accessed[address.unwrap()]
                 return state, accessed
             for substate in hybrid_CALL(state):
-                substate, subaccessed = _execute(substate, indent + 2)
+                substate, subaccessed = _execute(
+                    substate, indent + 2 if indent is not None else None
+                )
                 for s, v in subaccessed.items():
                     accessed[s].extend(v)
         elif action == "DELEGATECALL":
@@ -121,7 +133,9 @@ def _execute(state: State, indent: int = 0) -> Tuple[State, Dict[int, List[Uint2
             state.stack.append(Uint256(1))
         elif action == "CREATE":
             with concrete_CREATE(state) as substate:
-                _, subaccessed = _execute(substate, indent + 2)
+                _, subaccessed = _execute(
+                    substate, indent + 2 if indent is not None else None
+                )
                 for s, v in subaccessed.items():
                     accessed[s].extend(v)
         elif action == "TERMINATE":
@@ -129,8 +143,9 @@ def _execute(state: State, indent: int = 0) -> Tuple[State, Dict[int, List[Uint2
         else:
             raise NotImplementedError(action)
 
-        # for y in reversed(state.stack):
-        #     print("      ", y.describe())
+        if indent is not None:
+            for y in reversed(state.stack):
+                print("      ", y.describe())
 
     for contract in state.universe.contracts.values():
         accessed[contract.address.unwrap()].extend(contract.storage.accessed)
