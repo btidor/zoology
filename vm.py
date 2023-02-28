@@ -391,6 +391,7 @@ def concrete_start(program: Program, value: Uint256, data: bytes) -> State:
         returndata=FrozenBytes.concrete(b""),
         success=None,
         subcontexts=[],
+        logs=[],
         gas_variables=[],
         call_variables=[],
         path_constraints=[],

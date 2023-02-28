@@ -3,7 +3,7 @@
 from arrays import FrozenBytes
 from disassembler import Instruction
 from smt import Constraint, Uint8, Uint160, Uint256, Uint257, Uint512
-from state import State
+from state import Log, State
 
 
 def STOP(s: State) -> None:
@@ -438,38 +438,12 @@ def SWAP(ins: Instruction, s: State) -> None:
     s.stack[-1], s.stack[-m] = s.stack[-m], s.stack[-1]
 
 
-def LOG0(offset: Uint256, size: Uint256) -> None:
-    """A0 - Append log record with no topics."""
-    raise NotImplementedError("LOG")
-
-
-def LOG1(offset: Uint256, size: Uint256, topic1: Uint256) -> None:
-    """A1 - Append log record with one topic."""
-    raise NotImplementedError("LOG")
-
-
-def LOG2(offset: Uint256, size: Uint256, topic1: Uint256, topic2: Uint256) -> None:
-    """A2 - Append log record with two topics."""
-    raise NotImplementedError("LOG")
-
-
-def LOG3(
-    offset: Uint256, size: Uint256, topic1: Uint256, topic2: Uint256, topic3: Uint256
-) -> None:
-    """A3 - Append log record with three topics."""
-    raise NotImplementedError("LOG")
-
-
-def LOG4(
-    offset: Uint256,
-    size: Uint256,
-    topic1: Uint256,
-    topic2: Uint256,
-    topic3: Uint256,
-    topic4: Uint256,
-) -> None:
-    """A4 - Append log record with four topics."""
-    raise NotImplementedError("LOG")
+def LOG(ins: Instruction, s: State, offset: Uint256, size: Uint256) -> None:
+    """AX - Append log record with N topics."""
+    if ins.suffix is None:
+        raise ValueError("somehow got a LOG without a suffix")
+    topics = [s.stack.pop() for _ in range(ins.suffix)]
+    s.logs.append(Log(s.memory.slice(offset, size), topics))
 
 
 def CREATE(value: Uint256, offset: Uint256, size: Uint256) -> Uint256:

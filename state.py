@@ -36,6 +36,8 @@ class State:
 
     subcontexts: List[State]
 
+    logs: List[Log]
+
     # Every time the GAS instruction is invoked we return a symbolic result,
     # tracked here. These should be monotonically decreasing.
     gas_variables: List[Uint256]
@@ -152,6 +154,7 @@ class State:
             success=None,
             returndata=FrozenBytes.concrete(b""),
             subcontexts=[],
+            logs=self.logs,
             gas_variables=self.gas_variables,
             call_variables=self.call_variables,
             path_constraints=self.path_constraints,
@@ -166,8 +169,17 @@ class State:
 
         # TODO: support reentrancy (apply storage changes to contract)
 
+        self.logs = substate.logs
         self.returndata = substate.returndata
         self.gas_variables = substate.gas_variables
         self.call_variables = substate.call_variables
         self.path_constraints = substate.path_constraints
         self.path = substate.path
+
+
+@dataclass
+class Log:
+    """A log entry emitted by the LOG* instruction."""
+
+    data: FrozenBytes
+    topics: List[Uint256]

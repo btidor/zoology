@@ -177,6 +177,7 @@ def symbolic_start(program: Program, sha3: SHA3, suffix: str) -> State:
         returndata=FrozenBytes.concrete(b""),
         success=None,
         subcontexts=[],
+        logs=[],
         gas_variables=[],
         call_variables=[],
         path_constraints=[],

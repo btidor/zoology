@@ -7,7 +7,7 @@ from sha3 import SHA3
 from smt import BitVector, Constraint, Uint160, Uint256
 from solidity import abiencode
 from solver import Solver
-from state import State
+from state import Log, State
 from universal import constrain_to_goal
 from vm import (
     concrete_CALLCODE,
@@ -130,6 +130,7 @@ def make_state(
     returndata: Optional[FrozenBytes] = None,
     success: Optional[bool] = None,
     subcontexts: Optional[List[State]] = None,
+    logs: Optional[List[Log]] = None,
     gas_variables: Optional[List[Uint256]] = None,
     call_variables: Optional[List[Tuple[FrozenBytes, Constraint]]] = None,
     path_constraints: Optional[List[Constraint]] = None,
@@ -148,6 +149,7 @@ def make_state(
         returndata=FrozenBytes.concrete(b"") if returndata is None else returndata,
         success=None if success is None else success,
         subcontexts=[] if subcontexts is None else subcontexts,
+        logs=[] if logs is None else logs,
         gas_variables=[] if gas_variables is None else gas_variables,
         call_variables=[] if call_variables is None else call_variables,
         path_constraints=[] if path_constraints is None else path_constraints,
