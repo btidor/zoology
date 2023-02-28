@@ -113,6 +113,8 @@ def _decode_instruction(code: bytes, offset: int) -> Instruction:
         suffix = opref.code - 0x7F
     elif opref.name == "SWAP":
         suffix = opref.code - 0x8F
+    elif opref.name == "LOG":
+        suffix = opref.code - 0xA0
     elif opref.name in UNIMPLEMENTED:
         raise ValueError(f"unimplemented opcode: {opref.fullName}")
 

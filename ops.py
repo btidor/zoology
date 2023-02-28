@@ -366,7 +366,10 @@ def JUMP(s: State, _counter: Uint256) -> None:
     # Instead, raise an error and fail the whole analysis. This lets us prove
     # that all jump targets are valid and within the body of the code, which is
     # why it's safe to strip the metadata trailer.
-    s.pc = s.contract.program.jumps[counter]
+    #
+    # Also, set PC to one instruction prior to the JUMPDEST, since the main loop
+    # will later increment it.
+    s.pc = s.contract.program.jumps[counter] - 1
 
 
 def JUMPI(s: State, counter: Uint256, b: Uint256) -> None:

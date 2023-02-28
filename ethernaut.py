@@ -3,7 +3,7 @@
 
 import copy
 from collections import defaultdict
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, cast
 
 from environment import Contract, Universe
 from rpc import get_code, get_storage_at
@@ -46,12 +46,11 @@ def setup(address: Uint160) -> Tuple[Contract, Universe]:
             start.universe.add_contract(copy.deepcopy(contract))
 
         end, accessed = _execute(start)
-        print("\n********", end.returndata.unwrap(), "\n")
         if end.success is True:
             break
 
         for addr, keys in accessed.items():
-            if addr == 0x70D070D070D070D070D070D070D070D070D0:
+            if addr == 0x70D070D070D070D070D070D070D070D070D070D0:
                 continue
             if addr not in contracts:
                 contracts[addr] = get_code(Uint160(addr))
@@ -84,8 +83,19 @@ def _execute(state: State, indent: int = 0) -> Tuple[State, Dict[int, List[Uint2
     accessed: Dict[int, List[Uint256]] = defaultdict(list)
 
     while True:
-        print(" " * indent, end="")
-        print(state.contract.program.instructions[state.pc])
+        instr = state.contract.program.instructions[state.pc]
+        # print(" " * indent, instr)
+
+        if instr.name == "EXTCODESIZE":
+            address = state.stack[-1].into(Uint160)
+            if address.unwrap() not in state.universe.contracts:
+                accessed[address.unwrap()]
+                return state, accessed
+        elif instr.name == "LOG":
+            state.pc += 1
+            for _ in range(2 + cast(int, instr.suffix)):
+                state.stack.pop()
+            continue
 
         action = step(state)
         if action == "CONTINUE":
@@ -100,9 +110,15 @@ def _execute(state: State, indent: int = 0) -> Tuple[State, Dict[int, List[Uint2
                 accessed[address.unwrap()]
                 return state, accessed
             for substate in hybrid_CALL(state):
-                _, subaccessed = _execute(substate, indent + 2)
+                substate, subaccessed = _execute(substate, indent + 2)
                 for s, v in subaccessed.items():
                     accessed[s].extend(v)
+        elif action == "DELEGATECALL":
+            # We can skip this opcode because it's only used to call the
+            # statistics library.
+            for _ in range(6):
+                state.stack.pop()
+            state.stack.append(Uint256(1))
         elif action == "CREATE":
             with concrete_CREATE(state) as substate:
                 _, subaccessed = _execute(substate, indent + 2)
@@ -112,6 +128,9 @@ def _execute(state: State, indent: int = 0) -> Tuple[State, Dict[int, List[Uint2
             break
         else:
             raise NotImplementedError(action)
+
+        # for y in reversed(state.stack):
+        #     print("      ", y.describe())
 
     for contract in state.universe.contracts.values():
         accessed[contract.address.unwrap()].extend(contract.storage.accessed)
