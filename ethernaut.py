@@ -3,7 +3,8 @@
 
 import copy
 from collections import defaultdict
-from typing import Dict, List, Optional, Tuple, cast
+from time import sleep
+from typing import Dict, List, Optional, Tuple
 
 from environment import Contract, Universe
 from rpc import get_code, get_storage_at
@@ -62,6 +63,7 @@ def setup(address: Uint160) -> Tuple[Contract, Universe]:
             for key in keys:
                 if key.unwrap() not in contract.storage.surface:
                     val = get_storage_at(Uint160(addr), key)
+                    sleep(0.25)
                     contract.storage.poke(key, val)
 
     assert len(end.logs) == 1
