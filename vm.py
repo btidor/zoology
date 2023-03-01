@@ -4,7 +4,7 @@
 import copy
 import inspect
 from contextlib import contextmanager
-from typing import Iterator, List, Literal, Optional, assert_never
+from typing import Iterator, List, Literal, Optional, Union, assert_never
 
 import ops
 from arrays import Array, FrozenBytes, MutableBytes
@@ -340,7 +340,9 @@ def concrete_CREATE(state: State) -> Iterator[State]:
         state.stack.append(address.into(Uint256))
 
 
-def concrete_start(program: Program, value: Uint256, data: bytes) -> State:
+def concrete_start(
+    program: Union[Contract, Program], value: Uint256, data: bytes
+) -> State:
     """Return a concrete start state with realistic values."""
     block = Block(
         number=Uint256(16030969),
@@ -353,11 +355,14 @@ def concrete_start(program: Program, value: Uint256, data: bytes) -> State:
         chainid=Uint256(1),
         basefee=Uint256(12267131109),
     )
-    contract = Contract(
-        address=Uint160(0xADADADADADADADADADADADADADADADADADADADAD),
-        program=program,
-        storage=Array.concrete(Uint256, Uint256(0)),
-    )
+    if isinstance(program, Contract):
+        contract = program
+    else:
+        contract = Contract(
+            address=Uint160(0xADADADADADADADADADADADADADADADADADADADAD),
+            program=program,
+            storage=Array.concrete(Uint256, Uint256(0)),
+        )
     transaction = Transaction(
         origin=Uint160(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0),
         caller=Uint160(0xCACACACACACACACACACACACACACACACACACACACA),
@@ -376,7 +381,7 @@ def concrete_start(program: Program, value: Uint256, data: bytes) -> State:
         contribution=Uint256(0),
         extraction=Uint256(0),
     )
-    universe.codesizes[contract.address] = contract.program.code.length
+    universe.add_contract(contract)
     universe.codesizes[Uint160(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0)] = Uint256(0)
     return State(
         suffix="",

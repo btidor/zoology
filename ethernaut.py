@@ -41,9 +41,7 @@ def setup(address: Uint160) -> Tuple[Contract, Universe]:
     controller = get_code(CONTROLLER)
     contracts: Dict[int, Contract] = {}
     while True:
-        start = concrete_start(controller.program, Uint256(0), calldata)
-        start.contract = copy.deepcopy(controller)
-        start.universe.add_contract(start.contract)
+        start = concrete_start(copy.deepcopy(controller), Uint256(0), calldata)
         for contract in contracts.values():
             start.universe.add_contract(copy.deepcopy(contract))
 
@@ -83,8 +81,7 @@ def check(level: Contract, universe: Universe) -> None:
         Uint256
     ).unwrap(bytes)
 
-    start = concrete_start(controller.program, Uint256(0), calldata)
-    start.contract = controller
+    start = concrete_start(controller, Uint256(0), calldata)
     start.universe = universe
 
     end, _ = _execute(start, 0)
