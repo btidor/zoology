@@ -8,41 +8,35 @@ from typing import Dict, List, Optional, Tuple
 
 from environment import Contract, Universe
 from rpc import get_code, get_storage_at
-from smt import Uint160, Uint256
+from sha3 import SHA3
+from smt import Constraint, Uint160, Uint256
 from solidity import abiencode
+from solver import Solver
 from state import State
-from universal import _universal_transaction
+from universal import _universal_transaction, printable_transition, symbolic_start
 from vm import (
     concrete_CREATE,
     concrete_GAS,
     concrete_JUMPI,
     concrete_start,
+    concrete_STATICCALL,
     hybrid_CALL,
     step,
 )
 
-CONTROLLER = Uint160(0xD2E5E0102E55A5234379DD796B8C641CD5996EFD)
-
-LEVELS = [
-    # 00 - Hello Ethernaut
-    Uint160(0xBA97454449C10A0F04297022646E7750B8954EE8),
-    # 01 - Fallback
-    Uint160(0x80934BE6B8B872B364B470CA30EAAD8AEAC4F63F),
-    # 02 - Fallout
-    Uint160(0x0AA237C34532ED79676BCEA22111EA2D01C3D3E7),
+LEVEL_FACTORIES = [
+    Uint160(0x2A2497AE349BCA901FEA458370BD7DDA594D1D69),
 ]
 
 
-def setup(address: Uint160) -> Tuple[Contract, Universe]:
-    """Call createLevelInstance to set up the level."""
-    calldata = abiencode("createLevelInstance(address)") + address.into(Uint256).unwrap(
-        bytes
-    )
-
-    controller = get_code(CONTROLLER)
+def create(factory: Contract) -> Tuple[Uint160, Universe]:
+    """Call createInstance to set up the level."""
+    caller = Uint160(0xCACACACACACACACACACACACACACACACACACACACA)
+    calldata = abiencode("createInstance(address)") + caller.into(Uint256).unwrap(bytes)
     contracts: Dict[int, Contract] = {}
+
     while True:
-        start = concrete_start(copy.deepcopy(controller), Uint256(0), calldata)
+        start = concrete_start(copy.deepcopy(factory), Uint256(0), calldata)
         for contract in contracts.values():
             start.universe.add_contract(copy.deepcopy(contract))
 
@@ -53,40 +47,40 @@ def setup(address: Uint160) -> Tuple[Contract, Universe]:
         for addr, keys in accessed.items():
             if addr == 0x70D070D070D070D070D070D070D070D070D070D0:
                 continue
-            if addr == CONTROLLER.unwrap():
-                contract = controller
-            else:
-                if addr not in contracts:
-                    contracts[addr] = get_code(Uint160(addr))
-                contract = contracts[addr]
+            if addr not in contracts:
+                contracts[addr] = get_code(Uint160(addr))
+            contract = contracts[addr]
             for key in keys:
                 if key.unwrap() not in contract.storage.surface:
                     val = get_storage_at(Uint160(addr), key)
                     sleep(0.25)
                     contract.storage.poke(key, val)
 
-    assert len(end.logs) == 1
-    assert len(end.logs[0].topics) == 4
-    address = end.logs[0].topics[2].into(Uint160)
-    level = end.universe.contracts[address.unwrap()]
-
-    assert id(end.contract) == id(end.universe.contracts[CONTROLLER.unwrap()])
-
-    return level, end.universe
+    end.universe.add_contract(end.contract)
+    address = Uint160(int.from_bytes(end.returndata.unwrap()))
+    return address, end.universe
 
 
-def check(level: Contract, universe: Universe) -> None:
-    """Call submitLevelInstance to check the solution."""
-    controller = universe.contracts[CONTROLLER.unwrap()]
-    calldata = abiencode("submitLevelInstance(address)") + level.address.into(
-        Uint256
-    ).unwrap(bytes)
+def validate(factory: Uint160, instance: Uint160, universe: Universe) -> Constraint:
+    """Call validateInstance to check the solution."""
+    caller = Uint160(0xCACACACACACACACACACACACACACACACACACACACA)
+    calldata = (
+        abiencode("validateInstance(address,address)")
+        + instance.into(Uint256).unwrap(bytes)
+        + caller.into(Uint256).unwrap(bytes)
+    )
 
-    start = concrete_start(controller, Uint256(0), calldata)
+    universe = copy.deepcopy(universe)
+    contract = universe.contracts[factory.unwrap()]
+    start = concrete_start(contract, Uint256(0), calldata)
     start.universe = universe
 
-    for end in _universal_transaction(start):
-        print(end.success, hex(end.path))
+    return Constraint.any(
+        *(
+            (Uint256(end.returndata._bigvector()) != Uint256(0))
+            for end in _universal_transaction(start)
+        )
+    )
 
 
 def _execute(
@@ -159,6 +153,24 @@ def _execute(
 
 
 if __name__ == "__main__":
-    for address in LEVELS:
-        level, universe = setup(address)
-        check(level, universe)
+    for address in LEVEL_FACTORIES:
+        factory = get_code(address)
+        address, universe = create(factory)
+
+        instance = universe.contracts[address.unwrap()]
+        start = symbolic_start(instance, SHA3(), "")
+        start.universe = universe
+        start.universe.transfer(
+            start.transaction.caller,
+            start.contract.address,
+            start.transaction.callvalue,
+        )
+
+        solver = Solver()
+        for end in _universal_transaction(start):
+            end.universe.add_contract(end.contract)
+            ok = validate(factory.address, address, end.universe)
+            if solver.check(ok):
+                for line in printable_transition(start, end):
+                    print(line)
+                break
