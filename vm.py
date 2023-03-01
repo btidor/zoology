@@ -337,7 +337,7 @@ def concrete_CREATE(state: State) -> Iterator[State]:
 
     # TODO: this isn't quite right
     init = state.memory.slice(offset, size).unwrap()
-    address = Uint160(0x70D070D070D070D070D070D070D070D070D0)
+    address = Uint160(0x70D070D070D070D070D070D070D070D070D070D0)
     program = disassemble(init)
     contract = Contract(address, program, Array.concrete(Uint256, Uint256(0)))
     transaction = Transaction(

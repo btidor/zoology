@@ -2,7 +2,7 @@
 """A universal transaction solver."""
 
 import copy
-from typing import Iterable, Iterator, Tuple, assert_never
+from typing import Iterable, Iterator, Tuple, Union, assert_never
 
 from arrays import Array, FrozenBytes, MutableBytes
 from disassembler import Program, disassemble
@@ -121,7 +121,7 @@ def symbolic_GAS(state: State) -> None:
     state.stack.append(gas)
 
 
-def symbolic_start(program: Program, sha3: SHA3, suffix: str) -> State:
+def symbolic_start(program: Union[Contract, Program], sha3: SHA3, suffix: str) -> State:
     """Return a fully-symbolic start state."""
     block = Block(
         number=Uint256(f"NUMBER{suffix}"),
@@ -132,11 +132,14 @@ def symbolic_start(program: Program, sha3: SHA3, suffix: str) -> State:
         chainid=Uint256(f"CHAINID"),
         basefee=Uint256(f"BASEFEE{suffix}"),
     )
-    contract = Contract(
-        address=Uint160("ADDRESS"),
-        program=program,
-        storage=Array.symbolic(f"STORAGE{suffix}", Uint256, Uint256),
-    )
+    if isinstance(program, Contract):
+        contract = program
+    else:
+        contract = Contract(
+            address=Uint160("ADDRESS"),
+            program=program,
+            storage=Array.symbolic(f"STORAGE{suffix}", Uint256, Uint256),
+        )
     origin, caller = Uint160(f"ORIGIN"), Uint160(f"CALLER")
     transaction = Transaction(
         # TODO: properly constrain ORIGIN to be an EOA and CALLER to either be

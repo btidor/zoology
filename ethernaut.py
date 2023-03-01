@@ -97,7 +97,7 @@ def _execute(
     while True:
         instr = state.contract.program.instructions[state.pc]
         if indent is not None:
-            print(" " * indent, instr)
+            print("." * indent, instr)
 
         if instr.name == "EXTCODESIZE":
             address = state.stack[-1].into(Uint160)
@@ -112,8 +112,7 @@ def _execute(
             concrete_JUMPI(state)
         elif action == "GAS":
             concrete_GAS(state)
-        elif action == "CALL" or action == "STATICCALL":
-            # TODO: STATICCALL should require the call to be static
+        elif action == "CALL":
             address = state.stack[-2].into(Uint160)
             if address.unwrap() not in state.universe.contracts:
                 accessed[address.unwrap()]
@@ -130,6 +129,13 @@ def _execute(
             for _ in range(6):
                 state.stack.pop()
             state.stack.append(Uint256(1))
+        elif action == "STATICCALL":
+            with concrete_STATICCALL(state) as substate:
+                substate, subaccessed = _execute(
+                    substate, indent + 2 if indent is not None else None
+                )
+                for s, v in subaccessed.items():
+                    accessed[s].extend(v)
         elif action == "CREATE":
             with concrete_CREATE(state) as substate:
                 _, subaccessed = _execute(
@@ -144,7 +150,7 @@ def _execute(
 
         if indent is not None:
             for y in reversed(state.stack):
-                print("      ", y.describe())
+                print("." * indent, " ", y.describe())
 
     for contract in state.universe.contracts.values():
         accessed[contract.address.unwrap()].extend(contract.storage.accessed)
