@@ -180,8 +180,22 @@ def hybrid_CALL(state: State) -> Iterator[State]:
     retOffset = state.stack.pop()
     retSize = state.stack.pop()
 
-    # TODO: handle calls that mutate storage, including self-calls
+    return _hybrid_CALL(
+        state, gas, address, value, argsOffset, argsSize, retOffset, retSize
+    )
 
+
+def _hybrid_CALL(
+    state: State,
+    gas: Uint256,
+    address: Uint160,
+    value: Uint256,
+    argsOffset: Uint256,
+    argsSize: Uint256,
+    retOffset: Uint256,
+    retSize: Uint256,
+) -> Iterator[State]:
+    # TODO: handle calls that mutate storage, including self-calls
     codesize = state.universe.codesizes[address]
     if codesize.maybe_unwrap() == 0:
         # Simple transfer to an EOA: always succeeds.
@@ -301,7 +315,17 @@ def concrete_STATICCALL(state: State) -> Iterator[State]:
     retOffset = state.stack.pop()
     retSize = state.stack.pop()
 
-    raise NotImplementedError("STATICCALL")
+    # TODO: properly enforce STATICCALL constraints
+    return _hybrid_CALL(
+        state,
+        gas,
+        Uint160(address),
+        Uint256(0),
+        argsOffset,
+        argsSize,
+        retOffset,
+        retSize,
+    )
 
 
 @contextmanager

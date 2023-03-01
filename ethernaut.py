@@ -11,6 +11,7 @@ from rpc import get_code, get_storage_at
 from smt import Uint160, Uint256
 from solidity import abiencode
 from state import State
+from universal import _universal_transaction
 from vm import (
     concrete_CREATE,
     concrete_GAS,
@@ -84,10 +85,8 @@ def check(level: Contract, universe: Universe) -> None:
     start = concrete_start(controller, Uint256(0), calldata)
     start.universe = universe
 
-    end, _ = _execute(start, 0)
-    assert end.success is not None
-    if end.success is False:
-        raise RuntimeError(end.returndata.unwrap()[68:].strip(b"\x00").decode())
+    for end in _universal_transaction(start):
+        print(end.success, hex(end.path))
 
 
 def _execute(
@@ -113,7 +112,8 @@ def _execute(
             concrete_JUMPI(state)
         elif action == "GAS":
             concrete_GAS(state)
-        elif action == "CALL":
+        elif action == "CALL" or action == "STATICCALL":
+            # TODO: STATICCALL should require the call to be static
             address = state.stack[-2].into(Uint160)
             if address.unwrap() not in state.universe.contracts:
                 accessed[address.unwrap()]
