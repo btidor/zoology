@@ -6,7 +6,7 @@ from arrays import FrozenBytes
 from disassembler import disassemble
 from smt import Uint256
 from solidity import abiencode, compile_solidity
-from state import State
+from state import Jump, State, Termination
 from testlib import execute, make_contract, make_state, make_transaction
 from vm import printable_execution, step
 
@@ -27,61 +27,54 @@ def test_execute_basic() -> None:
     )
 
     action = step(state)
-    assert action == "CONTINUE"
+    assert action is None
     assert state.pc == 1
-    assert state.success is None
     assert concretize_stack(state) == [0xAA]
 
     action = step(state)
-    assert action == "CONTINUE"
+    assert action is None
     assert state.pc == 2
-    assert state.success is None
     assert concretize_stack(state) == [0xAA, 0x56]
 
     action = step(state)
-    assert action == "CONTINUE"
+    assert action is None
     assert state.pc == 3
-    assert state.success is None
     assert concretize_stack(state) == [0x100]
 
     action = step(state)
-    assert action == "CONTINUE"
+    assert action is None
     assert state.pc == 4
-    assert state.success is None
     assert concretize_stack(state) == [0x100, 0x09]
 
     action = step(state)
-    assert action == "JUMPI"
-    assert state.pc == 4
-    assert state.success is None
-    assert concretize_stack(state) == [0x100, 0x09]
+    assert isinstance(action, Jump)
+    assert state.pc == 5
+    assert concretize_stack(state) == []
 
     state.pc = program.jumps[0x09]
     assert state.pc == 6
     state.stack = []
 
     action = step(state)
-    assert action == "CONTINUE"
+    assert action is None
     assert state.pc == 7
-    assert state.success is None
     assert concretize_stack(state) == []
 
     action = step(state)
-    assert action == "CONTINUE"
+    assert action is None
     assert state.pc == 8
-    assert state.success is None
     assert concretize_stack(state) == [0x00]
 
     action = step(state)
-    assert action == "CONTINUE"
+    assert action is None
     assert state.pc == 9
-    assert state.success is None
     assert concretize_stack(state) == [0x00, 0x00]
 
     action = step(state)
-    assert action == "TERMINATE"
-    assert state.success is False
-    assert state.returndata.unwrap() == b""
+    assert action is None
+    assert isinstance(state.pc, Termination)
+    assert state.pc.success is False
+    assert state.pc.returndata.unwrap() == b""
     assert concretize_stack(state) == []
 
 
@@ -140,9 +133,10 @@ def test_execute_solidity() -> None:
             calldata=FrozenBytes.concrete(abiencode("owner()")),
         ),
     )
-    execute(state)
-    assert state.success is True
-    assert state.returndata.unwrap() == b"\x00" * 32
+    state = execute(state)
+    assert isinstance(state.pc, Termination)
+    assert state.pc.success is True
+    assert state.pc.returndata.unwrap() == b"\x00" * 32
 
     state = make_state(
         contract=state.contract,  # carries forward storage
@@ -152,9 +146,10 @@ def test_execute_solidity() -> None:
         ),
         universe=state.universe,
     )
-    execute(state)
-    assert state.success is False
-    assert state.returndata.unwrap()[68:91] == b"caller is not the owner"
+    state = execute(state)
+    assert isinstance(state.pc, Termination)
+    assert state.pc.success is False
+    assert state.pc.returndata.unwrap()[68:91] == b"caller is not the owner"
 
     state = make_state(
         contract=state.contract,
@@ -164,9 +159,10 @@ def test_execute_solidity() -> None:
         ),
         universe=state.universe,
     )
-    execute(state)
-    assert state.success is True
-    assert state.returndata.unwrap() == b""
+    state = execute(state)
+    assert isinstance(state.pc, Termination)
+    assert state.pc.success is True
+    assert state.pc.returndata.unwrap() == b""
 
     state = make_state(
         contract=state.contract,
@@ -176,9 +172,10 @@ def test_execute_solidity() -> None:
         ),
         universe=state.universe,
     )
-    execute(state)
-    assert state.success is True
-    assert state.returndata.unwrap()[-20:] == b"\xca" * 20
+    state = execute(state)
+    assert isinstance(state.pc, Termination)
+    assert state.pc.success is True
+    assert state.pc.returndata.unwrap()[-20:] == b"\xca" * 20
 
 
 def test_output_basic() -> None:

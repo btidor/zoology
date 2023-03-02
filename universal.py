@@ -2,7 +2,7 @@
 """A universal transaction solver."""
 
 import copy
-from typing import Iterable, Iterator, Tuple, Union, assert_never
+from typing import Iterable, Iterator, Tuple, Union
 
 from arrays import Array, FrozenBytes, MutableBytes
 from disassembler import Program, disassemble
@@ -10,15 +10,8 @@ from environment import Block, Contract, Transaction, Universe
 from sha3 import SHA3
 from smt import Uint160, Uint256
 from solver import Solver
-from state import State
-from vm import (
-    concrete_CALLCODE,
-    concrete_CREATE,
-    concrete_DELEGATECALL,
-    concrete_STATICCALL,
-    hybrid_CALL,
-    step,
-)
+from state import Descend, Jump, State, Termination
+from vm import step
 
 
 def universal_transaction(
@@ -48,77 +41,30 @@ def universal_transaction(
 
 
 def _universal_transaction(state: State) -> Iterator[State]:
-    while True:
-        action = step(state)
-        if action == "CONTINUE":
-            continue
-        elif action == "JUMPI":
-            for branch in symbolic_JUMPI(state.contract.program, state):
-                for end in _universal_transaction(branch):
-                    yield end
-            return
-        elif action == "GAS":
-            symbolic_GAS(state)
-            continue
-        elif action == "CALL":
-            for substate in hybrid_CALL(state):
-                for end in _universal_transaction(substate):
-                    yield end
-        elif action == "CALLCODE":
-            with concrete_CALLCODE(state) as substate:
-                for end in _universal_transaction(substate):
-                    yield end
-        elif action == "DELEGATECALL":
-            with concrete_DELEGATECALL(state) as substate:
-                for end in _universal_transaction(substate):
-                    yield end
-        elif action == "STATICCALL":
-            with concrete_STATICCALL(state) as substate:
-                for end in _universal_transaction(substate):
-                    yield end
-        elif action == "CREATE":
-            with concrete_CREATE(state) as substate:
-                for end in _universal_transaction(substate):
-                    yield end
-        elif action == "TERMINATE":
-            assert state.success is not None
-            if state.success:
-                yield state
-            return
-        else:
-            assert_never(action)
+    while isinstance(state.pc, int):
+        match step(state):
+            case None:
+                continue
+            case Jump(targets):
+                solver = Solver()
+                state.constrain(solver)
+                for constraint, next in targets:
+                    if not solver.check(constraint):
+                        continue
+                    yield from _universal_transaction(next)
+                return
+            case Descend(substate, callback):
+                for subend in _universal_transaction(substate):
+                    next = copy.deepcopy(state)
+                    next = callback(next, subend)
+                    yield from _universal_transaction(next)
+                return
+            case unknown:
+                raise ValueError(f"unknown action: {unknown}")
 
-
-def symbolic_JUMPI(program: Program, state: State) -> Iterator[State]:
-    """Handle a JUMPI action with a symbolic condition. Yields next states."""
-    solver = Solver()
-    state.constrain(solver)
-
-    counter = state.stack.pop().unwrap(int, "JUMPI requires concrete counter")
-    if counter not in program.jumps:
-        raise ValueError(f"illegal JUMPI target: 0x{counter:x}")
-    b = state.stack.pop()
-
-    if solver.check(b == Uint256(0)):
-        next = copy.deepcopy(state)
-        next.pc += 1
-        next.path = (next.path << 1) | 0
-        next.path_constraints.append(b == Uint256(0))
-        yield next
-
-    if solver.check(b != Uint256(0)):
-        next = copy.deepcopy(state)
-        next.pc = program.jumps[counter]
-        next.path = (next.path << 1) | 1
-        next.path_constraints.append(b != Uint256(0))
-        yield next
-
-
-def symbolic_GAS(state: State) -> None:
-    """Handle a GAS action using a symbolic value. Mutates state."""
-    gas = Uint256(f"GAS{len(state.gas_variables)}{state.suffix}")
-    state.gas_variables.append(gas)
-    state.stack.append(gas)
+    assert isinstance(state.pc, Termination)
+    if state.pc.success:
+        yield state
 
 
 def symbolic_start(program: Union[Contract, Program], sha3: SHA3, suffix: str) -> State:
@@ -177,9 +123,8 @@ def symbolic_start(program: Union[Contract, Program], sha3: SHA3, suffix: str) -
         pc=0,
         stack=[],
         memory=MutableBytes.concrete(b""),
-        returndata=FrozenBytes.concrete(b""),
-        success=None,
-        subcontexts=[],
+        children=0,
+        latest_return=FrozenBytes.concrete(b""),
         logs=[],
         gas_variables=[],
         call_variables=[],
@@ -231,12 +176,14 @@ def _printable_transition(
 ) -> Iterable[str]:
     end.narrow(solver)
 
-    if end.success is True:
-        result = "RETURN"
-    elif end.success is False:
-        result = "REVERT"
-    else:
+    if isinstance(end.pc, int):
         result = "PENDING"
+    else:
+        if end.pc.success is True:
+            result = "RETURN"
+        else:
+            result = "REVERT"
+
     yield f"---  {kind}\t{result}\t{end.px()}\t".ljust(80, "-")
     yield ""
 

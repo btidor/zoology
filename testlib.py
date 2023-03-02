@@ -1,4 +1,4 @@
-from typing import Dict, List, Literal, Optional, Tuple, assert_never
+from typing import Dict, List, Literal, Optional, Tuple, cast
 
 from arrays import Array, FrozenBytes, MutableBytes
 from disassembler import Program, disassemble
@@ -7,18 +7,9 @@ from sha3 import SHA3
 from smt import BitVector, Constraint, Uint160, Uint256
 from solidity import abiencode
 from solver import Solver
-from state import Log, State
+from state import Log, State, Termination
 from universal import constrain_to_goal
-from vm import (
-    concrete_CALLCODE,
-    concrete_CREATE,
-    concrete_DELEGATECALL,
-    concrete_GAS,
-    concrete_JUMPI,
-    concrete_STATICCALL,
-    hybrid_CALL,
-    step,
-)
+from vm import printable_execution
 
 
 def concretize(value: Optional[BitVector]) -> Optional[int]:
@@ -127,9 +118,8 @@ def make_state(
     pc: Optional[int] = None,
     stack: Optional[List[Uint256]] = None,
     memory: Optional[MutableBytes] = None,
-    returndata: Optional[FrozenBytes] = None,
-    success: Optional[bool] = None,
-    subcontexts: Optional[List[State]] = None,
+    children: Optional[int] = None,
+    latest_return: Optional[FrozenBytes] = None,
     logs: Optional[List[Log]] = None,
     gas_variables: Optional[List[Uint256]] = None,
     call_variables: Optional[List[Tuple[FrozenBytes, Constraint]]] = None,
@@ -146,11 +136,12 @@ def make_state(
         pc=0 if pc is None else pc,
         stack=[] if stack is None else stack,
         memory=MutableBytes.concrete(b"") if memory is None else memory,
-        returndata=FrozenBytes.concrete(b"") if returndata is None else returndata,
-        success=None if success is None else success,
-        subcontexts=[] if subcontexts is None else subcontexts,
+        children=0 if children is None else children,
+        latest_return=FrozenBytes.concrete(b"")
+        if latest_return is None
+        else latest_return,
         logs=[] if logs is None else logs,
-        gas_variables=[] if gas_variables is None else gas_variables,
+        gas_variables=gas_variables,
         call_variables=[] if call_variables is None else call_variables,
         path_constraints=[] if path_constraints is None else path_constraints,
         path=1 if path is None else path,
@@ -158,33 +149,12 @@ def make_state(
 
 
 def execute(state: State) -> State:
-    while True:
-        action = step(state)
-        if action == "CONTINUE":
-            continue
-        elif action == "JUMPI":
-            concrete_JUMPI(state)
-        elif action == "GAS":
-            concrete_GAS(state)
-        elif action == "CALL":
-            for substate in hybrid_CALL(state):
-                execute(substate)
-        elif action == "CALLCODE":
-            with concrete_CALLCODE(state) as substate:
-                execute(substate)
-        elif action == "DELEGATECALL":
-            with concrete_DELEGATECALL(state) as substate:
-                execute(substate)
-        elif action == "STATICCALL":
-            with concrete_STATICCALL(state) as substate:
-                execute(substate)
-        elif action == "CREATE":
-            with concrete_CREATE(state) as substate:
-                execute(substate)
-        elif action == "TERMINATE":
-            return state
-        else:
-            assert_never(action)
+    generator = printable_execution(state)
+    try:
+        while True:
+            next(generator)
+    except StopIteration as e:
+        return cast(State, e.value)
 
 
 def check_transition(
@@ -196,7 +166,8 @@ def check_transition(
     value: Optional[int] = None,
 ) -> None:
     assert end.path == path, f"unexpected path: {end.px()}"
-    assert end.success is True
+    assert isinstance(end.pc, Termination)
+    assert end.pc.success is True
 
     solver = Solver()
     end.constrain(solver)

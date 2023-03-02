@@ -6,6 +6,7 @@ from disassembler import disassemble
 from sha3 import SHA3
 from smt import Uint256
 from solver import Solver
+from state import Termination
 from testlib import check_transition
 from universal import constrain_to_goal, printable_transition, universal_transaction
 
@@ -18,7 +19,8 @@ def test_basic() -> None:
     universal = universal_transaction(program, sha3, "")
 
     start, end = next(universal)
-    assert end.success == True
+    assert isinstance(end.pc, Termination)
+    assert end.pc.success == True
 
     end.path_constraints.append(
         # This extra constraint makes the test deterministic

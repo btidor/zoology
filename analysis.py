@@ -9,7 +9,7 @@ from disassembler import Program, disassemble
 from sha3 import SHA3
 from smt import Constraint, Uint160, Uint256
 from solver import Solver
-from state import State
+from state import State, Termination
 from universal import constrain_to_goal, universal_transaction
 
 
@@ -162,7 +162,8 @@ def balance_safety_predicates(state: State) -> Iterator[Predicate]:
 
 def describe_state(solver: Solver, state: State) -> str:
     assert solver.check()
-    assert state.success is True
+    assert isinstance(state.pc, Termination)
+    assert state.pc.success is True
 
     return "0x" + state.transaction.calldata.evaluate(solver)
 

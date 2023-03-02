@@ -389,3 +389,17 @@ class Constraint(Symbolic[bool]):
     def ite(self, then: V, else_: V) -> V:
         """Return a symbolic value: `then` if true, `else_` if false."""
         return then.__class__(Ite(self.node, then.node, else_.node))
+
+    def maybe_unwrap(self) -> Optional[bool]:
+        """Return the constraint's underlying value, if a constant."""
+        if not self.node.is_constant():
+            return None
+        result = self.node.constant_value()
+        assert isinstance(result, bool)
+        return result
+
+    def unwrap(self, msg: str = "unexpected symbolic value") -> bool:
+        """Unwrap the constraint or raise an error."""
+        if (value := self.maybe_unwrap()) is None:
+            raise ValueError(msg)
+        return value

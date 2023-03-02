@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 from collections import OrderedDict
-from contextlib import contextmanager
 from dataclasses import dataclass
 from itertools import count
-from typing import Iterator, List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple, Union
 
 from arrays import FrozenBytes, MutableBytes
 from environment import Block, Contract, Transaction, Universe
@@ -27,20 +26,24 @@ class State:
     universe: Universe
     sha3: SHA3
 
-    pc: int
+    pc: Union[int, Termination]
     stack: List[Uint256]
     memory: MutableBytes
 
-    returndata: FrozenBytes
-    success: Optional[bool]
+    # Tracks the number of times we've spawned a subcontext, so that symbolic
+    # variables can be given a unique name.
+    children: int
 
-    subcontexts: List[State]
+    # The return data of the most recent subcontext, for the RETURNDATASIZE and
+    # RETURNDATACOPY instructions.
+    latest_return: FrozenBytes
 
     logs: List[Log]
 
     # Every time the GAS instruction is invoked we return a symbolic result,
-    # tracked here. These should be monotonically decreasing.
-    gas_variables: List[Uint256]
+    # tracked here. These should be monotonically decreasing. In the case of a
+    # concrete execution, this value is set to None.
+    gas_variables: Optional[List[Uint256]]
 
     # Every time the CALL instruction is invoked we return a symbolic result,
     # tracked here.
@@ -68,8 +71,11 @@ class State:
         # the BLOCKHASH instruction from overflowing.
         solver.assert_and_track(self.block.number >= Uint256(256))
 
-        for i in range(1, len(self.gas_variables)):
-            solver.assert_and_track(self.gas_variables[i - 1] >= self.gas_variables[i])
+        if self.gas_variables is not None:
+            for i in range(1, len(self.gas_variables)):
+                solver.assert_and_track(
+                    self.gas_variables[i - 1] >= self.gas_variables[i]
+                )
 
         self.sha3.constrain(solver)
         self.universe.constrain(solver)
@@ -129,57 +135,94 @@ class State:
 
         Only attributes present in the model will be included.
         """
+        assert isinstance(self.pc, Termination)
         r: OrderedDict[str, str] = OrderedDict()
         a = solver.evaluate(self.contract.address)
         if a is not None and a.unwrap() > 0:
             r["Address"] = "0x" + a.unwrap(bytes).hex()
-        returndata = self.returndata.evaluate(solver, True)
+        returndata = self.pc.returndata.evaluate(solver, True)
         if returndata:
             r["Return"] = "0x" + returndata
         return r
 
-    @contextmanager
-    def descend(self, contract: Contract, transaction: Transaction) -> Iterator[State]:
-        """Descend into a subcontext."""
-        substate = State(
-            suffix=f"{len(self.subcontexts)}.{self.suffix}",
-            block=self.block,
-            contract=contract,
-            transaction=transaction,
-            universe=self.universe,
-            sha3=self.sha3,
-            pc=0,
-            stack=[],
-            memory=MutableBytes.concrete(b""),
-            success=None,
-            returndata=FrozenBytes.concrete(b""),
-            subcontexts=[],
-            logs=self.logs,
-            gas_variables=self.gas_variables,
-            call_variables=self.call_variables,
-            path_constraints=self.path_constraints,
-            path=self.path,
-        )
-        substate.universe.transfer(
-            transaction.caller, contract.address, transaction.callvalue
-        )
-        self.subcontexts.append(substate)
 
-        yield substate
+@dataclass(frozen=True)
+class Termination:
+    """The result of running a contract to completion."""
 
-        # TODO: support reentrancy (apply storage changes to contract)
-
-        self.logs = substate.logs
-        self.returndata = substate.returndata
-        self.gas_variables = substate.gas_variables
-        self.call_variables = substate.call_variables
-        self.path_constraints = substate.path_constraints
-        self.path = substate.path
+    success: bool
+    returndata: FrozenBytes
 
 
-@dataclass
+@dataclass(frozen=True)
 class Log:
     """A log entry emitted by the LOG* instruction."""
 
     data: FrozenBytes
     topics: List[Uint256]
+
+
+class ControlFlow:
+    """A superclass for control-flow actions."""
+
+    pass
+
+
+@dataclass(frozen=True)
+class Jump(ControlFlow):
+    """A JUMP or JUMPI instruction."""
+
+    targets: List[Tuple[Constraint, State]]
+
+
+@dataclass(frozen=True)
+class Descend(ControlFlow):
+    """A CALL, DELEGATECALL, etc. instruction."""
+
+    state: State
+    callback: Callable[[State, State], State]
+
+    @classmethod
+    def new(
+        cls,
+        state: State,
+        contract: Contract,
+        transaction: Transaction,
+        callback: Callable[[State, State], State],
+    ) -> Descend:
+        """Descend into a subcontext."""
+        substate = State(
+            suffix=f"{state.children}.{state.suffix}",
+            block=state.block,
+            contract=contract,
+            transaction=transaction,
+            universe=state.universe,
+            sha3=state.sha3,
+            pc=0,
+            stack=[],
+            memory=MutableBytes.concrete(b""),
+            children=0,
+            latest_return=FrozenBytes.concrete(b""),
+            logs=state.logs,
+            gas_variables=state.gas_variables,
+            call_variables=state.call_variables,
+            path_constraints=state.path_constraints,
+            path=state.path,
+        )
+        substate.universe.transfer(
+            transaction.caller, contract.address, transaction.callvalue
+        )
+        state.children += 1
+
+        def metacallback(state: State, substate: State) -> State:
+            # TODO: support reentrancy (apply storage changes to contract,
+            # including on self-calls)
+            state.logs = substate.logs
+            state.latest_return = substate.latest_return
+            state.gas_variables = substate.gas_variables
+            state.call_variables = substate.call_variables
+            state.path_constraints = substate.path_constraints
+            state.path = substate.path
+            return callback(state, substate)
+
+        return Descend(substate, metacallback)

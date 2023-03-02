@@ -229,14 +229,14 @@ class Bytes(abc.ABC):
             return None
         return bytes(data)
 
-    def unwrap(self) -> bytes:
+    def unwrap(self, msg: str = "unexpected symbolic value") -> bytes:
         """
         Unwrap this instance to bytes.
 
         Requires a concrete length and all-concrete values.
         """
         if (data := self.maybe_unwrap()) is None:
-            raise ValueError("unexpected symbolic length or data")
+            raise ValueError(msg)
         return data
 
     def evaluate(self, solver: Solver, model_completion: bool = False) -> str:

@@ -12,17 +12,9 @@ from sha3 import SHA3
 from smt import Constraint, Uint160, Uint256
 from solidity import abiencode
 from solver import Solver
-from state import State
+from state import State, Termination
 from universal import _universal_transaction, printable_transition, symbolic_start
-from vm import (
-    concrete_CREATE,
-    concrete_GAS,
-    concrete_JUMPI,
-    concrete_start,
-    concrete_STATICCALL,
-    hybrid_CALL,
-    step,
-)
+from vm import concrete_start, step
 
 LEVEL_FACTORIES = [
     Uint160(0x2A2497AE349BCA901FEA458370BD7DDA594D1D69),
@@ -41,7 +33,8 @@ def create(factory: Contract) -> Tuple[Uint160, Universe]:
             start.universe.add_contract(copy.deepcopy(contract))
 
         end, accessed = _execute(start)
-        if end.success is True:
+        assert isinstance(end.pc, Termination)
+        if end.pc.success is True:
             break
 
         for addr, keys in accessed.items():
@@ -57,7 +50,7 @@ def create(factory: Contract) -> Tuple[Uint160, Universe]:
                     contract.storage.poke(key, val)
 
     end.universe.add_contract(end.contract)
-    address = Uint160(int.from_bytes(end.returndata.unwrap()))
+    address = Uint160(int.from_bytes(end.pc.returndata.unwrap()))
     return address, end.universe
 
 
@@ -77,8 +70,9 @@ def validate(factory: Uint160, instance: Uint160, universe: Universe) -> Constra
 
     return Constraint.any(
         *(
-            (Uint256(end.returndata._bigvector()) != Uint256(0))
+            (Uint256(end.pc.returndata._bigvector()) != Uint256(0))
             for end in _universal_transaction(start)
+            if isinstance(end.pc, Termination)  # should always be true
         )
     )
 
@@ -88,7 +82,7 @@ def _execute(
 ) -> Tuple[State, Dict[int, List[Uint256]]]:
     accessed: Dict[int, List[Uint256]] = defaultdict(list)
 
-    while True:
+    while isinstance(state.pc, int):
         instr = state.contract.program.instructions[state.pc]
         if indent is not None:
             print("." * indent, instr)
@@ -100,47 +94,37 @@ def _execute(
                 return state, accessed
 
         action = step(state)
-        if action == "CONTINUE":
-            pass
-        elif action == "JUMPI":
-            concrete_JUMPI(state)
-        elif action == "GAS":
-            concrete_GAS(state)
-        elif action == "CALL":
-            address = state.stack[-2].into(Uint160)
-            if address.unwrap() not in state.universe.contracts:
-                accessed[address.unwrap()]
-                return state, accessed
-            for substate in hybrid_CALL(state):
-                substate, subaccessed = _execute(
-                    substate, indent + 2 if indent is not None else None
-                )
-                for s, v in subaccessed.items():
-                    accessed[s].extend(v)
-        elif action == "DELEGATECALL":
-            # We can skip this opcode because it's only used to call the
-            # statistics library.
-            for _ in range(6):
-                state.stack.pop()
-            state.stack.append(Uint256(1))
-        elif action == "STATICCALL":
-            with concrete_STATICCALL(state) as substate:
-                substate, subaccessed = _execute(
-                    substate, indent + 2 if indent is not None else None
-                )
-                for s, v in subaccessed.items():
-                    accessed[s].extend(v)
-        elif action == "CREATE":
-            with concrete_CREATE(state) as substate:
-                _, subaccessed = _execute(
-                    substate, indent + 2 if indent is not None else None
-                )
-                for s, v in subaccessed.items():
-                    accessed[s].extend(v)
-        elif action == "TERMINATE":
-            break
-        else:
-            raise NotImplementedError(action)
+        raise NotImplementedError("TODO")
+        # if action == "CONTINUE":
+        #     pass
+        # elif action == "CALL":
+        #     address = state.stack[-2].into(Uint160)
+        #     if address.unwrap() not in state.universe.contracts:
+        #         accessed[address.unwrap()]
+        #         return state, accessed
+        #     for substate in hybrid_CALL(state):
+        #         substate, subaccessed = _execute(
+        #             substate, indent + 2 if indent is not None else None
+        #         )
+        #         for s, v in subaccessed.items():
+        #             accessed[s].extend(v)
+        # elif action == "DELEGATECALL":
+        #     # We can skip this opcode because it's only used to call the
+        #     # statistics library.
+        #     for _ in range(6):
+        #         state.stack.pop()
+        #     state.stack.append(Uint256(1))
+        # elif action == "STATICCALL":
+        #     with concrete_STATICCALL(state) as substate:
+        #         substate, subaccessed = _execute(
+        #             substate, indent + 2 if indent is not None else None
+        #         )
+        #         for s, v in subaccessed.items():
+        #             accessed[s].extend(v)
+        # elif action == "TERMINATE":
+        #     break
+        # else:
+        #     raise NotImplementedError(action)
 
         if indent is not None:
             for y in reversed(state.stack):

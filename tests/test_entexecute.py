@@ -3,8 +3,8 @@
 from arrays import FrozenBytes
 from smt import Uint160, Uint256
 from solidity import abiencode, load_binary, load_solidity, loads_solidity
+from state import Termination
 from testlib import execute, make_contract, make_state, make_transaction
-from vm import printable_execution
 
 
 def test_fallback() -> None:
@@ -19,8 +19,9 @@ def test_fallback() -> None:
 
     state = execute(state)
 
-    assert state.success is True
-    assert state.returndata.unwrap() == Uint256(0).unwrap(bytes)
+    assert isinstance(state.pc, Termination)
+    assert state.pc.success is True
+    assert state.pc.returndata.unwrap() == Uint256(0).unwrap(bytes)
 
 
 def test_fallout() -> None:
@@ -35,7 +36,8 @@ def test_fallout() -> None:
 
     state = execute(state)
 
-    assert state.success is True
+    assert isinstance(state.pc, Termination)
+    assert state.pc.success is True
     assert state.contract.storage[Uint256(1)].unwrap(bytes) == Uint256(
         0xCACACACACACACACACACACACACACACACACACACACA
     ).unwrap(bytes)
@@ -59,7 +61,8 @@ def test_coinflip() -> None:
 
     state = execute(state)
 
-    assert state.success is True
+    assert isinstance(state.pc, Termination)
+    assert state.pc.success is True
     assert state.contract.storage[Uint256(1)].unwrap(bytes) == Uint256(0).unwrap(bytes)
 
 
@@ -79,8 +82,9 @@ def test_telephone() -> None:
 
     state = execute(state)
 
-    assert state.success is True
-    assert state.returndata.unwrap() == b""
+    assert isinstance(state.pc, Termination)
+    assert state.pc.success is True
+    assert state.pc.returndata.unwrap() == b""
 
 
 def test_token() -> None:
@@ -97,13 +101,11 @@ def test_token() -> None:
         ),
     )
 
-    # state = execute(state)
+    state = execute(state)
 
-    for line in printable_execution(state):
-        print(line)
-
-    assert state.success is True
-    assert state.returndata.unwrap() == Uint256(1).unwrap(bytes)
+    assert isinstance(state.pc, Termination)
+    assert state.pc.success is True
+    assert state.pc.returndata.unwrap() == Uint256(1).unwrap(bytes)
 
 
 def test_delegation() -> None:
@@ -122,8 +124,9 @@ def test_delegation() -> None:
 
     state = execute(state)
 
-    assert state.success is True
-    assert state.returndata.unwrap() == b""
+    assert isinstance(state.pc, Termination)
+    assert state.pc.success is True
+    assert state.pc.returndata.unwrap() == b""
 
 
 def test_force() -> None:
@@ -138,8 +141,9 @@ def test_force() -> None:
 
     state = execute(state)
 
-    assert state.success is False
-    assert state.returndata.unwrap() == b""
+    assert isinstance(state.pc, Termination)
+    assert state.pc.success is False
+    assert state.pc.returndata.unwrap() == b""
 
 
 def test_vault() -> None:
@@ -156,8 +160,9 @@ def test_vault() -> None:
 
     state = execute(state)
 
-    assert state.success is True
-    assert state.returndata.unwrap() == b""
+    assert isinstance(state.pc, Termination)
+    assert state.pc.success is True
+    assert state.pc.returndata.unwrap() == b""
 
 
 def test_king() -> None:
@@ -172,8 +177,9 @@ def test_king() -> None:
 
     state = execute(state)
 
-    assert state.success is True
-    assert state.returndata.unwrap() == b""
+    assert isinstance(state.pc, Termination)
+    assert state.pc.success is True
+    assert state.pc.returndata.unwrap() == b""
 
 
 def test_reentrancy() -> None:
@@ -190,8 +196,9 @@ def test_reentrancy() -> None:
 
     state = execute(state)
 
-    assert state.success is True
-    assert state.returndata.unwrap() == b""
+    assert isinstance(state.pc, Termination)
+    assert state.pc.success is True
+    assert state.pc.returndata.unwrap() == b""
 
 
 def test_elevator() -> None:
@@ -213,8 +220,9 @@ def test_elevator() -> None:
 
     state = execute(state)
 
-    assert state.success is True
-    assert state.returndata.unwrap() == b""
+    assert isinstance(state.pc, Termination)
+    assert state.pc.success is True
+    assert state.pc.returndata.unwrap() == b""
 
 
 def test_privacy() -> None:
@@ -232,8 +240,9 @@ def test_privacy() -> None:
 
     state = execute(state)
 
-    assert state.success is True
-    assert state.returndata.unwrap() == b""
+    assert isinstance(state.pc, Termination)
+    assert state.pc.success is True
+    assert state.pc.returndata.unwrap() == b""
 
 
 def test_gatekeeper_one() -> None:
@@ -259,8 +268,9 @@ def test_gatekeeper_two() -> None:
 
     state = execute(state)
 
-    assert state.success is True
-    assert state.returndata.unwrap() == Uint256(1).unwrap(bytes)
+    assert isinstance(state.pc, Termination)
+    assert state.pc.success is True
+    assert state.pc.returndata.unwrap() == Uint256(1).unwrap(bytes)
 
 
 def test_preservation() -> None:
@@ -286,5 +296,6 @@ def test_preservation() -> None:
 
     state = execute(state)
 
-    assert state.success is True
-    assert state.returndata.unwrap() == b""
+    assert isinstance(state.pc, Termination)
+    assert state.pc.success is True
+    assert state.pc.returndata.unwrap() == b""

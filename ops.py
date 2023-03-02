@@ -1,15 +1,18 @@
 """A library of EVM instruction implementations."""
 
-from arrays import FrozenBytes
-from disassembler import Instruction
+import copy
+from typing import Optional
+
+from arrays import Array, FrozenBytes
+from disassembler import Instruction, disassemble
+from environment import Contract, Transaction
 from smt import Constraint, Uint8, Uint160, Uint256, Uint257, Uint512
-from state import Log, State
+from state import ControlFlow, Descend, Jump, Log, State, Termination
 
 
 def STOP(s: State) -> None:
     """00 - Halts execution."""
-    s.returndata = FrozenBytes.concrete(b"")
-    s.success = True
+    s.pc = Termination(True, FrozenBytes.concrete(b""))
 
 
 def ADD(a: Uint256, b: Uint256) -> Uint256:
@@ -254,14 +257,14 @@ def RETURNDATASIZE(s: State) -> Uint256:
 
     Get size of output data from the previous call from the current environment.
     """
-    return s.returndata.length
+    return s.latest_return.length
 
 
 def RETURNDATACOPY(
     s: State, destOffset: Uint256, offset: Uint256, size: Uint256
 ) -> None:
     """3E - Copy output data from the previous call to memory."""
-    s.memory.graft(s.returndata.slice(offset, size), destOffset)
+    s.memory.graft(s.latest_return.slice(offset, size), destOffset)
 
 
 def EXTCODEHASH(s: State, _address: Uint256) -> Uint256:
@@ -359,27 +362,40 @@ def SSTORE(s: State, key: Uint256, value: Uint256) -> None:
     s.contract.storage[key] = value
 
 
-def JUMP(s: State, _counter: Uint256) -> None:
+def JUMP(s: State, _counter: Uint256) -> ControlFlow:
     """56 - Alter the program counter."""
     counter = _counter.unwrap(int, "JUMP requires concrete counter")
+
     # In theory, JUMP should revert if counter is not a valid jump target.
     # Instead, raise an error and fail the whole analysis. This lets us prove
     # that all jump targets are valid and within the body of the code, which is
     # why it's safe to strip the metadata trailer.
-    #
-    # Also, set PC to one instruction prior to the JUMPDEST, since the main loop
-    # will later increment it.
-    s.pc = s.contract.program.jumps[counter] - 1
+    next = copy.deepcopy(s)
+    next.pc = s.contract.program.jumps[counter]
+
+    return Jump(targets=[(Constraint(True), next)])
 
 
-def JUMPI(s: State, counter: Uint256, b: Uint256) -> None:
-    """
-    57 - Conditionally alter the program counter.
+def JUMPI(s: State, _counter: Uint256, _b: Uint256) -> ControlFlow:
+    """57 - Conditionally alter the program counter."""
+    program = s.contract.program
+    counter = _counter.unwrap(int, "JUMPI requires concrete counter")
+    targets = []
 
-    This opcode should be implemented by the VM, since we may need to fork
-    execution.
-    """
-    raise NotImplementedError("JUMPI")
+    next = copy.deepcopy(s)
+    assert isinstance(next.pc, int)
+    next.pc += 1
+    next.path = (next.path << 1) | 0
+    next.path_constraints.append(_b == Uint256(0))
+    targets.append((_b == Uint256(0), next))
+
+    next = copy.deepcopy(s)
+    next.pc = program.jumps[counter]
+    next.path = (next.path << 1) | 1
+    next.path_constraints.append(_b != Uint256(0))
+    targets.append((_b != Uint256(0), next))
+
+    return Jump(targets=targets)
 
 
 def PC(ins: Instruction) -> Uint256:
@@ -404,11 +420,15 @@ def GAS(s: State) -> Uint256:
     Get the amount of available gas, including the corresponding reduction for
     the cost of this instruction.
 
-    This opcode should be implemented by the VM. Since we don't actually track
-    gas usage, the VM will need to return either a symbolic value or a concrete
-    dummy value.
+    Since we don't actually track gas usage, return either a symbolic value or a
+    concrete dummy value based on the execution mode.
     """
-    raise NotImplementedError("GAS")
+    if s.gas_variables is None:
+        return Uint256(0x00A500A500A500A500A5)
+    else:
+        gas = Uint256(f"GAS{len(s.gas_variables)}{s.suffix}")
+        s.gas_variables.append(gas)
+        return gas
 
 
 def JUMPDEST() -> None:
@@ -446,73 +466,176 @@ def LOG(ins: Instruction, s: State, offset: Uint256, size: Uint256) -> None:
     s.logs.append(Log(s.memory.slice(offset, size), topics))
 
 
-def CREATE(value: Uint256, offset: Uint256, size: Uint256) -> Uint256:
-    """
-    F0 - Create a new account with associated code.
+def CREATE(s: State, value: Uint256, offset: Uint256, size: Uint256) -> ControlFlow:
+    """F0 - Create a new account with associated code."""
+    # TODO: this isn't quite right
+    init = s.memory.slice(offset, size).unwrap("CREATE requires concrete program data")
+    address = Uint160(0x70D070D070D070D070D070D070D070D070D070D0)
+    program = disassemble(init)
+    contract = Contract(address, program, Array.concrete(Uint256, Uint256(0)))
+    transaction = Transaction(
+        origin=s.transaction.origin,
+        caller=s.transaction.caller,
+        calldata=FrozenBytes.concrete(b""),
+        callvalue=value,
+        gasprice=s.transaction.gasprice,
+    )
 
-    This opcode should be implemented by the VM.
-    """
-    raise NotImplementedError("CREATE")
+    def callback(state: State, substate: State) -> State:
+        assert isinstance(substate.pc, Termination)
+        if substate.pc.success is False:
+            state.stack.append(Uint256(0))
+        else:
+            code = substate.pc.returndata.unwrap()
+            program = disassemble(code)
+
+            contract = Contract(address, program, substate.contract.storage)
+            state.universe.add_contract(contract)
+
+            state.stack.append(address.into(Uint256))
+        return state
+
+    return Descend.new(s, contract, transaction, callback)
 
 
 def CALL(
     s: State,
     gas: Uint256,
-    address: Uint256,
+    _address: Uint256,
     value: Uint256,
     argsOffset: Uint256,
     argsSize: Uint256,
     retOffset: Uint256,
     retSize: Uint256,
-) -> Uint256:
-    """
-    F1 - Message-call into an account.
+) -> Optional[ControlFlow]:
+    """F1 - Message-call into an account."""
+    codesize = s.universe.codesizes[_address.into(Uint160)]
+    if codesize.maybe_unwrap() == 0:
+        # Simple transfer to an EOA: always succeeds.
+        s.universe.transfer(s.contract.address, _address.into(Uint160), value)
+        s.latest_return = FrozenBytes.concrete(b"")
+        s.memory.graft(s.latest_return.slice(Uint256(0), retSize), retOffset)
+        s.stack.append(Uint256(1))
+        return None
+    elif (address := _address.maybe_unwrap()) is not None:
+        # Call to a concrete address: simulate the full execution.
+        transaction = Transaction(
+            origin=s.transaction.origin,
+            caller=s.contract.address,
+            callvalue=value,
+            calldata=s.memory.slice(argsOffset, argsSize),
+            gasprice=s.transaction.gasprice,
+        )
 
-    This opcode should be implemented by the VM.
-    """
-    raise NotImplementedError("CALL")
+        contract = s.universe.contracts.get(address, None)
+        if not contract:
+            raise ValueError(f"CALL to unknown contract: {hex(address)}")
+
+        def callback(state: State, substate: State) -> State:
+            assert isinstance(substate.pc, Termination)
+            state.memory.graft(
+                substate.pc.returndata.slice(Uint256(0), retSize), retOffset
+            )
+            state.stack.append(Uint256(1) if substate.pc.success else Uint256(0))
+            return state
+
+        return Descend.new(s, contract, transaction, callback)
+    else:
+        # Call to a symbolic address: return a fully-symbolic response.
+        s.latest_return = FrozenBytes.conditional(
+            f"RETURNDATA{len(s.call_variables)}{s.suffix}",
+            s.universe.codesizes[_address.into(Uint160)] == Uint256(0),
+        )
+        s.memory.graft(s.latest_return.slice(Uint256(0), retSize), retOffset)
+        success = Constraint.any(
+            # Calls (transfers) to an EOA always succeed.
+            (s.universe.codesizes[_address.into(Uint160)] == Uint256(0)),
+            # Create a variable for if the call succeeded.
+            Constraint(f"RETURNOK{len(s.call_variables)}{s.suffix}"),
+        )
+        s.universe.transfer(s.contract.address, _address.into(Uint160), value)
+        s.call_variables.append((s.latest_return, success))
+        s.stack.append((success).ite(Uint256(1), Uint256(0)))
+        return None
 
 
 def CALLCODE(
+    s: State,
     gas: Uint256,
-    address: Uint256,
+    _address: Uint256,
     value: Uint256,
     argsOffset: Uint256,
     argsSize: Uint256,
     retOffset: Uint256,
     retSize: Uint256,
-) -> Uint256:
-    """
-    F2 - Message-call into this account with alternative account's code.
+) -> ControlFlow:
+    """F2 - Message-call into this account with alternative account's code."""
+    transaction = Transaction(
+        origin=s.transaction.origin,
+        caller=s.contract.address,
+        callvalue=value,
+        calldata=s.memory.slice(argsOffset, argsSize),
+        gasprice=s.transaction.gasprice,
+    )
+    address = _address.unwrap(msg="CALLCODE requires concrete address")
+    destination = s.universe.contracts.get(address, None)
+    if not destination:
+        raise ValueError("CALLCODE to unknown contract: " + hex(address))
+    contract = copy.deepcopy(s.contract)
+    contract.program = destination.program
 
-    This opcode should be implemented by the VM.
-    """
-    raise NotImplementedError("CALLCODE")
+    def callback(state: State, substate: State) -> State:
+        assert isinstance(substate.pc, Termination)
+        state.contract.storage = substate.contract.storage
+        state.memory.graft(substate.pc.returndata.slice(Uint256(0), retSize), retOffset)
+        state.stack.append(Uint256(1) if substate.pc.success else Uint256(0))
+        return state
+
+    return Descend.new(s, contract, transaction, callback)
 
 
 def RETURN(s: State, offset: Uint256, size: Uint256) -> None:
     """F3 - Halts execution returning output data."""
-    s.returndata = s.memory.slice(offset, size)
-    s.success = True
+    s.pc = Termination(True, s.memory.slice(offset, size))
 
 
 def DELEGATECALL(
+    s: State,
     gas: Uint256,
-    address: Uint256,
+    _address: Uint256,
     argsOffset: Uint256,
     argsSize: Uint256,
     retOffset: Uint256,
     retSize: Uint256,
-) -> Uint256:
+) -> ControlFlow:
     """
     F4.
 
     Message-call into this account with an alternative account's code, but
     persisting the current values for sender and value.
-
-    This opcode should be implemented by the VM.
     """
-    raise NotImplementedError("DELEGATECALL")
+    transaction = Transaction(
+        origin=s.transaction.origin,
+        caller=s.transaction.caller,
+        callvalue=s.transaction.callvalue,
+        calldata=s.memory.slice(argsOffset, argsSize),
+        gasprice=s.transaction.gasprice,
+    )
+    address = _address.unwrap(msg="DELEGATECALL requires concrete address")
+    destination = s.universe.contracts.get(address, None)
+    if not destination:
+        raise ValueError("DELEGATECALL to unknown contract: " + hex(address))
+    contract = copy.copy(s.contract)
+    contract.program = destination.program
+
+    def callback(state: State, substate: State) -> State:
+        assert isinstance(substate.pc, Termination)
+        state.contract.storage = substate.contract.storage
+        state.memory.graft(substate.pc.returndata.slice(Uint256(0), retSize), retOffset)
+        state.stack.append(Uint256(1) if substate.pc.success else Uint256(0))
+        return state
+
+    return Descend.new(s, contract, transaction, callback)
 
 
 def CREATE2(value: Uint256, offset: Uint256, size: Uint256, salt: Uint256) -> Uint256:
@@ -521,19 +644,17 @@ def CREATE2(value: Uint256, offset: Uint256, size: Uint256, salt: Uint256) -> Ui
 
 
 def STATICCALL(
+    s: State,
     gas: Uint256,
     address: Uint256,
     argsOffset: Uint256,
     argsSize: Uint256,
     retOffset: Uint256,
     retSize: Uint256,
-) -> Uint256:
-    """
-    FA - Static message-call into an account.
-
-    This opcode should be implemented by the VM.
-    """
-    raise NotImplementedError("STATICCALL")
+) -> Optional[ControlFlow]:
+    """FA - Static message-call into an account."""
+    # TODO: enforce static constraint
+    return CALL(s, gas, address, Uint256(0), argsOffset, argsSize, retOffset, retSize)
 
 
 def REVERT(s: State, offset: Uint256, size: Uint256) -> None:
@@ -542,14 +663,12 @@ def REVERT(s: State, offset: Uint256, size: Uint256) -> None:
 
     Halt execution reverting state changes but returning data and remaining gas.
     """
-    s.returndata = s.memory.slice(offset, size)
-    s.success = False
+    s.pc = Termination(False, s.memory.slice(offset, size))
 
 
 def INVALID(s: State) -> None:
     """FE - Designated invalid instruction."""
-    s.returndata = FrozenBytes.concrete(b"")
-    s.success = False
+    s.pc = Termination(False, FrozenBytes.concrete(b""))
 
 
 def SELFDESTRUCT() -> None:

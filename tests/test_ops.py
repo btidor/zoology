@@ -7,14 +7,16 @@ from disassembler import Instruction, disassemble
 from ops import *
 from smt import Uint160, Uint256
 from solver import Solver
+from state import Termination
 from testlib import concretize, make_block, make_contract, make_state, make_transaction
 
 
 def test_STOP() -> None:
-    s = make_state(returndata=FrozenBytes.concrete(b"\x12\x34"))
+    s = make_state(latest_return=FrozenBytes.concrete(b"\x12\x34"))
     STOP(s)
-    assert s.success is True
-    assert s.returndata.unwrap() == b""
+    assert isinstance(s.pc, Termination)
+    assert s.pc.success is True
+    assert s.pc.returndata.unwrap() == b""
 
 
 def test_ADD() -> None:
@@ -437,13 +439,13 @@ def test_EXTCODECOPY() -> None:
 
 
 def test_RETURNDATASIZE() -> None:
-    s = make_state(returndata=FrozenBytes.concrete(b"abcdefghijklmnopqrstuvwxyz"))
+    s = make_state(latest_return=FrozenBytes.concrete(b"abcdefghijklmnopqrstuvwxyz"))
     assert concretize(RETURNDATASIZE(s)) == 26
 
 
 def test_RETURNDATACOPY() -> None:
     s = make_state(
-        returndata=FrozenBytes.concrete(
+        latest_return=FrozenBytes.concrete(
             b"\x7d\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\x7f"
         )
     )
@@ -645,29 +647,32 @@ def test_SWAP() -> None:
 
 def test_RETURN() -> None:
     s = make_state(
-        returndata=FrozenBytes.concrete(b"\x12\x34"),
+        latest_return=FrozenBytes.concrete(b"\x12\x34"),
         memory=MutableBytes.concrete(b"\xff\x01"),
     )
     RETURN(s, Uint256(0), Uint256(2))
-    assert s.success is True
-    assert s.returndata.unwrap() == b"\xff\x01"
+    assert isinstance(s.pc, Termination)
+    assert s.pc.success is True
+    assert s.pc.returndata.unwrap() == b"\xff\x01"
 
 
 def test_REVERT() -> None:
     s = make_state(
-        returndata=FrozenBytes.concrete(b"\x12\x34"),
+        latest_return=FrozenBytes.concrete(b"\x12\x34"),
         memory=MutableBytes.concrete(b"\xff\x01"),
     )
     REVERT(s, Uint256(0), Uint256(2))
-    assert s.success is False
-    assert s.returndata.unwrap() == b"\xff\x01"
+    assert isinstance(s.pc, Termination)
+    assert s.pc.success is False
+    assert s.pc.returndata.unwrap() == b"\xff\x01"
 
 
 def test_INVALID() -> None:
-    s = make_state(returndata=FrozenBytes.concrete(b"\x12\x34"))
+    s = make_state(latest_return=FrozenBytes.concrete(b"\x12\x34"))
     INVALID(s)
-    assert s.success is False
-    assert s.returndata.unwrap() == b""
+    assert isinstance(s.pc, Termination)
+    assert s.pc.success is False
+    assert s.pc.returndata.unwrap() == b""
 
 
 def test_SELFDESTRUCT() -> None:
