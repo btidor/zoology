@@ -2,33 +2,47 @@
 """A solver for the Ethernaut CTF."""
 
 import copy
+import json
 from collections import defaultdict
 from time import sleep
 from typing import Dict, List, Optional, Tuple
 
-from environment import Contract, Universe
+from arrays import FrozenBytes
+from environment import Contract, Transaction, Universe
 from rpc import get_code, get_storage_at
 from sha3 import SHA3
 from smt import Constraint, Uint160, Uint256
 from solidity import abiencode
 from solver import Solver
-from state import State, Termination
-from universal import _universal_transaction, printable_transition, symbolic_start
+from state import Descend, Jump, State, Termination
+from universal import _universal_transaction, symbolic_start
 from vm import concrete_start, step
 
-LEVEL_FACTORIES = [
-    Uint160(0x2A2497AE349BCA901FEA458370BD7DDA594D1D69),
-]
+with open("ethernaut.json") as f:
+    data = json.load(f)
+    LEVEL_FACTORIES = [
+        Uint160(int.from_bytes(bytes.fromhex(data[str(i)][2:]))) for i in range(29)
+    ]
+
+
+SETUP = Uint160(0x5757575757575757575757575757575757575757)
+PLAYER = Uint160(0xCACACACACACACACACACACACACACACACACACACACA)
 
 
 def create(factory: Contract) -> Tuple[Uint160, Universe]:
     """Call createInstance to set up the level."""
-    caller = Uint160(0xCACACACACACACACACACACACACACACACACACACACA)
-    calldata = abiencode("createInstance(address)") + caller.into(Uint256).unwrap(bytes)
+    calldata = abiencode("createInstance(address)") + PLAYER.into(Uint256).unwrap(bytes)
     contracts: Dict[int, Contract] = {}
 
     while True:
         start = concrete_start(copy.deepcopy(factory), Uint256(0), calldata)
+        start.transaction = Transaction(
+            origin=SETUP,
+            caller=SETUP,
+            callvalue=Uint256(0),
+            calldata=FrozenBytes.concrete(calldata),
+            gasprice=Uint256(0x12),
+        )
         for contract in contracts.values():
             start.universe.add_contract(copy.deepcopy(contract))
 
@@ -56,16 +70,21 @@ def create(factory: Contract) -> Tuple[Uint160, Universe]:
 
 def validate(factory: Uint160, instance: Uint160, universe: Universe) -> Constraint:
     """Call validateInstance to check the solution."""
-    caller = Uint160(0xCACACACACACACACACACACACACACACACACACACACA)
     calldata = (
         abiencode("validateInstance(address,address)")
         + instance.into(Uint256).unwrap(bytes)
-        + caller.into(Uint256).unwrap(bytes)
+        + PLAYER.into(Uint256).unwrap(bytes)
     )
 
-    universe = copy.deepcopy(universe)
     contract = universe.contracts[factory.unwrap()]
     start = concrete_start(contract, Uint256(0), calldata)
+    start.transaction = Transaction(
+        origin=SETUP,
+        caller=SETUP,
+        callvalue=Uint256(0),
+        calldata=FrozenBytes.concrete(calldata),
+        gasprice=Uint256(0x12),
+    )
     start.universe = universe
 
     return Constraint.any(
@@ -87,44 +106,24 @@ def _execute(
         if indent is not None:
             print("." * indent, instr)
 
-        if instr.name == "EXTCODESIZE":
-            address = state.stack[-1].into(Uint160)
-            if address.unwrap() not in state.universe.contracts:
-                accessed[address.unwrap()]
-                return state, accessed
-
-        action = step(state)
-        raise NotImplementedError("TODO")
-        # if action == "CONTINUE":
-        #     pass
-        # elif action == "CALL":
-        #     address = state.stack[-2].into(Uint160)
-        #     if address.unwrap() not in state.universe.contracts:
-        #         accessed[address.unwrap()]
-        #         return state, accessed
-        #     for substate in hybrid_CALL(state):
-        #         substate, subaccessed = _execute(
-        #             substate, indent + 2 if indent is not None else None
-        #         )
-        #         for s, v in subaccessed.items():
-        #             accessed[s].extend(v)
-        # elif action == "DELEGATECALL":
-        #     # We can skip this opcode because it's only used to call the
-        #     # statistics library.
-        #     for _ in range(6):
-        #         state.stack.pop()
-        #     state.stack.append(Uint256(1))
-        # elif action == "STATICCALL":
-        #     with concrete_STATICCALL(state) as substate:
-        #         substate, subaccessed = _execute(
-        #             substate, indent + 2 if indent is not None else None
-        #         )
-        #         for s, v in subaccessed.items():
-        #             accessed[s].extend(v)
-        # elif action == "TERMINATE":
-        #     break
-        # else:
-        #     raise NotImplementedError(action)
+        match step(state):
+            case None:
+                continue
+            case Jump(targets):
+                matched = [
+                    s for (c, s) in targets if c.unwrap("JUMPI requires concrete b")
+                ]
+                assert len(matched) == 1, "no matching jump target"
+                state = matched[0]
+            case Descend(substate, callback):
+                substate, subaccessed = _execute(
+                    substate, indent + 2 if indent is not None else None
+                )
+                for s, v in subaccessed.items():
+                    accessed[s].extend(v)
+                state = callback(state, substate)
+            case unknown:
+                raise ValueError(f"unknown action: {unknown}")
 
         if indent is not None:
             for y in reversed(state.stack):
@@ -137,24 +136,36 @@ def _execute(
 
 
 if __name__ == "__main__":
-    for address in LEVEL_FACTORIES:
-        factory = get_code(address)
-        address, universe = create(factory)
+    for i, address in enumerate(LEVEL_FACTORIES):
+        print(f"{i:04}", end="\t")
+        try:
+            factory = get_code(address)
+            address, universe = create(factory)
 
-        instance = universe.contracts[address.unwrap()]
-        start = symbolic_start(instance, SHA3(), "")
-        start.universe = universe
-        start.universe.transfer(
-            start.transaction.caller,
-            start.contract.address,
-            start.transaction.callvalue,
-        )
+            ok = validate(factory.address, address, universe)
 
-        solver = Solver()
-        for end in _universal_transaction(start):
-            end.universe.add_contract(end.contract)
-            ok = validate(factory.address, address, end.universe)
-            if solver.check(ok):
-                for line in printable_transition(start, end):
-                    print(line)
-                break
+            instance = universe.contracts[address.unwrap()]
+            start = symbolic_start(instance, SHA3(), "")
+            start.universe = universe
+            start.universe.transfer(
+                start.transaction.caller,
+                start.contract.address,
+                start.transaction.callvalue,
+            )
+
+            solution = None
+            for end in _universal_transaction(start):
+                solver = Solver()
+                end.constrain(solver)
+                assert solver.check()
+
+                ok = validate(factory.address, address, end.universe)
+                solver.assert_and_track(ok)
+                if solver.check():
+                    solution = end.transaction.calldata.evaluate(solver, True)
+            print(solution if solution is not None else "no solution")
+        except Exception as e:
+            suffix = ""
+            if str(e) != "":
+                suffix = f": {e}"
+            print(f"{e.__class__.__name__}{suffix}")
