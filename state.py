@@ -96,14 +96,14 @@ class State:
             solver.assert_and_track(constraint)
 
         # Minimize calldata length
-        for i in count():
+        for i in range(257):
             constraint = self.transaction.calldata.length == Uint256(i)
             if solver.check(constraint):
                 solver.assert_and_track(constraint)
                 break
 
         # Minimize callvalue
-        for i in count():
+        for i in range(1025):
             constraint = self.transaction.callvalue == Uint256(i)
             if solver.check(constraint):
                 solver.assert_and_track(constraint)
@@ -217,8 +217,9 @@ class Descend(ControlFlow):
         def metacallback(state: State, substate: State) -> State:
             # TODO: support reentrancy (apply storage changes to contract,
             # including on self-calls)
+            assert isinstance(substate.pc, Termination)
             state.logs = substate.logs
-            state.latest_return = substate.latest_return
+            state.latest_return = substate.pc.returndata
             state.gas_variables = substate.gas_variables
             state.call_variables = substate.call_variables
             state.path_constraints = substate.path_constraints

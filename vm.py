@@ -2,7 +2,7 @@
 """An implementation of the Ethereum virtual machine."""
 
 import inspect
-from typing import Generator, Iterator, List, Optional, Union, assert_never
+from typing import Generator, List, Optional, Union, assert_never
 
 import ops
 from arrays import Array, FrozenBytes, MutableBytes
@@ -62,6 +62,7 @@ def step(state: State) -> Optional[ControlFlow]:
             raise Exception("evm stack overflow")
         return None
     elif isinstance(result, ControlFlow):
+        # TODO: reduce number of state copies for performance
         return result
     else:
         assert_never(result)

@@ -378,7 +378,6 @@ def JUMP(s: State, _counter: Uint256) -> ControlFlow:
 
 def JUMPI(s: State, _counter: Uint256, _b: Uint256) -> ControlFlow:
     """57 - Conditionally alter the program counter."""
-    program = s.contract.program
     counter = _counter.unwrap(int, "JUMPI requires concrete counter")
     targets = []
 
@@ -390,7 +389,7 @@ def JUMPI(s: State, _counter: Uint256, _b: Uint256) -> ControlFlow:
     targets.append((_b == Uint256(0), next))
 
     next = copy.deepcopy(s)
-    next.pc = program.jumps[counter]
+    next.pc = s.contract.program.jumps[counter]
     next.path = (next.path << 1) | 1
     next.path_constraints.append(_b != Uint256(0))
     targets.append((_b != Uint256(0), next))

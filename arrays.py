@@ -244,6 +244,9 @@ class Bytes(abc.ABC):
         length = solver.evaluate(self.length, True).unwrap()
         result = ""
         for i in range(length):
+            if i > 256:
+                result += "..."
+                break
             b = solver.evaluate(self[Uint256(i)], model_completion)
             result += b.unwrap(bytes).hex() if b is not None else "??"
         return result

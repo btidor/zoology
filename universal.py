@@ -40,7 +40,7 @@ def universal_transaction(
         yield start, end
 
 
-def _universal_transaction(state: State) -> Iterator[State]:
+def _universal_transaction(state: State, filter: bool = True) -> Iterator[State]:
     while isinstance(state.pc, int):
         match step(state):
             case None:
@@ -51,19 +51,22 @@ def _universal_transaction(state: State) -> Iterator[State]:
                 for constraint, next in targets:
                     if not solver.check(constraint):
                         continue
-                    yield from _universal_transaction(next)
+                    yield from _universal_transaction(next, filter=filter)
                 return
             case Descend(substate, callback):
-                for subend in _universal_transaction(substate):
+                # We need to collect *all* terminal states, since if the
+                # subcontract reverts the parent contract will continue to
+                # execute.
+                for subend in _universal_transaction(substate, filter=False):
                     next = copy.deepcopy(state)
                     next = callback(next, subend)
-                    yield from _universal_transaction(next)
+                    yield from _universal_transaction(next, filter=filter)
                 return
             case unknown:
                 raise ValueError(f"unknown action: {unknown}")
 
     assert isinstance(state.pc, Termination)
-    if state.pc.success:
+    if state.pc.success or not filter:
         yield state
 
 
@@ -174,18 +177,13 @@ def printable_transition(start: State, end: State) -> Iterable[str]:
 def _printable_transition(
     solver: Solver, start: State, end: State, kind: str
 ) -> Iterable[str]:
-    end.narrow(solver)
-
-    if isinstance(end.pc, int):
-        result = "PENDING"
-    else:
-        if end.pc.success is True:
-            result = "RETURN"
-        else:
-            result = "REVERT"
+    assert isinstance(end.pc, Termination)
+    result = "RETURN" if end.pc.success else "REVERT"
 
     yield f"---  {kind}\t{result}\t{end.px()}\t".ljust(80, "-")
     yield ""
+
+    end.narrow(solver)
 
     values = end.transaction.evaluate(solver)
     for k, v in values.items():
