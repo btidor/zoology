@@ -45,6 +45,9 @@ def _api_request(action: str, **kwargs: str) -> bytes:
             "action": action,
             "apikey": API_KEY,
         },
+        headers={
+            "User-Agent": "zoonaut",
+        },
     )
     res.raise_for_status()
     assert "error" not in res.json(), res.json()["error"]["message"]
