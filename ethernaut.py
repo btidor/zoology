@@ -143,6 +143,7 @@ if __name__ == "__main__":
             address, universe = create(factory)
 
             ok = validate(factory.address, address, universe)
+            assert ok.unwrap() is False
 
             instance = universe.contracts[address.unwrap()]
             start = symbolic_start(instance, SHA3(), "")
@@ -152,8 +153,15 @@ if __name__ == "__main__":
                 start.contract.address,
                 start.transaction.callvalue,
             )
+            start.transaction = Transaction(
+                origin=PLAYER,
+                caller=PLAYER,
+                callvalue=Uint256(f"CALLVALUE"),
+                calldata=FrozenBytes.symbolic(f"CALLDATA"),
+                gasprice=Uint256(f"GASPRICE"),
+            )
 
-            solution = None
+            found = False
             for end in _universal_transaction(start):
                 solver = Solver()
                 end.constrain(solver)
@@ -162,8 +170,20 @@ if __name__ == "__main__":
                 ok = validate(factory.address, address, end.universe)
                 solver.assert_and_track(ok)
                 if solver.check():
-                    solution = end.transaction.calldata.evaluate(solver, True)
-            print(solution if solution is not None else "no solution")
+                    end.narrow(solver)
+                    found = True
+
+                    print(end.transaction.calldata.evaluate(solver, True), end="")
+
+                    amount = solver.evaluate(end.transaction.callvalue, True).unwrap()
+                    if amount > 0:
+                        print(f"  (amount: {amount})", end="")
+
+                    print()
+                    break
+
+            if not found:
+                print("no solution")
         except Exception as e:
             suffix = ""
             if str(e) != "":
