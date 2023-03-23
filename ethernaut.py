@@ -46,7 +46,7 @@ def create(factory: Contract) -> Tuple[Uint160, Universe]:
         for contract in contracts.values():
             start.universe.add_contract(copy.deepcopy(contract))
 
-        end, accessed = _execute(start)
+        end, accessed = execute(start)
         assert isinstance(end.pc, Termination)
         if end.pc.success is True:
             break
@@ -96,9 +96,10 @@ def validate(factory: Uint160, instance: Uint160, universe: Universe) -> Constra
     )
 
 
-def _execute(
+def execute(
     state: State, indent: Optional[int] = None
 ) -> Tuple[State, Dict[int, List[Uint256]]]:
+    """Concretely execute a contract, tracking storage accesses."""
     accessed: Dict[int, List[Uint256]] = defaultdict(list)
 
     while isinstance(state.pc, int):
@@ -116,7 +117,7 @@ def _execute(
                 assert len(matched) == 1, "no matching jump target"
                 state = matched[0]
             case Descend(substate, callback):
-                substate, subaccessed = _execute(
+                substate, subaccessed = execute(
                     substate, indent + 2 if indent is not None else None
                 )
                 for s, v in subaccessed.items():
@@ -135,57 +136,120 @@ def _execute(
     return state, accessed
 
 
-if __name__ == "__main__":
-    for i, address in enumerate(LEVEL_FACTORIES):
-        print(f"{i:04}", end="\t")
-        try:
-            factory = get_code(address)
-            address, universe = create(factory)
-
-            ok = validate(factory.address, address, universe)
-            assert ok.unwrap() is False
+def search(
+    address: Uint160, starting_universe: Universe, prints: bool = False
+) -> Optional[List[State]]:
+    """Symbolically execute the given level until a solution is found."""
+    histories: List[List[State]] = [[]]
+    for i in range(16):
+        suffix = str(i)
+        if prints:
+            print(f"Level {suffix}:")
+        subsequent: List[List[State]] = []
+        for history in histories:
+            if len(history) > 0:
+                universe = history[-1].universe
+            else:
+                universe = starting_universe
+            universe = copy.deepcopy(universe)
 
             instance = universe.contracts[address.unwrap()]
-            start = symbolic_start(instance, SHA3(), "")
+            start = symbolic_start(instance, SHA3(), suffix)
             start.universe = universe
+            # ASSUMPTION: origin and caller are the player's fixed address
+            start.transaction = Transaction(
+                origin=PLAYER,
+                caller=PLAYER,
+                callvalue=Uint256(f"CALLVALUE{suffix}"),
+                calldata=FrozenBytes.symbolic(f"CALLDATA{suffix}"),
+                gasprice=Uint256(f"GASPRICE{suffix}"),
+            )
             start.universe.transfer(
                 start.transaction.caller,
                 start.contract.address,
                 start.transaction.callvalue,
             )
-            start.transaction = Transaction(
-                origin=PLAYER,
-                caller=PLAYER,
-                callvalue=Uint256(f"CALLVALUE"),
-                calldata=FrozenBytes.symbolic(f"CALLDATA"),
-                gasprice=Uint256(f"GASPRICE"),
-            )
+            start.contract.storage.written = []
 
-            found = False
             for end in _universal_transaction(start):
+                states = history + [end]
+
                 solver = Solver()
-                end.constrain(solver)
+                for state in states:
+                    state.constrain(solver)
                 assert solver.check()
 
-                ok = validate(factory.address, address, end.universe)
-                solver.assert_and_track(ok)
-                if solver.check():
-                    end.narrow(solver)
-                    found = True
+                sp = "-"
+                for state in states:
+                    state.narrow(solver)
+                    if prints:
+                        data = state.transaction.calldata.evaluate(solver, True)
+                        if len(data) == 0:
+                            data = "(empty)"
+                        value = solver.evaluate(state.transaction.callvalue, True)
+                        print(f"{sp} {data}\t(value: {value.unwrap()})")
+                    sp = " "
 
-                    print(end.transaction.calldata.evaluate(solver, True), end="")
+                solver = Solver()
+                for state in states:
+                    state.constrain(solver)
+                assert solver.check()
 
-                    amount = solver.evaluate(end.transaction.callvalue, True).unwrap()
-                    if amount > 0:
-                        print(f"  (amount: {amount})", end="")
+                ok = validate(factory.address, address, states[-1].universe)
+                if solver.check(ok):
+                    if prints:
+                        print("  [found solution!]")
+                    return states
 
-                    print()
-                    break
+                if len(end.contract.storage.written) == 0:
+                    # TODO: check if *any* contract's storage was written; also
+                    # note that this ignores transactions that only change
+                    # contract balances, which can also be material
+                    if prints:
+                        print("  [read-only]")
+                    continue
 
-            if not found:
-                print("no solution")
+                if prints:
+                    print("  [candidate]")
+                subsequent.append(states)
+
+        histories = subsequent
+        assert len(histories) < 256
+
+    return None
+
+
+if __name__ == "__main__":
+    for i, address in enumerate(LEVEL_FACTORIES):
+        print(f"{i:04}", end="")
+        try:
+            factory = get_code(address)
+            address, universe = create(factory)
+
+            universe.balances[PLAYER] = Uint256(10**9)
+
+            ok = validate(factory.address, address, universe)
+            assert ok.unwrap() is False
+
+            solution = search(address, universe)
+            if solution is None:
+                print("\tno solution")
+                continue
+
+            for state in solution:
+                solver = Solver()
+                state.constrain(solver)
+                assert solver.check()
+
+                state.narrow(solver)
+                data = state.transaction.calldata.evaluate(solver, True)
+                if len(data) == 0:
+                    data = "(empty)"
+                value = solver.evaluate(state.transaction.callvalue, True)
+                print(f"\t{data}\t(value: {value.unwrap()})")
+
         except Exception as e:
             suffix = ""
             if str(e) != "":
                 suffix = f": {e}"
-            print(f"{e.__class__.__name__}{suffix}")
+            print(f"\t{e.__class__.__name__}{suffix}")

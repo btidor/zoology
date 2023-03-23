@@ -1,0 +1,19 @@
+0000    ValueError: SHA3 requires concrete size
+0001    d7bb99ba        (value: 0)
+        (empty) (value: 1)
+        3ccfd60b        (value: 0)
+0002    6fab5ddf        (value: 0)
+0003    no solution
+0004    no solution
+0005    a9059cbb00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000   (value: 0)
+0006    ValueError: DELEGATECALL to unknown contract: 0x0
+0007    no solution
+0008    ec9b5b3a412076657279207374726f6e67207365637265742070617373776f7264203a29        (value: 0)
+0009    AssertionError
+0010    AssertionError
+0011    no solution
+0012    e1afb08c8d3e0f3be93413600f15f3408ac39e7000000000000000000000000000000000        (value: 0)
+0013    no solution
+0014    no solution
+0015    AssertionError
+0016    ValueError: DELEGATECALL to unknown contract: 0x0
