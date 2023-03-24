@@ -8,7 +8,7 @@ from time import sleep
 from typing import Dict, List, Optional, Tuple
 
 from arrays import FrozenBytes
-from environment import Contract, Transaction, Universe
+from environment import Block, Contract, Transaction, Universe
 from rpc import get_code, get_storage_at
 from sha3 import SHA3
 from smt import Constraint, Uint160, Uint256
@@ -29,12 +29,34 @@ SETUP = Uint160(0x5757575757575757575757575757575757575757)
 PLAYER = Uint160(0xCACACACACACACACACACACACACACACACACACACACA)
 
 
+def block(offset: int, universe: Universe) -> Block:
+    """Create a simulated Block."""
+    # As an approximation, assume the blockhash of the `n`th block is
+    # `999999*n`.
+    number = Uint256(16030969 + offset)
+    universe.blockhashes[number] = Uint256(999999) * number
+    return Block(
+        number=number,
+        coinbase=Uint160(0xDAFEA492D9C6733AE3D56B7ED1ADB60692C98BC5),
+        timestamp=Uint256(1669214471 + offset),
+        prevrandao=Uint256(
+            0xCC7E0A66B3B9E3F54B7FDB9DCF98D57C03226D73BFFBB4E0BA7B08F92CE00D19
+        ),
+        gaslimit=Uint256(30000000000000000),
+        chainid=Uint256(1),
+        basefee=Uint256(12267131109),
+    )
+
+
 def create(factory: Contract) -> Tuple[Uint160, Universe]:
     """Call createInstance to set up the level."""
     calldata = abiencode("createInstance(address)") + PLAYER.into(Uint256).unwrap(bytes)
     contracts: Dict[int, Contract] = {}
 
     while True:
+        # Caveat: this *concrete* universe will be used in symbolic execution
+        # later. Any oversights in the environment (e.g. the player's address
+        # having a zero balance, etc.) can result in inaccurate analysis.
         start = concrete_start(copy.deepcopy(factory), Uint256(0), calldata)
         start.transaction = Transaction(
             origin=SETUP,
@@ -45,6 +67,8 @@ def create(factory: Contract) -> Tuple[Uint160, Universe]:
         )
         for contract in contracts.values():
             start.universe.add_contract(copy.deepcopy(contract))
+        start.universe.balances[PLAYER] = Uint256(10**9)
+        start.block = block(0, start.universe)
 
         end, accessed = execute(start)
         assert isinstance(end.pc, Termination)
@@ -157,6 +181,11 @@ def search(
             instance = universe.contracts[address.unwrap()]
             start = symbolic_start(instance, sha3, suffix)
             start.universe = universe
+
+            # ASSUMPTION: each call to the level takes place in a different
+            # block, and the blocks are consecutive.
+            start.block = block(i + 1, start.universe)
+
             # ASSUMPTION: origin and caller are the player's fixed address
             start.transaction = Transaction(
                 origin=PLAYER,
@@ -226,8 +255,6 @@ if __name__ == "__main__":
         try:
             factory = get_code(address)
             address, universe = create(factory)
-
-            universe.balances[PLAYER] = Uint256(10**9)
 
             ok = validate(factory.address, address, universe)
             assert ok.unwrap() is False
