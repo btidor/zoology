@@ -133,7 +133,7 @@ def execute(
 
         match step(state):
             case None:
-                continue
+                pass
             case Jump(targets):
                 matched = [
                     s for (c, s) in targets if c.unwrap("JUMPI requires concrete b")
