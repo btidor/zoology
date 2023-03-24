@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from dataclasses import dataclass
-from itertools import count
 from typing import Callable, List, Optional, Tuple, Union
 
 from arrays import FrozenBytes, MutableBytes
