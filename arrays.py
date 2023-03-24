@@ -256,7 +256,7 @@ class FrozenBytes(Bytes):
     """A symbolic-length sequence of symbolic bytes. Immutable."""
 
     def __getitem__(self, i: Uint256) -> Uint8:
-        return self.array[i]
+        return (i < self.length).ite(self.array[i], Uint8(0))
 
 
 class ByteSlice(FrozenBytes):
