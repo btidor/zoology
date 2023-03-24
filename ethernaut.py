@@ -27,6 +27,7 @@ with open("ethernaut.json") as f:
 
 SETUP = Uint160(0x5757575757575757575757575757575757575757)
 PLAYER = Uint160(0xCACACACACACACACACACACACACACACACACACACACA)
+PROXY = Uint160(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0)
 
 
 def block(offset: int, universe: Universe) -> Block:
@@ -186,13 +187,20 @@ def search(
             # block, and the blocks are consecutive.
             start.block = block(i + 1, start.universe)
 
-            # ASSUMPTION: origin and caller are the player's fixed address
+            # ASSUMPTION: all transactions are originated by the player, but may
+            # (or may not!) be bounced through a "proxy" contract
             start.transaction = Transaction(
                 origin=PLAYER,
-                caller=PLAYER,
+                caller=Uint160(f"CALLER{suffix}"),
                 callvalue=Uint256(f"CALLVALUE{suffix}"),
                 calldata=FrozenBytes.symbolic(f"CALLDATA{suffix}"),
                 gasprice=Uint256(f"GASPRICE{suffix}"),
+            )
+            start.path_constraints.append(
+                Constraint.any(
+                    start.transaction.caller == PLAYER,
+                    start.transaction.caller == PROXY,
+                )
             )
             start.universe.transfer(
                 start.transaction.caller,
