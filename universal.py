@@ -40,10 +40,17 @@ def universal_transaction(
         yield start, end
 
 
-def _universal_transaction(state: State, filter: bool = True) -> Iterator[State]:
+def _universal_transaction(
+    state: State, filter: bool = True, prints: bool = False
+) -> Iterator[State]:
     while isinstance(state.pc, int):
+        if prints:
+            print(state.contract.program.instructions[state.pc])
         match step(state):
             case None:
+                if prints:
+                    for x in reversed(state.stack):
+                        print(" ", x.describe())
                 continue
             case Jump(targets):
                 solver = Solver()
@@ -51,16 +58,22 @@ def _universal_transaction(state: State, filter: bool = True) -> Iterator[State]
                 for constraint, next in targets:
                     if not solver.check(constraint):
                         continue
-                    yield from _universal_transaction(next, filter=filter)
+                    yield from _universal_transaction(
+                        next, filter=filter, prints=prints
+                    )
                 return
             case Descend(substate, callback):
                 # We need to collect *all* terminal states, since if the
                 # subcontract reverts the parent contract will continue to
                 # execute.
-                for subend in _universal_transaction(substate, filter=False):
+                for subend in _universal_transaction(
+                    substate, filter=False, prints=prints
+                ):
                     next = copy.deepcopy(state)
                     next = callback(next, subend)
-                    yield from _universal_transaction(next, filter=filter)
+                    yield from _universal_transaction(
+                        next, filter=filter, prints=prints
+                    )
                 return
             case unknown:
                 raise ValueError(f"unknown action: {unknown}")
