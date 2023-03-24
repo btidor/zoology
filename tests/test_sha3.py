@@ -40,6 +40,28 @@ def test_symbolic() -> None:
     )
 
 
+def test_fully_symbolic() -> None:
+    sha3 = SHA3()
+    input = FrozenBytes.symbolic("INPUT")
+    assert sha3[input].maybe_unwrap() is None
+
+    solver = Solver()
+    sha3.constrain(solver)
+    solver.assert_and_track(
+        Constraint(
+            Equals(input._bigvector(7), FrozenBytes.concrete(b"testing")._bigvector())
+        )
+    )
+    assert solver.check()
+
+    assert input.evaluate(solver) == b"testing".hex()
+    sha3.narrow(solver)
+    assert (
+        solver.evaluate(sha3[input], True).unwrap(bytes).hex()
+        == "5f16f4c7f149ac4f9510d9cf8cf384038ad348b3bcdc01915f95de12df9d1b02"
+    )
+
+
 def test_zero() -> None:
     sha3 = SHA3()
     assert (

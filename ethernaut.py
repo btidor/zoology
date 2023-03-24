@@ -140,6 +140,7 @@ def search(
     address: Uint160, starting_universe: Universe, prints: bool = False
 ) -> Optional[List[State]]:
     """Symbolically execute the given level until a solution is found."""
+    sha3 = SHA3()
     histories: List[List[State]] = [[]]
     for i in range(16):
         suffix = str(i)
@@ -154,7 +155,7 @@ def search(
             universe = copy.deepcopy(universe)
 
             instance = universe.contracts[address.unwrap()]
-            start = symbolic_start(instance, SHA3(), suffix)
+            start = symbolic_start(instance, sha3, suffix)
             start.universe = universe
             # ASSUMPTION: origin and caller are the player's fixed address
             start.transaction = Transaction(

@@ -161,12 +161,9 @@ def SAR(shift: Uint256, value: Uint256) -> Uint256:
     return (value.as_signed() >> shift).as_unsigned()
 
 
-def SHA3(s: State, offset: Uint256, _size: Uint256) -> Uint256:
+def SHA3(s: State, offset: Uint256, size: Uint256) -> Uint256:
     """20 - Compute Keccak-256 hash."""
-    size = _size.unwrap(int, "SHA3 requires concrete size")
-
-    data = FrozenBytes.concrete([s.memory[offset + Uint256(i)] for i in range(size)])
-    return s.sha3[data]
+    return s.sha3[s.memory.slice(offset, size)]
 
 
 def ADDRESS(s: State) -> Uint256:

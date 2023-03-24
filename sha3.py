@@ -12,7 +12,7 @@ from pysmt.shortcuts import BV, BVExtract, Equals, Implies, NotEquals, Select, S
 from pysmt.typing import ArrayType, BVType
 
 from arrays import Bytes
-from smt import Constraint, Uint256
+from smt import Constraint, Uint8, Uint256
 from solver import Solver
 
 
@@ -34,6 +34,11 @@ class SHA3:
     # n-byte inputs to 32-byte outputs. Z3 requires n to be constant for any
     # given function, so we store a mapping from `n -> func_n(x)`.
     hashes: Dict[int, FNode] = field(default_factory=dict)
+
+    # If the input has a symbolic length, we don't really know what it's going
+    # to hash to. In this case, mint a new variable for the return value.
+    free_digests: List[Tuple[Bytes, Uint256]] = field(default_factory=list)
+
     accessed: Dict[int, List[Bytes]] = field(default_factory=dict)
 
     digest_constraints: List[Constraint] = field(default_factory=list)
@@ -42,13 +47,23 @@ class SHA3:
         return SHA3(
             suffix=self.suffix,
             hashes=copy.copy(self.hashes),
+            free_digests=copy.deepcopy(self.free_digests, memo),
             accessed=copy.deepcopy(self.accessed, memo),
             digest_constraints=copy.deepcopy(self.digest_constraints, memo),
         )
 
     def __getitem__(self, key: Bytes) -> Uint256:
         """Compute the SHA3 hash of a given key."""
-        size = key.length.unwrap(int, "can't hash symbolic-length bytes")
+        size = key.length.maybe_unwrap()
+
+        if size is None:
+            result = Uint256(f"SHA3(?{len(self.free_digests)}){self.suffix}")
+            self.free_digests.append((key, result))
+            for key2, val2 in reversed(self.free_digests[:-1]):
+                result = Constraint(Equals(key._bigvector(), key2._bigvector())).ite(
+                    val2, result
+                )
+            return result
 
         if size == 0:
             digest = keccak.new(data=b"", digest_bits=256).digest()
@@ -76,14 +91,18 @@ class SHA3:
             return Uint256(Select(self.hashes[size], key._bigvector()))
 
     def items(self) -> Iterator[Tuple[int, Bytes, Uint256]]:
-        """Iterate over (n, key, value) tuples."""
+        """
+        Iterate over (n, key, value) tuples.
+
+        Note: does not include free digests, which must be handled manually.
+        """
         for n, array in self.hashes.items():
             for key in self.accessed[n]:
                 yield (n, key, Uint256(Select(array, key._bigvector())))
 
     def constrain(self, solver: Solver) -> None:
         """Apply computed SHA3 constraints to the given solver instance."""
-        for _, key1, val1 in self.items():
+        for n1, key1, val1 in self.items():
             # Assumption: no hash may have more than 128 leading zero bits. This
             # avoids hash collisions between maps/arrays and ordinary storage
             # slots.
@@ -91,31 +110,43 @@ class SHA3:
                 Constraint(NotEquals(BVExtract(val1.node, 128, 255), BV(0, 128)))
             )
 
-            for _, key2, val2 in self.items():
+            for n2, key2, val2 in self.items():
                 # Assumption: every hash digest is distinct, there are no
                 # collisions ever.
-                solver.assert_and_track(
-                    Constraint(
-                        Implies(
-                            NotEquals(key1._bigvector(), key2._bigvector()),
-                            NotEquals(val1.node, val2.node),
+                if n1 == n2:
+                    solver.assert_and_track(
+                        Constraint(
+                            Implies(
+                                NotEquals(key1._bigvector(), key2._bigvector()),
+                                NotEquals(val1.node, val2.node),
+                            )
                         )
                     )
-                )
+                else:
+                    solver.assert_and_track(val1 != val2)
+
+        # TODO: extend these assumptions to support free digests
 
         for constraint in self.digest_constraints:
             solver.assert_and_track(constraint)
 
     def narrow(self, solver: Solver) -> None:
         """Apply concrete SHA3 constraints to a given model instance."""
-        hashes: Dict[bytes, bytes] = {}
         for n, key, val in self.items():
             data = bytes.fromhex(key.evaluate(solver))
             hash = keccak.new(data=data, digest_bits=256)
-            hashes[data] = hash.digest()
             solver.assert_and_track(
                 Constraint(Equals(key._bigvector(), BV(int.from_bytes(data), n * 8)))
             )
+            solver.assert_and_track(val == Uint256(int.from_bytes(hash.digest())))
+            assert solver.check()
+
+        for key, val in self.free_digests:
+            data = bytes.fromhex(key.evaluate(solver))
+            hash = keccak.new(data=data, digest_bits=256)
+            solver.assert_and_track(key.length == Uint256(len(data)))
+            for i, b in enumerate(data):
+                solver.assert_and_track(key[Uint256(i)] == Uint8(b))
             solver.assert_and_track(val == Uint256(int.from_bytes(hash.digest())))
             assert solver.check()
 
