@@ -272,12 +272,20 @@ if __name__ == "__main__":
                 print("\tno solution")
                 continue
 
+            solver = Solver()
             for state in solution:
                 solver = Solver()
                 state.constrain(solver)
                 assert solver.check()
 
+            ok = validate(factory.address, address, solution[-1].universe)
+            solver.assert_and_track(ok)
+            assert solver.check()
+
+            for state in solution:
                 state.narrow(solver)
+
+            for state in solution:
                 data = state.transaction.calldata.evaluate(solver, True)
                 if len(data) == 0:
                     data = "(empty)"
