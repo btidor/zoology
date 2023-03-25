@@ -5,7 +5,7 @@ import copy
 import json
 from collections import defaultdict
 from time import sleep
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
 
 from arrays import FrozenBytes
 from environment import Block, Contract, Transaction, Universe
@@ -170,7 +170,7 @@ def search(
     for i in range(16):
         suffix = str(i)
         if prints:
-            print(f"Level {suffix}:")
+            print(f"\tLevel {suffix}:")
         subsequent: List[List[State]] = []
         for history in histories:
             if len(history) > 0:
@@ -212,21 +212,11 @@ def search(
             for end in _universal_transaction(start):
                 states = history + [end]
 
-                solver = Solver()
-                for state in states:
-                    state.constrain(solver)
-                assert solver.check()
-
-                sp = "-"
-                for state in states:
-                    state.narrow(solver)
-                    if prints:
-                        data = state.transaction.calldata.evaluate(solver, True)
-                        if len(data) == 0:
-                            data = "(empty)"
-                        value = solver.evaluate(state.transaction.callvalue, True)
-                        print(f"{sp} {data}\t(value: {value.unwrap()})")
-                    sp = " "
+                if prints:
+                    sp = "-"
+                    for line in printable_states(Solver(), states):
+                        print(f"{sp} {line}")
+                        sp = " "
 
                 solver = Solver()
                 for state in states:
@@ -257,6 +247,36 @@ def search(
     return None
 
 
+def printable_states(solver: Solver, states: List[State]) -> Iterable[str]:
+    """Yield a human-readable description of the transaction sequence."""
+    for state in states:
+        state.constrain(solver)
+        assert solver.check()
+
+    for state in states:
+        state.narrow(solver)
+
+    for state in states:
+        data = state.transaction.calldata.evaluate(solver, True)
+        if len(data) == 0:
+            data = "(empty)"
+        elif len(data) > 8:
+            data = data[:8] + " " + data[8:]
+        line = f"{data}"
+
+        suffixes = []
+        value = solver.evaluate(state.transaction.callvalue, True).unwrap()
+        if value > 0:
+            suffixes.append(f"value: {value}")
+        caller = solver.evaluate(state.transaction.caller, True)
+        if (caller != PLAYER).unwrap():
+            suffixes.append(f"via proxy")
+        if len(suffixes) > 0:
+            line += f"\t({', '.join(suffixes)})"
+
+        yield line
+
+
 if __name__ == "__main__":
     for i, address in enumerate(LEVEL_FACTORIES):
         print(f"{i:04}", end="")
@@ -273,24 +293,12 @@ if __name__ == "__main__":
                 continue
 
             solver = Solver()
-            for state in solution:
-                solver = Solver()
-                state.constrain(solver)
-                assert solver.check()
-
             ok = validate(factory.address, address, solution[-1].universe)
             solver.assert_and_track(ok)
             assert solver.check()
 
-            for state in solution:
-                state.narrow(solver)
-
-            for state in solution:
-                data = state.transaction.calldata.evaluate(solver, True)
-                if len(data) == 0:
-                    data = "(empty)"
-                value = solver.evaluate(state.transaction.callvalue, True)
-                print(f"\t{data}\t(value: {value.unwrap()})")
+            for line in printable_states(solver, solution):
+                print("\t" + line)
 
         except Exception as e:
             suffix = ""
