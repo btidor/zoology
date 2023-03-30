@@ -218,11 +218,11 @@ def search(
 
                 if prints:
                     sp = "-"
-                    output = []
+                    output = ""
                     for line in printable_states(Solver(), states):
-                        output.append(f"{sp} {line}")
+                        output += f"{sp} {line}\n"
                         sp = " "
-                    print("\n".join(output))
+                    print(output, end="")
 
                 solver = Solver()
                 for state in states:
