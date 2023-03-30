@@ -170,9 +170,9 @@ def search(
     """Symbolically execute the given level until a solution is found."""
     histories: List[List[State]] = [[]]
     for i in range(16):
-        suffix = str(i)
+        suffix = str(i + 1)
         if prints:
-            print(f"\tLevel {suffix}:")
+            print(f"\tTxn {suffix}:")
         subsequent: List[List[State]] = []
         for history in histories:
             if len(history) > 0:
@@ -218,9 +218,11 @@ def search(
 
                 if prints:
                     sp = "-"
+                    output = []
                     for line in printable_states(Solver(), states):
-                        print(f"{sp} {line}")
+                        output.append(f"{sp} {line}")
                         sp = " "
+                    print("\n".join(output))
 
                 solver = Solver()
                 for state in states:
