@@ -231,9 +231,30 @@ def search(
 
                 ok = validate(factory.address, address, states[-1].universe)
                 if solver.check(ok):
-                    if prints:
-                        print("  [found solution!]")
-                    return states
+                    solver.assert_and_track(ok)
+                    assert solver.check()
+
+                    try:
+                        states[-1].sha3.narrow(solver)
+                        for state in states:
+                            state.narrow(solver)
+                        if prints:
+                            print("  [found solution!]")
+                        return states
+                    except AssertionError:
+                        print("  [ok warning: narrowing error]")
+                        solver = Solver()
+                        for state in states:
+                            state.constrain(solver)
+                        assert solver.check()
+
+                try:
+                    states[-1].sha3.narrow(solver)
+                    for state in states:
+                        state.narrow(solver)
+                except AssertionError:
+                    print("  [warning: narrowing error]")
+                    continue
 
                 if len(end.contract.storage.written) == 0:
                     # TODO: check if *any* contract's storage was written; also
@@ -257,10 +278,18 @@ def printable_states(solver: Solver, states: List[State]) -> Iterable[str]:
     """Yield a human-readable description of the transaction sequence."""
     for state in states:
         state.constrain(solver)
-        assert solver.check()
+        if not solver.check():
+            yield "unprintable: unsatisfiable"
+            return
 
-    for state in states:
-        state.narrow(solver)
+    try:
+        if len(states) > 0:
+            states[-1].sha3.narrow(solver)
+        for state in states:
+            state.narrow(solver)
+    except AssertionError:
+        yield "unprintable: narrowing error"
+        return
 
     for state in states:
         data = state.transaction.calldata.evaluate(solver, True)
