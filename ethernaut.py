@@ -49,7 +49,7 @@ def block(offset: int, universe: Universe) -> Block:
     )
 
 
-def create(factory: Contract) -> Tuple[Uint160, Universe]:
+def create(factory: Contract) -> Tuple[Uint160, Universe, SHA3]:
     """Call createInstance to set up the level."""
     calldata = abiencode("createInstance(address)") + PLAYER.into(Uint256).unwrap(bytes)
     contracts: Dict[int, Contract] = {}
@@ -90,7 +90,7 @@ def create(factory: Contract) -> Tuple[Uint160, Universe]:
 
     end.universe.add_contract(end.contract)
     address = Uint160(int.from_bytes(end.pc.returndata.unwrap()))
-    return address, end.universe
+    return address, end.universe, end.sha3
 
 
 def validate(factory: Uint160, instance: Uint160, universe: Universe) -> Constraint:
@@ -162,10 +162,12 @@ def execute(
 
 
 def search(
-    address: Uint160, starting_universe: Universe, prints: bool = False
+    address: Uint160,
+    starting_universe: Universe,
+    starting_sha3: SHA3,
+    prints: bool = False,
 ) -> Optional[List[State]]:
     """Symbolically execute the given level until a solution is found."""
-    sha3 = SHA3()
     histories: List[List[State]] = [[]]
     for i in range(16):
         suffix = str(i)
@@ -175,8 +177,10 @@ def search(
         for history in histories:
             if len(history) > 0:
                 universe = history[-1].universe
+                sha3 = history[-1].sha3
             else:
                 universe = starting_universe
+                sha3 = starting_sha3
             universe = copy.deepcopy(universe)
 
             instance = universe.contracts[address.unwrap()]
@@ -282,12 +286,12 @@ if __name__ == "__main__":
         print(f"{i:04}", end="")
         try:
             factory = get_code(address)
-            address, universe = create(factory)
+            address, universe, sha3 = create(factory)
 
             ok = validate(factory.address, address, universe)
             assert ok.unwrap() is False
 
-            solution = search(address, universe)
+            solution = search(address, universe, sha3)
             if solution is None:
                 print("\tno solution")
                 continue
