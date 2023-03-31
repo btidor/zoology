@@ -212,12 +212,10 @@ class Bytes(abc.ABC):
         """Return a symbolic slice of this instance."""
         return ByteSlice(self, offset, size)
 
-    def _bigvector(self, default_length: int = 1024) -> FNode:
+    def _bigvector(self, expected_length: int) -> FNode:
         """Return a single, large bitvector of this instance's bytes."""
-        # HACK: to avoid introducing quantifiers, if this instance has a
-        # symbolic length, we return a fixed 1024-byte vector. This is an
-        # unsound assumption!
-        length = self.length.maybe_unwrap() or default_length
+        length = self.length.maybe_unwrap() or expected_length
+        assert length == expected_length
         return BVConcat(*[self[Uint256(i)].node for i in range(length)])
 
     def maybe_unwrap(self) -> Optional[bytes]:

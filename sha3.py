@@ -60,9 +60,12 @@ class SHA3:
             result = Uint256(f"SHA3(?{len(self.free_digests)}){self.suffix}")
             self.free_digests.append((key, result))
             for key2, val2 in reversed(self.free_digests[:-1]):
-                result = Constraint(Equals(key._bigvector(), key2._bigvector())).ite(
-                    val2, result
-                )
+                # HACK: to avoid introducing quantifiers, if this instance has a
+                # symbolic length, we return a fixed 1024-byte vector. This is
+                # an unsound assumption!
+                result = Constraint(
+                    Equals(key._bigvector(1024), key2._bigvector(1024))
+                ).ite(val2, result)
             return result
 
         if size == 0:
@@ -83,12 +86,14 @@ class SHA3:
             symbolic = Uint256(int.from_bytes(digest))
             self.digest_constraints.append(
                 Constraint(
-                    Equals(Select(self.hashes[size], key._bigvector()), symbolic.node)
+                    Equals(
+                        Select(self.hashes[size], key._bigvector(size)), symbolic.node
+                    )
                 )
             )
             return symbolic
         else:
-            return Uint256(Select(self.hashes[size], key._bigvector()))
+            return Uint256(Select(self.hashes[size], key._bigvector(size)))
 
     def items(self) -> Iterator[Tuple[int, Bytes, Uint256]]:
         """
@@ -98,7 +103,7 @@ class SHA3:
         """
         for n, array in self.hashes.items():
             for key in self.accessed[n]:
-                yield (n, key, Uint256(Select(array, key._bigvector())))
+                yield (n, key, Uint256(Select(array, key._bigvector(n))))
 
     def constrain(self, solver: Solver) -> None:
         """Apply computed SHA3 constraints to the given solver instance."""
@@ -117,7 +122,7 @@ class SHA3:
                     solver.assert_and_track(
                         Constraint(
                             Implies(
-                                NotEquals(key1._bigvector(), key2._bigvector()),
+                                NotEquals(key1._bigvector(n1), key2._bigvector(n2)),
                                 NotEquals(val1.node, val2.node),
                             )
                         )
@@ -135,11 +140,12 @@ class SHA3:
         for n, key, val in self.items():
             data = key.evaluate(solver)
             hash = keccak.new(data=data, digest_bits=256)
-            solver.assert_and_track(
-                Constraint(Equals(key._bigvector(), BV(int.from_bytes(data), n * 8)))
-            )
+            assert len(data) == n
+            for i, b in enumerate(data):
+                solver.assert_and_track(key[Uint256(i)] == Uint8(b))
             solver.assert_and_track(val == Uint256(int.from_bytes(hash.digest())))
-            assert solver.check()
+            if not solver.check():
+                raise NarrowingError(data)
 
         for key, val in self.free_digests:
             data = key.evaluate(solver)
@@ -148,7 +154,8 @@ class SHA3:
             for i, b in enumerate(data):
                 solver.assert_and_track(key[Uint256(i)] == Uint8(b))
             solver.assert_and_track(val == Uint256(int.from_bytes(hash.digest())))
-            assert solver.check()
+            if not solver.check():
+                raise NarrowingError(data)
 
     def printable(self, solver: Solver) -> Iterable[str]:
         """Yield a human-readable evaluation using the given model."""
@@ -170,3 +177,19 @@ class SHA3:
 
         if line == "":
             yield ""
+
+
+class NarrowingError(Exception):
+    """
+    Applying deferred constraints failed.
+
+    Used when a branch satisifes path constraints but is unreachable in
+    practice.
+    """
+
+    def __init__(self, key: bytes) -> None:
+        """Create a new NarrowingError."""
+        self.key = key
+
+    def __str__(self) -> str:
+        return self.key.hex()

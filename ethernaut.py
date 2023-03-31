@@ -12,7 +12,7 @@ from typing import Dict, Iterable, List, Optional, Tuple
 from arrays import FrozenBytes
 from environment import Block, Contract, Transaction, Universe
 from rpc import get_code, get_storage_at
-from sha3 import SHA3
+from sha3 import SHA3, NarrowingError
 from smt import Constraint, Uint160, Uint256
 from solidity import abiencode
 from solver import Solver
@@ -73,13 +73,17 @@ class History:
         solver = Solver()
         for constraint in constraints:
             solver.assert_and_track(constraint)
-        self.constrain(solver)
+        try:
+            self.constrain(solver)
+        except AssertionError:
+            yield "unprintable: unsatisfiable"
+            return
 
         try:
             for state in self.states:
                 state.narrow(solver)
                 state.sha3.narrow(solver)
-        except AssertionError:
+        except NarrowingError:
             yield "unprintable: narrowing error"
             solver = Solver()
             for constraint in constraints:
@@ -172,7 +176,9 @@ def create(factory: Contract) -> Tuple[Uint160, History]:
     return address, History(end.universe, end.sha3)
 
 
-def validate(factory: Uint160, instance: Uint160, history: History) -> Constraint:
+def validate(
+    factory: Uint160, instance: Uint160, history: History, prints: bool = False
+) -> Constraint:
     """Call validateInstance to check the solution."""
     calldata = (
         abiencode("validateInstance(address,address)")
@@ -193,13 +199,11 @@ def validate(factory: Uint160, instance: Uint160, history: History) -> Constrain
     start.universe = universe
     start.sha3 = sha3
 
-    return Constraint.any(
-        *(
-            (Uint256(end.pc.returndata._bigvector()) != Uint256(0))
-            for end in _universal_transaction(start)
-            if isinstance(end.pc, Termination)  # should always be true
-        )
-    )
+    constraints = []
+    for end in _universal_transaction(start, prints=prints):
+        assert isinstance(end.pc, Termination)
+        constraints.append(Uint256(end.pc.returndata._bigvector(32)) != Uint256(0))
+    return Constraint.any(*constraints)
 
 
 def execute(
@@ -266,16 +270,10 @@ def search(
             # (or may not!) be bounced through a "proxy" contract
             start.transaction = Transaction(
                 origin=PLAYER,
-                caller=Uint160(f"CALLER{suffix}"),
+                caller=Constraint(f"CALLERAB{suffix}").ite(PLAYER, PROXY),
                 callvalue=Uint256(f"CALLVALUE{suffix}"),
                 calldata=FrozenBytes.symbolic(f"CALLDATA{suffix}"),
                 gasprice=Uint256(f"GASPRICE{suffix}"),
-            )
-            start.path_constraints.append(
-                Constraint.any(
-                    start.transaction.caller == PLAYER,
-                    start.transaction.caller == PROXY,
-                )
             )
             start.universe.transfer(
                 start.transaction.origin,
@@ -294,6 +292,8 @@ def search(
                         output += f"{sp} {line}\n"
                         sp = " "
                     print(output, end="")
+                    if "unsatisfiable" in output:
+                        continue
 
                 solver = Solver()
                 candidate.constrain(solver)
@@ -308,15 +308,15 @@ def search(
                         if prints:
                             print("  [found solution!]")
                         return candidate
-                    except AssertionError:
-                        print("  [ok warning: narrowing error]")
+                    except NarrowingError:
                         solver = Solver()
                         candidate.constrain(solver)
 
                 try:
                     candidate.narrow(solver)
-                except AssertionError:
-                    print("  [warning: narrowing error]")
+                except NarrowingError:
+                    if prints:
+                        print("  [narrowing error]")
                     continue
 
                 if len(end.contract.storage.written) == 0:
