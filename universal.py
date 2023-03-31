@@ -198,13 +198,13 @@ def _printable_transition(
 
     end.narrow(solver)
 
-    values = end.transaction.evaluate(solver)
+    values = end.transaction.describe(solver)
     for k, v in values.items():
         yield f"{k}\t{v}"
     if len(values) > 0:
         yield ""
 
-    values = end.evaluate(solver)
+    values = end.describe(solver)
     for k, v in values.items():
         yield f"{k}\t{v}"
     if len(values) > 0:

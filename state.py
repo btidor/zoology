@@ -128,7 +128,7 @@ class State:
 
         return False
 
-    def evaluate(self, solver: Solver) -> OrderedDict[str, str]:
+    def describe(self, solver: Solver) -> OrderedDict[str, str]:
         """
         Use a model to evaluate this instance as a dictionary of attributes.
 
@@ -139,7 +139,7 @@ class State:
         a = solver.evaluate(self.contract.address)
         if a is not None and a.unwrap() > 0:
             r["Address"] = "0x" + a.unwrap(bytes).hex()
-        returndata = self.pc.returndata.evaluate(solver, True)
+        returndata = self.pc.returndata.describe(solver, True)
         if returndata:
             r["Return"] = "0x" + returndata
         return r

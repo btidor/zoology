@@ -239,7 +239,7 @@ class Bytes(abc.ABC):
             raise ValueError(msg)
         return data
 
-    def evaluate(self, solver: Solver, model_completion: bool = False) -> str:
+    def describe(self, solver: Solver, model_completion: bool = False) -> str:
         """Use a model to evaluate this instance as a hexadecimal string."""
         length = solver.evaluate(self.length, True).unwrap()
         result = ""
@@ -249,6 +249,16 @@ class Bytes(abc.ABC):
                 break
             b = solver.evaluate(self[Uint256(i)], model_completion)
             result += b.unwrap(bytes).hex() if b is not None else "??"
+        return result
+
+    def evaluate(self, solver: Solver) -> bytes:
+        """Use a model to evaluate this instance as bytes."""
+        length = solver.evaluate(self.length, True).unwrap()
+        if length > 256:
+            raise ValueError("length too long to evaluate!")
+        result = b""
+        for i in range(length):
+            result += solver.evaluate(self[Uint256(i)], True).unwrap(bytes)
         return result
 
 

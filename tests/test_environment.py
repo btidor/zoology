@@ -16,7 +16,7 @@ def test_transaction_evaluate() -> None:
     state.constrain(solver)
     assert solver.check()
 
-    values = state.transaction.evaluate(solver)
+    values = state.transaction.describe(solver)
     assert values == {
         "Caller": "0xcacacacacacacacacacacacacacacacacacacaca",
         "Gas": "0x0000000000000000000000000000000000000000000000000000000000000012",

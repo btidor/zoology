@@ -165,7 +165,7 @@ def describe_state(solver: Solver, state: State) -> str:
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
 
-    return "0x" + state.transaction.calldata.evaluate(solver)
+    return "0x" + state.transaction.calldata.describe(solver)
 
 
 if __name__ == "__main__":

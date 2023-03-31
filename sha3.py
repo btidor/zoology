@@ -133,7 +133,7 @@ class SHA3:
     def narrow(self, solver: Solver) -> None:
         """Apply concrete SHA3 constraints to a given model instance."""
         for n, key, val in self.items():
-            data = bytes.fromhex(key.evaluate(solver))
+            data = key.evaluate(solver)
             hash = keccak.new(data=data, digest_bits=256)
             solver.assert_and_track(
                 Constraint(Equals(key._bigvector(), BV(int.from_bytes(data), n * 8)))
@@ -142,7 +142,7 @@ class SHA3:
             assert solver.check()
 
         for key, val in self.free_digests:
-            data = bytes.fromhex(key.evaluate(solver))
+            data = key.evaluate(solver)
             hash = keccak.new(data=data, digest_bits=256)
             solver.assert_and_track(key.length == Uint256(len(data)))
             for i, b in enumerate(data):
@@ -155,7 +155,7 @@ class SHA3:
         line = "SHA3"
         seen = set()
         for _, key, val in self.items():
-            k = "0x" + key.evaluate(solver)
+            k = "0x" + key.describe(solver)
             if k in seen:
                 continue
             line += f"\t{k} "

@@ -292,7 +292,7 @@ def printable_states(solver: Solver, states: List[State]) -> Iterable[str]:
         return
 
     for state in states:
-        data = state.transaction.calldata.evaluate(solver, True)
+        data = state.transaction.calldata.describe(solver, True)
         if len(data) == 0:
             data = "(empty)"
         elif len(data) > 8:

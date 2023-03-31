@@ -44,14 +44,14 @@ class Transaction:
     calldata: FrozenBytes
     gasprice: Uint256
 
-    def evaluate(self, solver: Solver) -> OrderedDict[str, str]:
+    def describe(self, solver: Solver) -> OrderedDict[str, str]:
         """
         Use a model to evaluate this instance as a dictionary of attributes.
 
         Only attributes present in the model will be included.
         """
         r: OrderedDict[str, Optional[Union[BitVector, str]]] = OrderedDict()
-        calldata = self.calldata.evaluate(solver, True)
+        calldata = self.calldata.describe(solver, True)
         r["Data"] = f"0x{calldata[:8]} {calldata[8:]}".strip() if calldata else None
         r["Value"] = self.callvalue
         r["Caller"] = self.caller

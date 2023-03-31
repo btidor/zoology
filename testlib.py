@@ -182,7 +182,7 @@ def check_transition(
     assert solver.check()
 
     end.narrow(solver)
-    transaction = end.transaction.evaluate(solver)
+    transaction = end.transaction.describe(solver)
 
     actual = bytes.fromhex(transaction.get("Data", "")[2:10])
     if method is None:
