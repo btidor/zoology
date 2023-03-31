@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import copy
 import json
 from collections import defaultdict
@@ -338,7 +339,17 @@ def search(
 
 
 if __name__ == "__main__":
-    for i, address in enumerate(LEVEL_FACTORIES):
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "-l", "--level", help="select which level(s) to run", action="append", type=int
+    )
+    parser.add_argument("-v", "--verbose", action="count", default=0)
+    args = parser.parse_args()
+    if args.level is None:
+        args.level = list(range(len(LEVEL_FACTORIES)))
+
+    for i in args.level:
+        address = LEVEL_FACTORIES[i]
         print(f"{i:04}", end="")
         try:
             factory = get_code(address)
@@ -347,7 +358,7 @@ if __name__ == "__main__":
             ok = validate(factory.address, address, beginning)
             assert ok.unwrap() is False
 
-            solution = search(address, beginning)
+            solution = search(address, beginning, prints=(args.verbose > 1))
             if solution is None:
                 print("\tno solution")
                 continue
@@ -361,3 +372,5 @@ if __name__ == "__main__":
             if str(e) != "":
                 suffix = f": {e}"
             print(f"\t{e.__class__.__name__}{suffix}")
+            if args.verbose > 0:
+                raise e
