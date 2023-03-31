@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """A solver for the Ethernaut CTF."""
 
+from __future__ import annotations
+
 import copy
 import json
 from collections import defaultdict
@@ -30,6 +32,83 @@ PLAYER = Uint160(0xCACACACACACACACACACACACACACACACACACACACA)
 PROXY = Uint160(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0)
 
 
+class History:
+    """Encapsulates a linear sequence of transactions."""
+
+    def __init__(self, starting_universe: Universe, starting_sha3: SHA3) -> None:
+        """Create a new History."""
+        self.starting_universe = starting_universe
+        self.starting_sha3 = starting_sha3
+        self.states: List[State] = []
+
+    def subsequent(self) -> Tuple[Universe, SHA3]:
+        """Set up the execution of a new transaction."""
+        if len(self.states) == 0:
+            pair = (self.starting_universe, self.starting_sha3)
+        else:
+            pair = (self.states[-1].universe, self.states[-1].sha3)
+        return copy.deepcopy(pair)
+
+    def extend(self, state: State) -> History:
+        """Add a new transaction to the History."""
+        other = copy.deepcopy(self)
+        other.states.append(state)
+        return other
+
+    def constrain(self, solver: Solver) -> None:
+        """Apply hard constraints to the given solver instance."""
+        for state in self.states:
+            state.constrain(solver)
+        assert solver.check()
+
+    def narrow(self, solver: Solver) -> None:
+        """Apply soft and deferred constraints to a given solver instance."""
+        for state in self.states:
+            state.narrow(solver)
+            state.sha3.narrow(solver)
+        assert solver.check()
+
+    def describe(self, *constraints: Constraint) -> Iterable[str]:
+        """Yield a human-readable description of the transaction sequence."""
+        solver = Solver()
+        for constraint in constraints:
+            solver.assert_and_track(constraint)
+        self.constrain(solver)
+
+        try:
+            for state in self.states:
+                state.narrow(solver)
+                state.sha3.narrow(solver)
+        except AssertionError:
+            yield "unprintable: narrowing error"
+            solver = Solver()
+            for constraint in constraints:
+                solver.assert_and_track(constraint)
+            self.constrain(solver)
+            for state in self.states:
+                state.narrow(solver)
+
+        for state in self.states:
+            data = state.transaction.calldata.describe(solver, True)
+            if len(data) == 0:
+                data = "(empty) "
+            elif len(data) > 8:
+                data = data[:8] + " " + data[8:]
+            line = f"{data}"
+
+            suffixes = []
+            value = solver.evaluate(state.transaction.callvalue, True).unwrap()
+            if value > 0:
+                suffixes.append(f"value: {value}")
+            caller = solver.evaluate(state.transaction.caller, True)
+            if (caller != PLAYER).unwrap():
+                suffixes.append(f"via proxy")
+            if len(suffixes) > 0:
+                line += f"\t({', '.join(suffixes)})"
+
+            yield line
+
+
 def block(offset: int, universe: Universe) -> Block:
     """Create a simulated Block."""
     # As an approximation, assume the blockhash of the `n`th block is
@@ -49,7 +128,7 @@ def block(offset: int, universe: Universe) -> Block:
     )
 
 
-def create(factory: Contract) -> Tuple[Uint160, Universe, SHA3]:
+def create(factory: Contract) -> Tuple[Uint160, History]:
     """Call createInstance to set up the level."""
     calldata = abiencode("createInstance(address)") + PLAYER.into(Uint256).unwrap(bytes)
     contracts: Dict[int, Contract] = {}
@@ -90,10 +169,10 @@ def create(factory: Contract) -> Tuple[Uint160, Universe, SHA3]:
 
     end.universe.add_contract(end.contract)
     address = Uint160(int.from_bytes(end.pc.returndata.unwrap()))
-    return address, end.universe, end.sha3
+    return address, History(end.universe, end.sha3)
 
 
-def validate(factory: Uint160, instance: Uint160, universe: Universe) -> Constraint:
+def validate(factory: Uint160, instance: Uint160, history: History) -> Constraint:
     """Call validateInstance to check the solution."""
     calldata = (
         abiencode("validateInstance(address,address)")
@@ -101,6 +180,7 @@ def validate(factory: Uint160, instance: Uint160, universe: Universe) -> Constra
         + PLAYER.into(Uint256).unwrap(bytes)
     )
 
+    universe, sha3 = history.subsequent()
     contract = universe.contracts[factory.unwrap()]
     start = concrete_start(contract, Uint256(0), calldata)
     start.transaction = Transaction(
@@ -111,6 +191,7 @@ def validate(factory: Uint160, instance: Uint160, universe: Universe) -> Constra
         gasprice=Uint256(0x12),
     )
     start.universe = universe
+    start.sha3 = sha3
 
     return Constraint.any(
         *(
@@ -162,27 +243,17 @@ def execute(
 
 
 def search(
-    address: Uint160,
-    starting_universe: Universe,
-    starting_sha3: SHA3,
-    prints: bool = False,
-) -> Optional[List[State]]:
+    address: Uint160, beginning: History, prints: bool = False
+) -> Optional[History]:
     """Symbolically execute the given level until a solution is found."""
-    histories: List[List[State]] = [[]]
+    histories: List[History] = [beginning]
     for i in range(16):
         suffix = str(i + 1)
         if prints:
             print(f"\tTxn {suffix}:")
-        subsequent: List[List[State]] = []
+        subsequent: List[History] = []
         for history in histories:
-            if len(history) > 0:
-                universe = history[-1].universe
-                sha3 = history[-1].sha3
-            else:
-                universe = starting_universe
-                sha3 = starting_sha3
-            universe = copy.deepcopy(universe)
-
+            universe, sha3 = history.subsequent()
             instance = universe.contracts[address.unwrap()]
             start = symbolic_start(instance, sha3, suffix)
             start.universe = universe
@@ -214,44 +285,36 @@ def search(
             start.contract.storage.written = []
 
             for end in _universal_transaction(start):
-                states = history + [end]
+                candidate = history.extend(end)
 
                 if prints:
                     sp = "-"
                     output = ""
-                    for line in printable_states(Solver(), states):
+                    for line in candidate.describe():
                         output += f"{sp} {line}\n"
                         sp = " "
                     print(output, end="")
 
                 solver = Solver()
-                for state in states:
-                    state.constrain(solver)
-                assert solver.check()
+                candidate.constrain(solver)
 
-                ok = validate(factory.address, address, states[-1].universe)
+                ok = validate(factory.address, address, candidate)
                 if solver.check(ok):
                     solver.assert_and_track(ok)
                     assert solver.check()
 
                     try:
-                        states[-1].sha3.narrow(solver)
-                        for state in states:
-                            state.narrow(solver)
+                        candidate.narrow(solver)
                         if prints:
                             print("  [found solution!]")
-                        return states
+                        return candidate
                     except AssertionError:
                         print("  [ok warning: narrowing error]")
                         solver = Solver()
-                        for state in states:
-                            state.constrain(solver)
-                        assert solver.check()
+                        candidate.constrain(solver)
 
                 try:
-                    states[-1].sha3.narrow(solver)
-                    for state in states:
-                        state.narrow(solver)
+                    candidate.narrow(solver)
                 except AssertionError:
                     print("  [warning: narrowing error]")
                     continue
@@ -266,7 +329,7 @@ def search(
 
                 if prints:
                     print("  [candidate]")
-                subsequent.append(states)
+                subsequent.append(candidate)
 
         histories = subsequent
         assert len(histories) < 256
@@ -274,65 +337,23 @@ def search(
     return None
 
 
-def printable_states(solver: Solver, states: List[State]) -> Iterable[str]:
-    """Yield a human-readable description of the transaction sequence."""
-    for state in states:
-        state.constrain(solver)
-        if not solver.check():
-            yield "unprintable: unsatisfiable"
-            return
-
-    try:
-        if len(states) > 0:
-            states[-1].sha3.narrow(solver)
-        for state in states:
-            state.narrow(solver)
-    except AssertionError:
-        yield "unprintable: narrowing error"
-        return
-
-    for state in states:
-        data = state.transaction.calldata.describe(solver, True)
-        if len(data) == 0:
-            data = "(empty)"
-        elif len(data) > 8:
-            data = data[:8] + " " + data[8:]
-        line = f"{data}"
-
-        suffixes = []
-        value = solver.evaluate(state.transaction.callvalue, True).unwrap()
-        if value > 0:
-            suffixes.append(f"value: {value}")
-        caller = solver.evaluate(state.transaction.caller, True)
-        if (caller != PLAYER).unwrap():
-            suffixes.append(f"via proxy")
-        if len(suffixes) > 0:
-            line += f"\t({', '.join(suffixes)})"
-
-        yield line
-
-
 if __name__ == "__main__":
     for i, address in enumerate(LEVEL_FACTORIES):
         print(f"{i:04}", end="")
         try:
             factory = get_code(address)
-            address, universe, sha3 = create(factory)
+            address, beginning = create(factory)
 
-            ok = validate(factory.address, address, universe)
+            ok = validate(factory.address, address, beginning)
             assert ok.unwrap() is False
 
-            solution = search(address, universe, sha3)
+            solution = search(address, beginning)
             if solution is None:
                 print("\tno solution")
                 continue
 
-            solver = Solver()
-            ok = validate(factory.address, address, solution[-1].universe)
-            solver.assert_and_track(ok)
-            assert solver.check()
-
-            for line in printable_states(solver, solution):
+            ok = validate(factory.address, address, solution)
+            for line in solution.describe(ok):
                 print("\t" + line)
 
         except Exception as e:
