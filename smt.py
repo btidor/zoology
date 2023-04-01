@@ -108,6 +108,24 @@ class BitVector(Symbolic[int]):
         return BV(arg, cls.length())
 
     def __eq__(self: T, other: T) -> Constraint:  # type: ignore
+        # TODO: verify or remove this manual simplification
+        if self.node.is_ite():
+            p, q, r = self.node.args()
+            qc = Constraint(Equals(other.node, q)).maybe_unwrap()
+            rc = Constraint(Equals(other.node, r)).maybe_unwrap()
+            if qc is True and rc is False:
+                return Constraint(p)
+            elif qc is False and rc is True:
+                return ~Constraint(p)
+        elif other.node.is_ite():
+            p, q, r = other.node.args()
+            qc = Constraint(Equals(self.node, q)).maybe_unwrap()
+            rc = Constraint(Equals(self.node, r)).maybe_unwrap()
+            if qc is True and rc is False:
+                return Constraint(p)
+            elif qc is False and rc is True:
+                return ~Constraint(p)
+
         return Constraint(Equals(self.node, other.node))
 
     def __ne__(self: T, other: T) -> Constraint:  # type: ignore
@@ -218,6 +236,11 @@ class Uint(BitVector):
         return self.__class__(BVLShl(self.node, other.node))
 
     def __rshift__(self: T, other: T) -> T:
+        # TODO: this is a hack because the pySMT simplifier doesn't compact
+        # repeated shifts. We should either prove it's correct, or remove it.
+        if self.node.is_bv_lshr():
+            p, q = self.node.args()
+            return self.__class__(BVLShr(p, q + other.node))
         return self.__class__(BVLShr(self.node, other.node))
 
     def __and__(self: T, other: T) -> T:
