@@ -66,8 +66,6 @@ class History:
         """Apply soft and deferred constraints to a given solver instance."""
         for state in self.states:
             state.narrow(solver)
-            state.sha3.narrow(solver)
-        assert solver.check()
 
     def describe(self, *constraints: Constraint) -> Iterable[str]:
         """Yield a human-readable description of the transaction sequence."""
@@ -83,7 +81,6 @@ class History:
         try:
             for state in self.states:
                 state.narrow(solver)
-                state.sha3.narrow(solver)
         except NarrowingError:
             yield "unprintable: narrowing error"
             solver = Solver()
@@ -91,7 +88,7 @@ class History:
                 solver.assert_and_track(constraint)
             self.constrain(solver)
             for state in self.states:
-                state.narrow(solver)
+                state.narrow(solver, skip_sha3=True)
 
         for state in self.states:
             data = state.transaction.calldata.describe(solver, True)

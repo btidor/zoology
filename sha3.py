@@ -157,6 +157,8 @@ class SHA3:
             if not solver.check():
                 raise NarrowingError(data)
 
+        assert solver.check()
+
     def printable(self, solver: Solver) -> Iterable[str]:
         """Yield a human-readable evaluation using the given model."""
         line = "SHA3"

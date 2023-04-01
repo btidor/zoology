@@ -79,7 +79,7 @@ class State:
         self.sha3.constrain(solver)
         self.universe.constrain(solver)
 
-    def narrow(self, solver: Solver) -> None:
+    def narrow(self, solver: Solver, skip_sha3: bool = False) -> None:
         """Apply concrete constraints to a given model instance."""
         constraint = self.contract.address == Uint160(
             0xADADADADADADADADADADADADADADADADADADADAD
@@ -109,6 +109,9 @@ class State:
                 break
 
         assert solver.check()
+
+        if not skip_sha3:
+            self.sha3.narrow(solver)
 
     def is_changed(self, since: State) -> bool:
         """Check if any permanent state changes have been made."""
