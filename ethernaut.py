@@ -63,8 +63,14 @@ class History:
         if not solver.check():
             raise ConstrainingError
 
-    def narrow(self, solver: Solver) -> None:
+    def narrow(self, solver: Solver, skip_sha3: bool = False) -> None:
         """Apply soft and deferred constraints to a given solver instance."""
+        if not skip_sha3:
+            if len(self.states) > 0:
+                self.states[-1].sha3.narrow(solver)
+            else:
+                self.starting_sha3.narrow(solver)
+
         for state in self.states:
             state.narrow(solver)
 
@@ -80,16 +86,13 @@ class History:
             return
 
         try:
-            for state in self.states:
-                state.narrow(solver)
+            self.narrow(solver)
         except NarrowingError:
             yield "unprintable: narrowing error"
             solver = Solver()
             for constraint in constraints:
                 solver.assert_and_track(constraint)
-            self.constrain(solver)
-            for state in self.states:
-                state.narrow(solver, skip_sha3=True)
+            self.narrow(solver, skip_sha3=True)
 
         for state in self.states:
             data = state.transaction.calldata.describe(solver, True)
