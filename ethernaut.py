@@ -8,7 +8,7 @@ import copy
 import json
 from collections import defaultdict
 from time import sleep
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Dict, Iterable, Iterator, List, Optional, Tuple
 
 from arrays import FrozenBytes
 from environment import Block, Contract, Transaction, Universe
@@ -74,7 +74,9 @@ class History:
         for state in self.states:
             state.narrow(solver)
 
-    def describe(self, *constraints: Constraint) -> Iterable[str]:
+    def describe(
+        self, *constraints: Constraint, skip_final: bool = False
+    ) -> Iterable[str]:
         """Yield a human-readable description of the transaction sequence."""
         solver = Solver()
         for constraint in constraints:
@@ -95,7 +97,10 @@ class History:
             self.constrain(solver)
             self.narrow(solver, skip_sha3=True)
 
-        for state in self.states:
+        states = self.states
+        if skip_final:
+            states = states[:-1]
+        for state in states:
             data = state.transaction.calldata.describe(solver, True)
             if len(data) == 0:
                 data = "(empty) "
@@ -181,7 +186,7 @@ def create(factory: Contract) -> Tuple[Uint160, History]:
 
 def validate(
     factory: Uint160, instance: Uint160, history: History, prints: bool = False
-) -> Constraint:
+) -> Iterator[Tuple[State, Constraint]]:
     """Call validateInstance to check the solution."""
     calldata = (
         abiencode("validateInstance(address,address)")
@@ -202,11 +207,10 @@ def validate(
     start.universe = universe
     start.sha3 = sha3
 
-    constraints = []
     for end in _universal_transaction(start, prints=prints):
         assert isinstance(end.pc, Termination)
-        constraints.append(Uint256(end.pc.returndata._bigvector(32)) != Uint256(0))
-    return Constraint.any(*constraints)
+        ok = Uint256(end.pc.returndata._bigvector(32)) != Uint256(0)
+        yield (end, ok)
 
 
 def execute(
@@ -251,7 +255,7 @@ def execute(
 
 def search(
     address: Uint160, beginning: History, prints: bool = False
-) -> Optional[History]:
+) -> Optional[Tuple[History, Constraint]]:
     """Symbolically execute the given level until a solution is found."""
     histories: List[History] = [beginning]
     for i in range(16):
@@ -295,27 +299,28 @@ def search(
                         output += f"{sp} {line}\n"
                         sp = " "
                     print(output, end="")
-                    if "unsatisfiable" in output:
+
+                for post, ok in validate(factory.address, address, candidate):
+                    complete = candidate.extend(post)
+
+                    solver = Solver()
+                    complete.constrain(solver)
+                    solver.assert_and_track(ok)
+
+                    if not solver.check():
                         continue
 
-                solver = Solver()
-                candidate.constrain(solver)
-
-                ok = validate(factory.address, address, candidate)
-                if solver.check(ok):
-                    solver.assert_and_track(ok)
-                    assert solver.check()
-
                     try:
-                        candidate.narrow(solver)
+                        complete.narrow(solver)
                         if prints:
                             print("  [found solution!]")
-                        return candidate
+                        return complete, ok
                     except NarrowingError:
-                        solver = Solver()
-                        candidate.constrain(solver)
+                        continue
 
                 try:
+                    solver = Solver()
+                    candidate.constrain(solver)
                     candidate.narrow(solver)
                 except NarrowingError:
                     if prints:
@@ -357,16 +362,16 @@ if __name__ == "__main__":
             factory = get_code(address)
             address, beginning = create(factory)
 
-            ok = validate(factory.address, address, beginning)
-            assert ok.unwrap() is False
+            for _, ok in validate(factory.address, address, beginning):
+                assert ok.unwrap() is False
 
-            solution = search(address, beginning, prints=(args.verbose > 1))
-            if solution is None:
+            result = search(address, beginning, prints=(args.verbose > 1))
+            if result is None:
                 print("\tno solution")
                 continue
 
-            ok = validate(factory.address, address, solution)
-            for line in solution.describe(ok):
+            solution, ok = result
+            for line in solution.describe(ok, skip_final=True):
                 print("\t" + line)
 
         except Exception as e:
