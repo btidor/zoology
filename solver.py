@@ -80,3 +80,25 @@ class Solver:
         result = value.__class__(value.node.substitute(self.model).simplify())
         assert result.node.is_constant()
         return result
+
+
+class ConstrainingError(Exception):
+    """Applying hard or soft constraints failed."""
+
+    pass
+
+
+class NarrowingError(Exception):
+    """
+    Applying deferred constraints failed.
+
+    Used when a branch satisifes path constraints but is unreachable in
+    practice.
+    """
+
+    def __init__(self, key: bytes) -> None:
+        """Create a new NarrowingError."""
+        self.key = key
+
+    def __str__(self) -> str:
+        return self.key.hex()

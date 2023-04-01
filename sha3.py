@@ -13,7 +13,7 @@ from pysmt.typing import ArrayType, BVType
 
 from arrays import Bytes
 from smt import Constraint, Uint8, Uint256
-from solver import Solver
+from solver import NarrowingError, Solver
 
 
 @dataclass
@@ -179,19 +179,3 @@ class SHA3:
 
         if line == "":
             yield ""
-
-
-class NarrowingError(Exception):
-    """
-    Applying deferred constraints failed.
-
-    Used when a branch satisifes path constraints but is unreachable in
-    practice.
-    """
-
-    def __init__(self, key: bytes) -> None:
-        """Create a new NarrowingError."""
-        self.key = key
-
-    def __str__(self) -> str:
-        return self.key.hex()

@@ -13,10 +13,10 @@ from typing import Dict, Iterable, List, Optional, Tuple
 from arrays import FrozenBytes
 from environment import Block, Contract, Transaction, Universe
 from rpc import get_code, get_storage_at
-from sha3 import SHA3, NarrowingError
+from sha3 import SHA3
 from smt import Constraint, Uint160, Uint256
 from solidity import abiencode
-from solver import Solver
+from solver import ConstrainingError, NarrowingError, Solver
 from state import Descend, Jump, State, Termination
 from universal import _universal_transaction, symbolic_start
 from vm import concrete_start, step
@@ -60,7 +60,8 @@ class History:
         """Apply hard constraints to the given solver instance."""
         for state in self.states:
             state.constrain(solver)
-        assert solver.check()
+        if not solver.check():
+            raise ConstrainingError
 
     def narrow(self, solver: Solver) -> None:
         """Apply soft and deferred constraints to a given solver instance."""
@@ -74,7 +75,7 @@ class History:
             solver.assert_and_track(constraint)
         try:
             self.constrain(solver)
-        except AssertionError:
+        except ConstrainingError:
             yield "unprintable: unsatisfiable"
             return
 

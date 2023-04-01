@@ -4,9 +4,9 @@ import pytest
 from pysmt.shortcuts import Equals
 
 from arrays import FrozenBytes
-from sha3 import SHA3, NarrowingError
+from sha3 import SHA3
 from smt import Constraint, Uint256
-from solver import Solver
+from solver import NarrowingError, Solver
 
 
 def test_concrete() -> None:
