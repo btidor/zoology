@@ -6,7 +6,7 @@ from typing import Dict, List, Literal, Optional, TypeVar, overload
 
 from pysmt import logics
 from pysmt.fnode import FNode
-from pysmt.shortcuts import BV, Array, Bool, Portfolio, get_env
+from pysmt.shortcuts import BV, Array, Bool, Portfolio, UnsatCoreSolver, get_env
 
 from smt import BitVector, Constraint
 
@@ -45,6 +45,14 @@ class Solver:
                 self.model = s.get_model().assignment
                 return True
             return False
+
+    def unsat_core(self, *assumptions: Constraint) -> List[Constraint]:
+        """Extract an unsatisfiable core for debugging."""
+        with UnsatCoreSolver("z3", logics.QF_ABV) as s:
+            s.add_assertions(c.node for c in self.constraints)
+            s.add_assertions(c.node for c in assumptions)
+            assert not s.solve()
+            return list(Constraint(c) for c in s.get_unsat_core())
 
     @overload
     def evaluate(self, value: T, model_completion: Literal[True]) -> T:
