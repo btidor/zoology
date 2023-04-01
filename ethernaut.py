@@ -92,6 +92,7 @@ class History:
             solver = Solver()
             for constraint in constraints:
                 solver.assert_and_track(constraint)
+            self.constrain(solver)
             self.narrow(solver, skip_sha3=True)
 
         for state in self.states:
