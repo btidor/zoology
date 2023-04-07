@@ -6,10 +6,8 @@ import copy
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, Iterator, List, Tuple
 
+import z3
 from Crypto.Hash import keccak
-from pysmt.fnode import FNode
-from pysmt.shortcuts import BV, BVExtract, Equals, Implies, NotEquals, Select, Symbol
-from pysmt.typing import ArrayType, BVType
 
 from arrays import Bytes
 from smt import Constraint, Uint8, Uint256
@@ -33,7 +31,7 @@ class SHA3:
     # We model the SHA-3 function as a symbolic uninterpreted function from
     # n-byte inputs to 32-byte outputs. Z3 requires n to be constant for any
     # given function, so we store a mapping from `n -> func_n(x)`.
-    hashes: Dict[int, FNode] = field(default_factory=dict)
+    hashes: Dict[int, z3.ArrayRef] = field(default_factory=dict)
 
     # If the input has a symbolic length, we don't really know what it's going
     # to hash to. In this case, mint a new variable for the return value.
@@ -63,9 +61,9 @@ class SHA3:
                 # HACK: to avoid introducing quantifiers, if this instance has a
                 # symbolic length, we return a fixed 1024-byte vector. This is
                 # an unsound assumption!
-                result = Constraint(
-                    Equals(key._bigvector(1024), key2._bigvector(1024))
-                ).ite(val2, result)
+                result = Constraint(key._bigvector(1024) == key2._bigvector(1024)).ite(
+                    val2, result
+                )
             return result
 
         if size == 0:
@@ -73,9 +71,10 @@ class SHA3:
             return Uint256(int.from_bytes(digest))
 
         if size not in self.hashes:
-            self.hashes[size] = Symbol(
+            self.hashes[size] = z3.Array(
                 f"SHA3({size}){self.suffix}",
-                ArrayType(BVType(size * 8), BVType(256)),
+                z3.BitVecSort(size * 8),
+                z3.BitVecSort(256),
             )
             self.accessed[size] = []
 
@@ -86,14 +85,14 @@ class SHA3:
             symbolic = Uint256(int.from_bytes(digest))
             self.digest_constraints.append(
                 Constraint(
-                    Equals(
-                        Select(self.hashes[size], key._bigvector(size)), symbolic.node
-                    )
+                    z3.Select(self.hashes[size], key._bigvector(size)) == symbolic.node
                 )
             )
             return symbolic
         else:
-            return Uint256(Select(self.hashes[size], key._bigvector(size)))
+            result = z3.Select(self.hashes[size], key._bigvector(size))
+            assert isinstance(result, z3.BitVecRef)
+            return Uint256(result)
 
     def items(self) -> Iterator[Tuple[int, Bytes, Uint256]]:
         """
@@ -103,7 +102,9 @@ class SHA3:
         """
         for n, array in self.hashes.items():
             for key in self.accessed[n]:
-                yield (n, key, Uint256(Select(array, key._bigvector(n))))
+                result = z3.Select(array, key._bigvector(n))
+                assert isinstance(result, z3.BitVecRef)
+                yield (n, key, Uint256(result))
 
     def constrain(self, solver: Solver) -> None:
         """Apply computed SHA3 constraints to the given solver instance."""
@@ -112,7 +113,7 @@ class SHA3:
             # avoids hash collisions between maps/arrays and ordinary storage
             # slots.
             solver.assert_and_track(
-                Constraint(NotEquals(BVExtract(val1.node, 128, 255), BV(0, 128)))
+                Constraint(z3.Extract(255, 128, val1.node) != z3.BitVecVal(0, 128))
             )
 
             for n2, key2, val2 in self.items():
@@ -121,9 +122,9 @@ class SHA3:
                 if n1 == n2:
                     solver.assert_and_track(
                         Constraint(
-                            Implies(
-                                NotEquals(key1._bigvector(n1), key2._bigvector(n2)),
-                                NotEquals(val1.node, val2.node),
+                            z3.Implies(
+                                (key1._bigvector(n1) != key2._bigvector(n2)),
+                                (val1.node != val2.node),
                             )
                         )
                     )

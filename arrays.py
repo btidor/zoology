@@ -19,10 +19,7 @@ from typing import (
     Union,
 )
 
-from pysmt.fnode import FNode
-from pysmt.shortcuts import Array as BackingArray
-from pysmt.shortcuts import BVConcat, Select, Store, Symbol
-from pysmt.typing import ArrayType
+import z3
 
 from smt import BitVector, Constraint, Uint8, Uint256
 from solver import Solver
@@ -40,7 +37,7 @@ class Array(Generic[K, V]):
     Tracks which keys are accessed and written.
     """
 
-    def __init__(self, array: FNode, vtype: Type[V]) -> None:
+    def __init__(self, array: z3.ExprRef, vtype: Type[V]) -> None:
         """Create a new Array. For internal use."""
         self.array = array
         self.vtype = vtype
@@ -63,13 +60,13 @@ class Array(Generic[K, V]):
     @classmethod
     def concrete(cls, key: Type[K], val: V) -> Array[K, V]:
         """Create a new Array with a concrete default value."""
-        return Array(BackingArray(key._pysmt_type(), val.node), val.__class__)
+        return Array(z3.K(z3.BitVecSort(key.length()), val.node), val.__class__)
 
     @classmethod
     def symbolic(cls, name: str, key: Type[K], val: Type[V]) -> Array[K, V]:
         """Create a new Array as an uninterpreted function."""
         return Array(
-            Symbol(name, ArrayType(key._pysmt_type(), val._pysmt_type())),
+            z3.Array(name, z3.BitVecSort(key.length()), z3.BitVecSort(val.length())),
             val,
         )
 
@@ -87,7 +84,9 @@ class Array(Generic[K, V]):
         """Look up the given symbolic key, but don't track the lookup."""
         if (u := key.maybe_unwrap()) is not None and u in self.surface:
             return self.surface[u]
-        return self.vtype(Select(self.array, key.node))
+        result = z3.Select(self.array, key.node)
+        assert isinstance(result, z3.BitVecRef)
+        return self.vtype(result)
 
     def poke(self, key: K, val: V) -> None:
         """Set up the given symbolic key, but don't track the write."""
@@ -95,7 +94,9 @@ class Array(Generic[K, V]):
             self.surface[u] = val
         else:
             self.surface = {}
-        self.array = Store(self.array, key.node, val.node)
+        result = z3.Store(self.array, key.node, val.node)
+        assert isinstance(result, z3.ArrayRef)
+        self.array = result
 
     def printable_diff(
         self, name: str, solver: Solver, original: Array[K, V]
@@ -212,11 +213,13 @@ class Bytes(abc.ABC):
         """Return a symbolic slice of this instance."""
         return ByteSlice(self, offset, size)
 
-    def _bigvector(self, expected_length: int) -> FNode:
+    def _bigvector(self, expected_length: int) -> z3.BitVecRef:
         """Return a single, large bitvector of this instance's bytes."""
         length = self.length.maybe_unwrap() or expected_length
         assert length == expected_length
-        return BVConcat(*[self[Uint256(i)].node for i in range(length)])
+        result = z3.Concat(*[self[Uint256(i)].node for i in range(length)])
+        assert isinstance(result, z3.BitVecRef)
+        return result
 
     def maybe_unwrap(self) -> Optional[bytes]:
         """Unwrap this instance to bytes."""

@@ -1,7 +1,6 @@
 #!/usr/bin/env pytest
 
 import pytest
-from pysmt.shortcuts import Equals
 
 from arrays import FrozenBytes
 from sha3 import SHA3
@@ -27,7 +26,7 @@ def test_symbolic() -> None:
     sha3.constrain(solver)
     solver.assert_and_track(
         Constraint(
-            Equals(input._bigvector(7), FrozenBytes.concrete(b"testing")._bigvector(7))
+            input._bigvector(7) == FrozenBytes.concrete(b"testing")._bigvector(7)
         )
     )
     assert solver.check()
@@ -49,7 +48,7 @@ def test_fully_symbolic() -> None:
     sha3.constrain(solver)
     solver.assert_and_track(
         Constraint(
-            Equals(input._bigvector(7), FrozenBytes.concrete(b"testing")._bigvector(7))
+            input._bigvector(7) == FrozenBytes.concrete(b"testing")._bigvector(7)
         )
     )
     assert solver.check()
@@ -83,7 +82,7 @@ def test_impossible_concrete() -> None:
     sha3.constrain(solver)
     solver.assert_and_track(
         Constraint(
-            Equals(input._bigvector(7), FrozenBytes.concrete(b"testing")._bigvector(7))
+            input._bigvector(7) == FrozenBytes.concrete(b"testing")._bigvector(7)
         )
     )
     solver.assert_and_track(

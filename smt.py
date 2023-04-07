@@ -1,64 +1,29 @@
-"""Library for SMT solving. Currently a typed wrapper for pySMT."""
+"""Library for SMT solving. Currently a typed wrapper for Z3."""
 
 from __future__ import annotations
 
 import abc
 from typing import Any, Generic, Literal, Optional, Type, TypeVar, Union, overload
 
+import z3
 from Crypto.Hash import keccak
-from pysmt.fnode import FNode
-from pysmt.shortcuts import (
-    BV,
-    BVSLE,
-    BVSLT,
-    BVULE,
-    BVULT,
-    And,
-    Bool,
-    BVAdd,
-    BVAnd,
-    BVAShr,
-    BVConcat,
-    BVExtract,
-    BVLShl,
-    BVLShr,
-    BVMul,
-    BVNot,
-    BVOr,
-    BVSDiv,
-    BVSRem,
-    BVSub,
-    BVUDiv,
-    BVURem,
-    BVXor,
-    BVZExt,
-    Equals,
-    Ite,
-    Not,
-    NotEquals,
-    Or,
-    Symbol,
-    simplify,
-)
-from pysmt.typing import BOOL, BVType, PySMTType
 
+R = TypeVar("R", bound="z3.ExprRef")
 S = TypeVar("S")
+
 T = TypeVar("T", bound="BitVector")
 U = TypeVar("U", bound="Uint")
-V = TypeVar("V", bound="Symbolic[Any]")
+V = TypeVar("V", bound="Symbolic[Any, Any]")
 
 
-class Symbolic(abc.ABC, Generic[S]):
+class Symbolic(abc.ABC, Generic[R, S]):
     """An SMT expression."""
 
-    def __init__(self, arg: Union[str, FNode, S]) -> None:
+    node: R
+
+    def __init__(self, arg: Union[str, R, S]) -> None:
         """Create a new Symbolic."""
-        if isinstance(arg, str):
-            self.node = Symbol(arg, self._pysmt_type())
-        elif isinstance(arg, FNode):
-            self.node = simplify(arg)
-        else:
-            self.node = self._pysmt_constant(arg)
+        raise NotImplementedError
 
     def __copy__(self: V) -> V:
         return self
@@ -66,27 +31,26 @@ class Symbolic(abc.ABC, Generic[S]):
     def __deepcopy__(self: V, memo: Any) -> V:
         return self
 
-    @classmethod
-    @abc.abstractmethod
-    def _pysmt_type(cls) -> PySMTType:
-        raise NotImplementedError
 
-    @classmethod
-    @abc.abstractmethod
-    def _pysmt_constant(cls, arg: S) -> FNode:
-        raise NotImplementedError
-
-
-class BitVector(Symbolic[int]):
+class BitVector(Symbolic[z3.BitVecRef, int]):
     """An SMT bitvector."""
 
-    def __init__(self, arg: Union[str, FNode, int]):
+    def __init__(self, arg: Union[str, z3.BitVecRef, int]):
         """Create a new BitVector."""
-        if isinstance(arg, FNode):
+        if isinstance(arg, str):
+            self.node = z3.BitVec(arg, self.length())
+        elif isinstance(arg, z3.ExprRef):
+            assert z3.is_bv(arg)
             assert (
-                arg.bv_width() == self.length()
-            ), f"can't initialize {type(self).__name__} with {arg.bv_width()} bits"
-        super().__init__(arg)
+                arg.size() == self.length()
+            ), f"can't initialize {type(self).__name__} with {arg.size()} bits"
+            result = z3.simplify(arg)
+            assert isinstance(result, z3.BitVecRef)
+            self.node = result
+        elif isinstance(arg, int):
+            self.node = z3.BitVecVal(arg, self.length())
+        else:
+            raise TypeError
 
     @classmethod
     @abc.abstractmethod
@@ -94,51 +58,20 @@ class BitVector(Symbolic[int]):
         """Return the number of bits in the bitvector."""
         raise NotImplementedError
 
-    @classmethod
-    def _pysmt_type(cls) -> PySMTType:
-        return BVType(cls.length())
-
-    @classmethod
-    def _pysmt_constant(cls, arg: int) -> FNode:
-        assert isinstance(arg, int)
-        assert arg >= 0, f"underflow: {arg} does not fit in {cls.__name__}"
-        assert (
-            arg < 2 ** cls.length()
-        ), f"overflow: {arg} does not fit in {cls.__name__}"
-        return BV(arg, cls.length())
-
     def __eq__(self: T, other: T) -> Constraint:  # type: ignore
-        # TODO: verify or remove this manual simplification
-        if self.node.is_ite():
-            p, q, r = self.node.args()
-            qc = Constraint(Equals(other.node, q)).maybe_unwrap()
-            rc = Constraint(Equals(other.node, r)).maybe_unwrap()
-            if qc is True and rc is False:
-                return Constraint(p)
-            elif qc is False and rc is True:
-                return ~Constraint(p)
-        elif other.node.is_ite():
-            p, q, r = other.node.args()
-            qc = Constraint(Equals(self.node, q)).maybe_unwrap()
-            rc = Constraint(Equals(self.node, r)).maybe_unwrap()
-            if qc is True and rc is False:
-                return Constraint(p)
-            elif qc is False and rc is True:
-                return ~Constraint(p)
-
-        return Constraint(Equals(self.node, other.node))
+        return Constraint(self.node == other.node)
 
     def __ne__(self: T, other: T) -> Constraint:  # type: ignore
-        return Constraint(NotEquals(self.node, other.node))
+        return Constraint(self.node != other.node)
 
     def __add__(self: T, other: T) -> T:
-        return self.__class__(BVAdd(self.node, other.node))
+        return self.__class__(self.node + other.node)
 
     def __sub__(self: T, other: T) -> T:
-        return self.__class__(BVSub(self.node, other.node))
+        return self.__class__(self.node - other.node)
 
     def __mul__(self: T, other: T) -> T:
-        return self.__class__(BVMul(self.node, other.node))
+        return self.__class__(self.node * other.node)
 
     @overload
     def maybe_unwrap(self, into: Type[int] = int) -> Optional[int]:
@@ -152,14 +85,16 @@ class BitVector(Symbolic[int]):
         self, into: Union[Type[int], Type[bytes]] = int
     ) -> Optional[Union[int, bytes]]:
         """Return the bitvector's underlying value, if a constant."""
-        if not self.node.is_constant():
+        if not z3.is_bv_value(self.node):
             return None
-        elif into == int:
-            result = self.node.constant_value()
+        assert isinstance(self.node, z3.BitVecNumRef)
+
+        if into == int:
+            result = self.node.as_long()
             assert isinstance(result, int)
             return result
         elif into == bytes:
-            result = self.node.constant_value()
+            result = self.node.as_long()
             assert isinstance(result, int)
             return result.to_bytes(self.length() // 8)
         else:
@@ -199,9 +134,10 @@ class BitVector(Symbolic[int]):
         return BitVector._describe(self.node)
 
     @classmethod
-    def _describe(cls, node: FNode) -> str:
-        if node.is_constant():
-            v = node.constant_value()
+    def _describe(cls, node: z3.ExprRef) -> str:
+        if z3.is_bv_value(node):
+            assert isinstance(node, z3.BitVecNumRef)
+            v = node.as_long()
             if v < (1 << 256):
                 return hex(v)
             p = []
@@ -211,9 +147,7 @@ class BitVector(Symbolic[int]):
                 v >>= 256
             return f"0x[{'.'.join(reversed(p))}]"
         else:
-            digest = keccak.new(
-                data=node.serialize().encode(), digest_bits=256
-            ).digest()
+            digest = keccak.new(data=node.sexpr().encode(), digest_bits=256).digest()
             return "#" + digest[:3].hex()
 
 
@@ -221,62 +155,59 @@ class Uint(BitVector):
     """A bitvector representing an unsigned integer."""
 
     def __lt__(self: T, other: T) -> Constraint:
-        return Constraint(BVULT(self.node, other.node))
+        return Constraint(z3.ULT(self.node, other.node))
 
     def __le__(self: T, other: T) -> Constraint:
-        return Constraint(BVULE(self.node, other.node))
+        return Constraint(z3.ULE(self.node, other.node))
 
     def __floordiv__(self: T, other: T) -> T:
-        return self.__class__(BVUDiv(self.node, other.node))
+        return self.__class__(z3.UDiv(self.node, other.node))
 
     def __mod__(self: T, other: T) -> T:
-        return self.__class__(BVURem(self.node, other.node))
+        return self.__class__(z3.URem(self.node, other.node))
 
     def __lshift__(self: T, other: T) -> T:
-        return self.__class__(BVLShl(self.node, other.node))
+        return self.__class__(self.node << other.node)
 
     def __rshift__(self: T, other: T) -> T:
-        # TODO: this is a hack because the pySMT simplifier doesn't compact
-        # repeated shifts. We should either prove it's correct, or remove it.
-        if self.node.is_bv_lshr():
-            p, q = self.node.args()
-            return self.__class__(BVLShr(p, q + other.node))
-        return self.__class__(BVLShr(self.node, other.node))
+        return self.__class__(z3.LShR(self.node, other.node))
 
     def __and__(self: T, other: T) -> T:
-        return self.__class__(BVAnd(self.node, other.node))
+        return self.__class__(self.node & other.node)
 
     def __or__(self: T, other: T) -> T:
-        return self.__class__(BVOr(self.node, other.node))
+        return self.__class__(self.node | other.node)
 
     def __xor__(self: T, other: T) -> T:
-        return self.__class__(BVXor(self.node, other.node))
+        return self.__class__(self.node ^ other.node)
 
     def __invert__(self: T) -> T:
-        return self.__class__(BVNot(self.node))
+        return self.__class__(~self.node)
 
     def into(self, into: Type[U]) -> U:
         """Truncate or zero-extend the bitvector into a different type."""
         if into.length() > self.length():
-            return into(BVZExt(self.node, into.length() - self.length()))
+            return into(z3.ZeroExt(into.length() - self.length(), self.node))
         else:
-            return into(BVExtract(self.node, 0, into.length() - 1))
+            result = z3.Extract(into.length() - 1, 0, self.node)
+            assert isinstance(result, z3.BitVecRef)
+            return into(result)
 
 
 class Sint(BitVector):
     """A bitvector representing a signed integer."""
 
     def __lt__(self: T, other: T) -> Constraint:
-        return Constraint(BVSLT(self.node, other.node))
+        return Constraint(self.node < other.node)
 
     def __le__(self: T, other: T) -> Constraint:
-        return Constraint(BVSLE(self.node, other.node))
+        return Constraint(self.node <= other.node)
 
     def __floordiv__(self: T, other: T) -> T:
-        return self.__class__(BVSDiv(self.node, other.node))
+        return self.__class__(self.node / other.node)
 
     def __mod__(self: T, other: T) -> T:
-        return self.__class__(BVSRem(self.node, other.node))
+        return self.__class__(z3.SRem(self.node, other.node))
 
 
 class Uint8(Uint):
@@ -309,14 +240,16 @@ class Uint256(Uint):
     def from_bytes(cls, *args: Uint8) -> Uint256:
         """Create a new Uint256 from a list of 32 Uint8s."""
         assert len(args) == 32
-        return Uint256(BVConcat(a.node for a in args))
+        result = z3.Concat(*[a.node for a in args])
+        assert isinstance(result, z3.BitVecRef)
+        return Uint256(result)
 
     @classmethod
     def overflow_safe(cls, a: Uint256, b: Uint256) -> Constraint:
         """Return a constraint asserting that a + b does not overflow."""
         result = a.into(Uint257) + b.into(Uint257)
-        sign = BVExtract(result.node, 256, 256)
-        return Constraint(Equals(sign, BV(0, 1)))
+        sign = z3.Extract(256, 256, result.node)
+        return Constraint(sign == z3.BitVecVal(0, 1))
 
     @classmethod
     def underflow_safe(cls, a: Uint256, b: Uint256) -> Constraint:
@@ -359,29 +292,28 @@ class Sint256(Sint):
         return Uint256(self.node)
 
     def __lshift__(self: T, other: Uint256) -> T:
-        return self.__class__(BVLShl(self.node, other.node))
+        return self.__class__(self.node << other.node)
 
     def __rshift__(self: T, other: Uint256) -> T:
-        return self.__class__(BVAShr(self.node, other.node))
+        return self.__class__(self.node >> other.node)
 
 
-class Constraint(Symbolic[bool]):
+class Constraint(Symbolic[z3.BoolRef, bool]):
     """A symbolic boolean value representing true or false."""
 
-    def __init__(self, arg: Union[str, FNode, bool]):
+    def __init__(self, arg: Union[str, z3.BoolRef, bool]):
         """Create a new Constraint."""
-        if isinstance(arg, FNode):
-            assert arg.get_type().is_bool_type()
-        super().__init__(arg)
-
-    @classmethod
-    def _pysmt_type(cls) -> PySMTType:
-        return BOOL
-
-    @classmethod
-    def _pysmt_constant(cls, arg: bool) -> FNode:
-        assert isinstance(arg, bool)
-        return Bool(arg)
+        if isinstance(arg, str):
+            self.node = z3.Bool(arg)
+        elif isinstance(arg, z3.ExprRef):
+            assert z3.is_bool(arg)
+            result = z3.simplify(arg)
+            assert isinstance(result, z3.BoolRef)
+            self.node = result
+        elif isinstance(arg, bool):
+            self.node = z3.BoolVal(arg)
+        else:
+            raise TypeError
 
     def __bool__(self) -> bool:
         # Footgun: it's really easy to accidentally create a Constraint and try
@@ -399,27 +331,34 @@ class Constraint(Symbolic[bool]):
     @classmethod
     def all(cls, *constraints: Constraint) -> Constraint:
         """Return the AND of all given constraints."""
-        return Constraint(And(*(c.node for c in constraints)))
+        result = z3.And(*(c.node for c in constraints))
+        assert isinstance(result, z3.BoolRef)
+        return Constraint(result)
 
     @classmethod
     def any(cls, *constraints: Constraint) -> Constraint:
         """Return the OR of all given constraints."""
-        return Constraint(Or(*(c.node for c in constraints)))
+        result = z3.Or(*(c.node for c in constraints))
+        assert isinstance(result, z3.BoolRef)
+        return Constraint(result)
 
     def __invert__(self) -> Constraint:
-        return Constraint(Not(self.node))
+        result = z3.Not(self.node)
+        assert isinstance(result, z3.BoolRef)
+        return Constraint(result)
 
     def ite(self, then: V, else_: V) -> V:
         """Return a symbolic value: `then` if true, `else_` if false."""
-        return then.__class__(Ite(self.node, then.node, else_.node))
+        return then.__class__(z3.If(self.node, then.node, else_.node))
 
     def maybe_unwrap(self) -> Optional[bool]:
         """Return the constraint's underlying value, if a constant."""
-        if not self.node.is_constant():
+        if z3.is_true(self.node):
+            return True
+        elif z3.is_false(self.node):
+            return False
+        else:
             return None
-        result = self.node.constant_value()
-        assert isinstance(result, bool)
-        return result
 
     def unwrap(self, msg: str = "unexpected symbolic value") -> bool:
         """Unwrap the constraint or raise an error."""
