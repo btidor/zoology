@@ -11,7 +11,8 @@ from smt import Uint160, Uint256
 # For now, make requests for a given, fixed block offset.
 TAG = "0x81f21d"
 
-API_KEY = "***"
+with open(".key") as f:
+    API_KEY = f.read().strip()
 
 
 def get_code(address: Uint160) -> Contract:
