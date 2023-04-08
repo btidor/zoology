@@ -15,6 +15,13 @@ T = TypeVar("T", bound="BitVector")
 U = TypeVar("U", bound="Uint")
 V = TypeVar("V", bound="Symbolic[Any, Any]")
 
+# Note: we use Z3Py expressions as our underlying representation because Z3's
+# in-process simplifier is much more powerful than pySMT's. A well-simplified
+# internal representation is important for debuggability.
+#
+# However, Bitwuzla (which we access through pySMT) is a much faster solver than
+# Z3, so we convert to pySMT at solve time. The overhead is definitely worth it.
+
 
 class Symbolic(abc.ABC, Generic[R, S]):
     """An SMT expression."""
