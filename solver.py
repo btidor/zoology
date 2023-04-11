@@ -7,8 +7,10 @@ from typing import Dict, List, Literal, Optional, Tuple, TypeVar, overload
 
 import z3
 from pysmt import logics
+from pysmt.fnode import FNode
 from pysmt.shortcuts import Portfolio, get_env
 from pysmt.smtlib.parser import get_formula
+from pysmt.solvers.portfolio import Portfolio as PortfolioType
 from z3.z3util import get_vars
 
 from smt import BitVector, Constraint
@@ -25,11 +27,12 @@ class Solver:
     def __init__(self) -> None:
         """Create a new Solver."""
         self.constraints: List[Constraint] = []
+        self.cached_solver: Optional[PortfolioType] = None
         self.model: Optional[Dict[str, Tuple[z3.ExprRef, z3.ExprRef]]] = None
 
     def assert_and_track(self, constraint: Constraint) -> None:
         """Track a new constraint."""
-        self.model = None
+        self.cached_solver, self.model = None, None
         self.constraints.append(constraint)
 
     def check(self, *assumptions: Constraint) -> bool:
@@ -40,77 +43,31 @@ class Solver:
         solver fails.
         """
         # Bitwuzla is very fast, but can't solve all situations
-        with Portfolio(["bitwuzla", "msat"], logics.QF_ABV) as s:
-            for constraint in self.constraints + list(assumptions):
-                # FYI, this Z3 -> pySMT conversion process only works for
-                # boolean constraints, not arbitrary expressions ¯\_(ツ)_/¯
-                smtlib = z3.Z3_benchmark_to_smtlib_string(
-                    constraint.node.ctx_ref(),
-                    None,
-                    None,
-                    None,
-                    None,
-                    0,
-                    None,
-                    constraint.node.as_ast(),
-                )
-                fnode = get_formula(io.StringIO(smtlib))
-                s.add_assertion(fnode)
+        solver = Portfolio(["bitwuzla", "msat"], logics.QF_ABV)
+        for constraint in self.constraints + list(assumptions):
+            # FYI, this Z3 -> pySMT conversion process only works for boolean
+            # constraints, not arbitrary expressions ¯\_(ツ)_/¯
+            smtlib = z3.Z3_benchmark_to_smtlib_string(
+                constraint.node.ctx_ref(),
+                None,
+                None,
+                None,
+                None,
+                0,
+                None,
+                constraint.node.as_ast(),
+            )
+            fnode = get_formula(io.StringIO(smtlib))
+            solver.add_assertion(fnode)
 
-            if s.solve():
-                self.model = {}
-                for key, val in s.get_model().assignment.items():
-                    assert key.is_symbol(), f"expected symbol, got {key}"
-                    name, sym = key.symbol_name(), key.symbol_type()
-                    if sym.is_bool_type():
-                        if val.is_true():
-                            self.model[name] = (z3.Bool(name), z3.BoolVal(True))
-                        elif val.is_false():
-                            self.model[name] = (z3.Bool(name), z3.BoolVal(False))
-                        else:
-                            raise TypeError("bool is neither true nor false")
-                    elif sym.is_bv_type():
-                        self.model[name] = (
-                            z3.BitVec(name, val.bv_width()),
-                            z3.BitVecVal(val.bv_unsigned_value(), val.bv_width()),
-                        )
-                    elif sym.is_array_type():
-                        writes: Dict[int, int] = {}
-                        while val.is_store():
-                            val, i, x = val.args()
-                            if i in writes:
-                                continue  # last (outermost) write wins
-                            writes[i.bv_unsigned_value()] = x.bv_unsigned_value()
-                        assert val.is_array_value()
-
-                        array = z3.K(
-                            z3.BitVecSort(val.array_value_index_type().width),
-                            z3.BitVecVal(
-                                val.array_value_default().bv_unsigned_value(),
-                                val.array_value_default().bv_width(),
-                            ),
-                        )
-                        for i, x in writes.items():
-                            array = z3.Store(
-                                array,
-                                z3.BitVecVal(i, val.array_value_index_type().width),
-                                z3.BitVecVal(x, val.array_value_default().bv_width()),
-                            )
-
-                        self.model[name] = (
-                            z3.Array(
-                                name,
-                                z3.BitVecSort(val.array_value_index_type().width),
-                                z3.BitVecSort(val.array_value_default().bv_width()),
-                            ),
-                            array,
-                        )
-                    else:
-                        raise TypeError(f"unhandled type: {sym}")
-                return True
-            else:
-                self.model = None
-                return False
+        if solver.solve():
+            self.cached_solver = solver
+            self.model = None
+            return True
+        else:
+            self.cached_solver = None
+            self.model = None
+            return False
 
     def unsat_core(self, *assumptions: Constraint) -> List[Constraint]:
         """Extract an unsatisfiable core for debugging."""
@@ -137,26 +94,27 @@ class Solver:
 
     def evaluate(self, value: T, model_completion: bool = False) -> Optional[T]:
         """Evaluate a given bitvector expression with the given model."""
-        assert self.model is not None
+        assert self.cached_solver is not None
 
         if value.is_constant_literal():
             return value
 
-        for var in get_vars(value.node):
-            if (name := var.decl().name()) in self.model:
-                pass
-            elif model_completion is False:
-                return None
+        if self.model is None:
+            self.model = {}
+            for key, val in self.cached_solver.get_model().assignment.items():
+                symbol = translate_pysmt_symbol(key)
+                constant = translate_pysmt_constant(val)
+                self.model[symbol.decl().name()] = (symbol, constant)
+
+        for symbol in get_vars(value.node):
+            name = symbol.decl().name()
+            if name in self.model:
+                continue
+
+            if model_completion:
+                self.model[name] = (symbol, zero_for_z3_sort(symbol.sort()))
             else:
-                if var.sort_kind() == z3.Z3_BOOL_SORT:
-                    zero = z3.BoolVal(False)
-                elif var.sort_kind() == z3.Z3_BV_SORT:
-                    zero = z3.BitVecVal(0, var.size())
-                elif var.sort_kind() == z3.Z3_ARRAY_SORT:
-                    zero = z3.K(var.domain(), z3.BitVecVal(0, var.range().size()))
-                else:
-                    raise TypeError(f"unhandled type: {var.sort()}")
-                self.model[name] = (var, zero)
+                return None
 
         expr = z3.substitute(value.node, list(self.model.values()))
         expr = z3.simplify(expr)
@@ -187,3 +145,74 @@ class NarrowingError(Exception):
 
     def __str__(self) -> str:
         return self.key.hex()
+
+
+def translate_pysmt_symbol(node: FNode) -> z3.ExprRef:
+    """Convert a pySMT symbol into a Z3 expression."""
+    assert node.is_symbol(), f"expected symbol, got {node}"
+    sname, stype = node.symbol_name(), node.symbol_type()
+
+    if stype.is_bool_type():
+        return z3.Bool(sname)
+    elif stype.is_bv_type():
+        return z3.BitVec(sname, stype.width)
+    elif stype.is_array_type():
+        assert stype.index_type.is_bv_type()
+        assert stype.elem_type.is_bv_type()
+        return z3.Array(
+            sname,
+            z3.BitVecSort(stype.index_type.width),
+            z3.BitVecSort(stype.elem_type.width),
+        )
+    else:
+        raise TypeError(f"unhandled type: {stype}")
+
+
+def translate_pysmt_constant(node: FNode) -> z3.ExprRef:
+    """Convert a pySMT constant into a Z3 expression."""
+    if node.is_constant():
+        ctype, cvalue = node.constant_type(), node.constant_value()
+        if ctype.is_bool_type():
+            return z3.BoolVal(cvalue)
+        elif ctype.is_bv_type():
+            return z3.BitVecVal(cvalue, node.bv_width())
+        else:
+            raise TypeError(f"unhandled type: {ctype}")
+    elif node.is_array_op():
+        writes: Dict[int, int] = {}
+        while node.is_store():
+            node, i, x = node.args()
+            if i in writes:
+                continue  # last (outermost) write wins
+            writes[i.bv_unsigned_value()] = x.bv_unsigned_value()
+        assert node.is_array_value()
+
+        domain = node.array_value_index_type()
+        default = node.array_value_default()
+        array = z3.K(
+            z3.BitVecSort(domain.width),
+            z3.BitVecVal(default.bv_unsigned_value(), default.bv_width()),
+        )
+        for i, x in writes.items():
+            array = z3.Store(
+                array,
+                z3.BitVecVal(i, domain.width),
+                z3.BitVecVal(x, default.bv_width()),
+            )
+        return array
+    else:
+        raise TypeError(f"expected constant or array, got {node}")
+
+
+def zero_for_z3_sort(sort: z3.SortRef) -> z3.ExprRef:
+    """Create the zero-valued expression for a given Z3 sort."""
+    if sort.kind() == z3.Z3_BOOL_SORT:
+        return z3.BoolVal(False)
+    elif sort.kind() == z3.Z3_BV_SORT:
+        assert isinstance(sort, z3.BitVecSortRef)
+        return z3.BitVecVal(0, sort.size())
+    elif sort.kind() == z3.Z3_ARRAY_SORT:
+        assert isinstance(sort, z3.ArraySortRef)
+        return z3.K(sort.domain(), zero_for_z3_sort(sort.range()))
+    else:
+        raise TypeError(f"unhandled z3 sort: {sort}")
