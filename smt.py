@@ -38,6 +38,11 @@ class Symbolic(abc.ABC, Generic[R, S]):
     def __deepcopy__(self: V, memo: Any) -> V:
         return self
 
+    @abc.abstractmethod
+    def is_constant_literal(self) -> bool:
+        """Check if the expression has a concrete value."""
+        pass
+
 
 class BitVector(Symbolic[z3.BitVecRef, int]):
     """An SMT bitvector."""
@@ -80,6 +85,12 @@ class BitVector(Symbolic[z3.BitVecRef, int]):
     def __mul__(self: T, other: T) -> T:
         return self.__class__(self.node * other.node)
 
+    def is_constant_literal(self) -> bool:
+        """Check if the bitvector has a concrete value."""
+        result = z3.is_bv_value(self.node)
+        assert type(result) == bool
+        return result
+
     @overload
     def maybe_unwrap(self, into: Type[int] = int) -> Optional[int]:
         ...
@@ -91,8 +102,8 @@ class BitVector(Symbolic[z3.BitVecRef, int]):
     def maybe_unwrap(
         self, into: Union[Type[int], Type[bytes]] = int
     ) -> Optional[Union[int, bytes]]:
-        """Return the bitvector's underlying value, if a constant."""
-        if not z3.is_bv_value(self.node):
+        """Return the bitvector's underlying value, if a constant literal."""
+        if not self.is_constant_literal():
             return None
         assert isinstance(self.node, z3.BitVecNumRef)
 
@@ -358,8 +369,14 @@ class Constraint(Symbolic[z3.BoolRef, bool]):
         """Return a symbolic value: `then` if true, `else_` if false."""
         return then.__class__(z3.If(self.node, then.node, else_.node))
 
+    def is_constant_literal(self) -> bool:
+        """Check if the constraint has a concrete value."""
+        result = z3.is_true(self.node) or z3.is_false(self.node)
+        assert type(result) == bool
+        return result
+
     def maybe_unwrap(self) -> Optional[bool]:
-        """Return the constraint's underlying value, if a constant."""
+        """Return the constraint's underlying value, if a constant literal."""
         if z3.is_true(self.node):
             return True
         elif z3.is_false(self.node):

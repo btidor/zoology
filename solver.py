@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import io
-from typing import Dict, List, Literal, Optional, TypeVar, overload
+from typing import Dict, List, Literal, Optional, Tuple, TypeVar, overload
 
 import z3
 from pysmt import logics
-from pysmt.fnode import FNode
 from pysmt.shortcuts import Portfolio, get_env
 from pysmt.smtlib.parser import get_formula
+from z3.z3util import get_vars
 
 from smt import BitVector, Constraint
 
@@ -25,7 +25,7 @@ class Solver:
     def __init__(self) -> None:
         """Create a new Solver."""
         self.constraints: List[Constraint] = []
-        self.model: Optional[Dict[FNode, FNode]] = None
+        self.model: Optional[Dict[str, Tuple[z3.ExprRef, z3.ExprRef]]] = None
 
     def assert_and_track(self, constraint: Constraint) -> None:
         """Track a new constraint."""
@@ -42,6 +42,8 @@ class Solver:
         # Bitwuzla is very fast, but can't solve all situations
         with Portfolio(["bitwuzla", "msat"], logics.QF_ABV) as s:
             for constraint in self.constraints + list(assumptions):
+                # FYI, this Z3 -> pySMT conversion process only works for
+                # boolean constraints, not arbitrary expressions ¯\_(ツ)_/¯
                 smtlib = z3.Z3_benchmark_to_smtlib_string(
                     constraint.node.ctx_ref(),
                     None,
@@ -56,10 +58,30 @@ class Solver:
                 s.add_assertion(fnode)
 
             if s.solve():
-                self.model = s.get_model().assignment
+                self.model = {}
+                for key, val in s.get_model().assignment.items():
+                    assert key.is_symbol(), f"expected symbol, got {key}"
+                    name, sym = key.symbol_name(), key.symbol_type()
+                    if sym.is_bool_type():
+                        if val.is_true():
+                            self.model[name] = (z3.Bool(name), z3.BoolVal(True))
+                        elif val.is_false():
+                            self.model[name] = (z3.Bool(name), z3.BoolVal(False))
+                        else:
+                            raise TypeError("bool is neither true nor false")
+                    elif sym.is_bv_type():
+                        self.model[name] = (
+                            z3.BitVec(name, val.bv_width()),
+                            z3.BitVecVal(val.bv_unsigned_value(), val.bv_width()),
+                        )
+                    elif sym.is_array_type():
+                        raise NotImplementedError
+                    else:
+                        raise TypeError(f"unhandled type: {sym}")
                 return True
-
-            return False
+            else:
+                self.model = None
+                return False
 
     def unsat_core(self, *assumptions: Constraint) -> List[Constraint]:
         """Extract an unsatisfiable core for debugging."""
@@ -88,30 +110,26 @@ class Solver:
         """Evaluate a given bitvector expression with the given model."""
         assert self.model is not None
 
-        # for var in self.value.node.get_free_variables():
-        #     if var in self.model:
-        #         continue
+        if value.is_constant_literal():
+            return value
 
-        #     if model_completion is False:
-        #         return None
+        for var in get_vars(value.node):
+            if (name := var.decl().name()) in self.model:
+                pass
+            elif model_completion is False:
+                return None
+            else:
+                # TODO: detect type and insert zero value
+                raise NotImplementedError
 
-        #     # Model Completion (adapted from pysmt:solvers/eager.py)
-        #     assert var.is_symbol(), f"expected symbol, got {var}"
-        #     sym = var.symbol_type()
-        #     if sym.is_bool_type():
-        #         self.model[var] = Bool(False)
-        #     elif sym.is_bv_type():
-        #         self.model[var] = BV(0, var.bv_width())
-        #     elif sym.is_array_type():
-        #         self.model[var] = Array(sym.index_type, BV(0, sym.elem_type.width))
-        #     else:
-        #         raise TypeError(f"unhandled type: {var.symbol_type()}")
+        print(value.node, self.model.values())
+        expr = z3.substitute(value.node, self.model.values())
+        expr = z3.simplify(expr)
+        assert isinstance(expr, z3.BitVecRef)
 
-        # result = value.__class__(value.node.substitute(self.model).simplify())
-        # assert result.node.is_constant()
-        # return result
-
-        raise NotImplementedError
+        result = value.__class__(expr)
+        assert result.is_constant_literal()
+        return result
 
 
 class ConstrainingError(Exception):
