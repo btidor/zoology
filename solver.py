@@ -75,7 +75,36 @@ class Solver:
                             z3.BitVecVal(val.bv_unsigned_value(), val.bv_width()),
                         )
                     elif sym.is_array_type():
-                        raise NotImplementedError
+                        writes: Dict[int, int] = {}
+                        while val.is_store():
+                            val, i, x = val.args()
+                            if i in writes:
+                                continue  # last (outermost) write wins
+                            writes[i.bv_unsigned_value()] = x.bv_unsigned_value()
+                        assert val.is_array_value()
+
+                        array = z3.K(
+                            z3.BitVecSort(val.array_value_index_type().width),
+                            z3.BitVecVal(
+                                val.array_value_default().bv_unsigned_value(),
+                                val.array_value_default().bv_width(),
+                            ),
+                        )
+                        for i, x in writes.items():
+                            array = z3.Store(
+                                array,
+                                z3.BitVecVal(i, val.array_value_index_type().width),
+                                z3.BitVecVal(x, val.array_value_default().bv_width()),
+                            )
+
+                        self.model[name] = (
+                            z3.Array(
+                                name,
+                                z3.BitVecSort(val.array_value_index_type().width),
+                                z3.BitVecSort(val.array_value_default().bv_width()),
+                            ),
+                            array,
+                        )
                     else:
                         raise TypeError(f"unhandled type: {sym}")
                 return True
@@ -119,11 +148,17 @@ class Solver:
             elif model_completion is False:
                 return None
             else:
-                # TODO: detect type and insert zero value
-                raise NotImplementedError
+                if var.sort_kind() == z3.Z3_BOOL_SORT:
+                    zero = z3.BoolVal(False)
+                elif var.sort_kind() == z3.Z3_BV_SORT:
+                    zero = z3.BitVecVal(0, var.size())
+                elif var.sort_kind() == z3.Z3_ARRAY_SORT:
+                    zero = z3.K(var.domain(), z3.BitVecVal(0, var.range().size()))
+                else:
+                    raise TypeError(f"unhandled type: {var.sort()}")
+                self.model[name] = (var, zero)
 
-        print(value.node, self.model.values())
-        expr = z3.substitute(value.node, self.model.values())
+        expr = z3.substitute(value.node, list(self.model.values()))
         expr = z3.simplify(expr)
         assert isinstance(expr, z3.BitVecRef)
 
