@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import abc
-from typing import Any, Generic, Literal, Optional, Type, TypeVar, overload
+from typing import Any, Generic, Literal, Type, TypeVar, overload
 
 import z3
 from Crypto.Hash import keccak
@@ -92,16 +92,14 @@ class BitVector(Symbolic[z3.BitVecRef, int]):
         return result
 
     @overload
-    def maybe_unwrap(self, into: Type[int] = int) -> Optional[int]:
+    def maybe_unwrap(self, into: Type[int] = int) -> int | None:
         ...
 
     @overload
-    def maybe_unwrap(self, into: Type[bytes]) -> Optional[bytes]:
+    def maybe_unwrap(self, into: Type[bytes]) -> bytes | None:
         ...
 
-    def maybe_unwrap(
-        self, into: Type[int] | Type[bytes] = int
-    ) -> Optional[int | bytes]:
+    def maybe_unwrap(self, into: Type[int] | Type[bytes] = int) -> int | bytes | None:
         """Return the bitvector's underlying value, if a constant literal."""
         if not self.is_constant_literal():
             return None
@@ -375,7 +373,7 @@ class Constraint(Symbolic[z3.BoolRef, bool]):
         assert type(result) == bool
         return result
 
-    def maybe_unwrap(self) -> Optional[bool]:
+    def maybe_unwrap(self) -> bool | None:
         """Return the constraint's underlying value, if a constant literal."""
         if z3.is_true(self.node):
             return True

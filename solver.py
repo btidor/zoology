@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import io
-from typing import Dict, List, Literal, Optional, Tuple, TypeVar, overload
+from typing import Literal, TypeVar, overload
 
 import z3
 from pysmt import logics
@@ -86,10 +86,10 @@ class Solver:
         ...
 
     @overload
-    def evaluate(self, value: T, model_completion: bool = False) -> Optional[T]:
+    def evaluate(self, value: T, model_completion: bool = False) -> T | None:
         ...
 
-    def evaluate(self, value: T, model_completion: bool = False) -> Optional[T]:
+    def evaluate(self, value: T, model_completion: bool = False) -> T | None:
         """Evaluate a given bitvector expression with the given model."""
         assert self.model is not None
         return self.model.evaluate(value, model_completion)
@@ -101,9 +101,9 @@ class Model:
     def __init__(self, assignment: dict[FNode, FNode]):
         """Create a new Model."""
         self.assignment = assignment
-        self.translated: Optional[dict[str, tuple[z3.ExprRef, z3.ExprRef]]] = None
+        self.translated: dict[str, tuple[z3.ExprRef, z3.ExprRef]] | None = None
 
-    def evaluate(self, value: T, model_completion: bool = False) -> Optional[T]:
+    def evaluate(self, value: T, model_completion: bool = False) -> T | None:
         """Evaluate a given bitvector expression against the model."""
         if value.is_constant_literal():
             return value
