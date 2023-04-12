@@ -73,7 +73,7 @@ Token = (
 )
 
 Delegation = (
-    ("Px191", "VIEW", "0x00000000"),  # *
+    ("Px191", "VIEW", "$any4"),  # *
     ("Px193", "SAVE", "pwn()"),
     ("Px67", "VIEW", "$any4"),  # *
     ("PxD", "VIEW", "owner()"),

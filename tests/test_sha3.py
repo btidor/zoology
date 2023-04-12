@@ -51,6 +51,7 @@ def test_fully_symbolic() -> None:
             input._bigvector(7) == FrozenBytes.concrete(b"testing")._bigvector(7)
         )
     )
+    solver.assert_and_track(input.length == Uint256(7))
     assert solver.check()
 
     assert input.describe(solver) == b"testing".hex()
