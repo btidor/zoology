@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Performs multi-transaction analysis to find safety violations."""
 
-from typing import Callable, Iterator, List, Optional, Set
+from typing import Callable, Iterator
 
 from Crypto.Hash import keccak
 
@@ -16,7 +16,7 @@ from universal import constrain_to_goal, universal_transaction
 def analyze(program: Program) -> None:
     print("Ownership: Universal Analysis")
     sha3 = SHA3()
-    ownership: List[Predicate] = []
+    ownership: list[Predicate] = []
     for start, end in universal_transaction(program, sha3, ""):
         solver = Solver()
         end.constrain(solver)
@@ -56,8 +56,8 @@ def analyze(program: Program) -> None:
 
     print()
     print("Balance: Universal Analysis")
-    additional: List[str] = []
-    balance: List[Predicate] = []
+    additional: list[str] = []
+    balance: list[Predicate] = []
     for start, end in universal_transaction(program, sha3, "^"):
         solver = Solver()
         end.constrain(solver)
@@ -107,7 +107,7 @@ class Predicate:
         expression: Callable[[State], Constraint],
         description: str,
         state: State,
-        storage_key: Optional[Uint256] = None,
+        storage_key: Uint256 | None = None,
     ) -> None:
         self.expression = expression
         self.description = description
@@ -138,7 +138,7 @@ def ownership_safety_predicates(state: State) -> Iterator[Predicate]:
 
 
 def balance_safety_predicates(state: State) -> Iterator[Predicate]:
-    used: Set[str] = set()
+    used: set[str] = set()
     for key in state.contract.storage.accessed:
         if u := key.maybe_unwrap():
             index = hex(u)[2:]

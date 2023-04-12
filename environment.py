@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Union
 
 from arrays import Array, FrozenBytes
 from disassembler import Program
@@ -50,7 +49,7 @@ class Transaction:
 
         Only attributes present in the model will be included.
         """
-        r: OrderedDict[str, Optional[Union[BitVector, str]]] = OrderedDict()
+        r: OrderedDict[str, BitVector | str | None] = OrderedDict()
         calldata = self.calldata.describe(solver, True)
         r["Data"] = f"0x{calldata[:8]} {calldata[8:]}".strip() if calldata else None
         r["Value"] = self.callvalue
@@ -83,9 +82,9 @@ class Universe:
     suffix: str
 
     balances: Array[Uint160, Uint256]  # address -> balance in wei
-    transfer_constraints: List[Constraint]
+    transfer_constraints: list[Constraint]
 
-    contracts: Dict[int, Contract]  # address -> Contract
+    contracts: dict[int, Contract]  # address -> Contract
     codesizes: Array[Uint160, Uint256]  # address -> code size
 
     blockhashes: Array[Uint256, Uint256]
@@ -94,7 +93,7 @@ class Universe:
     # under test to our agent's accounts. To avoid overflow errors, we track
     # value contributed to and value extracted from the contracts under test as
     # two separate unsigned (nonnegative) integers.
-    agents: List[Uint160]
+    agents: list[Uint160]
     contribution: Uint256
     extraction: Uint256
 

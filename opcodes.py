@@ -3,7 +3,6 @@
 import json
 import os
 from dataclasses import dataclass
-from typing import Dict
 
 
 @dataclass
@@ -28,7 +27,7 @@ class Opcode:
 _PATH = os.path.join(os.path.dirname(os.path.realpath(__file__)), "opcodes.json")
 
 
-def _load_opcodes() -> Dict[int, Opcode]:
+def _load_opcodes() -> dict[int, Opcode]:
     with open(_PATH) as f:
         raw = json.load(f)
         tuples = [Opcode(**item) for item in raw]

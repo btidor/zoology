@@ -2,7 +2,7 @@
 """A universal transaction solver."""
 
 import copy
-from typing import Iterable, Iterator, Tuple, Union
+from typing import Iterable, Iterator
 
 from arrays import Array, FrozenBytes, MutableBytes
 from disassembler import Program, disassemble
@@ -16,7 +16,7 @@ from vm import step
 
 def universal_transaction(
     program: Program, sha3: SHA3, suffix: str = ""
-) -> Iterator[Tuple[State, State]]:
+) -> Iterator[tuple[State, State]]:
     """
     Compute the "universal transaction" over a fully symbolic input.
 
@@ -83,7 +83,7 @@ def _universal_transaction(
         yield state
 
 
-def symbolic_start(program: Union[Contract, Program], sha3: SHA3, suffix: str) -> State:
+def symbolic_start(program: Contract | Program, sha3: SHA3, suffix: str) -> State:
     """Return a fully-symbolic start state."""
     block = Block(
         number=Uint256(f"NUMBER{suffix}"),

@@ -1,7 +1,6 @@
 """A library of EVM instruction implementations."""
 
 import copy
-from typing import Optional
 
 from arrays import Array, FrozenBytes
 from disassembler import Instruction, disassemble
@@ -504,7 +503,7 @@ def CALL(
     argsSize: Uint256,
     retOffset: Uint256,
     retSize: Uint256,
-) -> Optional[ControlFlow]:
+) -> ControlFlow | None:
     """F1 - Message-call into an account."""
     codesize = s.universe.codesizes[_address.into(Uint160)]
     if codesize.maybe_unwrap() == 0:
@@ -648,7 +647,7 @@ def STATICCALL(
     argsSize: Uint256,
     retOffset: Uint256,
     retSize: Uint256,
-) -> Optional[ControlFlow]:
+) -> ControlFlow | None:
     """FA - Static message-call into an account."""
     # TODO: enforce static constraint
     return CALL(s, gas, address, Uint256(0), argsOffset, argsSize, retOffset, retSize)

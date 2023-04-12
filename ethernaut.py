@@ -8,7 +8,7 @@ import copy
 import json
 from collections import defaultdict
 from time import sleep
-from typing import Dict, Iterable, Iterator, List, Optional, Tuple
+from typing import Iterable, Iterator
 
 from arrays import FrozenBytes
 from environment import Block, Contract, Transaction, Universe
@@ -40,9 +40,9 @@ class History:
         """Create a new History."""
         self.starting_universe = starting_universe
         self.starting_sha3 = starting_sha3
-        self.states: List[State] = []
+        self.states: list[State] = []
 
-    def subsequent(self) -> Tuple[Universe, SHA3]:
+    def subsequent(self) -> tuple[Universe, SHA3]:
         """Set up the execution of a new transaction."""
         if len(self.states) == 0:
             pair = (self.starting_universe, self.starting_sha3)
@@ -140,10 +140,10 @@ def block(offset: int, universe: Universe) -> Block:
     )
 
 
-def create(factory: Contract) -> Tuple[Uint160, History]:
+def create(factory: Contract) -> tuple[Uint160, History]:
     """Call createInstance to set up the level."""
     calldata = abiencode("createInstance(address)") + PLAYER.into(Uint256).unwrap(bytes)
-    contracts: Dict[int, Contract] = {}
+    contracts: dict[int, Contract] = {}
 
     while True:
         # Caveat: this *concrete* universe will be used in symbolic execution
@@ -186,7 +186,7 @@ def create(factory: Contract) -> Tuple[Uint160, History]:
 
 def validate(
     factory: Uint160, instance: Uint160, history: History, prints: bool = False
-) -> Iterator[Tuple[State, Constraint]]:
+) -> Iterator[tuple[State, Constraint]]:
     """Call validateInstance to check the solution."""
     calldata = (
         abiencode("validateInstance(address,address)")
@@ -214,10 +214,10 @@ def validate(
 
 
 def execute(
-    state: State, indent: Optional[int] = None
-) -> Tuple[State, Dict[int, List[Uint256]]]:
+    state: State, indent: int | None = None
+) -> tuple[State, dict[int, list[Uint256]]]:
     """Concretely execute a contract, tracking storage accesses."""
-    accessed: Dict[int, List[Uint256]] = defaultdict(list)
+    accessed: dict[int, list[Uint256]] = defaultdict(list)
 
     while isinstance(state.pc, int):
         instr = state.contract.program.instructions[state.pc]
@@ -255,14 +255,14 @@ def execute(
 
 def search(
     address: Uint160, beginning: History, prints: bool = False
-) -> Optional[Tuple[History, Constraint]]:
+) -> tuple[History, Constraint] | None:
     """Symbolically execute the given level until a solution is found."""
-    histories: List[History] = [beginning]
+    histories: list[History] = [beginning]
     for i in range(16):
         suffix = str(i + 1)
         if prints:
             print(f"\tTxn {suffix}:")
-        subsequent: List[History] = []
+        subsequent: list[History] = []
         for history in histories:
             universe, sha3 = history.subsequent()
             instance = universe.contracts[address.unwrap()]

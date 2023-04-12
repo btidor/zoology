@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, Iterator, List, Tuple
+from typing import Any, Iterable, Iterator
 
 import z3
 from Crypto.Hash import keccak
@@ -31,15 +31,15 @@ class SHA3:
     # We model the SHA-3 function as a symbolic uninterpreted function from
     # n-byte inputs to 32-byte outputs. Z3 requires n to be constant for any
     # given function, so we store a mapping from `n -> func_n(x)`.
-    hashes: Dict[int, z3.ArrayRef] = field(default_factory=dict)
+    hashes: dict[int, z3.ArrayRef] = field(default_factory=dict)
 
     # If the input has a symbolic length, we don't really know what it's going
     # to hash to. In this case, mint a new variable for the return value.
-    free_digests: List[Tuple[Bytes, Uint256]] = field(default_factory=list)
+    free_digests: list[tuple[Bytes, Uint256]] = field(default_factory=list)
 
-    accessed: Dict[int, List[Bytes]] = field(default_factory=dict)
+    accessed: dict[int, list[Bytes]] = field(default_factory=dict)
 
-    digest_constraints: List[Constraint] = field(default_factory=list)
+    digest_constraints: list[Constraint] = field(default_factory=list)
 
     def __deepcopy__(self, memo: Any) -> SHA3:
         return SHA3(
@@ -94,7 +94,7 @@ class SHA3:
             assert isinstance(result, z3.BitVecRef)
             return Uint256(result)
 
-    def items(self) -> Iterator[Tuple[int, Bytes, Uint256]]:
+    def items(self) -> Iterator[tuple[int, Bytes, Uint256]]:
         """
         Iterate over (n, key, value) tuples.
 

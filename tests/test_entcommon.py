@@ -1,4 +1,4 @@
-from typing import Any, Dict, Tuple, Union
+from typing import Any
 
 from disassembler import Program
 from sha3 import SHA3
@@ -8,7 +8,7 @@ from testlib import check_transition, make_contract
 from universal import _universal_transaction, symbolic_start
 
 
-def check_paths(input: Union[Program, State], branches: Tuple[Any, ...]) -> None:
+def check_paths(input: Program | State, branches: tuple[Any, ...]) -> None:
     expected = set(b[0] for b in branches)
     if isinstance(input, Program):
         input = symbolic_start(input, SHA3(), "")
@@ -19,7 +19,7 @@ def check_paths(input: Union[Program, State], branches: Tuple[Any, ...]) -> None
     assert actual == expected
 
 
-def check_transitions(input: Union[Program, State], branches: Tuple[Any, ...]) -> None:
+def check_transitions(input: Program | State, branches: tuple[Any, ...]) -> None:
     if isinstance(input, Program):
         input = symbolic_start(input, SHA3(), "")
 
@@ -139,7 +139,7 @@ Preservation = (
 )
 
 
-def delegation_start(programs: Dict[str, Program]) -> State:
+def delegation_start(programs: dict[str, Program]) -> State:
     other = make_contract(address=Uint160(0xABCDEF), program=programs["Delegate"])
     start = symbolic_start(programs["Delegation"], SHA3(), "")
     start.universe.transfer(
@@ -150,7 +150,7 @@ def delegation_start(programs: Dict[str, Program]) -> State:
     return start
 
 
-def preservation_start(programs: Dict[str, Program]) -> State:
+def preservation_start(programs: dict[str, Program]) -> State:
     preservation = make_contract(program=programs["Preservation"])
     library = make_contract(
         address=Uint160(0x1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B),

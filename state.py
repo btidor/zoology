@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from dataclasses import dataclass
-from typing import Callable, List, Optional, Tuple, Union
+from typing import Callable
 
 from arrays import FrozenBytes, MutableBytes
 from environment import Block, Contract, Transaction, Universe
@@ -25,8 +25,8 @@ class State:
     universe: Universe
     sha3: SHA3
 
-    pc: Union[int, Termination]
-    stack: List[Uint256]
+    pc: int | Termination
+    stack: list[Uint256]
     memory: MutableBytes
 
     # Tracks the number of times we've spawned a subcontext, so that symbolic
@@ -37,21 +37,21 @@ class State:
     # RETURNDATACOPY instructions.
     latest_return: FrozenBytes
 
-    logs: List[Log]
+    logs: list[Log]
 
     # Every time the GAS instruction is invoked we return a symbolic result,
     # tracked here. These should be monotonically decreasing. In the case of a
     # concrete execution, this value is set to None.
-    gas_variables: Optional[List[Uint256]]
+    gas_variables: list[Uint256] | None
 
     # Every time the CALL instruction is invoked we return a symbolic result,
     # tracked here.
-    call_variables: List[Tuple[FrozenBytes, Constraint]]
+    call_variables: list[tuple[FrozenBytes, Constraint]]
 
     # List of Z3 expressions that must be satisfied in order for the program to
     # reach this state. Based on the JUMPI instructions (if statements) seen so
     # far.
-    path_constraints: List[Constraint]
+    path_constraints: list[Constraint]
 
     # Tracks the path of the program's execution. Each JUMPI is a bit, 1 if
     # taken, 0 if not. MSB-first with a leading 1 prepended.
@@ -158,7 +158,7 @@ class Log:
     """A log entry emitted by the LOG* instruction."""
 
     data: FrozenBytes
-    topics: List[Uint256]
+    topics: list[Uint256]
 
 
 class ControlFlow:
@@ -171,7 +171,7 @@ class ControlFlow:
 class Jump(ControlFlow):
     """A JUMP or JUMPI instruction."""
 
-    targets: List[Tuple[Constraint, State]]
+    targets: list[tuple[Constraint, State]]
 
 
 @dataclass(frozen=True)

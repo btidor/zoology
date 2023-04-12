@@ -1,7 +1,5 @@
 #!/usr/bin/env pytest
 
-from typing import List
-
 from arrays import FrozenBytes
 from disassembler import disassemble
 from smt import Uint256
@@ -11,7 +9,7 @@ from testlib import execute, make_contract, make_state, make_transaction
 from vm import printable_execution, step
 
 
-def concretize_stack(state: State) -> List[int]:
+def concretize_stack(state: State) -> list[int]:
     return [x.unwrap() for x in state.stack]
 
 

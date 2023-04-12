@@ -2,7 +2,7 @@
 """An implementation of the Ethereum virtual machine."""
 
 import inspect
-from typing import Generator, List, Optional, Union, assert_never
+from typing import Generator, assert_never
 
 import ops
 from arrays import Array, FrozenBytes, MutableBytes
@@ -14,7 +14,7 @@ from solidity import abiencode, load_solidity
 from state import ControlFlow, Descend, Jump, State, Termination
 
 
-def step(state: State) -> Optional[ControlFlow]:
+def step(state: State) -> ControlFlow | None:
     """
     Execute a single instruction.
 
@@ -36,7 +36,7 @@ def step(state: State) -> Optional[ControlFlow]:
     fn = getattr(ops, ins.name)
 
     sig = inspect.signature(fn)
-    args: List[object] = []
+    args: list[object] = []
     for name in sig.parameters:
         kls = sig.parameters[name].annotation
         if kls == Uint256:
@@ -49,7 +49,7 @@ def step(state: State) -> Optional[ControlFlow]:
         else:
             raise TypeError(f"unknown arg class: {kls}")
 
-    result: Optional[Union[Uint256, ControlFlow]] = fn(*args)
+    result: Uint256 | ControlFlow | None = fn(*args)
 
     if isinstance(state.pc, int):
         state.pc += 1
@@ -109,9 +109,7 @@ def printable_execution(state: State) -> Generator[str, None, State]:
     return state
 
 
-def concrete_start(
-    program: Union[Contract, Program], value: Uint256, data: bytes
-) -> State:
+def concrete_start(program: Contract | Program, value: Uint256, data: bytes) -> State:
     """Return a concrete start state with realistic values."""
     block = Block(
         number=Uint256(16030969),

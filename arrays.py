@@ -4,20 +4,7 @@ from __future__ import annotations
 
 import abc
 import copy
-from typing import (
-    Any,
-    Dict,
-    Generic,
-    Iterable,
-    List,
-    Optional,
-    Tuple,
-    Type,
-    TypeAlias,
-    TypeGuard,
-    TypeVar,
-    Union,
-)
+from typing import Any, Generic, Iterable, Type, TypeAlias, TypeGuard, TypeVar
 
 import z3
 
@@ -41,14 +28,14 @@ class Array(Generic[K, V]):
         """Create a new Array. For internal use."""
         self.array = array
         self.vtype = vtype
-        self.accessed: List[K] = []
-        self.written: List[K] = []
+        self.accessed: list[K] = []
+        self.written: list[K] = []
 
         # pySMT can't simplify array expressions, so to perform basic
         # simplifications we track the "surface" writes: the set of recent
         # writes to a constant key. Writing to a non-constant key clears the
         # surface.
-        self.surface: Dict[int, V] = {}
+        self.surface: dict[int, V] = {}
 
     def __deepcopy__(self, memo: Any) -> Array[K, V]:
         result: Array[K, V] = Array(self.array, self.vtype)
@@ -106,7 +93,7 @@ class Array(Generic[K, V]):
 
         Yields a human-readable description of the differences.
         """
-        diffs: List[Tuple[str, List[Tuple[K, V, Optional[V]]]]] = [
+        diffs: list[tuple[str, list[tuple[K, V, V | None]]]] = [
             ("R", [(key, original.peek(key), None) for key in self.accessed]),
             (
                 "W",
@@ -116,7 +103,7 @@ class Array(Generic[K, V]):
         line = name
 
         for prefix, rows in diffs:
-            concrete: Dict[str, Tuple[str, Optional[str]]] = {}
+            concrete: dict[str, tuple[str, str | None]] = {}
             for key, value, prior in rows:
                 k = solver.evaluate(key, True).describe()
                 v = solver.evaluate(value, True).describe()
@@ -147,13 +134,10 @@ class Array(Generic[K, V]):
             yield ""
 
 
-BytesWrite: TypeAlias = Union[
-    Tuple[Uint256, Uint8],
-    Tuple[Uint256, "ByteSlice"],
-]
+BytesWrite: TypeAlias = tuple[Uint256, Uint8] | tuple[Uint256, "ByteSlice"]
 
 
-def present(values: List[Optional[int]]) -> TypeGuard[List[int]]:
+def present(values: list[int | None]) -> TypeGuard[list[int]]:
     """Return true iff the given list has no Nones."""
     return all(v is not None for v in values)
 
@@ -165,10 +149,10 @@ class Bytes(abc.ABC):
         """Create a new Bytes. For internal use."""
         self.length = length
         self.array = array
-        self.writes: List[BytesWrite] = []  # writes to apply *on top of* array
+        self.writes: list[BytesWrite] = []  # writes to apply *on top of* array
 
     @classmethod
-    def concrete(cls: Type[T], data: bytes | List[Uint8]) -> T:
+    def concrete(cls: Type[T], data: bytes | list[Uint8]) -> T:
         """Create a new Bytes from a concrete list of bytes."""
         length = Uint256(len(data))
         array = Array.concrete(Uint256, Uint8(0))
@@ -181,7 +165,7 @@ class Bytes(abc.ABC):
         return cls(length, array)
 
     @classmethod
-    def symbolic(cls: Type[T], name: str, length: Optional[int] = None) -> T:
+    def symbolic(cls: Type[T], name: str, length: int | None = None) -> T:
         """Create a new, fully-symbolic Bytes."""
         return cls(
             Uint256(length if length is not None else f"{name}.length"),
@@ -221,7 +205,7 @@ class Bytes(abc.ABC):
         assert isinstance(result, z3.BitVecRef)
         return result
 
-    def maybe_unwrap(self) -> Optional[bytes]:
+    def maybe_unwrap(self) -> bytes | None:
         """Unwrap this instance to bytes."""
         if (length := self.length.maybe_unwrap()) is None:
             return None

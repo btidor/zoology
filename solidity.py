@@ -4,7 +4,6 @@ import os
 import re
 import subprocess
 from enum import Enum
-from typing import Dict
 
 from Crypto.Hash import keccak
 
@@ -37,7 +36,7 @@ def load_solidity(path: str) -> Program:
     return disassemble(code)
 
 
-def loads_solidity(path: str) -> Dict[str, Program]:
+def loads_solidity(path: str) -> dict[str, Program]:
     """Load a Solidity file containing multiple programs."""
     assert path.endswith(".sol")
     path = os.path.join(os.path.dirname(os.path.realpath(__file__)), path)
@@ -57,7 +56,7 @@ def load_binary(path: str) -> Program:
     return disassemble(code)
 
 
-def compile_solidity(source: str) -> Dict[str, bytes]:
+def compile_solidity(source: str) -> dict[str, bytes]:
     """Return the binary contract code for each contract in the source file."""
     version = _detect_version(source)
 
@@ -68,7 +67,7 @@ def compile_solidity(source: str) -> Dict[str, bytes]:
     ).splitlines()
 
     current = "<unknown>"
-    matches: Dict[str, bytes] = {}
+    matches: dict[str, bytes] = {}
     for i in range(len(output)):
         if output[i].startswith(b"======="):
             current = output[i].split(b" ")[1][8:].decode()

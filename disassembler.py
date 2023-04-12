@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Iterable, List, Optional
+from typing import Iterable
 
 from arrays import FrozenBytes
 from opcodes import REFERENCE, UNIMPLEMENTED
@@ -16,11 +16,11 @@ class Program:
     """The disassembled code of an EVM contract."""
 
     code: FrozenBytes
-    instructions: List[Instruction]
+    instructions: list[Instruction]
 
     # Maps byte offsets in the contract, as used by JUMP/JUMPI, to an index into
     # `instructions`.
-    jumps: Dict[int, int]
+    jumps: dict[int, int]
 
 
 @dataclass(frozen=True)
@@ -37,10 +37,10 @@ class Instruction:
     name: str
 
     # Numeric suffix, e.g. 1 for DUP1
-    suffix: Optional[int] = None
+    suffix: int | None = None
 
     # Operand (PUSH only)
-    operand: Optional[Uint256] = None
+    operand: Uint256 | None = None
 
     def __str__(self) -> str:
         msg = f"{self.offset:04x}  {self.name}"

@@ -1,4 +1,4 @@
-from typing import Dict, List, Literal, Optional, Tuple, cast
+from typing import Literal, cast
 
 from arrays import Array, FrozenBytes, MutableBytes
 from disassembler import Program, disassemble
@@ -12,20 +12,20 @@ from universal import constrain_to_goal
 from vm import printable_execution
 
 
-def concretize(value: Optional[BitVector]) -> Optional[int]:
+def concretize(value: BitVector | None) -> int | None:
     if value is None:
         return None
     return value.unwrap()
 
 
 def make_block(
-    number: Optional[Uint256] = None,
-    coinbase: Optional[Uint160] = None,
-    timestamp: Optional[Uint256] = None,
-    prevrandao: Optional[Uint256] = None,
-    gaslimit: Optional[Uint256] = None,
-    chainid: Optional[Uint256] = None,
-    basefee: Optional[Uint256] = None,
+    number: Uint256 | None = None,
+    coinbase: Uint160 | None = None,
+    timestamp: Uint256 | None = None,
+    prevrandao: Uint256 | None = None,
+    gaslimit: Uint256 | None = None,
+    chainid: Uint256 | None = None,
+    basefee: Uint256 | None = None,
 ) -> Block:
     return Block(
         number=Uint256(16030969) if number is None else number,
@@ -45,9 +45,9 @@ def make_block(
 
 
 def make_contract(
-    address: Optional[Uint160] = None,
-    program: Optional[Program] = None,
-    storage: Optional[Array[Uint256, Uint256]] = None,
+    address: Uint160 | None = None,
+    program: Program | None = None,
+    storage: Array[Uint256, Uint256] | None = None,
 ) -> Contract:
     return Contract(
         address=Uint160(0xADADADADADADADADADADADADADADADADADADADAD)
@@ -59,11 +59,11 @@ def make_contract(
 
 
 def make_transaction(
-    origin: Optional[Uint160] = None,
-    caller: Optional[Uint160] = None,
-    callvalue: Optional[Uint256] = None,
-    calldata: Optional[FrozenBytes] = None,
-    gasprice: Optional[Uint256] = None,
+    origin: Uint160 | None = None,
+    caller: Uint160 | None = None,
+    callvalue: Uint256 | None = None,
+    calldata: FrozenBytes | None = None,
+    gasprice: Uint256 | None = None,
 ) -> Transaction:
     return Transaction(
         origin=Uint160(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0)
@@ -79,15 +79,15 @@ def make_transaction(
 
 
 def make_universe(
-    suffix: Optional[str] = None,
-    balances: Optional[Array[Uint160, Uint256]] = None,
-    transfer_constraints: Optional[List[Constraint]] = None,
-    contracts: Optional[Dict[int, Contract]] = None,
-    codesizes: Optional[Array[Uint160, Uint256]] = None,
-    blockhashes: Optional[Array[Uint256, Uint256]] = None,
-    agents: Optional[List[Uint160]] = None,
-    contribution: Optional[Uint256] = None,
-    extraction: Optional[Uint256] = None,
+    suffix: str | None = None,
+    balances: Array[Uint160, Uint256] | None = None,
+    transfer_constraints: list[Constraint] | None = None,
+    contracts: dict[int, Contract] | None = None,
+    codesizes: Array[Uint160, Uint256] | None = None,
+    blockhashes: Array[Uint256, Uint256] | None = None,
+    agents: list[Uint160] | None = None,
+    contribution: Uint256 | None = None,
+    extraction: Uint256 | None = None,
 ) -> Universe:
     return Universe(
         suffix="" if suffix is None else suffix,
@@ -109,22 +109,22 @@ def make_universe(
 
 
 def make_state(
-    suffix: Optional[str] = None,
-    block: Optional[Block] = None,
-    contract: Optional[Contract] = None,
-    transaction: Optional[Transaction] = None,
-    universe: Optional[Universe] = None,
-    sha3: Optional[SHA3] = None,
-    pc: Optional[int] = None,
-    stack: Optional[List[Uint256]] = None,
-    memory: Optional[MutableBytes] = None,
-    children: Optional[int] = None,
-    latest_return: Optional[FrozenBytes] = None,
-    logs: Optional[List[Log]] = None,
-    gas_variables: Optional[List[Uint256]] = None,
-    call_variables: Optional[List[Tuple[FrozenBytes, Constraint]]] = None,
-    path_constraints: Optional[List[Constraint]] = None,
-    path: Optional[int] = None,
+    suffix: str | None = None,
+    block: Block | None = None,
+    contract: Contract | None = None,
+    transaction: Transaction | None = None,
+    universe: Universe | None = None,
+    sha3: SHA3 | None = None,
+    pc: int | None = None,
+    stack: list[Uint256] | None = None,
+    memory: MutableBytes | None = None,
+    children: int | None = None,
+    latest_return: FrozenBytes | None = None,
+    logs: list[Log] | None = None,
+    gas_variables: list[Uint256] | None = None,
+    call_variables: list[tuple[FrozenBytes, Constraint]] | None = None,
+    path_constraints: list[Constraint] | None = None,
+    path: int | None = None,
 ) -> State:
     return State(
         suffix="" if suffix is None else suffix,
@@ -162,8 +162,8 @@ def check_transition(
     end: State,
     path: int,
     kind: Literal["GOAL", "SAVE", "VIEW"],
-    method: Optional[str],
-    value: Optional[int] = None,
+    method: str | None,
+    value: int | None = None,
 ) -> None:
     assert end.path == path, f"unexpected path: {end.px()}"
     assert isinstance(end.pc, Termination)

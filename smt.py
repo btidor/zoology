@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import abc
-from typing import Any, Generic, Literal, Optional, Type, TypeVar, Union, overload
+from typing import Any, Generic, Literal, Optional, Type, TypeVar, overload
 
 import z3
 from Crypto.Hash import keccak
@@ -28,7 +28,7 @@ class Symbolic(abc.ABC, Generic[R, S]):
 
     node: R
 
-    def __init__(self, arg: Union[str, R, S]) -> None:
+    def __init__(self, arg: str | R | S) -> None:
         """Create a new Symbolic."""
         raise NotImplementedError
 
@@ -47,7 +47,7 @@ class Symbolic(abc.ABC, Generic[R, S]):
 class BitVector(Symbolic[z3.BitVecRef, int]):
     """An SMT bitvector."""
 
-    def __init__(self, arg: Union[str, z3.BitVecRef, int]):
+    def __init__(self, arg: str | z3.BitVecRef | int):
         """Create a new BitVector."""
         if isinstance(arg, str):
             self.node = z3.BitVec(arg, self.length())
@@ -100,8 +100,8 @@ class BitVector(Symbolic[z3.BitVecRef, int]):
         ...
 
     def maybe_unwrap(
-        self, into: Union[Type[int], Type[bytes]] = int
-    ) -> Optional[Union[int, bytes]]:
+        self, into: Type[int] | Type[bytes] = int
+    ) -> Optional[int | bytes]:
         """Return the bitvector's underlying value, if a constant literal."""
         if not self.is_constant_literal():
             return None
@@ -132,9 +132,9 @@ class BitVector(Symbolic[z3.BitVecRef, int]):
 
     def unwrap(
         self,
-        into: Union[Type[int], Type[bytes]] = int,
+        into: Type[int] | Type[bytes] = int,
         msg: str = "unexpected symbolic value",
-    ) -> Union[int, bytes]:
+    ) -> int | bytes:
         """Unwrap the bitvector or raise an error."""
         if (u := self.maybe_unwrap(into)) is None:
             raise ValueError(msg)
@@ -319,7 +319,7 @@ class Sint256(Sint):
 class Constraint(Symbolic[z3.BoolRef, bool]):
     """A symbolic boolean value representing true or false."""
 
-    def __init__(self, arg: Union[str, z3.BoolRef, bool]):
+    def __init__(self, arg: str | z3.BoolRef | bool):
         """Create a new Constraint."""
         if isinstance(arg, str):
             self.node = z3.Bool(arg)

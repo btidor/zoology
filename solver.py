@@ -26,8 +26,8 @@ class Solver:
 
     def __init__(self) -> None:
         """Create a new Solver."""
-        self.constraints: List[Constraint] = []
-        self.model: Optional[Model] = None
+        self.constraints: list[Constraint] = []
+        self.model: Model | None = None
 
     def assert_and_track(self, constraint: Constraint) -> None:
         """Track a new constraint."""
@@ -66,7 +66,7 @@ class Solver:
                 self.model = None
                 return False
 
-    def unsat_core(self, *assumptions: Constraint) -> List[Constraint]:
+    def unsat_core(self, *assumptions: Constraint) -> list[Constraint]:
         """Extract an unsatisfiable core for debugging."""
         solver = z3.Solver()
         for constraint in self.constraints:
@@ -98,10 +98,10 @@ class Solver:
 class Model:
     """A lazy wrapper around Z3/pySMT models."""
 
-    def __init__(self, assignment: Dict[FNode, FNode]):
+    def __init__(self, assignment: dict[FNode, FNode]):
         """Create a new Model."""
         self.assignment = assignment
-        self.translated: Optional[Dict[str, Tuple[z3.ExprRef, z3.ExprRef]]] = None
+        self.translated: Optional[dict[str, tuple[z3.ExprRef, z3.ExprRef]]] = None
 
     def evaluate(self, value: T, model_completion: bool = False) -> Optional[T]:
         """Evaluate a given bitvector expression against the model."""
@@ -156,7 +156,7 @@ class Model:
     def translate_pysmt_constant(self, node: FNode) -> z3.ExprRef:
         """Convert a pySMT constant into a Z3 expression."""
         if node.is_array_op():
-            writes: Dict[int, int] = {}
+            writes: dict[int, int] = {}
             while node.is_store():
                 node, i, x = node.args()
                 if i in writes:
