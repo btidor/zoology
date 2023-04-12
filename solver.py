@@ -56,6 +56,12 @@ class Solver:
                     None,
                     constraint.node.as_ast(),
                 )
+                for op in ["bvsdiv", "bvudiv", "bvsrem", "bvurem", "bvsmod"]:
+                    # The *_i versions of these operators are an internal Z3
+                    # optimization; they function identically to the standard
+                    # SMTLIB ops:
+                    # https://github.com/Z3Prover/z3/blob/0b5c38d/src/api/z3_api.h#L394-L407
+                    smtlib = smtlib.replace(f"{op}_i", op)
                 fnode = get_formula(io.StringIO(smtlib))
                 s.add_assertion(fnode)
 
