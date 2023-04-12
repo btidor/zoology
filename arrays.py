@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import abc
 import copy
-from typing import Any, Generic, Iterable, Type, TypeAlias, TypeGuard, TypeVar
+from typing import Any, Generic, Iterable, Type, TypeGuard, TypeVar
 
 import z3
 
@@ -15,6 +15,13 @@ K = TypeVar("K", bound=BitVector)
 V = TypeVar("V", bound=BitVector)
 
 T = TypeVar("T", bound="Bytes")
+
+BytesWrite = tuple[Uint256, "Uint8 | ByteSlice"]
+
+
+def present(values: list[int | None]) -> TypeGuard[list[int]]:
+    """Return true iff the given list has no Nones."""
+    return all(v is not None for v in values)
 
 
 class Array(Generic[K, V]):
@@ -132,14 +139,6 @@ class Array(Generic[K, V]):
 
         if line == "":
             yield ""
-
-
-BytesWrite: TypeAlias = tuple[Uint256, Uint8] | tuple[Uint256, "ByteSlice"]
-
-
-def present(values: list[int | None]) -> TypeGuard[list[int]]:
-    """Return true iff the given list has no Nones."""
-    return all(v is not None for v in values)
 
 
 class Bytes(abc.ABC):
