@@ -12,9 +12,9 @@ from typing import Iterable, Iterator
 
 from arrays import FrozenBytes
 from environment import Block, Contract, Transaction, Universe
-from rpc import get_code, get_storage_at
 from sha3 import SHA3
 from smt import Constraint, Uint160, Uint256
+from snapshot import get_code, get_storage_at
 from solidity import abiencode
 from solver import ConstrainingError, NarrowingError, Solver
 from state import Descend, Jump, State, Termination
