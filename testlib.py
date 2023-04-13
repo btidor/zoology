@@ -1,4 +1,4 @@
-from typing import Literal, cast
+from typing import Literal
 
 from arrays import Array, FrozenBytes, MutableBytes
 from disassembler import Program, disassemble
@@ -154,7 +154,8 @@ def execute(state: State) -> State:
         while True:
             next(generator)
     except StopIteration as e:
-        return cast(State, e.value)
+        assert isinstance(e.value, State)
+        return e.value
 
 
 def check_transition(
