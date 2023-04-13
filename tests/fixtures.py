@@ -1,36 +1,11 @@
-from typing import Any
+"""Helpers for test cases based on the Solidity fixtures."""
 
 from disassembler import Program
 from sha3 import SHA3
 from smt import Uint160, Uint256
 from state import State
-from testlib import check_transition, make_contract
-from universal import _universal_transaction, symbolic_start
-
-
-def check_paths(input: Program | State, branches: tuple[Any, ...]) -> None:
-    expected = set(b[0] for b in branches)
-    if isinstance(input, Program):
-        input = symbolic_start(input, SHA3(), "")
-    actual = set()
-    for end in _universal_transaction(input):
-        assert end.px() not in actual, "duplicate path"
-        actual.add(end.px())
-    assert actual == expected
-
-
-def check_transitions(input: Program | State, branches: tuple[Any, ...]) -> None:
-    if isinstance(input, Program):
-        input = symbolic_start(input, SHA3(), "")
-
-    expected = dict((b[0], b[1:]) for b in branches)
-    for end in _universal_transaction(input):
-        assert end.px() in expected, f"unexpected path: {end.px()}"
-        check_transition(input, end, end.path, *expected[end.px()])
-        del expected[end.px()]
-
-    assert len(expected) == 0, f"missing paths: {expected.keys()}"
-
+from testlib import make_contract
+from universal import symbolic_start
 
 Fallback = (
     ("Px19", "SAVE", None, 1),
@@ -140,6 +115,7 @@ Preservation = (
 
 
 def delegation_start(programs: dict[str, Program]) -> State:
+    """Set up the Delegation level."""
     other = make_contract(address=Uint160(0xABCDEF), program=programs["Delegate"])
     start = symbolic_start(programs["Delegation"], SHA3(), "")
     start.universe.transfer(
@@ -151,6 +127,7 @@ def delegation_start(programs: dict[str, Program]) -> State:
 
 
 def preservation_start(programs: dict[str, Program]) -> State:
+    """Set up the Preservation level."""
     preservation = make_contract(program=programs["Preservation"])
     library = make_contract(
         address=Uint160(0x1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B),

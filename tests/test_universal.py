@@ -1,14 +1,37 @@
 #!/usr/bin/env pytest
 
+from typing import Any
+
 import pytest
 
-from disassembler import disassemble
+import tests.fixtures as cases
+from disassembler import Program, disassemble
 from sha3 import SHA3
 from smt import Uint256
+from solidity import load_binary, load_solidity, loads_solidity
 from solver import Solver
-from state import Termination
+from state import State, Termination
 from testlib import check_transition
-from universal import constrain_to_goal, printable_transition, universal_transaction
+from universal import (
+    _universal_transaction,
+    constrain_to_goal,
+    printable_transition,
+    symbolic_start,
+    universal_transaction,
+)
+
+
+def check_transitions(input: Program | State, branches: tuple[Any, ...]) -> None:
+    if isinstance(input, Program):
+        input = symbolic_start(input, SHA3(), "")
+
+    expected = dict((b[0], b[1:]) for b in branches)
+    for end in _universal_transaction(input):
+        assert end.px() in expected, f"unexpected path: {end.px()}"
+        check_transition(input, end, end.path, *expected[end.px()])
+        del expected[end.px()]
+
+    assert len(expected) == 0, f"missing paths: {expected.keys()}"
 
 
 def test_basic() -> None:
@@ -59,19 +82,78 @@ def test_basic() -> None:
         next(universal)
 
 
+def test_fallback() -> None:
+    program = load_solidity("fixtures/01_Fallback.sol")
+    check_transitions(program, cases.Fallback)
+
+
 def test_fallout() -> None:
-    code = bytes.fromhex(
-        "6080604052600436106100655760003560e01c8063a2dea26f11610043578063a2dea26f146100ba578063abaa9916146100ed578063ffd40b56146100f557610065565b80636fab5ddf1461006a5780638aa96f38146100745780638da5cb5b14610089575b600080fd5b61007261013a565b005b34801561008057600080fd5b50610072610182565b34801561009557600080fd5b5061009e610210565b604080516001600160a01b039092168252519081900360200190f35b3480156100c657600080fd5b50610072600480360360208110156100dd57600080fd5b50356001600160a01b031661021f565b610072610285565b34801561010157600080fd5b506101286004803603602081101561011857600080fd5b50356001600160a01b03166102b1565b60408051918252519081900360200190f35b600180547fffffffffffffffffffffffff0000000000000000000000000000000000000000163317908190556001600160a01b03166000908152602081905260409020349055565b6001546001600160a01b031633146101e1576040805162461bcd60e51b815260206004820152601760248201527f63616c6c6572206973206e6f7420746865206f776e6572000000000000000000604482015290519081900360640190fd5b60405133904780156108fc02916000818181858888f1935050505015801561020d573d6000803e3d6000fd5b50565b6001546001600160a01b031681565b6001600160a01b03811660009081526020819052604090205461024157600080fd5b6001600160a01b03811660008181526020819052604080822054905181156108fc0292818181858888f19350505050158015610281573d6000803e3d6000fd5b5050565b3360009081526020819052604090205461029f90346102cc565b33600090815260208190526040902055565b6001600160a01b031660009081526020819052604090205490565b600082820183811015610326576040805162461bcd60e51b815260206004820152601b60248201527f536166654d6174683a206164646974696f6e206f766572666c6f770000000000604482015290519081900360640190fd5b939250505056fea264697066735822122008472e24693cfb431a0cbec77ce1c2c19216911e421de2df4e138648a9ce11c764736f6c634300060c0033"
-    )
-    program = disassemble(code)
-    universal = universal_transaction(program, SHA3(), "")
+    program = load_solidity("fixtures/02_Fallout.sol")
+    check_transitions(program, cases.Fallout)
 
-    check_transition(*next(universal), 0x87, "VIEW", "0xffd40b56")
-    check_transition(*next(universal), 0x23, "SAVE", "0xabaa9916")
-    check_transition(*next(universal), 0x9F, "GOAL", "0xa2dea26f")
-    check_transition(*next(universal), 0x53, "VIEW", "0x8da5cb5b")
-    check_transition(*next(universal), 0xAF, "GOAL", "0x8aa96f38")
-    check_transition(*next(universal), 0xB, "SAVE", "0x6fab5ddf")
 
-    with pytest.raises(StopIteration):
-        next(universal)
+def test_coinflip() -> None:
+    program = load_solidity("fixtures/03_CoinFlip.sol")
+    check_transitions(program, cases.CoinFlip)
+
+
+def test_telephone() -> None:
+    program = load_solidity("fixtures/04_Telephone.sol")
+    check_transitions(program, cases.Telephone)
+
+
+def test_token() -> None:
+    program = load_solidity("fixtures/05_Token.sol")
+    check_transitions(program, cases.Token)
+
+
+def test_delegation() -> None:
+    programs = loads_solidity("fixtures/06_Delegation.sol")
+    start = cases.delegation_start(programs)
+    check_transitions(start, cases.Delegation)
+
+
+def test_force() -> None:
+    program = load_binary("fixtures/07_Force.bin")
+    check_transitions(program, cases.Force)
+
+
+def test_vault() -> None:
+    program = load_solidity("fixtures/08_Vault.sol")
+    check_transitions(program, cases.Vault)
+
+
+def test_king() -> None:
+    program = load_solidity("fixtures/09_King.sol")
+    check_transitions(program, cases.King)
+
+
+def test_reentrancy() -> None:
+    program = load_solidity("fixtures/10_Reentrancy.sol")
+    check_transitions(program, cases.Reentrancy)
+
+
+def test_elevator() -> None:
+    programs = loads_solidity("fixtures/11_Elevator.sol")
+    check_transitions(programs["Elevator"], cases.Elevator)
+
+
+def test_privacy() -> None:
+    program = load_binary("fixtures/12_Privacy.bin")
+    check_transitions(program, cases.Privacy)
+
+
+def test_gatekeeper_one() -> None:
+    program = load_solidity("fixtures/13_GatekeeperOne.sol")
+    check_transitions(program, cases.GatekeeperOne)
+
+
+def test_gatekeeper_two() -> None:
+    program = load_solidity("fixtures/14_GatekeeperTwo.sol")
+    check_transitions(program, cases.GatekeeperTwo)
+
+
+def test_preservation() -> None:
+    programs = loads_solidity("fixtures/15_Preservation.sol")
+    start = cases.preservation_start(programs)
+    check_transitions(start, cases.Preservation)
