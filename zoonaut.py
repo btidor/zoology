@@ -5,28 +5,18 @@ from __future__ import annotations
 
 import argparse
 import copy
-import json
-from collections import defaultdict
-from time import sleep
 from typing import Iterable, Iterator
 
-from arrays import FrozenBytes
-from environment import Block, Contract, Transaction, Universe
+from arrays import Array, FrozenBytes, MutableBytes
+from environment import Block, Transaction, Universe
 from sha3 import SHA3
 from smt import Constraint, Uint160, Uint256
-from snapshot import get_code, get_storage_at
+from snapshot import LEVEL_FACTORIES, apply_snapshot
 from solidity import abiencode
 from solver import ConstrainingError, NarrowingError, Solver
-from state import Descend, Jump, State, Termination
+from state import State, Termination
 from universal import _universal_transaction, symbolic_start
-from vm import concrete_start, step
-
-with open("ethernaut.json") as f:
-    data = json.load(f)
-    LEVEL_FACTORIES = [
-        Uint160(int.from_bytes(bytes.fromhex(data[str(i)][2:]))) for i in range(29)
-    ]
-
+from vm import concrete_start, printable_execution
 
 SETUP = Uint160(0x5757575757575757575757575757575757575757)
 PLAYER = Uint160(0xCACACACACACACACACACACACACACACACACACACACA)
@@ -140,44 +130,46 @@ def block(offset: int, universe: Universe) -> Block:
     )
 
 
-def create(factory: Contract) -> tuple[Uint160, History]:
+def create(universe: Universe, address: Uint160) -> tuple[Uint160, History]:
     """Call createInstance to set up the level."""
+    # Warning: this symbolic universe will be used in symbolic execution later
+    # on. Inaccuracies in the environment may result in an inaccurate analysis.
     calldata = abiencode("createInstance(address)") + PLAYER.into(Uint256).unwrap(bytes)
-    contracts: dict[int, Contract] = {}
-
-    while True:
-        # Caveat: this *concrete* universe will be used in symbolic execution
-        # later. Any oversights in the environment (e.g. the player's address
-        # having a zero balance, etc.) can result in inaccurate analysis.
-        start = concrete_start(copy.deepcopy(factory), Uint256(0), calldata)
-        start.transaction = Transaction(
+    start = State(
+        suffix="",
+        block=block(0, universe),
+        contract=universe.contracts[address.unwrap()],
+        transaction=Transaction(
             origin=SETUP,
             caller=SETUP,
             callvalue=Uint256(0),
             calldata=FrozenBytes.concrete(calldata),
             gasprice=Uint256(0x12),
-        )
-        for contract in contracts.values():
-            start.universe.add_contract(copy.deepcopy(contract))
-        start.universe.balances[PLAYER] = Uint256(10**9)
-        start.block = block(0, start.universe)
+        ),
+        universe=universe,
+        sha3=SHA3(),
+        pc=0,
+        stack=[],
+        memory=MutableBytes.concrete(b""),
+        children=0,
+        latest_return=FrozenBytes.concrete(b""),
+        logs=[],
+        gas_variables=None,
+        call_variables=[],
+        path_constraints=[],
+        path=1,
+    )
 
-        end, accessed = execute(start)
-        assert isinstance(end.pc, Termination)
-        if end.pc.success is True:
-            break
+    generator = printable_execution(start)
+    try:
+        while True:
+            next(generator)
+    except StopIteration as e:
+        end = e.value
+        assert isinstance(end, State)
 
-        for addr, keys in accessed.items():
-            if addr == 0x70D070D070D070D070D070D070D070D070D070D0:
-                continue
-            if addr not in contracts:
-                contracts[addr] = get_code(Uint160(addr))
-            contract = contracts[addr]
-            for key in keys:
-                if key.unwrap() not in contract.storage.surface:
-                    val = get_storage_at(Uint160(addr), key)
-                    sleep(0.25)
-                    contract.storage.poke(key, val)
+    assert isinstance(end.pc, Termination)
+    assert end.pc.success
 
     end.universe.add_contract(end.contract)
     address = Uint160(int.from_bytes(end.pc.returndata.unwrap()))
@@ -211,46 +203,6 @@ def validate(
         assert isinstance(end.pc, Termination)
         ok = Uint256(end.pc.returndata._bigvector(32)) != Uint256(0)
         yield (end, ok)
-
-
-def execute(
-    state: State, indent: int | None = None
-) -> tuple[State, dict[int, list[Uint256]]]:
-    """Concretely execute a contract, tracking storage accesses."""
-    accessed: dict[int, list[Uint256]] = defaultdict(list)
-
-    while isinstance(state.pc, int):
-        instr = state.contract.program.instructions[state.pc]
-        if indent is not None:
-            print("." * indent, instr)
-
-        match step(state):
-            case None:
-                pass
-            case Jump(targets):
-                matched = [
-                    s for (c, s) in targets if c.unwrap("JUMPI requires concrete b")
-                ]
-                assert len(matched) == 1, "no matching jump target"
-                state = matched[0]
-            case Descend(substate, callback):
-                substate, subaccessed = execute(
-                    substate, indent + 2 if indent is not None else None
-                )
-                for s, v in subaccessed.items():
-                    accessed[s].extend(v)
-                state = callback(state, substate)
-            case unknown:
-                raise ValueError(f"unknown action: {unknown}")
-
-        if indent is not None:
-            for y in reversed(state.stack):
-                print("." * indent, " ", y.describe())
-
-    for contract in state.universe.contracts.values():
-        accessed[contract.address.unwrap()].extend(contract.storage.accessed)
-    accessed[state.contract.address.unwrap()].extend(state.contract.storage.accessed)
-    return state, accessed
 
 
 def search(
@@ -300,7 +252,7 @@ def search(
                         sp = " "
                     print(output, end="")
 
-                for post, ok in validate(factory.address, address, candidate):
+                for post, ok in validate(address, address, candidate):
                     complete = candidate.extend(post)
 
                     solver = Solver()
@@ -355,17 +307,33 @@ if __name__ == "__main__":
     if args.level is None:
         args.level = list(range(len(LEVEL_FACTORIES)))
 
+    with open("snapshot.json", "r") as f:
+        universe = Universe(
+            suffix="",
+            balances=Array.symbolic(f"BALANCE", Uint160, Uint256),
+            transfer_constraints=[],
+            contracts={},
+            codesizes=Array.symbolic(f"CODESIZE", Uint160, Uint256),
+            blockhashes=Array.symbolic(f"BLOCKHASH", Uint256, Uint256),
+            # We're not using the goal feature:
+            agents=[],
+            contribution=Uint256(f"CONTRIBUTION"),
+            extraction=Uint256(f"EXTRACTION"),
+        )
+        apply_snapshot(f, universe)
+
     for i in args.level:
-        address = LEVEL_FACTORIES[i]
+        if i == 0:
+            continue
+        factory = LEVEL_FACTORIES[i]
         print(f"{i:04}", end="")
         try:
-            factory = get_code(address)
-            address, beginning = create(factory)
+            instance, beginning = create(copy.deepcopy(universe), factory)
 
-            for _, ok in validate(factory.address, address, beginning):
+            for _, ok in validate(factory, instance, beginning):
                 assert ok.unwrap() is False
 
-            result = search(address, beginning, prints=(args.verbose > 1))
+            result = search(instance, beginning, prints=(args.verbose > 1))
             if result is None:
                 print("\tno solution")
                 continue

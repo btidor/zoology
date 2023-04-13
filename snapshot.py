@@ -3,12 +3,13 @@
 
 import json
 from time import sleep
+from typing import TextIO
 
 import requests
 
 from arrays import Array
 from disassembler import disassemble
-from environment import Contract
+from environment import Contract, Universe
 from smt import Uint160, Uint256
 
 # For consistency, make requests at a fixed block offset
@@ -16,6 +17,29 @@ TAG = "0x86a800"
 
 with open(".key") as f:
     API_KEY = f.read().strip()
+
+
+with open("ethernaut.json") as f:
+    _eth = json.load(f)
+    LEVEL_FACTORIES = [
+        Uint160(int.from_bytes(bytes.fromhex(_eth[str(i)][2:]))) for i in range(29)
+    ]
+
+
+def apply_snapshot(file: TextIO, universe: Universe) -> None:
+    """Load a snapshot and add the contracts to the given universe."""
+    snapshot = json.load(file)
+    for addr, saved in snapshot.items():
+        address = Uint160(int(addr, 16))
+        program = disassemble(bytes.fromhex(saved["code"]))
+        contract = Contract(address, program, Array.concrete(Uint256, Uint256(0)))
+
+        for k, v in saved.items():
+            if k == "code":
+                continue
+            contract.storage.poke(Uint256(int(k)), Uint256(int(v, 16)))
+
+        universe.add_contract(contract)
 
 
 def get_code(address: Uint160) -> Contract:
@@ -68,14 +92,8 @@ def _api_request(action: str, **kwargs: str) -> bytes:
 
 
 if __name__ == "__main__":
-    with open("ethernaut.json") as f:
-        data = json.load(f)
-        factories = [
-            Uint160(int.from_bytes(bytes.fromhex(data[str(i)][2:]))) for i in range(29)
-        ]
-
     snapshot = {}
-    for i, address in enumerate(factories):
+    for i, address in enumerate(LEVEL_FACTORIES):
         print(f"Downloading level {i}")
         key = address.unwrap(bytes).hex()
         contract = get_code(address)
