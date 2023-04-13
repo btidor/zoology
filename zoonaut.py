@@ -5,15 +5,16 @@ from __future__ import annotations
 
 import argparse
 import copy
-from typing import Iterable, Iterator
+from typing import Iterator
 
 from arrays import Array, FrozenBytes, MutableBytes
 from environment import Block, Transaction, Universe
+from history import History
 from sha3 import SHA3
 from smt import Constraint, Uint160, Uint256
 from snapshot import LEVEL_FACTORIES, apply_snapshot
 from solidity import abiencode
-from solver import ConstrainingError, NarrowingError, Solver
+from solver import NarrowingError, Solver
 from state import State, Termination
 from universal import _universal_transaction, symbolic_start
 from vm import concrete_start, printable_execution
@@ -23,113 +24,6 @@ PLAYER = Uint160(0xCACACACACACACACACACACACACACACACACACACACA)
 PROXY = Uint160(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0)
 
 
-class History:
-    """Encapsulates a linear sequence of transactions."""
-
-    def __init__(self, starting_universe: Universe, starting_sha3: SHA3) -> None:
-        """Create a new History."""
-        self.starting_universe = starting_universe
-        self.starting_sha3 = starting_sha3
-        self.states: list[State] = []
-
-    def subsequent(self) -> tuple[Universe, SHA3]:
-        """Set up the execution of a new transaction."""
-        if len(self.states) == 0:
-            pair = (self.starting_universe, self.starting_sha3)
-        else:
-            pair = (self.states[-1].universe, self.states[-1].sha3)
-        return copy.deepcopy(pair)
-
-    def extend(self, state: State) -> History:
-        """Add a new transaction to the History."""
-        other = copy.deepcopy(self)
-        other.states.append(state)
-        return other
-
-    def constrain(self, solver: Solver) -> None:
-        """Apply hard constraints to the given solver instance."""
-        for state in self.states:
-            state.constrain(solver)
-        if not solver.check():
-            raise ConstrainingError
-
-    def narrow(self, solver: Solver, skip_sha3: bool = False) -> None:
-        """Apply soft and deferred constraints to a given solver instance."""
-        if not skip_sha3:
-            if len(self.states) > 0:
-                self.states[-1].sha3.narrow(solver)
-            else:
-                self.starting_sha3.narrow(solver)
-
-        for state in self.states:
-            state.narrow(solver)
-
-    def describe(
-        self, *constraints: Constraint, skip_final: bool = False
-    ) -> Iterable[str]:
-        """Yield a human-readable description of the transaction sequence."""
-        solver = Solver()
-        for constraint in constraints:
-            solver.assert_and_track(constraint)
-        try:
-            self.constrain(solver)
-        except ConstrainingError:
-            yield "unprintable: unsatisfiable"
-            return
-
-        try:
-            self.narrow(solver)
-        except NarrowingError:
-            yield "unprintable: narrowing error"
-            solver = Solver()
-            for constraint in constraints:
-                solver.assert_and_track(constraint)
-            self.constrain(solver)
-            self.narrow(solver, skip_sha3=True)
-
-        states = self.states
-        if skip_final:
-            states = states[:-1]
-        for state in states:
-            data = state.transaction.calldata.describe(solver, True)
-            if len(data) == 0:
-                data = "(empty) "
-            elif len(data) > 8:
-                data = data[:8] + " " + data[8:]
-            line = f"{state.px()}\t{data}"
-
-            suffixes = []
-            value = solver.evaluate(state.transaction.callvalue, True).unwrap()
-            if value > 0:
-                suffixes.append(f"value: {value}")
-            caller = solver.evaluate(state.transaction.caller, True)
-            if (caller != PLAYER).unwrap():
-                suffixes.append(f"via proxy")
-            if len(suffixes) > 0:
-                line += f"\t({', '.join(suffixes)})"
-
-            yield line
-
-
-def block(offset: int, universe: Universe) -> Block:
-    """Create a simulated Block."""
-    # As an approximation, assume the blockhash of the `n`th block is
-    # `999999*n`.
-    number = Uint256(16030969 + offset)
-    universe.blockhashes[number] = Uint256(999999) * number
-    return Block(
-        number=number,
-        coinbase=Uint160(0xDAFEA492D9C6733AE3D56B7ED1ADB60692C98BC5),
-        timestamp=Uint256(1669214471 + offset),
-        prevrandao=Uint256(
-            0xCC7E0A66B3B9E3F54B7FDB9DCF98D57C03226D73BFFBB4E0BA7B08F92CE00D19
-        ),
-        gaslimit=Uint256(30000000000000000),
-        chainid=Uint256(1),
-        basefee=Uint256(12267131109),
-    )
-
-
 def create(universe: Universe, address: Uint160) -> tuple[Uint160, History]:
     """Call createInstance to set up the level."""
     # Warning: this symbolic universe will be used in symbolic execution later
@@ -137,7 +31,7 @@ def create(universe: Universe, address: Uint160) -> tuple[Uint160, History]:
     calldata = abiencode("createInstance(address)") + PLAYER.into(Uint256).unwrap(bytes)
     start = State(
         suffix="",
-        block=block(0, universe),
+        block=_block(0, universe),
         contract=universe.contracts[address.unwrap()],
         transaction=Transaction(
             origin=SETUP,
@@ -173,7 +67,7 @@ def create(universe: Universe, address: Uint160) -> tuple[Uint160, History]:
 
     end.universe.add_contract(end.contract)
     address = Uint160(int.from_bytes(end.pc.returndata.unwrap()))
-    return address, History(end.universe, end.sha3)
+    return address, History(end.universe, end.sha3, PLAYER)
 
 
 def validate(
@@ -223,7 +117,7 @@ def search(
 
             # ASSUMPTION: each call to the level takes place in a different
             # block, and the blocks are consecutive.
-            start.block = block(i + 1, start.universe)
+            start.block = _block(i + 1, start.universe)
 
             # ASSUMPTION: all transactions are originated by the player, but may
             # (or may not!) be bounced through a "proxy" contract
@@ -295,6 +189,25 @@ def search(
         assert len(histories) < 256
 
     return None
+
+
+def _block(offset: int, universe: Universe) -> Block:
+    """Create a simulated Block."""
+    # As an approximation, assume the blockhash of the `n`th block is
+    # `999999*n`.
+    number = Uint256(16030969 + offset)
+    universe.blockhashes[number] = Uint256(999999) * number
+    return Block(
+        number=number,
+        coinbase=Uint160(0xDAFEA492D9C6733AE3D56B7ED1ADB60692C98BC5),
+        timestamp=Uint256(1669214471 + offset),
+        prevrandao=Uint256(
+            0xCC7E0A66B3B9E3F54B7FDB9DCF98D57C03226D73BFFBB4E0BA7B08F92CE00D19
+        ),
+        gaslimit=Uint256(30000000000000000),
+        chainid=Uint256(1),
+        basefee=Uint256(12267131109),
+    )
 
 
 if __name__ == "__main__":
