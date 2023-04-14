@@ -8,10 +8,9 @@ import tests.fixtures as cases
 from disassembler import Program, disassemble
 from sha3 import SHA3
 from smt import Uint256
-from solidity import load_binary, load_solidity, loads_solidity
+from solidity import abiencode, load_binary, load_solidity, loads_solidity
 from solver import Solver
 from state import State, Termination
-from testlib import check_transition
 from universal import (
     _universal_transaction,
     constrain_to_goal,
@@ -21,14 +20,51 @@ from universal import (
 )
 
 
-def check_transitions(input: Program | State, branches: tuple[Any, ...]) -> None:
-    if isinstance(input, Program):
-        input = symbolic_start(input, SHA3(), "")
+def check_transitions(start: Program | State, branches: tuple[Any, ...]) -> None:
+    if isinstance(start, Program):
+        start = symbolic_start(start, SHA3(), "")
 
     expected = dict((b[0], b[1:]) for b in branches)
-    for end in _universal_transaction(input):
+    for end in _universal_transaction(start):
         assert end.px() in expected, f"unexpected path: {end.px()}"
-        check_transition(input, end, end.path, *expected[end.px()])
+        assert isinstance(end.pc, Termination)
+        assert end.pc.success is True
+
+        kind, method, value = (expected[end.px()] + (None,))[:3]
+
+        solver = Solver()
+        end.constrain(solver)
+        constrain_to_goal(solver, start, end)
+        assert solver.check() == (kind == "GOAL")
+
+        if kind != "GOAL":
+            assert end.is_changed(start) == (kind == "SAVE")
+
+        solver = Solver()
+        end.constrain(solver)
+        assert solver.check()
+
+        end.narrow(solver)
+        transaction = end.transaction.describe(solver)
+
+        actual = bytes.fromhex(transaction.get("Data", "")[2:10])
+        if method is None:
+            assert actual == b"", f"unexpected data: {actual.hex()}"
+        elif method.startswith("0x"):
+            assert actual == bytes.fromhex(
+                method[2:]
+            ), f"unexpected data: {actual.hex()}"
+        elif method == "$any4":
+            assert len(actual) == 4, f"unexpected data: {actual.hex()}"
+        else:
+            assert actual == abiencode(method), f"unexpected data: {actual.hex()}"
+
+        if "Value" not in transaction:
+            assert value is None
+        else:
+            assert value is not None
+            assert transaction["Value"] == "0x" + int.to_bytes(value, 32).hex()
+
         del expected[end.px()]
 
     assert len(expected) == 0, f"missing paths: {expected.keys()}"

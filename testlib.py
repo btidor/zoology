@@ -1,15 +1,9 @@
-from typing import Literal
-
 from arrays import Array, FrozenBytes, MutableBytes
 from disassembler import Program, disassemble
 from environment import Block, Contract, Transaction, Universe
 from sha3 import SHA3
 from smt import BitVector, Constraint, Uint160, Uint256
-from solidity import abiencode
-from solver import Solver
-from state import Log, State, Termination
-from universal import constrain_to_goal
-from vm import printable_execution
+from state import Log, State
 
 
 def concretize(value: BitVector | None) -> int | None:
@@ -146,57 +140,3 @@ def make_state(
         path_constraints=[] if path_constraints is None else path_constraints,
         path=1 if path is None else path,
     )
-
-
-def execute(state: State) -> State:
-    generator = printable_execution(state)
-    try:
-        while True:
-            next(generator)
-    except StopIteration as e:
-        assert isinstance(e.value, State)
-        return e.value
-
-
-def check_transition(
-    start: State,
-    end: State,
-    path: int,
-    kind: Literal["GOAL", "SAVE", "VIEW"],
-    method: str | None,
-    value: int | None = None,
-) -> None:
-    assert end.path == path, f"unexpected path: {end.px()}"
-    assert isinstance(end.pc, Termination)
-    assert end.pc.success is True
-
-    solver = Solver()
-    end.constrain(solver)
-    constrain_to_goal(solver, start, end)
-    assert solver.check() == (kind == "GOAL")
-
-    if kind != "GOAL":
-        assert end.is_changed(start) == (kind == "SAVE")
-
-    solver = Solver()
-    end.constrain(solver)
-    assert solver.check()
-
-    end.narrow(solver)
-    transaction = end.transaction.describe(solver)
-
-    actual = bytes.fromhex(transaction.get("Data", "")[2:10])
-    if method is None:
-        assert actual == b"", f"unexpected data: {actual.hex()}"
-    elif method.startswith("0x"):
-        assert actual == bytes.fromhex(method[2:]), f"unexpected data: {actual.hex()}"
-    elif method == "$any4":
-        assert len(actual) == 4, f"unexpected data: {actual.hex()}"
-    else:
-        assert actual == abiencode(method), f"unexpected data: {actual.hex()}"
-
-    if "Value" not in transaction:
-        assert value is None
-    else:
-        assert value is not None
-        assert transaction["Value"] == "0x" + int.to_bytes(value, 32).hex()
