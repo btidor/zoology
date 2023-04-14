@@ -15,6 +15,10 @@ class CORSRequestHandler(SimpleHTTPRequestHandler):
         self.send_header("Cache-Control", "no-cache")
         SimpleHTTPRequestHandler.end_headers(self)
 
+    def do_OPTIONS(self):
+        self.send_response(200)
+        self.end_headers()
+
 
 # https://github.com/python/cpython/blob/a286caa937/Lib/http/server.py#L1297-L1308
 class DualStackServer(ThreadingHTTPServer):
