@@ -6,7 +6,7 @@
     "files.exclude": {
         "\"stdout\"": true,
         "**/.mypy_cache": true,
-        "**/prof": true,
+        "**/.profiles": true,
         "**/__pycache__": true,
         "**/*.py[cod]": true,
         "**/.pytest_cache": true
@@ -20,7 +20,7 @@
     "python.formatting.provider": "black",
     "python.linting.mypyEnabled": true,
     "python.linting.pydocstyleArgs": [
-        "--match=^((?!test).)*\\.py$",
+        "--match=^((?!test|speedscope).)*\\.py$",
         "--add-ignore=D105"
     ],
     "python.linting.pydocstyleEnabled": true,

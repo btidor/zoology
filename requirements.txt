@@ -1,7 +1,7 @@
 pycryptodome
+pyinstrument
 pysmt
 pytest
-pytest-profiling
 pytest-timeout
 pytest-xdist
 requests
