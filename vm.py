@@ -19,12 +19,8 @@ def step(state: State) -> ControlFlow | None:
     Execute a single instruction.
 
     Mutates state. The caller must handle the return value, which indicates
-    whether the program (a) continues normally, or (b) hits a conditional jump
-    (JUMPI), or (c) terminates
-
-    In the case of a JUMPI, state is not modified. The caller must evaluate
-    whether or not the jump should be taken, update the program counter, and
-    optionally add symbolic constraints.
+    whether the program (a) continues normally, (b) hits a conditional jump
+    (JUMPI), or (c) terminates.
     """
     assert isinstance(state.pc, int), "program has terminated"
 
@@ -49,10 +45,12 @@ def step(state: State) -> ControlFlow | None:
         else:
             raise TypeError(f"unknown arg class: {kls}")
 
-    result: Uint256 | ControlFlow | None = fn(*args)
-
+    # Note: we increment the program counter *before* executing the instruction
+    # because instructions may overwrite it (e.g. in the case of a JUMP).
     if isinstance(state.pc, int):
         state.pc += 1
+
+    result: Uint256 | ControlFlow | None = fn(*args)
 
     if result is None:
         return None

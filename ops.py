@@ -358,7 +358,7 @@ def SSTORE(s: State, key: Uint256, value: Uint256) -> None:
     s.contract.storage[key] = value
 
 
-def JUMP(s: State, _counter: Uint256) -> ControlFlow:
+def JUMP(s: State, _counter: Uint256) -> None:
     """56 - Alter the program counter."""
     counter = _counter.unwrap(int, "JUMP requires concrete counter")
 
@@ -366,10 +366,7 @@ def JUMP(s: State, _counter: Uint256) -> ControlFlow:
     # Instead, raise an error and fail the whole analysis. This lets us prove
     # that all jump targets are valid and within the body of the code, which is
     # why it's safe to strip the metadata trailer.
-    next = copy.deepcopy(s)
-    next.pc = s.contract.program.jumps[counter]
-
-    return Jump(targets=[(Constraint(True), next)])
+    s.pc = s.contract.program.jumps[counter]
 
 
 def JUMPI(s: State, _counter: Uint256, _b: Uint256) -> ControlFlow:
@@ -379,7 +376,6 @@ def JUMPI(s: State, _counter: Uint256, _b: Uint256) -> ControlFlow:
 
     next = copy.deepcopy(s)
     assert isinstance(next.pc, int)
-    next.pc += 1
     next.path = (next.path << 1) | 0
     next.path_constraints.append(_b == Uint256(0))
     targets.append((_b == Uint256(0), next))
