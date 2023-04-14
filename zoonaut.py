@@ -191,6 +191,25 @@ def search(
     return None
 
 
+def starting_universe() -> Universe:
+    """Set up a symbolic universe with factory levels loaded."""
+    universe = Universe(
+        suffix="",
+        balances=Array.symbolic(f"BALANCE", Uint160, Uint256),
+        transfer_constraints=[],
+        contracts={},
+        codesizes=Array.symbolic(f"CODESIZE", Uint160, Uint256),
+        blockhashes=Array.symbolic(f"BLOCKHASH", Uint256, Uint256),
+        # We're not using the goal feature:
+        agents=[],
+        contribution=Uint256(f"CONTRIBUTION"),
+        extraction=Uint256(f"EXTRACTION"),
+    )
+    with open("snapshot.json", "r") as f:
+        apply_snapshot(f, universe)
+    return universe
+
+
 def _block(offset: int, universe: Universe) -> Block:
     """Create a simulated Block."""
     # As an approximation, assume the blockhash of the `n`th block is
@@ -220,20 +239,7 @@ if __name__ == "__main__":
     if args.level is None:
         args.level = list(range(len(LEVEL_FACTORIES)))
 
-    with open("snapshot.json", "r") as f:
-        universe = Universe(
-            suffix="",
-            balances=Array.symbolic(f"BALANCE", Uint160, Uint256),
-            transfer_constraints=[],
-            contracts={},
-            codesizes=Array.symbolic(f"CODESIZE", Uint160, Uint256),
-            blockhashes=Array.symbolic(f"BLOCKHASH", Uint256, Uint256),
-            # We're not using the goal feature:
-            agents=[],
-            contribution=Uint256(f"CONTRIBUTION"),
-            extraction=Uint256(f"EXTRACTION"),
-        )
-        apply_snapshot(f, universe)
+    universe = starting_universe()
 
     for i in args.level:
         if i == 0:
