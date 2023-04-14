@@ -62,12 +62,14 @@ def test_basic() -> None:
 
     action = step(state)
     assert isinstance(action, Jump)
+    assert len(action.targets) == 2
+    constraint, state = action.targets[0]
+    assert constraint.unwrap() is False
     assert state.pc == 5
-    assert concretize_stack(state) == []
-
-    state.pc = program.jumps[0x09]
+    constraint, state = action.targets[1]
+    assert constraint.unwrap() is True
     assert state.pc == 6
-    state.stack = []
+    assert concretize_stack(state) == []
 
     action = step(state)
     assert action is None

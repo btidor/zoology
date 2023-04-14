@@ -375,12 +375,11 @@ def JUMPI(s: State, _counter: Uint256, _b: Uint256) -> ControlFlow:
     targets = []
 
     next = copy.deepcopy(s)
-    assert isinstance(next.pc, int)
     next.path = (next.path << 1) | 0
     next.path_constraints.append(_b == Uint256(0))
     targets.append((_b == Uint256(0), next))
 
-    next = copy.deepcopy(s)
+    next = s
     next.pc = s.contract.program.jumps[counter]
     next.path = (next.path << 1) | 1
     next.path_constraints.append(_b != Uint256(0))

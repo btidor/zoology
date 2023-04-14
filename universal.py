@@ -53,10 +53,10 @@ def _universal_transaction(
                         print(" ", x.describe())
                 continue
             case Jump(targets):
-                solver = Solver()
-                state.constrain(solver)
-                for constraint, next in targets:
-                    if not solver.check(constraint):
+                for _, next in targets:
+                    solver = Solver()
+                    next.constrain(solver)
+                    if not solver.check():
                         continue
                     yield from _universal_transaction(
                         next, filter=filter, prints=prints
