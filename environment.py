@@ -104,7 +104,7 @@ class Universe:
         The contract must have a concrete address.
         """
         self.contracts[contract.address.unwrap()] = contract
-        self.codesizes[contract.address] = contract.program.code.length
+        self.codesizes[contract.address] = Uint256(len(contract.program.code))
 
     def transfer(self, src: Uint160, dst: Uint160, val: Uint256) -> None:
         """Transfer value from one account to another."""

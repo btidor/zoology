@@ -97,7 +97,7 @@ if __name__ == "__main__":
         print(f"Downloading level {i}")
         key = address.unwrap(bytes).hex()
         contract = get_code(address)
-        snapshot[key] = {"code": contract.program.code.unwrap().hex()}
+        snapshot[key] = {"code": contract.program.code.hex()}
 
         for j in range(8):
             # HACK: level factories only use the first few storage slots. Higher
