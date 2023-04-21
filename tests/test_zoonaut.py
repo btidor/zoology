@@ -3,14 +3,18 @@
 import copy
 
 from snapshot import LEVEL_FACTORIES
-from zoonaut import create, starting_universe
+from zoonaut import create, search, starting_universe, validate
 
 UNIVERSE = starting_universe()
 
 
 def check_level(i: int) -> None:
     factory = LEVEL_FACTORIES[i]
-    create(copy.deepcopy(UNIVERSE), factory)
+    instance, beginning = create(copy.deepcopy(UNIVERSE), factory)
+    for _, ok in validate(factory, instance, beginning):
+        assert ok.unwrap() is False
+
+    search(instance, beginning)
     # TODO: finish the rest...
 
 
