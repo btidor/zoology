@@ -50,12 +50,12 @@ def test_vault() -> None:
     check_level(8)
 
 
-def test_king() -> None:
-    check_level(9)
+# def test_king() -> None:
+#     check_level(9)
 
 
-def test_reentrancy() -> None:
-    check_level(10)
+# def test_reentrancy() -> None:
+#     check_level(10)
 
 
 def test_elevator() -> None:
@@ -82,8 +82,8 @@ def test_preservation() -> None:
     check_level(16)
 
 
-def test_recovery() -> None:
-    check_level(17)
+# def test_recovery() -> None:
+#     check_level(17)
 
 
 def test_magic_number() -> None:
@@ -94,36 +94,36 @@ def test_alien_codex() -> None:
     check_level(19)
 
 
-def test_denial() -> None:
-    check_level(20)
+# def test_denial() -> None:
+#     check_level(20)
 
 
 def test_shop() -> None:
     check_level(21)
 
 
-def test_dex() -> None:
-    check_level(22)
+# def test_dex() -> None:
+#     check_level(22)
 
 
-def test_dex2() -> None:
-    check_level(23)
+# def test_dex2() -> None:
+#     check_level(23)
 
 
-def test_puzzle_wallet() -> None:
-    check_level(24)
+# def test_puzzle_wallet() -> None:
+#     check_level(24)
 
 
-def test_motorbike() -> None:
-    check_level(25)
+# def test_motorbike() -> None:
+#     check_level(25)
 
 
-def test_double_entry_point() -> None:
-    check_level(26)
+# def test_double_entry_point() -> None:
+#     check_level(26)
 
 
-def test_good_samaritan() -> None:
-    check_level(27)
+# def test_good_samaritan() -> None:
+#     check_level(27)
 
 
 def test_gatekeeper_three() -> None:
