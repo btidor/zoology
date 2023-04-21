@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Any, Iterable
 
 from arrays import FrozenBytes
 from opcodes import REFERENCE, UNIMPLEMENTED
@@ -35,6 +35,12 @@ class Program:
         if self._symbolic_code is None:
             self._symbolic_code = FrozenBytes.concrete(self.code)
         return self._symbolic_code
+
+    def __copy__(self) -> Program:
+        return self
+
+    def __deepcopy__(self, memo: Any) -> Program:
+        return self
 
 
 @dataclass(frozen=True)
