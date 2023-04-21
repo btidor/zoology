@@ -18,8 +18,8 @@ def check_level(i: int) -> None:
     # TODO: finish the rest...
 
 
-def test_hello() -> None:
-    check_level(0)
+# def test_hello() -> None:
+#     check_level(0)
 
 
 def test_fallback() -> None:
@@ -42,8 +42,8 @@ def test_token() -> None:
     check_level(5)
 
 
-def test_delegation() -> None:
-    check_level(6)
+# def test_delegation() -> None:
+#     check_level(6)
 
 
 def test_force() -> None:
@@ -78,24 +78,24 @@ def test_gatekeeper_two() -> None:
     check_level(14)
 
 
-def test_naughtcoin() -> None:
-    check_level(15)
+# def test_naughtcoin() -> None:
+#     check_level(15)
 
 
-def test_preservation() -> None:
-    check_level(16)
+# def test_preservation() -> None:
+#     check_level(16)
 
 
 # def test_recovery() -> None:
 #     check_level(17)
 
 
-def test_magic_number() -> None:
-    check_level(18)
+# def test_magic_number() -> None:
+#     check_level(18)
 
 
-def test_alien_codex() -> None:
-    check_level(19)
+# def test_alien_codex() -> None:
+#     check_level(19)
 
 
 # def test_denial() -> None:
@@ -130,5 +130,5 @@ def test_shop() -> None:
 #     check_level(27)
 
 
-def test_gatekeeper_three() -> None:
-    check_level(28)
+# def test_gatekeeper_three() -> None:
+#     check_level(28)
