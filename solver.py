@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import io
 from typing import Literal, TypeVar, overload
 
 import z3
@@ -10,7 +9,6 @@ from pysmt import logics
 from pysmt.fnode import FNode
 from pysmt.shortcuts import Solver as PySMTSolver
 from pysmt.shortcuts import get_env
-from pysmt.smtlib.parser import get_formula
 from z3.z3util import get_vars
 
 from smt import BitVector, Constraint
@@ -44,26 +42,7 @@ class Solver:
         # Bitwuzla is very fast, but can't solve all situations
         with PySMTSolver("bitwuzla", logics.QF_ABV) as s:
             for constraint in self.constraints + list(assumptions):
-                # FYI, this Z3 -> pySMT conversion process only works for boolean
-                # constraints, not arbitrary expressions ¯\_(ツ)_/¯
-                smtlib = z3.Z3_benchmark_to_smtlib_string(
-                    constraint.node.ctx_ref(),
-                    None,
-                    None,
-                    None,
-                    None,
-                    0,
-                    None,
-                    constraint.node.as_ast(),
-                )
-                for op in ["bvsdiv", "bvudiv", "bvsrem", "bvurem", "bvsmod"]:
-                    # The *_i versions of these operators are an internal Z3
-                    # optimization; they function identically to the standard
-                    # SMTLIB ops:
-                    # https://github.com/Z3Prover/z3/blob/0b5c38d/src/api/z3_api.h#L394-L407
-                    smtlib = smtlib.replace(f"{op}_i", op)
-                fnode = get_formula(io.StringIO(smtlib))
-                s.add_assertion(fnode)
+                s.add_assertion(constraint.as_pysmt())
 
             if s.solve():
                 self.model = Model(s.get_model().assignment)

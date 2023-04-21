@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import abc
-from typing import Any, Generic, Literal, Type, TypeVar, overload
+import io
+from typing import Any, Generic, Literal, Optional, Type, TypeVar, overload
 
 import z3
 from Crypto.Hash import keccak
+from pysmt.fnode import FNode
+from pysmt.smtlib.parser import get_formula
 
 R = TypeVar("R", bound="z3.ExprRef")
 S = TypeVar("S")
@@ -319,6 +322,7 @@ class Constraint(Symbolic[z3.BoolRef, bool]):
 
     def __init__(self, arg: str | z3.BoolRef | bool):
         """Create a new Constraint."""
+        self._fnode: Optional[FNode] = None
         if isinstance(arg, str):
             self.node = z3.Bool(arg)
         elif isinstance(arg, z3.ExprRef):
@@ -387,3 +391,34 @@ class Constraint(Symbolic[z3.BoolRef, bool]):
         if (value := self.maybe_unwrap()) is None:
             raise ValueError(msg)
         return value
+
+    def as_pysmt(self) -> FNode:
+        """
+        Return the pySMT representation of this Constraint.
+
+        Caches conversion results for performance.
+        """
+        if self._fnode is None:
+            # FYI, this Z3 -> pySMT conversion process only works for boolean
+            # constraints, not arbitrary expressions ¯\_(ツ)_/¯
+            smtlib = z3.Z3_benchmark_to_smtlib_string(
+                self.node.ctx_ref(),
+                None,
+                None,
+                None,
+                None,
+                0,
+                None,
+                self.node.as_ast(),
+            )
+
+            # The *_i versions of these operators are an internal Z3
+            # optimization; they function identically to the standard SMTLIB
+            # ops:
+            # https://github.com/Z3Prover/z3/blob/0b5c38d/src/api/z3_api.h#L394-L407
+            for op in ["bvsdiv", "bvudiv", "bvsrem", "bvurem", "bvsmod"]:
+                smtlib = smtlib.replace(f"{op}_i", op)
+
+            self._fnode = get_formula(io.StringIO(smtlib))
+
+        return self._fnode
