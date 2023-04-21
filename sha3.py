@@ -39,7 +39,7 @@ class SHA3:
 
     accessed: dict[int, list[Bytes]] = field(default_factory=dict)
 
-    digest_constraints: list[Constraint] = field(default_factory=list)
+    constraints: list[Constraint] = field(default_factory=list)
 
     def __deepcopy__(self, memo: Any) -> SHA3:
         return SHA3(
@@ -47,7 +47,7 @@ class SHA3:
             hashes=copy.copy(self.hashes),
             free_digests=copy.deepcopy(self.free_digests, memo),
             accessed=copy.deepcopy(self.accessed, memo),
-            digest_constraints=copy.deepcopy(self.digest_constraints, memo),
+            constraints=copy.deepcopy(self.constraints, memo),
         )
 
     def __getitem__(self, key: Bytes) -> Uint256:
@@ -78,21 +78,43 @@ class SHA3:
             )
             self.accessed[size] = []
 
-        self.accessed[size].append(key)
-
         if (data := key.maybe_unwrap()) is not None:
             digest = keccak.new(data=data, digest_bits=256).digest()
             symbolic = Uint256(int.from_bytes(digest))
-            self.digest_constraints.append(
+            self.constraints.append(
                 Constraint(
                     z3.Select(self.hashes[size], key._bigvector(size)) == symbolic.node
                 )
             )
-            return symbolic
         else:
             result = z3.Select(self.hashes[size], key._bigvector(size))
             assert isinstance(result, z3.BitVecRef)
-            return Uint256(result)
+            # Assumption: no hash may have more than 128 leading zero bits. This
+            # avoids hash collisions between maps/arrays and ordinary storage
+            # slots.
+            self.constraints.append(
+                Constraint(z3.Extract(255, 128, result) != z3.BitVecVal(0, 128))
+            )
+            self.accessed[size].append(key)
+            symbolic = Uint256(result)
+
+        for n, okey, oval in self.items():
+            # Assumption: every hash digest is distinct, there are no collisions
+            # ever.
+            if n == size:
+                self.constraints.append(
+                    Constraint(
+                        z3.Implies(
+                            (key._bigvector(n) != okey._bigvector(n)),
+                            (symbolic.node != oval.node),
+                        )
+                    )
+                )
+            else:
+                self.constraints.append(symbolic != oval)
+
+        self.accessed[size].append(key)
+        return symbolic
 
     def items(self) -> Iterator[tuple[int, Bytes, Uint256]]:
         """
@@ -108,32 +130,8 @@ class SHA3:
 
     def constrain(self, solver: Solver) -> None:
         """Apply computed SHA3 constraints to the given solver instance."""
-        for n1, key1, val1 in self.items():
-            # Assumption: no hash may have more than 128 leading zero bits. This
-            # avoids hash collisions between maps/arrays and ordinary storage
-            # slots.
-            solver.assert_and_track(
-                Constraint(z3.Extract(255, 128, val1.node) != z3.BitVecVal(0, 128))
-            )
-
-            for n2, key2, val2 in self.items():
-                # Assumption: every hash digest is distinct, there are no
-                # collisions ever.
-                if n1 == n2:
-                    solver.assert_and_track(
-                        Constraint(
-                            z3.Implies(
-                                (key1._bigvector(n1) != key2._bigvector(n2)),
-                                (val1.node != val2.node),
-                            )
-                        )
-                    )
-                else:
-                    solver.assert_and_track(val1 != val2)
-
-        # TODO: extend these assumptions to support free digests
-
-        for constraint in self.digest_constraints:
+        # TODO: extend assumptions above to also constrain free digests
+        for constraint in self.constraints:
             solver.assert_and_track(constraint)
 
     def narrow(self, solver: Solver) -> None:
