@@ -31,7 +31,7 @@ class Array(Generic[K, V]):
     Tracks which keys are accessed and written.
     """
 
-    def __init__(self, array: z3.ExprRef, vtype: Type[V]) -> None:
+    def __init__(self, array: z3.ArrayRef, vtype: Type[V]) -> None:
         """Create a new Array. For internal use."""
         self.array = array
         self.vtype = vtype
@@ -75,9 +75,15 @@ class Array(Generic[K, V]):
         """Look up the given symbolic key, but don't track the lookup."""
         if (u := key.maybe_unwrap()) is not None and u in self.surface:
             return self.surface[u]
-        result = z3.Select(self.array, key.node)
-        assert isinstance(result, z3.BitVecRef)
-        return self.vtype(result)
+        # Copied from z3.Select() / ArrayRef.__getitem__(). We skip the domain
+        # check since the type system enforces it automatically.
+        ref = z3.Z3_mk_select(
+            self.array.ctx_ref(), self.array.as_ast(), key.node.as_ast()
+        )
+        if z3.Z3_get_ast_kind(self.array.ctx_ref(), ref) == z3.Z3_NUMERAL_AST:
+            return self.vtype(z3.BitVecNumRef(ref, self.array.ctx))
+        else:
+            return self.vtype(z3.BitVecRef(ref, self.array.ctx))
 
     def poke(self, key: K, val: V) -> None:
         """Set up the given symbolic key, but don't track the write."""
@@ -85,9 +91,16 @@ class Array(Generic[K, V]):
             self.surface[u] = val
         else:
             self.surface = {}
-        result = z3.Store(self.array, key.node, val.node)
-        assert isinstance(result, z3.ArrayRef)
-        self.array = result
+
+        # Copied from z3.Update(). We skip the domain and range checks since the
+        # type system enforces them automatically.
+        ref = z3.Z3_mk_store(
+            self.array.ctx_ref(),
+            self.array.as_ast(),
+            key.node.as_ast(),
+            val.node.as_ast(),
+        )
+        self.array = z3.ArrayRef(ref, self.array.ctx)
 
     def printable_diff(
         self, name: str, solver: Solver, original: Array[K, V]
