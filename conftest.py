@@ -19,7 +19,7 @@ PROFILE_ROOT = Path.cwd() / ".profiles"
 
 RENDER_OPTS = {
     "processor_options": {
-        "filter_threshold": 0.001,
+        "filter_threshold": 0,
         "show_regex": r".*",
     },
     "show_all": True,

@@ -1,21 +1,24 @@
 #!/usr/bin/env pytest
 
-import copy
-
 from snapshot import LEVEL_FACTORIES
 from zoonaut import create, search, starting_universe, validate
 
-UNIVERSE = starting_universe()
-
 
 def check_level(i: int) -> None:
+    universe = starting_universe()
     factory = LEVEL_FACTORIES[i]
-    instance, beginning = create(copy.deepcopy(UNIVERSE), factory)
+    instance, beginning = create(universe, factory)
     for _, ok in validate(factory, instance, beginning):
         assert ok.unwrap() is False
 
     search(instance, beginning)
     # TODO: finish the rest...
+
+
+def test_starting_universe() -> None:
+    # for profiling
+    starting_universe()
+    starting_universe()
 
 
 # def test_hello() -> None:
