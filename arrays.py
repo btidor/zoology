@@ -54,15 +54,12 @@ class Array(Generic[K, V]):
     @classmethod
     def concrete(cls, key: Type[K], val: V) -> Array[K, V]:
         """Create a new Array with a concrete default value."""
-        return Array(z3.K(z3.BitVecSort(key.length()), val.node), val.__class__)
+        return Array(z3.K(key._sort(), val.node), val.__class__)
 
     @classmethod
     def symbolic(cls, name: str, key: Type[K], val: Type[V]) -> Array[K, V]:
         """Create a new Array as an uninterpreted function."""
-        return Array(
-            z3.Array(name, z3.BitVecSort(key.length()), z3.BitVecSort(val.length())),
-            val,
-        )
+        return Array(z3.Array(name, key._sort(), val._sort()), val)
 
     def __getitem__(self, key: K) -> V:
         """Look up the given symbolic key."""

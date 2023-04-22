@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import abc
 import io
-from typing import Any, Generic, Literal, Optional, Type, TypeVar, overload
+from typing import Any, Generic, Optional, Type, TypeVar, overload
 
 import z3
 from Crypto.Hash import keccak
@@ -47,6 +47,17 @@ class Symbolic(abc.ABC, Generic[R, S]):
         pass
 
 
+# Creating the same BitVecSort instances over and over can create a lot of
+# overhead. Create them once, upfront, instead.
+BVSORT_8 = z3.BitVecSort(8)
+BVSORT_160 = z3.BitVecSort(160)
+BVSORT_256 = z3.BitVecSort(256)
+BVSORT_257 = z3.BitVecSort(257)
+BVSORT_512 = z3.BitVecSort(512)
+
+ZERO_BIT = z3.BitVecVal(0, 1)
+
+
 class BitVector(Symbolic[z3.BitVecRef, int]):
     """An SMT bitvector."""
 
@@ -63,9 +74,20 @@ class BitVector(Symbolic[z3.BitVecRef, int]):
             assert isinstance(result, z3.BitVecRef)
             self.node = result
         elif isinstance(arg, int):
-            self.node = z3.BitVecVal(arg, self.length())
+            sort = self._sort()
+            # Borrowed from z3.BitVecVal(). Skipping the is_bv_sort() check
+            # saves a little time.
+            self.node = z3.BitVecNumRef(
+                z3.Z3_mk_numeral(sort.ctx.ref(), str(arg), sort.ast),
+                sort.ctx,
+            )
         else:
             raise TypeError
+
+    @classmethod
+    @abc.abstractmethod
+    def _sort(cls) -> z3.BitVecSortRef:
+        raise NotImplementedError
 
     @classmethod
     @abc.abstractmethod
@@ -233,7 +255,11 @@ class Uint8(Uint):
     """A uint8."""
 
     @classmethod
-    def length(cls) -> Literal[8]:
+    def _sort(cls) -> z3.BitVecSortRef:
+        return BVSORT_8
+
+    @classmethod
+    def length(cls) -> int:
         """Return the number of bits in the bitvector."""
         return 8
 
@@ -242,7 +268,11 @@ class Uint160(Uint):
     """A uint160."""
 
     @classmethod
-    def length(cls) -> Literal[160]:
+    def _sort(cls) -> z3.BitVecSortRef:
+        return BVSORT_160
+
+    @classmethod
+    def length(cls) -> int:
         """Return the number of bits in the bitvector."""
         return 160
 
@@ -251,7 +281,11 @@ class Uint256(Uint):
     """A uint256."""
 
     @classmethod
-    def length(cls) -> Literal[256]:
+    def _sort(cls) -> z3.BitVecSortRef:
+        return BVSORT_256
+
+    @classmethod
+    def length(cls) -> int:
         """Return the number of bits in the bitvector."""
         return 256
 
@@ -268,7 +302,7 @@ class Uint256(Uint):
         """Return a constraint asserting that a + b does not overflow."""
         result = a.into(Uint257) + b.into(Uint257)
         sign = z3.Extract(256, 256, result.node)
-        return Constraint(sign == z3.BitVecVal(0, 1))
+        return Constraint(sign == ZERO_BIT)
 
     @classmethod
     def underflow_safe(cls, a: Uint256, b: Uint256) -> Constraint:
@@ -284,7 +318,11 @@ class Uint257(Uint):
     """A uint257."""
 
     @classmethod
-    def length(cls) -> Literal[257]:
+    def _sort(cls) -> z3.BitVecSortRef:
+        return BVSORT_257
+
+    @classmethod
+    def length(cls) -> int:
         """Return the number of bits in the bitvector."""
         return 257
 
@@ -293,7 +331,11 @@ class Uint512(Uint):
     """A uint512."""
 
     @classmethod
-    def length(cls) -> Literal[512]:
+    def _sort(cls) -> z3.BitVecSortRef:
+        return BVSORT_512
+
+    @classmethod
+    def length(cls) -> int:
         """Return the number of bits in the bitvector."""
         return 512
 
@@ -302,7 +344,11 @@ class Sint256(Sint):
     """A signed int256."""
 
     @classmethod
-    def length(cls) -> Literal[256]:
+    def _sort(cls) -> z3.BitVecSortRef:
+        return BVSORT_256
+
+    @classmethod
+    def length(cls) -> int:
         """Return the number of bits in the bitvector."""
         return 256
 

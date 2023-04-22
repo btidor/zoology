@@ -39,7 +39,6 @@ class Solver:
         Returns a model (if sat) or None (if unsat). Raises an error if the
         solver fails.
         """
-        # Bitwuzla is very fast, but can't solve all situations
         with PySMTSolver("bitwuzla", logics.QF_ABV) as s:
             for constraint in self.constraints + list(assumptions):
                 s.add_assertion(constraint.as_pysmt())
@@ -179,7 +178,7 @@ class Model:
             return z3.BoolVal(False)
         elif sort.kind() == z3.Z3_BV_SORT:
             assert isinstance(sort, z3.BitVecSortRef)
-            return z3.BitVecVal(0, sort.size())
+            return z3.BitVecVal(0, sort)
         elif sort.kind() == z3.Z3_ARRAY_SORT:
             assert isinstance(sort, z3.ArraySortRef)
             return z3.K(sort.domain(), self.zero_for_z3_sort(sort.range()))

@@ -13,6 +13,8 @@ from arrays import Bytes
 from smt import Constraint, Uint8, Uint256
 from solver import NarrowingError, Solver
 
+ZERO_128 = z3.BitVecVal(0, 128)
+
 
 @dataclass
 class SHA3:
@@ -72,9 +74,7 @@ class SHA3:
 
         if size not in self.hashes:
             self.hashes[size] = z3.Array(
-                f"SHA3({size}){self.suffix}",
-                z3.BitVecSort(size * 8),
-                z3.BitVecSort(256),
+                f"SHA3({size}){self.suffix}", z3.BitVecSort(size * 8), Uint256._sort()
             )
             self.accessed[size] = []
 
@@ -93,7 +93,7 @@ class SHA3:
             # avoids hash collisions between maps/arrays and ordinary storage
             # slots.
             self.constraints.append(
-                Constraint(z3.Extract(255, 128, result) != z3.BitVecVal(0, 128))
+                Constraint(z3.Extract(255, 128, result) != ZERO_128)
             )
             self.accessed[size].append(key)
             symbolic = Uint256(result)
