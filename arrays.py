@@ -38,17 +38,10 @@ class Array(Generic[K, V]):
         self.accessed: list[K] = []
         self.written: list[K] = []
 
-        # pySMT can't simplify array expressions, so to perform basic
-        # simplifications we track the "surface" writes: the set of recent
-        # writes to a constant key. Writing to a non-constant key clears the
-        # surface.
-        self.surface: dict[int, V] = {}
-
     def __deepcopy__(self, memo: Any) -> Array[K, V]:
         result: Array[K, V] = Array(self.array, self.vtype)
         result.accessed = copy.deepcopy(self.accessed, memo)
         result.written = copy.deepcopy(self.written, memo)
-        result.surface = copy.deepcopy(self.surface, memo)
         return result
 
     @classmethod
@@ -73,8 +66,6 @@ class Array(Generic[K, V]):
 
     def peek(self, key: K) -> V:
         """Look up the given symbolic key, but don't track the lookup."""
-        if (u := key.maybe_unwrap()) is not None and u in self.surface:
-            return self.surface[u]
         # Copied from z3.Select() / ArrayRef.__getitem__(). We skip the domain
         # check since the type system enforces it automatically.
         ref = z3.Z3_mk_select(
@@ -87,11 +78,6 @@ class Array(Generic[K, V]):
 
     def poke(self, key: K, val: V) -> None:
         """Set up the given symbolic key, but don't track the write."""
-        if (u := key.maybe_unwrap()) is not None:
-            self.surface[u] = val
-        else:
-            self.surface = {}
-
         # Copied from z3.Update(). We skip the domain and range checks since the
         # type system enforces them automatically.
         ref = z3.Z3_mk_store(
