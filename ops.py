@@ -214,12 +214,12 @@ def CALLDATACOPY(s: State, destOffset: Uint256, offset: Uint256, size: Uint256) 
 
 def CODESIZE(s: State) -> Uint256:
     """38 - Get size of code running in current environment."""
-    return Uint256(len(s.contract.program.code))
+    return s.contract.program.code.length
 
 
 def CODECOPY(s: State, destOffset: Uint256, offset: Uint256, size: Uint256) -> None:
     """39 - Copy code running in current environment to memory."""
-    s.memory.graft(s.contract.program.symbolic_code().slice(offset, size), destOffset)
+    s.memory.graft(s.contract.program.code.slice(offset, size), destOffset)
 
 
 def GASPRICE(s: State) -> Uint256:
@@ -243,7 +243,7 @@ def EXTCODECOPY(
     address = _address.unwrap(int, "EXTCODECOPY requires concrete address")
 
     contract = s.universe.contracts.get(address, None)
-    code = contract.program.symbolic_code() if contract else FrozenBytes.concrete(b"")
+    code = contract.program.code if contract else FrozenBytes.concrete(b"")
     s.memory.graft(code.slice(offset, size), destOffset)
 
 
@@ -272,8 +272,7 @@ def EXTCODEHASH(s: State, _address: Uint256) -> Uint256:
         # TODO: for EOAs we should actually return the empty hash
         return Uint256(0)
 
-    # TODO: SHA3 should be able to handle concrete bytes natively
-    return s.sha3[contract.program.symbolic_code()]
+    return s.sha3[contract.program.code]
 
 
 def BLOCKHASH(s: State, blockNumber: Uint256) -> Uint256:

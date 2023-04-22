@@ -127,7 +127,7 @@ def symbolic_start(program: Contract | Program, sha3: SHA3, suffix: str) -> Stat
         contribution=Uint256(f"CONTRIBUTION{suffix}"),
         extraction=Uint256(f"EXTRACTION{suffix}"),
     )
-    universe.codesizes[contract.address] = Uint256(len(contract.program.code))
+    universe.codesizes[contract.address] = contract.program.code.length
     universe.codesizes[origin] = Uint256(0)
     return State(
         suffix=suffix,

@@ -15,26 +15,12 @@ from smt import Uint256
 class Program:
     """The disassembled code of an EVM contract."""
 
-    code: bytes
+    code: FrozenBytes
     instructions: list[Instruction]
 
     # Maps byte offsets in the contract, as used by JUMP/JUMPI, to an index into
     # `instructions`.
     jumps: dict[int, int]
-
-    _symbolic_code: FrozenBytes | None = None
-
-    def symbolic_code(self) -> FrozenBytes:
-        """
-        Return the program code as a FrozenBytes object.
-
-        Converting large programs to a symbolic array is extremely expensive
-        because it requires many calls to the Z3 API. Since the instructions
-        that require this are rare, only do it when stricly necessary.
-        """
-        if self._symbolic_code is None:
-            self._symbolic_code = FrozenBytes.concrete(self.code)
-        return self._symbolic_code
 
     def __copy__(self) -> Program:
         return self
@@ -74,7 +60,7 @@ class Instruction:
 
 def disassemble(code: bytes) -> Program:
     """Parse and validate an EVM contract's code."""
-    program = Program(code=code, instructions=[], jumps={})
+    program = Program(code=FrozenBytes.concrete(code), instructions=[], jumps={})
 
     offset = 0
     while offset < len(code):
