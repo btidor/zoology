@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import abc
 import io
+from collections import defaultdict
 from typing import Any, Generic, Optional, Type, TypeVar, overload
 
 import z3
@@ -26,7 +27,23 @@ V = TypeVar("V", bound="Symbolic[Any, Any]")
 # Z3, so we convert to pySMT at solve time. The overhead is definitely worth it.
 
 
-class Symbolic(abc.ABC, Generic[R, S]):
+class UniqueSymbolic(abc.ABCMeta):
+    """A caching metaclass for Symbolic."""
+
+    _cache: dict[UniqueSymbolic, dict[Any, Any]] = defaultdict(dict)
+
+    def __call__(cls, arg: Any) -> Any:
+        """Intercept calls to the Symbolic constructor."""
+        if isinstance(arg, z3.ExprRef):
+            # Hashing ExprRefs requires a call into Z3, which is slow.
+            return super().__call__(arg)
+
+        if not arg in cls._cache[cls]:
+            cls._cache[cls][arg] = super().__call__(arg)
+        return cls._cache[cls][arg]
+
+
+class Symbolic(abc.ABC, Generic[R, S], metaclass=UniqueSymbolic):
     """An SMT expression."""
 
     node: R
