@@ -64,7 +64,7 @@ class BitVector(Symbolic[z3.BitVecRef, int]):
     def __init__(self, arg: str | z3.BitVecRef | int):
         """Create a new BitVector."""
         if isinstance(arg, str):
-            self.node = z3.BitVec(arg, self.length())
+            self.node = z3.BitVec(arg, self._sort())
         elif isinstance(arg, z3.ExprRef):
             assert z3.is_bv(arg)
             assert (
