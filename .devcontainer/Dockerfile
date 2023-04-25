@@ -8,13 +8,17 @@ RUN apt update && apt -y upgrade
 RUN apt -y install python3.11 python3.11-dev python3-pip
 RUN ln -sf /usr/bin/python3.11 /usr/bin/python3
 
-RUN apt -y install build-essential cmake libgmp3-dev
+RUN pip install cython && \
+    apt -y install build-essential cmake libgmp3-dev
 RUN git clone https://github.com/bitwuzla/bitwuzla && \
     cd bitwuzla && \
     ./contrib/setup-cadical.sh && \
     ./contrib/setup-btor2tools.sh && \
     ./contrib/setup-symfpu.sh && \
-    ./configure.sh && cd build && make && make install
+    ./configure.sh --python && \
+    cd build && make && make install && \
+    mv /usr/local/lib/pybitwuzla.so /usr/local/lib/python3.11/dist-packages/ && \
+    ldconfig
 
 RUN pip install pysmt
 # Bitwuzla can't handle this set-option command
