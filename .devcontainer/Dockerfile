@@ -8,23 +8,21 @@ RUN apt update && apt -y upgrade
 RUN apt -y install python3.11 python3.11-dev python3-pip
 RUN ln -sf /usr/bin/python3.11 /usr/bin/python3
 
-RUN apt -y install autoconf build-essential cmake default-jre gperf \
-    libgmp3-dev python3-gmpy2 swig
-RUN pip install cython pysmt
-RUN sudo -u vscode -- pysmt-install --all --confirm-agreement
-
-RUN wget https://github.com/cvc5/cvc5/releases/download/cvc5-1.0.4/cvc5-Linux \
-    -O /usr/bin/cvc5 && chmod +x /usr/bin/cvc5
-
+RUN apt -y install build-essential cmake libgmp3-dev
 RUN git clone https://github.com/bitwuzla/bitwuzla && \
     cd bitwuzla && \
     ./contrib/setup-cadical.sh && \
     ./contrib/setup-btor2tools.sh && \
     ./contrib/setup-symfpu.sh && \
-    ./configure.sh --python && cd build && make && make install
+    ./configure.sh && cd build && make && make install
 
+RUN pip install pysmt
+# Bitwuzla can't handle this set-option command
 RUN sed -i '/set_option.*diagnostic-output-channel/d' \
     /usr/local/lib/python3.11/dist-packages/pysmt/smtlib/solver.py
+# Free performance!
+RUN sed -i '/time.sleep.0.01./d' \
+    /usr/local/lib/python3.11/dist-packages/pysmt/smtlib/solver.py
 
-RUN apt -y install nodejs python3-pydot
+RUN apt -y install nodejs
 RUN pip install black mypy pydocstyle

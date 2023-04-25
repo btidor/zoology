@@ -7,3 +7,4 @@ pytest-xdist
 requests
 types-requests
 solc-select
+z3-solver
