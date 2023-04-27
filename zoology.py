@@ -7,14 +7,14 @@ import argparse
 import copy
 from typing import Iterator
 
-from arrays import Array, FrozenBytes, MutableBytes
 from environment import Block, Transaction, Universe
 from history import History
-from sha3 import SHA3
-from smt import Constraint, Uint160, Uint256
+from smt.arrays import Array, FrozenBytes, MutableBytes
+from smt.sha3 import SHA3
+from smt.smt import Constraint, Uint160, Uint256
+from smt.solver import NarrowingError, Solver
 from snapshot import LEVEL_FACTORIES, apply_snapshot
 from solidity import abiencode
-from solver import NarrowingError, Solver
 from state import State, Termination
 from universal import _universal_transaction, symbolic_start
 from vm import concrete_start, printable_execution

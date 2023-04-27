@@ -1,8 +1,8 @@
 """Helpers for test cases based on the Solidity fixtures."""
 
 from disassembler import Program
-from sha3 import SHA3
-from smt import Uint160, Uint256
+from smt.sha3 import SHA3
+from smt.smt import Uint160, Uint256
 from state import State
 from testlib import make_contract
 from universal import symbolic_start

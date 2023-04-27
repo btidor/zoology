@@ -6,10 +6,10 @@ import pytest
 
 import tests.fixtures as cases
 from disassembler import Program, disassemble
-from sha3 import SHA3
-from smt import Uint160, Uint256
+from smt.sha3 import SHA3
+from smt.smt import Uint160, Uint256
+from smt.solver import Solver
 from solidity import abiencode, load_binary, load_solidity, loads_solidity
-from solver import Solver
 from state import State, Termination
 from universal import (
     _universal_transaction,

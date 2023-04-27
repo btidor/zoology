@@ -4,7 +4,7 @@ from typing import Any
 
 import tests.fixtures as cases
 from disassembler import Program
-from sha3 import SHA3
+from smt.sha3 import SHA3
 from solidity import load_binary, load_solidity, loads_solidity
 from state import State
 from universal import _universal_transaction, symbolic_start

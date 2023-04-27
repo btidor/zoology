@@ -6,9 +6,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Iterable
 
-from arrays import FrozenBytes
 from opcodes import REFERENCE, UNIMPLEMENTED
-from smt import Uint256
+from smt.arrays import FrozenBytes
+from smt.smt import Uint256
 
 
 @dataclass

@@ -1,8 +1,8 @@
 #!/usr/bin/env pytest
 
-from arrays import FrozenBytes
 from disassembler import disassemble
-from smt import Uint160, Uint256
+from smt.arrays import FrozenBytes
+from smt.smt import Uint160, Uint256
 from solidity import (
     abiencode,
     compile_solidity,

@@ -1,8 +1,8 @@
-from arrays import Array, FrozenBytes, MutableBytes
 from disassembler import Program, disassemble
 from environment import Block, Contract, Transaction, Universe
-from sha3 import SHA3
-from smt import BitVector, Constraint, Uint160, Uint256
+from smt.arrays import Array, FrozenBytes, MutableBytes
+from smt.sha3 import SHA3
+from smt.smt import BitVector, Constraint, Uint160, Uint256
 from state import Log, State
 
 

@@ -81,7 +81,7 @@ def pyinstrument_combined(pytestconfig: pytest.Config) -> Iterator[None]:
 
 ### ### ### ### ###
 
-import bitwuzla
+from smt import bitwuzla
 
 
 @pytest.fixture(autouse=True)

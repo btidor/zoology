@@ -6,11 +6,11 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Callable
 
-from arrays import FrozenBytes, MutableBytes
 from environment import Block, Contract, Transaction, Universe
-from sha3 import SHA3
-from smt import Constraint, Uint160, Uint256
-from solver import Solver
+from smt.arrays import FrozenBytes, MutableBytes
+from smt.sha3 import SHA3
+from smt.smt import Constraint, Uint160, Uint256
+from smt.solver import Solver
 
 
 @dataclass

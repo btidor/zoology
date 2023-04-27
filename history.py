@@ -6,9 +6,9 @@ import copy
 from typing import Iterable
 
 from environment import Universe
-from sha3 import SHA3
-from smt import Constraint, Uint160
-from solver import ConstrainingError, NarrowingError, Solver
+from smt.sha3 import SHA3
+from smt.smt import Constraint, Uint160
+from smt.solver import ConstrainingError, NarrowingError, Solver
 from state import State
 
 

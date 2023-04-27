@@ -4,12 +4,12 @@
 import copy
 from typing import Iterable, Iterator
 
-from arrays import Array, FrozenBytes, MutableBytes
 from disassembler import Program, disassemble
 from environment import Block, Contract, Transaction, Universe
-from sha3 import SHA3
-from smt import Uint160, Uint256
-from solver import Solver
+from smt.arrays import Array, FrozenBytes, MutableBytes
+from smt.sha3 import SHA3
+from smt.smt import Uint160, Uint256
+from smt.solver import Solver
 from state import Descend, Jump, State, Termination
 from vm import step
 

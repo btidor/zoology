@@ -3,9 +3,9 @@
 import copy
 
 from disassembler import disassemble
-from sha3 import SHA3
-from smt import Uint160, Uint256
-from solver import Solver
+from smt.sha3 import SHA3
+from smt.smt import Uint160, Uint256
+from smt.solver import Solver
 from testlib import concretize, make_state
 from universal import symbolic_start
 

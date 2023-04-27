@@ -2,11 +2,11 @@
 
 import pytest
 
-from arrays import Array, FrozenBytes, MutableBytes
 from disassembler import Instruction, disassemble
 from ops import *
-from smt import Uint160, Uint256
-from solver import Solver
+from smt.arrays import Array, FrozenBytes, MutableBytes
+from smt.smt import Uint160, Uint256
+from smt.solver import Solver
 from state import Termination
 from testlib import concretize, make_block, make_contract, make_state, make_transaction
 

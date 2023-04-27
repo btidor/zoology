@@ -6,8 +6,8 @@ from typing import Literal, TypeVar, overload
 
 from pybitwuzla import Result
 
-from bitwuzla import assume_formula, check_sat, get_value
-from smt import BitVector, Constraint
+from smt.bitwuzla import assume_formula, check_sat, get_value
+from smt.smt import BitVector, Constraint
 
 T = TypeVar("T", bound=BitVector)
 

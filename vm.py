@@ -5,11 +5,11 @@ import inspect
 from typing import Generator, assert_never
 
 import ops
-from arrays import Array, FrozenBytes, MutableBytes
 from disassembler import Instruction, Program
 from environment import Block, Contract, Transaction, Universe
-from sha3 import SHA3
-from smt import Uint160, Uint256
+from smt.arrays import Array, FrozenBytes, MutableBytes
+from smt.sha3 import SHA3
+from smt.smt import Uint160, Uint256
 from solidity import abiencode, load_solidity
 from state import ControlFlow, Descend, Jump, State, Termination
 

@@ -5,10 +5,10 @@ from __future__ import annotations
 from collections import OrderedDict
 from dataclasses import dataclass
 
-from arrays import Array, FrozenBytes
 from disassembler import Program
-from smt import BitVector, Constraint, Uint160, Uint256
-from solver import Solver
+from smt.arrays import Array, FrozenBytes
+from smt.smt import BitVector, Constraint, Uint160, Uint256
+from smt.solver import Solver
 
 
 @dataclass(frozen=True)

@@ -8,9 +8,9 @@ from typing import Any, Generic, Iterable, Type, TypeGuard, TypeVar
 
 import pybitwuzla
 
-from bitwuzla import mk_array_sort, mk_const, mk_const_array, mk_term
-from smt import BitVector, Constraint, Uint8, Uint256
-from solver import Solver
+from smt.bitwuzla import mk_array_sort, mk_const, mk_const_array, mk_term
+from smt.smt import BitVector, Constraint, Uint8, Uint256
+from smt.solver import Solver
 
 K = TypeVar("K", bound=BitVector)
 V = TypeVar("V", bound=BitVector)

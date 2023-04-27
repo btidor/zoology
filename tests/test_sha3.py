@@ -3,11 +3,11 @@
 import pytest
 from pybitwuzla import Kind
 
-from arrays import FrozenBytes
-from bitwuzla import mk_term
-from sha3 import SHA3
-from smt import Constraint, Uint256
-from solver import NarrowingError, Solver
+from smt.arrays import FrozenBytes
+from smt.bitwuzla import mk_term
+from smt.sha3 import SHA3
+from smt.smt import Constraint, Uint256
+from smt.solver import NarrowingError, Solver
 
 
 def test_concrete() -> None:
