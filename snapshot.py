@@ -21,7 +21,9 @@ with open(".key") as f:
 
 with open("ethernaut.json") as f:
     _eth = json.load(f)
-    LEVEL_FACTORIES = [bytes.fromhex(_eth[str(i)][2:]) for i in range(29)]
+    LEVEL_FACTORIES = [
+        Uint160(int.from_bytes(bytes.fromhex(_eth[str(i)][2:]))) for i in range(29)
+    ]
 
 
 def apply_snapshot(file: TextIO, universe: Universe) -> None:
@@ -91,10 +93,9 @@ def _api_request(action: str, **kwargs: str) -> bytes:
 
 if __name__ == "__main__":
     snapshot = {}
-    for i, _address in enumerate(LEVEL_FACTORIES):
+    for i, address in enumerate(LEVEL_FACTORIES):
         print(f"Downloading level {i}")
-        key = _address.hex()
-        address = Uint160(int.from_bytes(_address))
+        key = address.unwrap(bytes).hex()
         contract = get_code(address)
         snapshot[key] = {"code": contract.program.code.unwrap().hex()}
 

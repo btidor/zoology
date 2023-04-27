@@ -1,6 +1,8 @@
 """Wrapper around pybitwuzla for state management."""
+import gc
 from collections import defaultdict
 from typing import Any
+from weakref import WeakValueDictionary
 
 from pybitwuzla import Bitwuzla, BitwuzlaSort, BitwuzlaTerm, Kind, Option, Result
 
@@ -17,12 +19,23 @@ def reset() -> None:
     _bzla.set_option(Option.INCREMENTAL, True)
     _bzla.set_option(Option.PRODUCE_MODELS, True)
 
+    tmp: dict[Any, WeakValueDictionary[Any, Any]] = defaultdict(WeakValueDictionary)
+    for cls, subcache in _cache.items():
+        for k, v in subcache.items():
+            tmp[cls][k] = v
+
     _cache = defaultdict(dict)
     _checked = 0
 
     _sorts = {}
     for i in [1, 8, 128, 160, 256, 257, 512]:
         _sorts[i] = _bzla.mk_bv_sort(i)
+
+    gc.collect()
+    for cls, args in tmp.items():
+        for arg in args.keys():
+            args[arg].node = cls(arg).node
+            _cache[cls][arg] = args[arg]
 
 
 reset()
