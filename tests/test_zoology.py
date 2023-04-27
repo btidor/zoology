@@ -2,7 +2,7 @@
 
 from smt import Uint160
 from snapshot import LEVEL_FACTORIES
-from zoonaut import create, search, starting_universe, validate
+from zoology import create, search, starting_universe, validate
 
 
 def check_level(i: int) -> None:

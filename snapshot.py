@@ -75,7 +75,7 @@ def _api_request(action: str, **kwargs: str) -> bytes:
                 "apikey": API_KEY,
             },
             headers={
-                "User-Agent": "zoonaut",
+                "User-Agent": "zoology",
             },
         )
         res.raise_for_status()
