@@ -48,7 +48,7 @@ class State:
     # tracked here.
     call_variables: list[tuple[FrozenBytes, Constraint]]
 
-    # List of Z3 expressions that must be satisfied in order for the program to
+    # List of constraints that must be satisfied in order for the program to
     # reach this state. Based on the JUMPI instructions (if statements) seen so
     # far.
     path_constraints: list[Constraint]

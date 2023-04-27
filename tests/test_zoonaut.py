@@ -1,12 +1,13 @@
 #!/usr/bin/env pytest
 
+from smt import Uint160
 from snapshot import LEVEL_FACTORIES
 from zoonaut import create, search, starting_universe, validate
 
 
 def check_level(i: int) -> None:
     universe = starting_universe()
-    factory = LEVEL_FACTORIES[i]
+    factory = Uint160(int.from_bytes(LEVEL_FACTORIES[i]))
     instance, beginning = create(universe, factory)
     for _, ok in validate(factory, instance, beginning):
         assert ok.unwrap() is False

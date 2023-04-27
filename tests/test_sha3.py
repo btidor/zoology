@@ -1,8 +1,10 @@
 #!/usr/bin/env pytest
 
 import pytest
+from pybitwuzla import Kind
 
 from arrays import FrozenBytes
+from bitwuzla import mk_term
 from sha3 import SHA3
 from smt import Constraint, Uint256
 from solver import NarrowingError, Solver
@@ -26,7 +28,10 @@ def test_symbolic() -> None:
     sha3.constrain(solver)
     solver.assert_and_track(
         Constraint(
-            input._bigvector(7) == FrozenBytes.concrete(b"testing")._bigvector(7)
+            mk_term(
+                Kind.EQUAL,
+                [input._bigvector(7), FrozenBytes.concrete(b"testing")._bigvector(7)],
+            )
         )
     )
     assert solver.check()
@@ -48,7 +53,10 @@ def test_fully_symbolic() -> None:
     sha3.constrain(solver)
     solver.assert_and_track(
         Constraint(
-            input._bigvector(7) == FrozenBytes.concrete(b"testing")._bigvector(7)
+            mk_term(
+                Kind.EQUAL,
+                [input._bigvector(7), FrozenBytes.concrete(b"testing")._bigvector(7)],
+            )
         )
     )
     solver.assert_and_track(input.length == Uint256(7))
@@ -83,7 +91,10 @@ def test_impossible_concrete() -> None:
     sha3.constrain(solver)
     solver.assert_and_track(
         Constraint(
-            input._bigvector(7) == FrozenBytes.concrete(b"testing")._bigvector(7)
+            mk_term(
+                Kind.EQUAL,
+                [input._bigvector(7), FrozenBytes.concrete(b"testing")._bigvector(7)],
+            )
         )
     )
     solver.assert_and_track(

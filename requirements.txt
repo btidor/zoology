@@ -1,10 +1,8 @@
 pycryptodome
 pyinstrument
-pysmt
 pytest
 pytest-timeout
 pytest-xdist
 requests
 types-requests
 solc-select
-z3-solver==4.10.2 # 4.11 regresses performance

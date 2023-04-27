@@ -6,8 +6,9 @@ import abc
 import copy
 from typing import Any, Generic, Iterable, Type, TypeGuard, TypeVar
 
-import z3
+import pybitwuzla
 
+from bitwuzla import mk_array_sort, mk_const, mk_const_array, mk_term
 from smt import BitVector, Constraint, Uint8, Uint256
 from solver import Solver
 
@@ -31,7 +32,7 @@ class Array(Generic[K, V]):
     Tracks which keys are accessed and written.
     """
 
-    def __init__(self, array: z3.ArrayRef, vtype: Type[V]) -> None:
+    def __init__(self, array: pybitwuzla.BitwuzlaTerm, vtype: Type[V]) -> None:
         """Create a new Array. For internal use."""
         self.array = array
         self.vtype = vtype
@@ -47,12 +48,15 @@ class Array(Generic[K, V]):
     @classmethod
     def concrete(cls, key: Type[K], val: V) -> Array[K, V]:
         """Create a new Array with a concrete default value."""
-        return Array(z3.K(key._sort(), val.node), val.__class__)
+        return Array(
+            mk_const_array(mk_array_sort(key._sort(), val._sort()), val.node),
+            val.__class__,
+        )
 
     @classmethod
     def symbolic(cls, name: str, key: Type[K], val: Type[V]) -> Array[K, V]:
         """Create a new Array as an uninterpreted function."""
-        return Array(z3.Array(name, key._sort(), val._sort()), val)
+        return Array(mk_const(mk_array_sort(key._sort(), val._sort()), name), val)
 
     def __getitem__(self, key: K) -> V:
         """Look up the given symbolic key."""
@@ -66,27 +70,13 @@ class Array(Generic[K, V]):
 
     def peek(self, key: K) -> V:
         """Look up the given symbolic key, but don't track the lookup."""
-        # Copied from z3.Select() / ArrayRef.__getitem__(). We skip the domain
-        # check since the type system enforces it automatically.
-        ref = z3.Z3_mk_select(
-            self.array.ctx_ref(), self.array.as_ast(), key.node.as_ast()
-        )
-        if z3.Z3_get_ast_kind(self.array.ctx_ref(), ref) == z3.Z3_NUMERAL_AST:
-            return self.vtype(z3.BitVecNumRef(ref, self.array.ctx))
-        else:
-            return self.vtype(z3.BitVecRef(ref, self.array.ctx))
+        return self.vtype(mk_term(pybitwuzla.Kind.ARRAY_SELECT, [self.array, key.node]))
 
     def poke(self, key: K, val: V) -> None:
         """Set up the given symbolic key, but don't track the write."""
-        # Copied from z3.Update(). We skip the domain and range checks since the
-        # type system enforces them automatically.
-        ref = z3.Z3_mk_store(
-            self.array.ctx_ref(),
-            self.array.as_ast(),
-            key.node.as_ast(),
-            val.node.as_ast(),
+        self.array = mk_term(
+            pybitwuzla.Kind.ARRAY_STORE, [self.array, key.node, val.node]
         )
-        self.array = z3.ArrayRef(ref, self.array.ctx)
 
     def printable_diff(
         self, name: str, solver: Solver, original: Array[K, V]
@@ -192,12 +182,14 @@ class Bytes(abc.ABC):
         """Return a symbolic slice of this instance."""
         return ByteSlice(self, offset, size)
 
-    def _bigvector(self, expected_length: int) -> z3.BitVecRef:
+    def _bigvector(self, expected_length: int) -> pybitwuzla.BitwuzlaTerm:
         """Return a single, large bitvector of this instance's bytes."""
         length = self.length.maybe_unwrap() or expected_length
         assert length == expected_length
-        result = z3.Concat(*[self[Uint256(i)].node for i in range(length)])
-        assert isinstance(result, z3.BitVecRef)
+        result = mk_term(
+            pybitwuzla.Kind.BV_CONCAT, [self[Uint256(i)].node for i in range(length)]
+        )
+        assert isinstance(result, pybitwuzla.BitwuzlaTerm)
         return result
 
     def maybe_unwrap(self) -> bytes | None:

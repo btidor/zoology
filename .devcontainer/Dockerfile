@@ -20,13 +20,5 @@ RUN git clone https://github.com/bitwuzla/bitwuzla && \
     mv /usr/local/lib/pybitwuzla.so /usr/local/lib/python3.11/dist-packages/ && \
     ldconfig
 
-RUN pip install pysmt
-# Bitwuzla can't handle this set-option command
-RUN sed -i '/set_option.*diagnostic-output-channel/d' \
-    /usr/local/lib/python3.11/dist-packages/pysmt/smtlib/solver.py
-# Free performance!
-RUN sed -i '/time.sleep.0.01./d' \
-    /usr/local/lib/python3.11/dist-packages/pysmt/smtlib/solver.py
-
 RUN apt -y install nodejs
 RUN pip install black mypy pydocstyle

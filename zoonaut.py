@@ -19,13 +19,12 @@ from state import State, Termination
 from universal import _universal_transaction, symbolic_start
 from vm import concrete_start, printable_execution
 
-SETUP = Uint160(0x5757575757575757575757575757575757575757)
-PLAYER = Uint160(0xCACACACACACACACACACACACACACACACACACACACA)
-PROXY = Uint160(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0)
-
 
 def create(universe: Universe, address: Uint160) -> tuple[Uint160, History]:
     """Call createInstance to set up the level."""
+    SETUP = Uint160(0x5757575757575757575757575757575757575757)
+    PLAYER = Uint160(0xCACACACACACACACACACACACACACACACACACACACA)
+
     # Warning: this symbolic universe will be used in symbolic execution later
     # on. Inaccuracies in the environment may result in an inaccurate analysis.
     calldata = abiencode("createInstance(address)") + PLAYER.into(Uint256).unwrap(bytes)
@@ -74,6 +73,9 @@ def validate(
     factory: Uint160, instance: Uint160, history: History, prints: bool = False
 ) -> Iterator[tuple[State, Constraint]]:
     """Call validateInstance to check the solution."""
+    SETUP = Uint160(0x5757575757575757575757575757575757575757)
+    PLAYER = Uint160(0xCACACACACACACACACACACACACACACACACACACACA)
+
     calldata = (
         abiencode("validateInstance(address,address)")
         + instance.into(Uint256).unwrap(bytes)
@@ -103,6 +105,9 @@ def search(
     address: Uint160, beginning: History, prints: bool = False
 ) -> tuple[History, Constraint] | None:
     """Symbolically execute the given level until a solution is found."""
+    PLAYER = Uint160(0xCACACACACACACACACACACACACACACACACACACACA)
+    PROXY = Uint160(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0)
+
     histories: list[History] = [beginning]
     for i in range(16):
         suffix = str(i + 1)
@@ -244,7 +249,7 @@ if __name__ == "__main__":
     for i in args.level:
         if i == 0:
             continue
-        factory = LEVEL_FACTORIES[i]
+        factory = Uint160(int.from_bytes(LEVEL_FACTORIES[i]))
         print(f"{i:04}", end="")
         try:
             instance, beginning = create(copy.deepcopy(universe), factory)

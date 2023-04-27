@@ -6,14 +6,13 @@ import copy
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Iterator
 
-import z3
 from Crypto.Hash import keccak
+from pybitwuzla import BitwuzlaTerm, Kind
 
 from arrays import Bytes
+from bitwuzla import mk_array_sort, mk_bv_sort, mk_bv_value, mk_const, mk_term, sort
 from smt import Constraint, Uint8, Uint256
 from solver import NarrowingError, Solver
-
-ZERO_128 = z3.BitVecVal(0, 128)
 
 
 @dataclass
@@ -33,7 +32,7 @@ class SHA3:
     # We model the SHA-3 function as a symbolic uninterpreted function from
     # n-byte inputs to 32-byte outputs. Z3 requires n to be constant for any
     # given function, so we store a mapping from `n -> func_n(x)`.
-    hashes: dict[int, z3.ArrayRef] = field(default_factory=dict)
+    hashes: dict[int, BitwuzlaTerm] = field(default_factory=dict)
 
     # If the input has a symbolic length, we don't really know what it's going
     # to hash to. In this case, mint a new variable for the return value.
@@ -63,9 +62,9 @@ class SHA3:
                 # HACK: to avoid introducing quantifiers, if this instance has a
                 # symbolic length, we return a fixed 1024-byte vector. This is
                 # an unsound assumption!
-                result = Constraint(key._bigvector(1024) == key2._bigvector(1024)).ite(
-                    val2, result
-                )
+                result = Constraint(
+                    mk_term(Kind.EQUAL, [key._bigvector(1024), key2._bigvector(1024)])
+                ).ite(val2, result)
             return result
 
         if size == 0:
@@ -73,8 +72,9 @@ class SHA3:
             return Uint256(int.from_bytes(digest))
 
         if size not in self.hashes:
-            self.hashes[size] = z3.Array(
-                f"SHA3({size}){self.suffix}", z3.BitVecSort(size * 8), Uint256._sort()
+            self.hashes[size] = mk_const(
+                mk_array_sort(mk_bv_sort(size * 8), Uint256._sort()),
+                f"SHA3({size}){self.suffix}",
             )
             self.accessed[size] = []
 
@@ -83,33 +83,47 @@ class SHA3:
             symbolic = Uint256(int.from_bytes(digest))
             self.constraints.append(
                 Constraint(
-                    z3.Select(self.hashes[size], key._bigvector(size)) == symbolic.node
+                    mk_term(
+                        Kind.EQUAL,
+                        [
+                            mk_term(
+                                Kind.ARRAY_SELECT,
+                                [self.hashes[size], key._bigvector(size)],
+                            ),
+                            symbolic.node,
+                        ],
+                    )
                 )
             )
         else:
-            result = z3.Select(self.hashes[size], key._bigvector(size))
-            assert isinstance(result, z3.BitVecRef)
+            select = mk_term(
+                Kind.ARRAY_SELECT, [self.hashes[size], key._bigvector(size)]
+            )
+            assert isinstance(select, BitwuzlaTerm)
             # Assumption: no hash may have more than 128 leading zero bits. This
             # avoids hash collisions between maps/arrays and ordinary storage
             # slots.
             self.constraints.append(
-                Constraint(z3.Extract(255, 128, result) != ZERO_128)
+                Constraint(
+                    mk_term(
+                        Kind.DISTINCT,
+                        [
+                            mk_term(Kind.BV_EXTRACT, [select], [255, 128]),
+                            mk_bv_value(sort(128), 0),
+                        ],
+                    )
+                )
             )
             self.accessed[size].append(key)
-            symbolic = Uint256(result)
+            symbolic = Uint256(select)
 
         for n, okey, oval in self.items():
             # Assumption: every hash digest is distinct, there are no collisions
             # ever.
             if n == size:
-                self.constraints.append(
-                    Constraint(
-                        z3.Implies(
-                            (key._bigvector(n) != okey._bigvector(n)),
-                            (symbolic.node != oval.node),
-                        )
-                    )
-                )
+                a = mk_term(Kind.DISTINCT, [key._bigvector(n), okey._bigvector(n)])
+                b = mk_term(Kind.DISTINCT, [symbolic.node, oval.node])
+                self.constraints.append(Constraint(mk_term(Kind.IMPLIES, [a, b])))
             else:
                 self.constraints.append(symbolic != oval)
 
@@ -124,8 +138,8 @@ class SHA3:
         """
         for n, array in self.hashes.items():
             for key in self.accessed[n]:
-                result = z3.Select(array, key._bigvector(n))
-                assert isinstance(result, z3.BitVecRef)
+                result = mk_term(Kind.ARRAY_SELECT, [array, key._bigvector(n)])
+                assert isinstance(result, BitwuzlaTerm)
                 yield (n, key, Uint256(result))
 
     def constrain(self, solver: Solver) -> None:

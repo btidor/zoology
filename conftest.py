@@ -81,6 +81,17 @@ def pyinstrument_combined(pytestconfig: pytest.Config) -> Iterator[None]:
 
 ### ### ### ### ###
 
+import bitwuzla
+
+
+@pytest.fixture(autouse=True)
+def reset_bitwuzla() -> Iterator[None]:
+    bitwuzla.reset()
+    yield
+
+
+### ### ### ### ###
+
 import solidity
 
 solidity.install_solidity()

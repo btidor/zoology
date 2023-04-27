@@ -7,7 +7,7 @@ import pytest
 import tests.fixtures as cases
 from disassembler import Program, disassemble
 from sha3 import SHA3
-from smt import Uint256
+from smt import Uint160, Uint256
 from solidity import abiencode, load_binary, load_solidity, loads_solidity
 from solver import Solver
 from state import State, Termination
@@ -81,10 +81,14 @@ def test_basic() -> None:
     assert isinstance(end.pc, Termination)
     assert end.pc.success == True
 
+    # These extra constraints makes the test deterministic
     end.path_constraints.append(
-        # This extra constraint makes the test deterministic
-        start.universe.balances[end.contract.address]
+        start.universe.balances[Uint160(0xADADADADADADADADADADADADADADADADADADADAD)]
         == Uint256(0x8000000000001)
+    )
+    end.path_constraints.append(
+        start.universe.balances[Uint160(0xCACACACACACACACACACACACACACACACACACACACA)]
+        == Uint256(0xAAAAAAAAAAAAA)
     )
     solver = Solver()
     end.constrain(solver)
@@ -105,7 +109,7 @@ def test_basic() -> None:
         Balance\tR: 0xadadadadadadadadadadadadadadadadadadadad
         \t-> 0x8000000000001
         \tR: 0xcacacacacacacacacacacacacacacacacacacaca
-        \t-> 0x0
+        \t-> 0xaaaaaaaaaaaaa
 
         Storage\tW: 0xee -> 0xff (from 0x0)
     """.splitlines()
