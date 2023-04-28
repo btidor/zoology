@@ -9,7 +9,8 @@ from typing import Iterator
 
 from environment import Block, Transaction, Universe
 from history import History
-from smt.arrays import Array, FrozenBytes, MutableBytes
+from smt.arrays import Array
+from smt.bytes import FrozenBytes, MutableBytes
 from smt.sha3 import SHA3
 from smt.smt import Constraint, Uint160, Uint256
 from smt.solver import NarrowingError, Solver

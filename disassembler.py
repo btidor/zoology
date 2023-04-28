@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Iterable
 
 from opcodes import REFERENCE, UNIMPLEMENTED
-from smt.arrays import FrozenBytes
+from smt.bytes import FrozenBytes
 from smt.smt import Uint256
 
 

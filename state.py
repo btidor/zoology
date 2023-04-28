@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 from environment import Block, Contract, Transaction, Universe
-from smt.arrays import FrozenBytes, MutableBytes
+from smt.bytes import FrozenBytes, MutableBytes
 from smt.sha3 import SHA3
 from smt.smt import Constraint, Uint160, Uint256
 from smt.solver import Solver

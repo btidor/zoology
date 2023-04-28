@@ -6,7 +6,8 @@ from collections import OrderedDict
 from dataclasses import dataclass
 
 from disassembler import Program
-from smt.arrays import Array, FrozenBytes
+from smt.arrays import Array
+from smt.bytes import FrozenBytes
 from smt.smt import BitVector, Constraint, Uint160, Uint256
 from smt.solver import Solver
 

@@ -4,7 +4,8 @@ import pytest
 
 from disassembler import Instruction, disassemble
 from ops import *
-from smt.arrays import Array, FrozenBytes, MutableBytes
+from smt.arrays import Array
+from smt.bytes import FrozenBytes, MutableBytes
 from smt.smt import Uint160, Uint256
 from smt.solver import Solver
 from state import Termination

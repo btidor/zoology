@@ -6,7 +6,8 @@ from typing import Iterable, Iterator
 
 from disassembler import Program, disassemble
 from environment import Block, Contract, Transaction, Universe
-from smt.arrays import Array, FrozenBytes, MutableBytes
+from smt.arrays import Array
+from smt.bytes import FrozenBytes, MutableBytes
 from smt.sha3 import SHA3
 from smt.smt import Uint160, Uint256
 from smt.solver import Solver

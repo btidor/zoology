@@ -7,7 +7,8 @@ from typing import Generator, assert_never
 import ops
 from disassembler import Instruction, Program
 from environment import Block, Contract, Transaction, Universe
-from smt.arrays import Array, FrozenBytes, MutableBytes
+from smt.arrays import Array
+from smt.bytes import FrozenBytes, MutableBytes
 from smt.sha3 import SHA3
 from smt.smt import Uint160, Uint256
 from solidity import abiencode, load_solidity

@@ -8,7 +8,7 @@ from typing import Any, Generic, Type, TypeVar, overload
 from Crypto.Hash import keccak
 from pybitwuzla import BitwuzlaSort, BitwuzlaTerm, Kind
 
-from smt.bitwuzla import cache, get_value_int, mk_bv_value, mk_const, mk_term, sort
+from .bitwuzla import cache, get_value_int, mk_bv_value, mk_const, mk_term, sort
 
 S = TypeVar("S")
 
