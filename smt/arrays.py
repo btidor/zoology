@@ -64,9 +64,7 @@ class Array(Generic[K, V]):
 
     def poke(self, key: K, val: V) -> None:
         """Set up the given symbolic key, but don't track the write."""
-        self.array = mk_term(
-            Kind.ARRAY_STORE, [self.array, key.node, val.node]
-        )
+        self.array = mk_term(Kind.ARRAY_STORE, [self.array, key.node, val.node])
 
     def printable_diff(
         self, name: str, solver: Solver, original: Array[K, V]
