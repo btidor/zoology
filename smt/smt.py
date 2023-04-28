@@ -34,6 +34,8 @@ class UniqueSymbolic(abc.ABCMeta):
 class Symbolic(abc.ABC, Generic[S], metaclass=UniqueSymbolic):
     """An SMT expression."""
 
+    __slots__ = ("node", "__weakref__")
+
     node: BitwuzlaTerm
 
     def __init__(self, arg: str | BitwuzlaTerm | S) -> None:
@@ -54,6 +56,8 @@ class Symbolic(abc.ABC, Generic[S], metaclass=UniqueSymbolic):
 
 class BitVector(Symbolic[int]):
     """An SMT bitvector."""
+
+    __slots__ = ()
 
     def __init__(self, arg: str | BitwuzlaTerm | int):
         """Create a new BitVector."""
@@ -175,6 +179,8 @@ class BitVector(Symbolic[int]):
 class Uint(BitVector):
     """A bitvector representing an unsigned integer."""
 
+    __slots__ = ()
+
     def __lt__(self: T, other: T) -> Constraint:
         return Constraint(mk_term(Kind.BV_ULT, [self.node, other.node]))
 
@@ -222,6 +228,8 @@ class Uint(BitVector):
 class Sint(BitVector):
     """A bitvector representing a signed integer."""
 
+    __slots__ = ()
+
     def __lt__(self: T, other: T) -> Constraint:
         return Constraint(mk_term(Kind.BV_SLT, [self.node, other.node]))
 
@@ -238,6 +246,8 @@ class Sint(BitVector):
 class Uint8(Uint):
     """A uint8."""
 
+    __slots__ = ()
+
     @classmethod
     def _sort(cls) -> BitwuzlaSort:
         return sort(8)
@@ -251,6 +261,8 @@ class Uint8(Uint):
 class Uint160(Uint):
     """A uint160."""
 
+    __slots__ = ()
+
     @classmethod
     def _sort(cls) -> BitwuzlaSort:
         return sort(160)
@@ -263,6 +275,8 @@ class Uint160(Uint):
 
 class Uint256(Uint):
     """A uint256."""
+
+    __slots__ = ()
 
     @classmethod
     def _sort(cls) -> BitwuzlaSort:
@@ -299,6 +313,8 @@ class Uint256(Uint):
 class Sint256(Sint):
     """A signed int256."""
 
+    __slots__ = ()
+
     @classmethod
     def _sort(cls) -> BitwuzlaSort:
         return sort(256)
@@ -322,6 +338,8 @@ class Sint256(Sint):
 class Uint257(Uint):
     """A uint257."""
 
+    __slots__ = ()
+
     @classmethod
     def _sort(cls) -> BitwuzlaSort:
         return sort(257)
@@ -335,6 +353,8 @@ class Uint257(Uint):
 class Uint512(Uint):
     """A uint512."""
 
+    __slots__ = ()
+
     @classmethod
     def _sort(cls) -> BitwuzlaSort:
         return sort(512)
@@ -347,6 +367,8 @@ class Uint512(Uint):
 
 class Constraint(Symbolic[bool]):
     """A symbolic boolean value representing true or false."""
+
+    __slots__ = ()
 
     def __init__(self, arg: str | BitwuzlaTerm | bool):
         """Create a new Constraint."""
