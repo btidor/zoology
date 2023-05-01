@@ -243,8 +243,6 @@ if __name__ == "__main__":
     universe = starting_universe()
 
     for i in args.level:
-        if i == 0:
-            continue
         factory = LEVEL_FACTORIES[i]
         print(f"{i:04}", end="")
         try:
