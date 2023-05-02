@@ -102,11 +102,15 @@ def validate(
 
 
 def search(
-    factory: Uint160, instance: Uint160, beginning: History, prints: bool = False
+    factory: Uint160,
+    instance: Uint160,
+    beginning: History,
+    depth: int,
+    prints: bool = False,
 ) -> tuple[History, Constraint] | None:
     """Symbolically execute the given level until a solution is found."""
     histories: list[History] = [beginning]
-    for i in range(4):
+    for i in range(depth):
         suffix = str(i + 1)
         if prints:
             print(f"\tTxn {suffix}:")
@@ -236,6 +240,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "-l", "--level", help="select which level(s) to run", action="append", type=int
     )
+    parser.add_argument(
+        "-d", "--depth", help="maximum number of transactions", type=int, default=4
+    )
     parser.add_argument("-v", "--verbose", action="count", default=0)
     args = parser.parse_args()
     if args.level is None:
@@ -255,7 +262,9 @@ if __name__ == "__main__":
             for _, ok in validate(factory, instance, beginning):
                 assert ok.unwrap() is False
 
-            result = search(factory, instance, beginning, prints=(args.verbose > 1))
+            result = search(
+                factory, instance, beginning, args.depth, prints=(args.verbose > 1)
+            )
             if result is None:
                 print("\tno solution")
                 continue
