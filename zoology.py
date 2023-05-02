@@ -64,7 +64,8 @@ def create(universe: Universe, address: Uint160) -> tuple[Uint160, History]:
         assert isinstance(end, State)
 
     assert isinstance(end.pc, Termination)
-    assert end.pc.success
+    error = end.pc.returndata.unwrap()[68:].strip().decode()
+    assert end.pc.success, f"createInstance() failed{': ' + error if error else ''}"
 
     end.universe.add_contract(end.contract)
     address = Uint160(int.from_bytes(end.pc.returndata.unwrap()))
@@ -239,6 +240,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if args.level is None:
         args.level = list(range(len(LEVEL_FACTORIES)))
+    for i in args.level:
+        if i < 0 or i >= len(LEVEL_FACTORIES):
+            raise ValueError(f"invalid level: {i}")
 
     universe = starting_universe()
 
