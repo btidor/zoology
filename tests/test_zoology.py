@@ -11,7 +11,7 @@ def check_level(i: int) -> None:
     for _, ok in validate(factory, instance, beginning):
         assert ok.unwrap() is False
 
-    search(instance, beginning)
+    search(factory, instance, beginning)
     # TODO: finish the rest...
 
 

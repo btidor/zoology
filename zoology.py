@@ -101,19 +101,19 @@ def validate(
 
 
 def search(
-    address: Uint160, beginning: History, prints: bool = False
+    factory: Uint160, instance: Uint160, beginning: History, prints: bool = False
 ) -> tuple[History, Constraint] | None:
     """Symbolically execute the given level until a solution is found."""
     histories: list[History] = [beginning]
-    for i in range(16):
+    for i in range(4):
         suffix = str(i + 1)
         if prints:
             print(f"\tTxn {suffix}:")
         subsequent: list[History] = []
         for history in histories:
             universe, sha3 = history.subsequent()
-            instance = universe.contracts[address.unwrap()]
-            start = symbolic_start(instance, sha3, suffix)
+            contract = universe.contracts[instance.unwrap()]
+            start = symbolic_start(contract, sha3, suffix)
             start.universe = universe
 
             # ASSUMPTION: each call to the level takes place in a different
@@ -147,7 +147,7 @@ def search(
                         sp = " "
                     print(output, end="")
 
-                for post, ok in validate(address, address, candidate):
+                for post, ok in validate(factory, instance, candidate):
                     complete = candidate.extend(post)
 
                     solver = Solver()
@@ -251,7 +251,7 @@ if __name__ == "__main__":
             for _, ok in validate(factory, instance, beginning):
                 assert ok.unwrap() is False
 
-            result = search(instance, beginning, prints=(args.verbose > 1))
+            result = search(factory, instance, beginning, prints=(args.verbose > 1))
             if result is None:
                 print("\tno solution")
                 continue
