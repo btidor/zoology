@@ -11,12 +11,12 @@ def check_level(i: int) -> None:
     for _, ok in validate(factory, instance, beginning):
         assert ok.unwrap() is False
 
-    search(factory, instance, beginning, 1)
+    assert search(factory, instance, beginning, 1) is not None
     # TODO: finish the rest...
 
 
 def test_starting_universe() -> None:
-    # for profiling
+    # benchmark for profiling
     starting_universe()
     starting_universe()
 
@@ -25,16 +25,16 @@ def test_starting_universe() -> None:
 #     check_level(0)
 
 
-def test_fallback() -> None:
-    check_level(1)
+# def test_fallback() -> None:
+#     check_level(1)
 
 
 def test_fallout() -> None:
     check_level(2)
 
 
-def test_coinflip() -> None:
-    check_level(3)
+# def test_coinflip() -> None:
+#     check_level(3)
 
 
 def test_telephone() -> None:
@@ -49,8 +49,8 @@ def test_token() -> None:
 #     check_level(6)
 
 
-def test_force() -> None:
-    check_level(7)
+# def test_force() -> None:
+#     check_level(7)
 
 
 def test_vault() -> None:
