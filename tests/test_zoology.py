@@ -97,7 +97,7 @@ def test_vault() -> None:
 
 def test_elevator() -> None:
     raw = """
-        Px19F7\ted9a7134 ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+        Px19F7\ted9a7134 ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\t(via proxy)
     """.splitlines()
     fixture = map(lambda x: x[8:], raw[1:-1])
 
@@ -161,7 +161,7 @@ def test_gatekeeper_two() -> None:
 
 def test_shop() -> None:
     raw = """
-        Px673\ta6f2ae3a
+        Px673\ta6f2ae3a\t(via proxy)
     """.splitlines()
     fixture = map(lambda x: x[8:], raw[1:-1])
 

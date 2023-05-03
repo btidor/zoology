@@ -39,6 +39,7 @@ def starting_universe() -> Universe:
         contribution=Uint256(f"CONTRIBUTION"),
         extraction=Uint256(f"EXTRACTION"),
     )
+    universe.codesizes.poke(PLAYER, Uint256(0))
     with open("snapshot.json", "r") as f:
         apply_snapshot(f, universe)
     return universe
