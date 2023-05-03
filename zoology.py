@@ -117,7 +117,7 @@ def validateInstance(
 
     for end in _universal_transaction(start, prints=prints):
         assert isinstance(end.pc, Termination)
-        ok = Uint256(end.pc.returndata._bigvector(32)) != Uint256(0)
+        ok = Uint256(end.pc.returndata.bigvector(32)) != Uint256(0)
         yield (end, ok)
 
 

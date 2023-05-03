@@ -78,7 +78,7 @@ class Bytes(abc.ABC):
         """Return a symbolic slice of this instance."""
         return ByteSlice(self, offset, size)
 
-    def _bigvector(self, expected_length: int) -> BitwuzlaTerm:
+    def bigvector(self, expected_length: int) -> BitwuzlaTerm:
         """Return a single, large bitvector of this instance's bytes."""
         length = self.length.maybe_unwrap() or expected_length
         assert length == expected_length

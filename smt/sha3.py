@@ -63,7 +63,7 @@ class SHA3:
                 # symbolic length, we return a fixed 1024-byte vector. This is
                 # an unsound assumption!
                 result = Constraint(
-                    mk_term(Kind.EQUAL, [key._bigvector(1024), key2._bigvector(1024)])
+                    mk_term(Kind.EQUAL, [key.bigvector(1024), key2.bigvector(1024)])
                 ).ite(val2, result)
             return result
 
@@ -88,7 +88,7 @@ class SHA3:
                         [
                             mk_term(
                                 Kind.ARRAY_SELECT,
-                                [self.hashes[size], key._bigvector(size)],
+                                [self.hashes[size], key.bigvector(size)],
                             ),
                             symbolic.node,
                         ],
@@ -97,7 +97,7 @@ class SHA3:
             )
         else:
             select = mk_term(
-                Kind.ARRAY_SELECT, [self.hashes[size], key._bigvector(size)]
+                Kind.ARRAY_SELECT, [self.hashes[size], key.bigvector(size)]
             )
             assert isinstance(select, BitwuzlaTerm)
             # Assumption: no hash may have more than 128 leading zero bits. This
@@ -121,7 +121,7 @@ class SHA3:
             # Assumption: every hash digest is distinct, there are no collisions
             # ever.
             if n == size:
-                a = mk_term(Kind.DISTINCT, [key._bigvector(n), okey._bigvector(n)])
+                a = mk_term(Kind.DISTINCT, [key.bigvector(n), okey.bigvector(n)])
                 b = mk_term(Kind.DISTINCT, [symbolic.node, oval.node])
                 self.constraints.append(Constraint(mk_term(Kind.IMPLIES, [a, b])))
             else:
@@ -138,7 +138,7 @@ class SHA3:
         """
         for n, array in self.hashes.items():
             for key in self.accessed[n]:
-                result = mk_term(Kind.ARRAY_SELECT, [array, key._bigvector(n)])
+                result = mk_term(Kind.ARRAY_SELECT, [array, key.bigvector(n)])
                 assert isinstance(result, BitwuzlaTerm)
                 yield (n, key, Uint256(result))
 

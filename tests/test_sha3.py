@@ -30,7 +30,7 @@ def test_symbolic() -> None:
         Constraint(
             mk_term(
                 Kind.EQUAL,
-                [input._bigvector(7), FrozenBytes.concrete(b"testing")._bigvector(7)],
+                [input.bigvector(7), FrozenBytes.concrete(b"testing").bigvector(7)],
             )
         )
     )
@@ -55,7 +55,7 @@ def test_fully_symbolic() -> None:
         Constraint(
             mk_term(
                 Kind.EQUAL,
-                [input._bigvector(7), FrozenBytes.concrete(b"testing")._bigvector(7)],
+                [input.bigvector(7), FrozenBytes.concrete(b"testing").bigvector(7)],
             )
         )
     )
@@ -93,7 +93,7 @@ def test_impossible_concrete() -> None:
         Constraint(
             mk_term(
                 Kind.EQUAL,
-                [input._bigvector(7), FrozenBytes.concrete(b"testing")._bigvector(7)],
+                [input.bigvector(7), FrozenBytes.concrete(b"testing").bigvector(7)],
             )
         )
     )
