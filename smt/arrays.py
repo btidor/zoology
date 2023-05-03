@@ -86,13 +86,9 @@ class Array(Generic[K, V]):
         for prefix, rows in diffs:
             concrete: dict[str, tuple[str, str | None]] = {}
             for key, value, prior in rows:
-                k = solver.evaluate(key, True).describe()
-                v = solver.evaluate(value, True).describe()
-                p = (
-                    solver.evaluate(prior, True).describe()
-                    if prior is not None
-                    else None
-                )
+                k = solver.evaluate(key).describe()
+                v = solver.evaluate(value).describe()
+                p = solver.evaluate(prior).describe() if prior is not None else None
                 if v != p:
                     concrete[k] = (v, p)
 

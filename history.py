@@ -83,7 +83,7 @@ class History:
         if skip_final:
             states = states[:-1]
         for state in states:
-            data = state.transaction.calldata.describe(solver, True)
+            data = state.transaction.calldata.describe(solver)
             if len(data) == 0:
                 data = "(empty) "
             elif len(data) > 8:
@@ -91,10 +91,10 @@ class History:
             line = f"{state.px()}\t{data}"
 
             suffixes = []
-            value = solver.evaluate(state.transaction.callvalue, True).unwrap()
+            value = solver.evaluate(state.transaction.callvalue).unwrap()
             if value > 0:
                 suffixes.append(f"value: {value}")
-            caller = solver.evaluate(state.transaction.caller, True)
+            caller = solver.evaluate(state.transaction.caller)
             if (caller != self.player).unwrap():
                 suffixes.append(f"via proxy")
             if len(suffixes) > 0:

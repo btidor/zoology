@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal, TypeVar, overload
+from typing import TypeVar
 
 from pybitwuzla import Result
 
@@ -49,15 +49,7 @@ class Solver:
         """Extract an unsatisfiable core for debugging."""
         raise NotImplementedError
 
-    @overload
-    def evaluate(self, value: T, model_completion: Literal[True]) -> T:
-        ...
-
-    @overload
-    def evaluate(self, value: T, model_completion: bool = False) -> T | None:
-        ...
-
-    def evaluate(self, value: T, model_completion: bool = False) -> T | None:
+    def evaluate(self, value: T) -> T:
         """Evaluate a given bitvector expression with the given model."""
         assert self.solved
         return value.__class__(get_value(value.node))

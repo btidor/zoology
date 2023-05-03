@@ -211,15 +211,15 @@ def _printable_transition(
     if len(values) > 0:
         yield ""
 
-    a = solver.evaluate(start.universe.contribution, True).unwrap(bytes).hex()
-    b = solver.evaluate(end.universe.contribution, True).unwrap(bytes).hex()
+    a = solver.evaluate(start.universe.contribution).unwrap(bytes).hex()
+    b = solver.evaluate(end.universe.contribution).unwrap(bytes).hex()
     if a != b:
         yield f"Contrib\tETH 0x{a}"
         yield f"\t->  0x{b}"
         yield f""
 
-    a = solver.evaluate(start.universe.extraction, True).unwrap(bytes).hex()
-    b = solver.evaluate(end.universe.extraction, True).unwrap(bytes).hex()
+    a = solver.evaluate(start.universe.extraction).unwrap(bytes).hex()
+    b = solver.evaluate(end.universe.extraction).unwrap(bytes).hex()
     if a != b:
         yield f"Extract\tETH 0x{a}"
         yield f"\t->  0x{b}"

@@ -188,7 +188,7 @@ class SHA3:
             if len(k) > 34:
                 yield line
                 line = "\t"
-            v = solver.evaluate(val, True).describe()
+            v = solver.evaluate(val).describe()
             line += f"-> {v}"
             yield line
             line = ""

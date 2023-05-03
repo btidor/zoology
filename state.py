@@ -139,7 +139,7 @@ class State:
         a = solver.evaluate(self.contract.address)
         if a is not None and a.unwrap() > 0:
             r["Address"] = "0x" + a.unwrap(bytes).hex()
-        returndata = self.pc.returndata.describe(solver, True)
+        returndata = self.pc.returndata.describe(solver)
         if returndata:
             r["Return"] = "0x" + returndata
         return r
