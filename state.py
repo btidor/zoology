@@ -137,7 +137,7 @@ class State:
         assert isinstance(self.pc, Termination)
         r: OrderedDict[str, str] = OrderedDict()
         a = solver.evaluate(self.contract.address)
-        if a is not None and a.unwrap() > 0:
+        if a.unwrap() > 0:
             r["Address"] = "0x" + a.unwrap(bytes).hex()
         returndata = self.pc.returndata.describe(solver)
         if returndata:

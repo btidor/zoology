@@ -14,7 +14,7 @@ def check_paths(input: Program | State, branches: tuple[Any, ...]) -> None:
     expected = set(b[0] for b in branches)
     if isinstance(input, Program):
         input = symbolic_start(input, SHA3(), "")
-    actual = set()
+    actual: set[str] = set()
     for end in universal_transaction(input):
         assert end.px() not in actual, "duplicate path"
         actual.add(end.px())

@@ -94,7 +94,7 @@ class History:
                 data = data[:8] + " " + data[8:]
             line = f"{state.px()}\t{data}"
 
-            suffixes = []
+            suffixes: list[str] = []
             value = solver.evaluate(state.transaction.callvalue).unwrap()
             if value > 0:
                 suffixes.append(f"value: {value}")

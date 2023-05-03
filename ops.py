@@ -75,7 +75,7 @@ def EXP(a: Uint256, _exponent: Uint256) -> Uint256:
     exponent = _exponent.unwrap(int, "EXP requires concrete exponent")
     if exponent == 0:
         return Uint256(1)
-    for i in range(exponent - 1):
+    for _ in range(exponent - 1):
         a = a * a
     return a
 
@@ -373,7 +373,7 @@ def JUMP(s: State, _counter: Uint256) -> None:
 def JUMPI(s: State, _counter: Uint256, _b: Uint256) -> ControlFlow:
     """57 - Conditionally alter the program counter."""
     counter = _counter.unwrap(int, "JUMPI requires concrete counter")
-    targets = []
+    targets: list[tuple[Constraint, State]] = []
 
     next = copy.deepcopy(s)
     next.path = (next.path << 1) | 0

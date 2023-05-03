@@ -59,20 +59,18 @@ class Transaction:
 
         s: OrderedDict[str, str] = OrderedDict()
         for k in list(r.keys()):
-            v = r[k]
-            if v is None:
-                pass
-            elif isinstance(v, BitVector):
-                if v.maybe_unwrap():
-                    s[k] = "0x" + v.unwrap(bytes).hex()
-                else:
-                    v = solver.evaluate(v)
-                    if v is not None and v.maybe_unwrap():
+            match (v := r[k]):
+                case None:
+                    pass
+                case BitVector():
+                    if v.maybe_unwrap():
                         s[k] = "0x" + v.unwrap(bytes).hex()
-            elif isinstance(v, str):
-                s[k] = v
-            else:
-                raise TypeError(f"unknown value type: {type(r[k])}")
+                    else:
+                        v = solver.evaluate(v)
+                        if v.maybe_unwrap():
+                            s[k] = "0x" + v.unwrap(bytes).hex()
+                case str():
+                    s[k] = v
         return s
 
 

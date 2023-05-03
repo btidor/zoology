@@ -21,4 +21,4 @@ RUN git clone https://github.com/bitwuzla/bitwuzla && \
     ldconfig
 
 RUN apt -y install nodejs
-RUN pip install black mypy pydocstyle
+RUN pip install black pydocstyle

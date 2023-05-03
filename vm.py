@@ -2,7 +2,7 @@
 """An implementation of the Ethereum virtual machine."""
 
 import inspect
-from typing import Generator, assert_never
+from typing import Generator
 
 import ops
 from disassembler import Instruction, Program
@@ -48,23 +48,20 @@ def step(state: State) -> ControlFlow | None:
 
     # Note: we increment the program counter *before* executing the instruction
     # because instructions may overwrite it (e.g. in the case of a JUMP).
-    if isinstance(state.pc, int):
-        state.pc += 1
+    state.pc += 1
 
     result: Uint256 | ControlFlow | None = fn(*args)
-
-    if result is None:
-        return None
-    elif isinstance(result, Uint256):
-        state.stack.append(result)
-        if len(state.stack) > 1024:
-            raise Exception("evm stack overflow")
-        return None
-    elif isinstance(result, ControlFlow):
-        # TODO: reduce number of state copies for performance
-        return result
-    else:
-        assert_never(result)
+    match result:
+        case None:
+            return None
+        case Uint256():
+            state.stack.append(result)
+            if len(state.stack) > 1024:
+                raise Exception("evm stack overflow")
+            return None
+        case ControlFlow():
+            # TODO: reduce number of state copies for performance
+            return result
 
 
 def printable_execution(state: State) -> Generator[str, None, State]:

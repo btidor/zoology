@@ -20,7 +20,7 @@ V = TypeVar("V", bound="Symbolic[Any]")
 class UniqueSymbolic(abc.ABCMeta):
     """A caching metaclass for Symbolic."""
 
-    def __call__(cls, arg: Any) -> Any:
+    def __call__(cls, arg: Any) -> Any:  # type: ignore
         """Intercept calls to the Symbolic constructor."""
         if isinstance(arg, BitwuzlaTerm):
             # Don't try to hash BitwuzlaTerms
@@ -65,18 +65,17 @@ class BitVector(Symbolic[int]):
 
     def __init__(self, arg: str | BitwuzlaTerm | int):
         """Create a new BitVector."""
-        if isinstance(arg, str):
-            self.node = mk_const(sort(self.length()), arg)
-        elif isinstance(arg, BitwuzlaTerm):
-            assert arg.is_bv()
-            assert (
-                arg.get_sort().bv_get_size() == self.length()
-            ), f"can't initialize {type(self).__name__} with {arg.get_sort().bv_get_size()} bits"
-            self.node = arg
-        elif isinstance(arg, int):
-            self.node = mk_bv_value(sort(self.length()), arg)
-        else:
-            raise TypeError
+        match arg:
+            case str():
+                self.node = mk_const(sort(self.length()), arg)
+            case BitwuzlaTerm():
+                assert arg.is_bv()
+                assert (
+                    arg.get_sort().bv_get_size() == self.length()
+                ), f"can't initialize {type(self).__name__} with {arg.get_sort().bv_get_size()} bits"
+                self.node = arg
+            case int():
+                self.node = mk_bv_value(sort(self.length()), arg)
 
     @classmethod
     @abc.abstractmethod
@@ -164,7 +163,7 @@ class BitVector(Symbolic[int]):
             v = int(node.dump("smt2")[2:], 2)
             if v < (1 << 256):
                 return hex(v)
-            p = []
+            p: list[str] = []
             while v > 0:
                 b = v & ((1 << 256) - 1)
                 p.append(hex(b)[2:])

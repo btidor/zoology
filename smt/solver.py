@@ -48,7 +48,7 @@ class Solver:
     def unsat_core(self) -> list[Constraint]:
         """Extract an unsatisfiable core for debugging."""
         assert self.latest_result is False
-        core = []
+        core: list[Constraint] = []
         for term in get_unsat_assumptions():
             core.append(Constraint(term))
         return core
@@ -56,6 +56,7 @@ class Solver:
     def evaluate(self, value: T) -> T:
         """Evaluate a given bitvector expression with the given model."""
         assert self.latest_result is True
+        # TODO: model completion is *not* implemented
         return value.__class__(get_value(value.node))
 
 

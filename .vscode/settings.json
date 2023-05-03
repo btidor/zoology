@@ -6,7 +6,6 @@
     "editor.formatOnSave": true,
     "files.exclude": {
         "\"stdout\"": true,
-        "**/.mypy_cache": true,
         "**/.profiles": true,
         "**/__pycache__": true,
         "**/*.py[cod]": true,
@@ -20,9 +19,8 @@
     "python.analysis.fixAll": [
         "source.unusedImports"
     ],
-    "python.analysis.typeCheckingMode": "basic",
+    "python.analysis.typeCheckingMode": "strict",
     "python.formatting.provider": "black",
-    "python.linting.mypyEnabled": true,
     "python.linting.pydocstyleArgs": [
         "--match=^((?!test|speedscope).)*\\.py$",
         "--add-ignore=D105"
