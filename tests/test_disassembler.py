@@ -3,7 +3,8 @@
 import pytest
 
 from disassembler import disassemble, printable_disassembly
-from testlib import concretize
+
+from .helpers import concretize
 
 
 def test_disassemble_basic() -> None:

@@ -6,6 +6,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Iterable
 
+from Crypto.Hash import keccak
+
 from opcodes import REFERENCE, UNIMPLEMENTED
 from smt.bytes import FrozenBytes
 from smt.smt import Uint256
@@ -125,6 +127,11 @@ def _decode_instruction(code: bytes, offset: int) -> Instruction:
         raise ValueError(f"unimplemented opcode: {opref.fullName}")
 
     return Instruction(offset, size, opref.name, suffix, operand)
+
+
+def abiencode(signature: str) -> bytes:
+    """Encode a Solidity function-call signature."""
+    return keccak.new(data=signature.encode(), digest_bits=256).digest()[:4]
 
 
 if __name__ == "__main__":

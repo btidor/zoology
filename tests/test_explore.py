@@ -5,9 +5,10 @@ from typing import Any
 import tests.fixtures as cases
 from disassembler import Program
 from smt.sha3 import SHA3
-from solidity import load_binary, load_solidity, loads_solidity
 from state import State
 from universal import symbolic_start, universal_transaction
+
+from .solidity import load_binary, load_solidity, loads_solidity
 
 
 def check_paths(input: Program | State, branches: tuple[Any, ...]) -> None:

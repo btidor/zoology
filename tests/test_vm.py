@@ -1,18 +1,13 @@
 #!/usr/bin/env pytest
 
-from disassembler import disassemble
+from disassembler import abiencode, disassemble
 from smt.bytes import FrozenBytes
 from smt.smt import Uint160, Uint256
-from solidity import (
-    abiencode,
-    compile_solidity,
-    load_binary,
-    load_solidity,
-    loads_solidity,
-)
 from state import Jump, State, Termination
-from testlib import make_contract, make_state, make_transaction
 from vm import printable_execution, step
+
+from .helpers import make_contract, make_state, make_transaction
+from .solidity import compile_solidity, load_binary, load_solidity, loads_solidity
 
 
 def concretize_stack(state: State) -> list[int]:

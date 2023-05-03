@@ -1,3 +1,5 @@
+"""General test helpers."""
+
 from disassembler import Program, disassemble
 from environment import Block, Contract, Transaction, Universe
 from smt.arrays import Array
@@ -8,6 +10,7 @@ from state import Log, State
 
 
 def concretize(value: BitVector | None) -> int | None:
+    """Unwrap the given value, passing through Nones."""
     if value is None:
         return None
     return value.unwrap()
@@ -22,6 +25,7 @@ def make_block(
     chainid: Uint256 | None = None,
     basefee: Uint256 | None = None,
 ) -> Block:
+    """Create a concrete Block."""
     return Block(
         number=Uint256(16030969) if number is None else number,
         coinbase=Uint160(0xDAFEA492D9C6733AE3D56B7ED1ADB60692C98BC5)
@@ -44,6 +48,7 @@ def make_contract(
     program: Program | None = None,
     storage: Array[Uint256, Uint256] | None = None,
 ) -> Contract:
+    """Create a concrete Contract."""
     return Contract(
         address=Uint160(0xADADADADADADADADADADADADADADADADADADADAD)
         if address is None
@@ -60,6 +65,7 @@ def make_transaction(
     calldata: FrozenBytes | None = None,
     gasprice: Uint256 | None = None,
 ) -> Transaction:
+    """Create a concrete Transaction."""
     return Transaction(
         origin=Uint160(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0)
         if origin is None
@@ -84,6 +90,7 @@ def make_universe(
     contribution: Uint256 | None = None,
     extraction: Uint256 | None = None,
 ) -> Universe:
+    """Create a concrete Universe."""
     return Universe(
         suffix="" if suffix is None else suffix,
         balances=Array.concrete(Uint160, Uint256(0)) if balances is None else balances,
@@ -121,6 +128,7 @@ def make_state(
     path_constraints: list[Constraint] | None = None,
     path: int | None = None,
 ) -> State:
+    """Create a concrete State."""
     return State(
         suffix="" if suffix is None else suffix,
         block=make_block() if block is None else block,

@@ -4,7 +4,7 @@
 
 import pytest
 
-pytest.register_assert_rewrite("testlib")
+pytest.register_assert_rewrite("helpers")
 
 ### ### ### ### ###
 
@@ -92,6 +92,6 @@ def reset_bitwuzla() -> Iterator[None]:
 
 ### ### ### ### ###
 
-import solidity
+from . import solidity
 
 solidity.install_solidity()

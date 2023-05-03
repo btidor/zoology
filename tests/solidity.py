@@ -1,11 +1,10 @@
-"""Helpers for working with Solidity code."""
+"""Helpers for working with Solidity fixtures in tests."""
 
 import os
 import re
 import subprocess
 from enum import Enum
-
-from Crypto.Hash import keccak
+from pathlib import Path
 
 from disassembler import Program, disassemble
 
@@ -17,16 +16,13 @@ class Solidity(Enum):
     v06 = "0.6.12"
 
 
-def abiencode(signature: str) -> bytes:
-    """Encode a Solidity function-call signature."""
-    return keccak.new(data=signature.encode(), digest_bits=256).digest()[:4]
+_ROOT = Path(__file__).resolve().parent.parent
 
 
 def load_solidity(path: str) -> Program:
     """Load a Solidity contract into a Program object."""
     assert path.endswith(".sol")
-    path = os.path.join(os.path.dirname(os.path.realpath(__file__)), path)
-    with open(path, "r") as f:
+    with open(_ROOT / path, "r") as f:
         source = f.read()
 
     codes = compile_solidity(source)
@@ -39,8 +35,7 @@ def load_solidity(path: str) -> Program:
 def loads_solidity(path: str) -> dict[str, Program]:
     """Load a Solidity file containing multiple programs."""
     assert path.endswith(".sol")
-    path = os.path.join(os.path.dirname(os.path.realpath(__file__)), path)
-    with open(path, "r") as f:
+    with open(_ROOT / path, "r") as f:
         source = f.read()
 
     codes = compile_solidity(source)
@@ -50,8 +45,7 @@ def loads_solidity(path: str) -> dict[str, Program]:
 def load_binary(path: str) -> Program:
     """Load a file containing binary EVM contract code."""
     assert path.endswith(".bin")
-    path = os.path.join(os.path.dirname(os.path.realpath(__file__)), path)
-    with open(path, "rb") as f:
+    with open(_ROOT / path, "rb") as f:
         code = f.read()
     return disassemble(code)
 
@@ -91,9 +85,9 @@ def _detect_version(source: str) -> Solidity:
 
 def install_solidity() -> None:
     """Use solc to install the expected versions of Solidity."""
-    marker = os.path.expanduser("~/.config/solc-versions")
+    marker = Path.home() / ".config" / "solc-versions"
     target = [version.value for version in Solidity]
-    if os.path.exists(marker):
+    if marker.exists():
         with open(marker) as f:
             if f.read() == str(target):
                 return

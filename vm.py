@@ -5,13 +5,12 @@ import inspect
 from typing import Generator
 
 import ops
-from disassembler import Instruction, Program
+from disassembler import Instruction, Program, abiencode
 from environment import Block, Contract, Transaction, Universe
 from smt.arrays import Array
 from smt.bytes import FrozenBytes, MutableBytes
 from smt.sha3 import SHA3
 from smt.smt import Uint160, Uint256
-from solidity import abiencode, load_solidity
 from state import ControlFlow, Descend, Jump, State, Termination
 
 
@@ -167,6 +166,8 @@ def concrete_start(program: Contract | Program, value: Uint256, data: bytes) -> 
 
 
 if __name__ == "__main__":
+    from tests.solidity import load_solidity
+
     program = load_solidity("fixtures/02_Fallout.sol")
     start = concrete_start(program, Uint256(0), abiencode("collectAllocations()"))
 

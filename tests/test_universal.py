@@ -6,11 +6,10 @@ from typing import Any
 import pytest
 
 import tests.fixtures as cases
-from disassembler import Program, disassemble
+from disassembler import Program, abiencode, disassemble
 from smt.sha3 import SHA3
 from smt.smt import Uint160, Uint256
 from smt.solver import Solver
-from solidity import abiencode, load_binary, load_solidity, loads_solidity
 from state import State, Termination
 from universal import (
     constrain_to_goal,
@@ -18,6 +17,8 @@ from universal import (
     symbolic_start,
     universal_transaction,
 )
+
+from .solidity import load_binary, load_solidity, loads_solidity
 
 
 def check_transitions(start: Program | State, branches: tuple[Any, ...]) -> None:

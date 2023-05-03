@@ -6,8 +6,9 @@ from disassembler import disassemble
 from smt.sha3 import SHA3
 from smt.smt import Uint160, Uint256
 from smt.solver import Solver
-from testlib import concretize, make_state
 from universal import symbolic_start
+
+from .helpers import concretize, make_state
 
 
 def test_transaction_evaluate() -> None:

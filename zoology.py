@@ -7,6 +7,7 @@ import argparse
 import copy
 from typing import Iterator
 
+from disassembler import abiencode
 from environment import Block, Transaction, Universe
 from history import History
 from smt.arrays import Array
@@ -15,7 +16,6 @@ from smt.sha3 import SHA3
 from smt.smt import Constraint, Uint160, Uint256
 from smt.solver import NarrowingError, Solver
 from snapshot import LEVEL_FACTORIES, apply_snapshot
-from solidity import abiencode
 from state import State, Termination
 from universal import symbolic_start, universal_transaction
 from vm import concrete_start, printable_execution

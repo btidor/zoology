@@ -1,8 +1,8 @@
 """A library of EVM opcodes."""
 
 import json
-import os
 from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass
@@ -24,11 +24,12 @@ class Opcode:
 # $ npm install @ethereumjs/evm@latest
 # $ ./fetchOpcodes.js > opcodes.json
 #
-_PATH = os.path.join(os.path.dirname(os.path.realpath(__file__)), "opcodes.json")
+
+_FILENAME = Path(__file__).resolve().parent / "opcodes.json"
 
 
 def _load_opcodes() -> dict[int, Opcode]:
-    with open(_PATH) as f:
+    with open(_FILENAME) as f:
         raw = json.load(f)
         tuples = [Opcode(**item) for item in raw]
         return dict((item.code, item) for item in tuples)

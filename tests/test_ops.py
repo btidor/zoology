@@ -9,7 +9,8 @@ from smt.bytes import FrozenBytes, MutableBytes
 from smt.smt import Uint160, Uint256
 from smt.solver import Solver
 from state import Termination
-from testlib import concretize, make_block, make_contract, make_state, make_transaction
+
+from .helpers import concretize, make_block, make_contract, make_state, make_transaction
 
 
 def test_STOP() -> None:
