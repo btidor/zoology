@@ -24,6 +24,10 @@ class History:
         self.player = player
         self.states: list[State] = []
 
+    def pxs(self) -> str:
+        """Return a human-readable version of the sequence of paths."""
+        return ":".join(map(lambda s: s.px(), self.states))
+
     def subsequent(self) -> tuple[Universe, SHA3]:
         """Set up the execution of a new transaction."""
         if len(self.states) == 0:
@@ -66,13 +70,13 @@ class History:
         try:
             self.constrain(solver)
         except ConstrainingError:
-            yield "unprintable: unsatisfiable"
+            yield f"[{self.pxs()}] unprintable: unsatisfiable"
             return
 
         try:
             self.narrow(solver)
         except NarrowingError:
-            yield "unprintable: narrowing error"
+            yield f"[{self.pxs()}] unprintable: narrowing error"
             solver = Solver()
             for constraint in constraints:
                 solver.assert_and_track(constraint)
