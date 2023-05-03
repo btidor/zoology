@@ -82,9 +82,13 @@ def check_sat() -> Result:
     return result
 
 
+def get_unsat_assumptions() -> list[BitwuzlaTerm]:
+    """Compute the unsatisfiable core."""
+    return list(_bzla.get_unsat_assumptions())
+
+
 def get_value(term: BitwuzlaTerm) -> BitwuzlaTerm:
     """Load a value from the solver."""
-    global _checked
     assert _checked == 2
     return _bzla.get_value(term)
 

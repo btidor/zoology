@@ -40,7 +40,7 @@ class Symbolic(abc.ABC, Generic[S], metaclass=UniqueSymbolic):
 
     def __init__(self, arg: str | BitwuzlaTerm | S) -> None:
         """Create a new Symbolic."""
-        raise NotImplementedError
+        ...
 
     def __copy__(self: V) -> V:
         return self
@@ -51,7 +51,11 @@ class Symbolic(abc.ABC, Generic[S], metaclass=UniqueSymbolic):
     @abc.abstractmethod
     def is_constant_literal(self) -> bool:
         """Check if the expression has a concrete value."""
-        pass
+        ...
+
+    def smtlib(self) -> str:
+        """Output the symbolic expression as an SMT-LIBv2 formula."""
+        return self.node.dump("smt2")
 
 
 class BitVector(Symbolic[int]):
@@ -77,13 +81,13 @@ class BitVector(Symbolic[int]):
     @classmethod
     @abc.abstractmethod
     def _sort(cls) -> BitwuzlaSort:
-        raise NotImplementedError
+        ...
 
     @classmethod
     @abc.abstractmethod
     def length(cls) -> int:
         """Return the number of bits in the bitvector."""
-        raise NotImplementedError
+        ...
 
     def __eq__(self: T, other: T) -> Constraint:  # type: ignore
         return Constraint(mk_term(Kind.EQUAL, [self.node, other.node]))
@@ -162,7 +166,7 @@ class BitVector(Symbolic[int]):
     @classmethod
     def _describe(cls, node: BitwuzlaTerm) -> str:
         if node.is_bv_value():
-            v = int(node.dump()[2:], 2)
+            v = int(node.dump("smt2")[2:], 2)
             if v < (1 << 256):
                 return hex(v)
             p = []
@@ -172,7 +176,7 @@ class BitVector(Symbolic[int]):
                 v >>= 256
             return f"0x[{'.'.join(reversed(p))}]"
         else:
-            digest = keccak.new(data=node.dump(), digest_bits=256).digest()
+            digest = keccak.new(data=node.dump("smt2").encode(), digest_bits=256).digest()
             return "#" + digest[:3].hex()
 
 
@@ -431,7 +435,7 @@ class Constraint(Symbolic[bool]):
 
     def maybe_unwrap(self) -> bool | None:
         """Return the constraint's underlying value, if a constant literal."""
-        result = self.node.dump()
+        result = self.node.dump("smt2")
         if result == "true":
             return True
         elif result == "false":

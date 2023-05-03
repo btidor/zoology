@@ -6,7 +6,7 @@ from typing import TypeVar
 
 from pybitwuzla import Result
 
-from .bitwuzla import assume_formula, check_sat, get_value
+from .bitwuzla import assume_formula, check_sat, get_unsat_assumptions, get_value
 from .smt import BitVector, Constraint
 
 T = TypeVar("T", bound=BitVector)
@@ -18,11 +18,11 @@ class Solver:
     def __init__(self) -> None:
         """Create a new Solver."""
         self.constraints: list[Constraint] = []
-        self.solved = False
+        self.latest_result: bool | None = None
 
     def assert_and_track(self, constraint: Constraint) -> None:
         """Track a new constraint."""
-        self.solved = False
+        self.latest_result = None
         self.constraints.append(constraint)
 
     def check(self, *assumptions: Constraint) -> bool:
@@ -37,21 +37,25 @@ class Solver:
 
         result = check_sat()
         if result == Result.SAT:
-            self.solved = True
+            self.latest_result = True
             return True
         elif result == Result.UNSAT:
-            self.solved = False
+            self.latest_result = False
             return False
         else:
             raise ValueError("solver returned unknown")
 
-    def unsat_core(self, *assumptions: Constraint) -> list[Constraint]:
+    def unsat_core(self) -> list[Constraint]:
         """Extract an unsatisfiable core for debugging."""
-        raise NotImplementedError
+        assert self.latest_result is False
+        core = []
+        for term in get_unsat_assumptions():
+            core.append(Constraint(term))
+        return core
 
     def evaluate(self, value: T) -> T:
         """Evaluate a given bitvector expression with the given model."""
-        assert self.solved
+        assert self.latest_result is True
         return value.__class__(get_value(value.node))
 
 
