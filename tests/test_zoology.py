@@ -1,18 +1,24 @@
 #!/usr/bin/env pytest
 
+from typing import Iterable
+
 from snapshot import LEVEL_FACTORIES
-from zoology import create, search, starting_universe, validate
+from zoology import createInstance, search, starting_universe, validateInstance
 
 
-def check_level(i: int) -> None:
+def check_level(i: int) -> Iterable[str]:
     universe = starting_universe()
     factory = LEVEL_FACTORIES[i]
-    instance, beginning = create(universe, factory)
-    for _, ok in validate(factory, instance, beginning):
+
+    instance, beginning = createInstance(universe, factory)
+    for _, ok in validateInstance(factory, instance, beginning):
         assert ok.unwrap() is False
 
-    assert search(factory, instance, beginning, 1) is not None
-    # TODO: finish the rest...
+    result = search(factory, instance, beginning, 1)
+    assert result is not None
+
+    solution, ok = result
+    yield from solution.describe(ok, skip_final=True)
 
 
 def test_starting_universe() -> None:
@@ -30,7 +36,13 @@ def test_starting_universe() -> None:
 
 
 def test_fallout() -> None:
-    check_level(2)
+    raw = """
+        PxB\t6fab5ddf
+    """.splitlines()
+    fixture = map(lambda x: x[8:], raw[1:-1])
+
+    for actual, expected in zip(check_level(2), fixture, strict=True):
+        assert actual == expected
 
 
 # def test_coinflip() -> None:
@@ -38,11 +50,23 @@ def test_fallout() -> None:
 
 
 def test_telephone() -> None:
-    check_level(4)
+    raw = """
+        PxCE\ta6f9dae1 000000000000000000000000cacacacacacacacacacacacacacacacacacacaca\t(via proxy)
+    """.splitlines()
+    fixture = map(lambda x: x[8:], raw[1:-1])
+
+    for actual, expected in zip(check_level(4), fixture, strict=True):
+        assert actual == expected
 
 
 def test_token() -> None:
-    check_level(5)
+    raw = """
+        Px63\ta9059cbb ffffffffffffffffffffffffcacacacacacacacacacacacacacacacacacacacb4000000000000000000000000000000000000000000000000000000000000000
+    """.splitlines()
+    fixture = map(lambda x: x[8:], raw[1:-1])
+
+    for actual, expected in zip(check_level(5), fixture, strict=True):
+        assert actual == expected
 
 
 # def test_delegation() -> None:
@@ -54,7 +78,13 @@ def test_token() -> None:
 
 
 def test_vault() -> None:
-    check_level(8)
+    raw = """
+        Px66\tec9b5b3a 412076657279207374726f6e67207365637265742070617373776f7264203a29
+    """.splitlines()
+    fixture = map(lambda x: x[8:], raw[1:-1])
+
+    for actual, expected in zip(check_level(8), fixture, strict=True):
+        assert actual == expected
 
 
 # def test_king() -> None:
@@ -66,19 +96,43 @@ def test_vault() -> None:
 
 
 def test_elevator() -> None:
-    check_level(11)
+    raw = """
+        Px19F7\ted9a7134 ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+    """.splitlines()
+    fixture = map(lambda x: x[8:], raw[1:-1])
+
+    for actual, expected in zip(check_level(11), fixture, strict=True):
+        assert actual == expected
 
 
 def test_privacy() -> None:
-    check_level(12)
+    raw = """
+        Px18F\te1afb08c 8d3e0f3be93413600f15f3408ac39e7000000000000000000000000000000000
+    """.splitlines()
+    fixture = map(lambda x: x[8:], raw[1:-1])
+
+    for actual, expected in zip(check_level(12), fixture, strict=True):
+        assert actual == expected
 
 
 def test_gatekeeper_one() -> None:
-    check_level(13)
+    raw = """
+        PxDFF\t3370204e 000000010000caca000000000000000000000000000000000000000000000000\t(via proxy)
+    """.splitlines()
+    fixture = map(lambda x: x[8:], raw[1:-1])
+
+    for actual, expected in zip(check_level(13), fixture, strict=True):
+        assert actual == expected
 
 
 def test_gatekeeper_two() -> None:
-    check_level(14)
+    raw = """
+        Px1BF\t3370204e 2433b6aeb6cc3764000000000000000000000000000000000000000000000000\t(via proxy)
+    """.splitlines()
+    fixture = map(lambda x: x[8:], raw[1:-1])
+
+    for actual, expected in zip(check_level(14), fixture, strict=True):
+        assert actual == expected
 
 
 # def test_naughtcoin() -> None:
@@ -106,7 +160,13 @@ def test_gatekeeper_two() -> None:
 
 
 def test_shop() -> None:
-    check_level(21)
+    raw = """
+        Px673\ta6f2ae3a
+    """.splitlines()
+    fixture = map(lambda x: x[8:], raw[1:-1])
+
+    for actual, expected in zip(check_level(21), fixture, strict=True):
+        assert actual == expected
 
 
 # def test_dex() -> None:

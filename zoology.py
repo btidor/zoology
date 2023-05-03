@@ -25,7 +25,26 @@ PLAYER = Uint160(0xCACACACACACACACACACACACACACACACACACACACA)
 PROXY = Uint160(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0)
 
 
-def create(universe: Universe, address: Uint160) -> tuple[Uint160, History]:
+def starting_universe() -> Universe:
+    """Set up a symbolic universe with factory levels loaded."""
+    universe = Universe(
+        suffix="",
+        balances=Array.symbolic(f"BALANCE", Uint160, Uint256),
+        transfer_constraints=[],
+        contracts={},
+        codesizes=Array.symbolic(f"CODESIZE", Uint160, Uint256),
+        blockhashes=Array.symbolic(f"BLOCKHASH", Uint256, Uint256),
+        # We're not using the goal feature:
+        agents=[],
+        contribution=Uint256(f"CONTRIBUTION"),
+        extraction=Uint256(f"EXTRACTION"),
+    )
+    with open("snapshot.json", "r") as f:
+        apply_snapshot(f, universe)
+    return universe
+
+
+def createInstance(universe: Universe, address: Uint160) -> tuple[Uint160, History]:
     """Call createInstance to set up the level."""
     # Warning: this symbolic universe will be used in symbolic execution later
     # on. Inaccuracies in the environment may result in an inaccurate analysis.
@@ -72,7 +91,7 @@ def create(universe: Universe, address: Uint160) -> tuple[Uint160, History]:
     return address, History(end.universe, end.sha3, PLAYER)
 
 
-def validate(
+def validateInstance(
     factory: Uint160, instance: Uint160, history: History, prints: bool = False
 ) -> Iterator[tuple[State, Constraint]]:
     """Call validateInstance to check the solution."""
@@ -152,7 +171,7 @@ def search(
                         sp = " "
                     print(output, end="")
 
-                for post, ok in validate(factory, instance, candidate):
+                for post, ok in validateInstance(factory, instance, candidate):
                     complete = candidate.extend(post)
 
                     solver = Solver()
@@ -197,25 +216,6 @@ def search(
     return None
 
 
-def starting_universe() -> Universe:
-    """Set up a symbolic universe with factory levels loaded."""
-    universe = Universe(
-        suffix="",
-        balances=Array.symbolic(f"BALANCE", Uint160, Uint256),
-        transfer_constraints=[],
-        contracts={},
-        codesizes=Array.symbolic(f"CODESIZE", Uint160, Uint256),
-        blockhashes=Array.symbolic(f"BLOCKHASH", Uint256, Uint256),
-        # We're not using the goal feature:
-        agents=[],
-        contribution=Uint256(f"CONTRIBUTION"),
-        extraction=Uint256(f"EXTRACTION"),
-    )
-    with open("snapshot.json", "r") as f:
-        apply_snapshot(f, universe)
-    return universe
-
-
 def _block(offset: int, universe: Universe) -> Block:
     """Create a simulated Block."""
     # As an approximation, assume the blockhash of the `n`th block is
@@ -257,9 +257,8 @@ if __name__ == "__main__":
         factory = LEVEL_FACTORIES[i]
         print(f"{i:04}", end="")
         try:
-            instance, beginning = create(copy.deepcopy(universe), factory)
-
-            for _, ok in validate(factory, instance, beginning):
+            instance, beginning = createInstance(copy.deepcopy(universe), factory)
+            for _, ok in validateInstance(factory, instance, beginning):
                 assert ok.unwrap() is False
 
             result = search(
