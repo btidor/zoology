@@ -7,7 +7,6 @@ from typing import Iterable, Iterator
 from disassembler import Program, disassemble
 from environment import Block, Contract, Transaction, Universe
 from smt.arrays import Array
-from smt.bytes import FrozenBytes, MutableBytes
 from smt.sha3 import SHA3
 from smt.smt import Uint160, Uint256
 from smt.solver import Solver
@@ -92,16 +91,7 @@ def symbolic_start(program: Contract | Program, sha3: SHA3, suffix: str) -> Stat
         transaction=transaction,
         universe=universe,
         sha3=sha3,
-        pc=0,
-        stack=[],
-        memory=MutableBytes.concrete(),
-        children=0,
-        latest_return=FrozenBytes.concrete(),
-        logs=[],
         gas_variables=[],
-        call_variables=[],
-        path_constraints=[],
-        path=1,
     )
 
 

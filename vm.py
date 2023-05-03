@@ -7,9 +7,7 @@ from typing import Generator
 import ops
 from disassembler import Instruction, Program, abiencode
 from environment import Block, Contract, Transaction, Universe
-from smt.arrays import Array
-from smt.bytes import FrozenBytes, MutableBytes
-from smt.sha3 import SHA3
+from smt.bytes import FrozenBytes
 from smt.smt import Uint160, Uint256
 from state import ControlFlow, Descend, Jump, State, Termination
 
@@ -117,35 +115,16 @@ def concrete_start(program: Contract | Program, value: Uint256, data: bytes) -> 
         chainid=Uint256(1),
         basefee=Uint256(12267131109),
     )
-    if isinstance(program, Contract):
-        contract = program
-    else:
-        contract = Contract(
-            address=Uint160(0xADADADADADADADADADADADADADADADADADADADAD),
-            program=program,
-            storage=Array.concrete(Uint256, Uint256(0)),
-        )
+    contract = program if isinstance(program, Contract) else Contract(program=program)
     transaction = Transaction(callvalue=value, calldata=FrozenBytes.concrete(data))
     universe = Universe()
     universe.add_contract(contract)
     universe.codesizes[Uint160(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0)] = Uint256(0)
     return State(
-        suffix="",
         block=block,
         contract=contract,
         transaction=transaction,
         universe=universe,
-        sha3=SHA3(),
-        pc=0,
-        stack=[],
-        memory=MutableBytes.concrete(),
-        children=0,
-        latest_return=FrozenBytes.concrete(),
-        logs=[],
-        gas_variables=None,
-        call_variables=[],
-        path_constraints=[],
-        path=1,
     )
 
 

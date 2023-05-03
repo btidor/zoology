@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-@dataclass
+@dataclass(frozen=True)
 class Opcode:
     """An EVM operation."""
 
