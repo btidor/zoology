@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from collections import OrderedDict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
-from disassembler import Program
+from disassembler import Program, disassemble
 from smt.arrays import Array
 from smt.bytes import FrozenBytes
 from smt.smt import BitVector, Constraint, Uint160, Uint256
@@ -16,33 +16,63 @@ from smt.solver import Solver
 class Block:
     """A block in the blockchain."""
 
-    number: Uint256
-    coinbase: Uint160
-    timestamp: Uint256
-    prevrandao: Uint256
-    gaslimit: Uint256
-    chainid: Uint256
-    basefee: Uint256
+    number: Uint256 = Uint256(16030969)
+    coinbase: Uint160 = Uint160(0xDAFEA492D9C6733AE3D56B7ED1ADB60692C98BC5)
+    timestamp: Uint256 = Uint256(1669214471)
+    prevrandao: Uint256 = Uint256(
+        0xCC7E0A66B3B9E3F54B7FDB9DCF98D57C03226D73BFFBB4E0BA7B08F92CE00D19
+    )
+    gaslimit: Uint256 = Uint256(30000000000000000)
+    chainid: Uint256 = Uint256(1)
+    basefee: Uint256 = Uint256(12267131109)
+
+    @classmethod
+    def symbolic(cls, suffix: str) -> Block:
+        """Create a fully-symbolic Block."""
+        return Block(
+            number=Uint256(f"NUMBER{suffix}"),
+            coinbase=Uint160(f"COINBASE{suffix}"),
+            timestamp=Uint256(f"TIMESTAMP{suffix}"),
+            prevrandao=Uint256(f"PREVRANDAO{suffix}"),
+            gaslimit=Uint256(f"GASLIMIT{suffix}"),
+            chainid=Uint256(f"CHAINID"),
+            basefee=Uint256(f"BASEFEE{suffix}"),
+        )
 
 
 @dataclass
 class Contract:
     """A deployed contract account with code and symbolic storage."""
 
-    address: Uint160
-    program: Program
-    storage: Array[Uint256, Uint256]
+    address: Uint160 = Uint160(0xADADADADADADADADADADADADADADADADADADADAD)
+    program: Program = disassemble(b"")
+    storage: Array[Uint256, Uint256] = field(
+        default_factory=lambda: Array.concrete(Uint256, Uint256(0))
+    )
 
 
 @dataclass(frozen=True)
 class Transaction:
     """The inputs to a contract call."""
 
-    origin: Uint160
-    caller: Uint160
-    callvalue: Uint256
-    calldata: FrozenBytes
-    gasprice: Uint256
+    origin: Uint160 = Uint160(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0)
+    caller: Uint160 = Uint160(0xCACACACACACACACACACACACACACACACACACACACA)
+    callvalue: Uint256 = Uint256(0)
+    calldata: FrozenBytes = FrozenBytes.concrete()
+    gasprice: Uint256 = Uint256(0x12)
+
+    @classmethod
+    def symbolic(
+        cls, suffix: str, origin: Uint160 | None = None, caller: Uint160 | None = None
+    ) -> Transaction:
+        """Create a fully-symbolic Transaction."""
+        return Transaction(
+            origin=Uint160(f"ORIGIN{suffix}") if origin is None else origin,
+            caller=Uint160(f"CALLER{suffix}") if caller is None else caller,
+            callvalue=Uint256(f"CALLVALUE{suffix}"),
+            calldata=FrozenBytes.symbolic(f"CALLDATA{suffix}"),
+            gasprice=Uint256(f"GASPRICE{suffix}"),
+        )
 
     def describe(self, solver: Solver) -> OrderedDict[str, str]:
         """
@@ -78,23 +108,45 @@ class Transaction:
 class Universe:
     """The state of the entire blockchain and our interactions with it."""
 
-    suffix: str
+    suffix: str = ""
 
-    balances: Array[Uint160, Uint256]  # address -> balance in wei
-    transfer_constraints: list[Constraint]
+    balances: Array[Uint160, Uint256] = field(
+        # address -> balance in wei
+        default_factory=lambda: Array.concrete(Uint160, Uint256(0))
+    )
+    transfer_constraints: list[Constraint] = field(default_factory=list)
 
-    contracts: dict[int, Contract]  # address -> Contract
-    codesizes: Array[Uint160, Uint256]  # address -> code size
-
-    blockhashes: Array[Uint256, Uint256]
+    contracts: dict[int, Contract] = field(default_factory=dict)  # address -> Contract
+    codesizes: Array[Uint160, Uint256] = field(
+        # address -> code size
+        default_factory=lambda: Array.concrete(Uint160, Uint256(0))
+    )
+    blockhashes: Array[Uint256, Uint256] = field(
+        default_factory=lambda: Array.concrete(Uint256, Uint256(0))
+    )
 
     # These variables track how much value has been moved from the contracts
     # under test to our agent's accounts. To avoid overflow errors, we track
     # value contributed to and value extracted from the contracts under test as
     # two separate unsigned (nonnegative) integers.
-    agents: list[Uint160]
-    contribution: Uint256
-    extraction: Uint256
+    agents: list[Uint160] = field(default_factory=list)
+    contribution: Uint256 = Uint256(0)
+    extraction: Uint256 = Uint256(0)
+
+    @classmethod
+    def symbolic(cls, suffix: str) -> Universe:
+        """Create a fully-symbolic Universe."""
+        return Universe(
+            suffix=suffix,
+            balances=Array.symbolic(f"BALANCE{suffix}", Uint160, Uint256),
+            transfer_constraints=[],
+            contracts={},
+            codesizes=Array.symbolic(f"CODESIZE{suffix}", Uint160, Uint256),
+            blockhashes=Array.symbolic(f"BLOCKHASH{suffix}", Uint256, Uint256),
+            agents=[],
+            contribution=Uint256(f"CONTRIBUTION{suffix}"),
+            extraction=Uint256(f"EXTRACTION{suffix}"),
+        )
 
     def add_contract(self, contract: Contract) -> None:
         """

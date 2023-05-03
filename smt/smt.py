@@ -63,6 +63,8 @@ class BitVector(Symbolic[int]):
 
     __slots__ = ()
 
+    __hash__ = Symbolic.__hash__  # type: ignore
+
     def __init__(self, arg: str | BitwuzlaTerm | int):
         """Create a new BitVector."""
         match arg:
@@ -180,6 +182,9 @@ class Uint(BitVector):
     """A bitvector representing an unsigned integer."""
 
     __slots__ = ()
+
+    def __hash__(self) -> int:
+        return self.node.__hash__()
 
     def __lt__(self: T, other: T) -> Constraint:
         return Constraint(mk_term(Kind.BV_ULT, [self.node, other.node]))

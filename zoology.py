@@ -10,7 +10,6 @@ from typing import Iterator
 from disassembler import abiencode
 from environment import Block, Transaction, Universe
 from history import History
-from smt.arrays import Array
 from smt.bytes import FrozenBytes, MutableBytes
 from smt.sha3 import SHA3
 from smt.smt import Constraint, Uint160, Uint256
@@ -27,18 +26,7 @@ PROXY = Uint160(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0)
 
 def starting_universe() -> Universe:
     """Set up a symbolic universe with factory levels loaded."""
-    universe = Universe(
-        suffix="",
-        balances=Array.symbolic(f"BALANCE", Uint160, Uint256),
-        transfer_constraints=[],
-        contracts={},
-        codesizes=Array.symbolic(f"CODESIZE", Uint160, Uint256),
-        blockhashes=Array.symbolic(f"BLOCKHASH", Uint256, Uint256),
-        # We're not using the goal feature:
-        agents=[],
-        contribution=Uint256(f"CONTRIBUTION"),
-        extraction=Uint256(f"EXTRACTION"),
-    )
+    universe = Universe.symbolic("")
     universe.codesizes.poke(PLAYER, Uint256(0))
     with open("snapshot.json", "r") as f:
         apply_snapshot(f, universe)
@@ -57,17 +45,15 @@ def createInstance(universe: Universe, address: Uint160) -> tuple[Uint160, Histo
         transaction=Transaction(
             origin=SETUP,
             caller=SETUP,
-            callvalue=Uint256(0),
             calldata=FrozenBytes.concrete(calldata),
-            gasprice=Uint256(0x12),
         ),
         universe=universe,
         sha3=SHA3(),
         pc=0,
         stack=[],
-        memory=MutableBytes.concrete(b""),
+        memory=MutableBytes.concrete(),
         children=0,
-        latest_return=FrozenBytes.concrete(b""),
+        latest_return=FrozenBytes.concrete(),
         logs=[],
         gas_variables=None,
         call_variables=[],
@@ -108,9 +94,7 @@ def validateInstance(
     start.transaction = Transaction(
         origin=SETUP,
         caller=SETUP,
-        callvalue=Uint256(0),
         calldata=FrozenBytes.concrete(calldata),
-        gasprice=Uint256(0x12),
     )
     start.universe = universe
     start.sha3 = sha3
@@ -147,12 +131,10 @@ def search(
 
             # ASSUMPTION: all transactions are originated by the player, but may
             # (or may not!) be bounced through a "proxy" contract
-            start.transaction = Transaction(
+            start.transaction = Transaction.symbolic(
+                suffix=suffix,
                 origin=PLAYER,
                 caller=Constraint(f"CALLERAB{suffix}").ite(PLAYER, PROXY),
-                callvalue=Uint256(f"CALLVALUE{suffix}"),
-                calldata=FrozenBytes.symbolic(f"CALLDATA{suffix}"),
-                gasprice=Uint256(f"GASPRICE{suffix}"),
             )
             start.universe.transfer(
                 start.transaction.origin,

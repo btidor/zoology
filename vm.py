@@ -125,24 +125,8 @@ def concrete_start(program: Contract | Program, value: Uint256, data: bytes) -> 
             program=program,
             storage=Array.concrete(Uint256, Uint256(0)),
         )
-    transaction = Transaction(
-        origin=Uint160(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0),
-        caller=Uint160(0xCACACACACACACACACACACACACACACACACACACACA),
-        callvalue=value,
-        calldata=FrozenBytes.concrete(data),
-        gasprice=Uint256(0x12),
-    )
-    universe = Universe(
-        suffix="",
-        balances=Array.concrete(Uint160, Uint256(0)),
-        transfer_constraints=[],
-        contracts={},
-        codesizes=Array.concrete(Uint160, Uint256(0)),
-        blockhashes=Array.concrete(Uint256, Uint256(0)),
-        agents=[],
-        contribution=Uint256(0),
-        extraction=Uint256(0),
-    )
+    transaction = Transaction(callvalue=value, calldata=FrozenBytes.concrete(data))
+    universe = Universe()
     universe.add_contract(contract)
     universe.codesizes[Uint160(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0)] = Uint256(0)
     return State(
@@ -154,9 +138,9 @@ def concrete_start(program: Contract | Program, value: Uint256, data: bytes) -> 
         sha3=SHA3(),
         pc=0,
         stack=[],
-        memory=MutableBytes.concrete(b""),
+        memory=MutableBytes.concrete(),
         children=0,
-        latest_return=FrozenBytes.concrete(b""),
+        latest_return=FrozenBytes.concrete(),
         logs=[],
         gas_variables=None,
         call_variables=[],

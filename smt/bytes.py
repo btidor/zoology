@@ -33,7 +33,7 @@ class Bytes(abc.ABC):
         self.writes: list[BytesWrite] = []  # writes to apply *on top of* array
 
     @classmethod
-    def concrete(cls: Type[T], data: bytes | list[Uint8]) -> T:
+    def concrete(cls: Type[T], data: bytes | list[Uint8] = b"") -> T:
         """Create a new Bytes from a concrete list of bytes."""
         length = Uint256(len(data))
         array = Array.concrete(Uint256, Uint8(0))
@@ -151,6 +151,8 @@ class ByteSlice(FrozenBytes):
 
 class MutableBytes(Bytes):
     """A symbolic-length sequence of symbolic bytes. Mutable."""
+
+    __hash__ = None  # type: ignore
 
     def __getitem__(self, i: Uint256) -> Uint8:
         item = self.array[i]

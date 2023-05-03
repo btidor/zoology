@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import OrderedDict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable
 
 from environment import Block, Contract, Transaction, Universe
@@ -17,45 +17,45 @@ from smt.solver import Solver
 class State:
     """Transient context state associated with a contract invocation."""
 
-    suffix: str
+    suffix: str = ""
 
-    block: Block
-    contract: Contract
-    transaction: Transaction
-    universe: Universe
-    sha3: SHA3
+    block: Block = field(default_factory=Block)
+    contract: Contract = field(default_factory=Contract)
+    transaction: Transaction = field(default_factory=Transaction)
+    universe: Universe = field(default_factory=Universe)
+    sha3: SHA3 = field(default_factory=SHA3)
 
-    pc: int | Termination
-    stack: list[Uint256]
-    memory: MutableBytes
+    pc: int | Termination = 0
+    stack: list[Uint256] = field(default_factory=list)
+    memory: MutableBytes = field(default_factory=MutableBytes.concrete)
 
     # Tracks the number of times we've spawned a subcontext, so that symbolic
     # variables can be given a unique name.
-    children: int
+    children: int = 0
 
     # The return data of the most recent subcontext, for the RETURNDATASIZE and
     # RETURNDATACOPY instructions.
-    latest_return: FrozenBytes
+    latest_return: FrozenBytes = FrozenBytes.concrete()
 
-    logs: list[Log]
+    logs: list[Log] = field(default_factory=list)
 
     # Every time the GAS instruction is invoked we return a symbolic result,
     # tracked here. These should be monotonically decreasing. In the case of a
     # concrete execution, this value is set to None.
-    gas_variables: list[Uint256] | None
+    gas_variables: list[Uint256] | None = None
 
     # Every time the CALL instruction is invoked we return a symbolic result,
     # tracked here.
-    call_variables: list[tuple[FrozenBytes, Constraint]]
+    call_variables: list[tuple[FrozenBytes, Constraint]] = field(default_factory=list)
 
     # List of constraints that must be satisfied in order for the program to
     # reach this state. Based on the JUMPI instructions (if statements) seen so
     # far.
-    path_constraints: list[Constraint]
+    path_constraints: list[Constraint] = field(default_factory=list)
 
     # Tracks the path of the program's execution. Each JUMPI is a bit, 1 if
     # taken, 0 if not. MSB-first with a leading 1 prepended.
-    path: int
+    path: int = 1
 
     def px(self) -> str:
         """Return a human-readable version of the path."""
@@ -199,9 +199,9 @@ class Descend(ControlFlow):
             sha3=state.sha3,
             pc=0,
             stack=[],
-            memory=MutableBytes.concrete(b""),
+            memory=MutableBytes.concrete(),
             children=0,
-            latest_return=FrozenBytes.concrete(b""),
+            latest_return=FrozenBytes.concrete(),
             logs=state.logs,
             gas_variables=state.gas_variables,
             call_variables=state.call_variables,

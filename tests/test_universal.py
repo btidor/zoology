@@ -5,7 +5,6 @@ from typing import Any
 
 import pytest
 
-import tests.fixtures as cases
 from disassembler import Program, abiencode, disassemble
 from smt.sha3 import SHA3
 from smt.smt import Uint160, Uint256
@@ -18,6 +17,7 @@ from universal import (
     universal_transaction,
 )
 
+from . import helpers as cases
 from .solidity import load_binary, load_solidity, loads_solidity
 
 

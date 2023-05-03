@@ -13,12 +13,12 @@ from smt.bytes import FrozenBytes
 from smt.smt import Uint256
 
 
-@dataclass
+@dataclass(frozen=True)
 class Program:
     """The disassembled code of an EVM contract."""
 
     code: FrozenBytes
-    instructions: list[Instruction]
+    instructions: tuple[Instruction, ...]
 
     # Maps byte offsets in the contract, as used by JUMP/JUMPI, to an index into
     # `instructions`.
@@ -62,15 +62,15 @@ class Instruction:
 
 def disassemble(code: bytes) -> Program:
     """Parse and validate an EVM contract's code."""
-    program = Program(code=FrozenBytes.concrete(code), instructions=[], jumps={})
-
+    instructions: list[Instruction] = []
+    jumps: dict[int, int] = {}
     offset = 0
     while offset < len(code):
         instruction = _decode_instruction(code, offset)
 
-        program.instructions.append(instruction)
+        instructions.append(instruction)
         if instruction.name == "JUMPDEST":
-            program.jumps[offset] = len(program.instructions) - 1
+            jumps[offset] = len(instructions) - 1
 
         offset += instruction.size
 
@@ -79,7 +79,11 @@ def disassemble(code: bytes) -> Program:
         if instruction.name == "INVALID":
             break
 
-    return program
+    return Program(
+        code=FrozenBytes.concrete(code),
+        instructions=tuple(instructions),
+        jumps=jumps,
+    )
 
 
 def printable_disassembly(code: bytes) -> Iterable[str]:

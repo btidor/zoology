@@ -12,7 +12,7 @@ from state import ControlFlow, Descend, Jump, Log, State, Termination
 
 def STOP(s: State) -> None:
     """00 - Halts execution."""
-    s.pc = Termination(True, FrozenBytes.concrete(b""))
+    s.pc = Termination(True, FrozenBytes.concrete())
 
 
 def ADD(a: Uint256, b: Uint256) -> Uint256:
@@ -244,7 +244,7 @@ def EXTCODECOPY(
     address = _address.unwrap(int, "EXTCODECOPY requires concrete address")
 
     contract = s.universe.contracts.get(address, None)
-    code = contract.program.code if contract else FrozenBytes.concrete(b"")
+    code = contract.program.code if contract else FrozenBytes.concrete()
     s.memory.graft(code.slice(offset, size), destOffset)
 
 
@@ -467,8 +467,6 @@ def CREATE(s: State, value: Uint256, offset: Uint256, size: Uint256) -> ControlF
     transaction = Transaction(
         origin=s.transaction.origin,
         caller=s.transaction.caller,
-        calldata=FrozenBytes.concrete(b""),
-        callvalue=Uint256(0),
         gasprice=s.transaction.gasprice,
     )
 
@@ -505,7 +503,7 @@ def CALL(
     if codesize.maybe_unwrap() == 0:
         # Simple transfer to an EOA: always succeeds.
         s.universe.transfer(s.contract.address, _address.into(Uint160), value)
-        s.latest_return = FrozenBytes.concrete(b"")
+        s.latest_return = FrozenBytes.concrete()
         s.memory.graft(s.latest_return.slice(Uint256(0), retSize), retOffset)
         s.stack.append(Uint256(1))
         return None
@@ -660,7 +658,7 @@ def REVERT(s: State, offset: Uint256, size: Uint256) -> None:
 
 def INVALID(s: State) -> None:
     """FE - Designated invalid instruction."""
-    s.pc = Termination(False, FrozenBytes.concrete(b""))
+    s.pc = Termination(False, FrozenBytes.concrete())
 
 
 def SELFDESTRUCT() -> None:

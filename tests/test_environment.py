@@ -6,13 +6,14 @@ from disassembler import disassemble
 from smt.sha3 import SHA3
 from smt.smt import Uint160, Uint256
 from smt.solver import Solver
+from state import State
 from universal import symbolic_start
 
-from .helpers import concretize, make_state
+from .helpers import concretize
 
 
 def test_transaction_evaluate() -> None:
-    state = make_state()
+    state = State()
     solver = Solver()
     state.constrain(solver)
     assert solver.check()

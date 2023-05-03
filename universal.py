@@ -67,15 +67,6 @@ def universal_transaction(
 
 def symbolic_start(program: Contract | Program, sha3: SHA3, suffix: str) -> State:
     """Return a fully-symbolic start state."""
-    block = Block(
-        number=Uint256(f"NUMBER{suffix}"),
-        coinbase=Uint160(f"COINBASE{suffix}"),
-        timestamp=Uint256(f"TIMESTAMP{suffix}"),
-        prevrandao=Uint256(f"PREVRANDAO{suffix}"),
-        gaslimit=Uint256(f"GASLIMIT{suffix}"),
-        chainid=Uint256(f"CHAINID"),
-        basefee=Uint256(f"BASEFEE{suffix}"),
-    )
     if isinstance(program, Contract):
         contract = program
     else:
@@ -84,45 +75,28 @@ def symbolic_start(program: Contract | Program, sha3: SHA3, suffix: str) -> Stat
             program=program,
             storage=Array.symbolic(f"STORAGE{suffix}", Uint256, Uint256),
         )
-    origin, caller = Uint160(f"ORIGIN"), Uint160(f"CALLER")
-    transaction = Transaction(
-        # TODO: properly constrain ORIGIN to be an EOA and CALLER to either be
-        # equal to ORIGIN or else be a non-EOA; handle the case where ORIGIN and
-        # CALLER vary across transactions.
-        origin=origin,
-        caller=caller,
-        callvalue=Uint256(f"CALLVALUE{suffix}"),
-        calldata=FrozenBytes.symbolic(f"CALLDATA{suffix}"),
-        gasprice=Uint256(f"GASPRICE{suffix}"),
-    )
-    universe = Universe(
-        suffix=suffix,
-        # TODO: the balances of other accounts can change between transactions
-        # (and the balance of this contract account too, via SELFDESTRUCT). How
-        # do we model this?
-        balances=Array.symbolic(f"BALANCE{suffix}", Uint160, Uint256),
-        transfer_constraints=[],
-        contracts={},
-        codesizes=Array.symbolic(f"CODESIZE{suffix}", Uint160, Uint256),
-        blockhashes=Array.symbolic(f"BLOCKHASH{suffix}", Uint256, Uint256),
-        agents=[origin, caller],
-        contribution=Uint256(f"CONTRIBUTION{suffix}"),
-        extraction=Uint256(f"EXTRACTION{suffix}"),
-    )
+    # TODO: properly constrain ORIGIN to be an EOA and CALLER to either be equal
+    # to ORIGIN or else be a non-EOA
+    transaction = Transaction.symbolic(suffix)
+    # TODO: the balances of other accounts can change between transactions
+    # (and the balance of this contract account too, via SELFDESTRUCT). How
+    # do we model this?
+    universe = Universe.symbolic(suffix)
+    universe.agents = [transaction.origin, transaction.caller]
     universe.codesizes[contract.address] = contract.program.code.length
-    universe.codesizes[origin] = Uint256(0)
+    universe.codesizes[transaction.origin] = Uint256(0)
     return State(
         suffix=suffix,
-        block=block,
+        block=Block.symbolic(suffix),
         contract=contract,
         transaction=transaction,
         universe=universe,
         sha3=sha3,
         pc=0,
         stack=[],
-        memory=MutableBytes.concrete(b""),
+        memory=MutableBytes.concrete(),
         children=0,
-        latest_return=FrozenBytes.concrete(b""),
+        latest_return=FrozenBytes.concrete(),
         logs=[],
         gas_variables=[],
         call_variables=[],

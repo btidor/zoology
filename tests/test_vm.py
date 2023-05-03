@@ -1,12 +1,12 @@
 #!/usr/bin/env pytest
 
 from disassembler import abiencode, disassemble
+from environment import Contract, Transaction
 from smt.bytes import FrozenBytes
 from smt.smt import Uint160, Uint256
 from state import Jump, State, Termination
 from vm import printable_execution, step
 
-from .helpers import make_contract, make_state, make_transaction
 from .solidity import compile_solidity, load_binary, load_solidity, loads_solidity
 
 
@@ -27,12 +27,9 @@ def execute(state: State) -> State:
 def test_basic() -> None:
     code = bytes.fromhex("60AA605601600957005B60006000FD")
     program = disassemble(code)
-    state = make_state(
-        contract=make_contract(program=program),
-        transaction=make_transaction(
-            callvalue=Uint256(0),
-            calldata=FrozenBytes.concrete(b""),
-        ),
+    state = State(
+        contract=Contract(program=program),
+        transaction=Transaction(),
     )
 
     action = step(state)
@@ -137,10 +134,9 @@ def test_basic_solidity() -> None:
     code = compile_solidity(source)
     program = disassemble(code["Fallback"])
 
-    state = make_state(
-        contract=make_contract(program=program),
-        transaction=make_transaction(
-            callvalue=Uint256(0),
+    state = State(
+        contract=Contract(program=program),
+        transaction=Transaction(
             calldata=FrozenBytes.concrete(abiencode("owner()")),
         ),
     )
@@ -149,10 +145,9 @@ def test_basic_solidity() -> None:
     assert state.pc.success is True
     assert state.pc.returndata.unwrap() == b"\x00" * 32
 
-    state = make_state(
+    state = State(
         contract=state.contract,  # carries forward storage
-        transaction=make_transaction(
-            callvalue=Uint256(0),
+        transaction=Transaction(
             calldata=FrozenBytes.concrete(abiencode("withdraw()")),
         ),
         universe=state.universe,
@@ -162,9 +157,9 @@ def test_basic_solidity() -> None:
     assert state.pc.success is False
     assert state.pc.returndata.unwrap()[68:91] == b"caller is not the owner"
 
-    state = make_state(
+    state = State(
         contract=state.contract,
-        transaction=make_transaction(
+        transaction=Transaction(
             callvalue=Uint256(123456),
             calldata=FrozenBytes.concrete(abiencode("contribute()")),
         ),
@@ -175,10 +170,9 @@ def test_basic_solidity() -> None:
     assert state.pc.success is True
     assert state.pc.returndata.unwrap() == b""
 
-    state = make_state(
+    state = State(
         contract=state.contract,
-        transaction=make_transaction(
-            callvalue=Uint256(0),
+        transaction=Transaction(
             calldata=FrozenBytes.concrete(abiencode("owner()")),
         ),
         universe=state.universe,
@@ -192,12 +186,9 @@ def test_basic_solidity() -> None:
 def test_basic_printable() -> None:
     code = bytes.fromhex("60AA605601600957005B60006000FD")
     program = disassemble(code)
-    state = make_state(
-        contract=make_contract(program=program),
-        transaction=make_transaction(
-            callvalue=Uint256(0),
-            calldata=FrozenBytes.concrete(b""),
-        ),
+    state = State(
+        contract=Contract(program=program),
+        transaction=Transaction(),
     )
 
     raw = """
@@ -237,10 +228,9 @@ def test_basic_printable() -> None:
 
 def test_fallback() -> None:
     program = load_solidity("fixtures/01_Fallback.sol")
-    state = make_state(
-        contract=make_contract(program=program),
-        transaction=make_transaction(
-            callvalue=Uint256(0),
+    state = State(
+        contract=Contract(program=program),
+        transaction=Transaction(
             calldata=FrozenBytes.concrete(abiencode("owner()")),
         ),
     )
@@ -254,10 +244,9 @@ def test_fallback() -> None:
 
 def test_fallout() -> None:
     program = load_solidity("fixtures/02_Fallout.sol")
-    state = make_state(
-        contract=make_contract(program=program),
-        transaction=make_transaction(
-            callvalue=Uint256(0),
+    state = State(
+        contract=Contract(program=program),
+        transaction=Transaction(
             calldata=FrozenBytes.concrete(abiencode("Fal1out()")),
         ),
     )
@@ -273,10 +262,9 @@ def test_fallout() -> None:
 
 def test_coinflip() -> None:
     program = load_solidity("fixtures/03_CoinFlip.sol")
-    state = make_state(
-        contract=make_contract(program=program),
-        transaction=make_transaction(
-            callvalue=Uint256(0),
+    state = State(
+        contract=Contract(program=program),
+        transaction=Transaction(
             calldata=FrozenBytes.concrete(
                 abiencode("flip(bool)") + Uint256(0).unwrap(bytes)
             ),
@@ -296,11 +284,10 @@ def test_coinflip() -> None:
 
 def test_telephone() -> None:
     program = load_solidity("fixtures/04_Telephone.sol")
-    state = make_state(
-        contract=make_contract(program=program),
-        transaction=make_transaction(
+    state = State(
+        contract=Contract(program=program),
+        transaction=Transaction(
             caller=Uint160(0xB1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1),
-            callvalue=Uint256(0),
             calldata=FrozenBytes.concrete(
                 abiencode("changeOwner(address)")
                 + Uint256(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF).unwrap(bytes)
@@ -317,10 +304,9 @@ def test_telephone() -> None:
 
 def test_token() -> None:
     program = load_solidity("fixtures/05_Token.sol")
-    state = make_state(
-        contract=make_contract(program=program),
-        transaction=make_transaction(
-            callvalue=Uint256(0),
+    state = State(
+        contract=Contract(program=program),
+        transaction=Transaction(
             calldata=FrozenBytes.concrete(
                 abiencode("transfer(address,uint256)")
                 + Uint256(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF).unwrap(bytes)
@@ -339,11 +325,10 @@ def test_token() -> None:
 def test_delegation() -> None:
     programs = loads_solidity("fixtures/06_Delegation.sol")
 
-    other = make_contract(address=Uint160(0xABCDEF), program=programs["Delegate"])
-    state = make_state(
-        contract=make_contract(program=programs["Delegation"]),
-        transaction=make_transaction(
-            callvalue=Uint256(0),
+    other = Contract(address=Uint160(0xABCDEF), program=programs["Delegate"])
+    state = State(
+        contract=Contract(program=programs["Delegation"]),
+        transaction=Transaction(
             calldata=FrozenBytes.concrete(abiencode("pwn()")),
         ),
     )
@@ -359,12 +344,9 @@ def test_delegation() -> None:
 
 def test_force() -> None:
     program = load_binary("fixtures/07_Force.bin")
-    state = make_state(
-        contract=make_contract(program=program),
-        transaction=make_transaction(
-            callvalue=Uint256(0x1234),
-            calldata=FrozenBytes.concrete(b""),
-        ),
+    state = State(
+        contract=Contract(program=program),
+        transaction=Transaction(callvalue=Uint256(0x1234)),
     )
 
     state = execute(state)
@@ -376,10 +358,9 @@ def test_force() -> None:
 
 def test_vault() -> None:
     program = load_solidity("fixtures/08_Vault.sol")
-    state = make_state(
-        contract=make_contract(program=program),
-        transaction=make_transaction(
-            callvalue=Uint256(0),
+    state = State(
+        contract=Contract(program=program),
+        transaction=Transaction(
             calldata=FrozenBytes.concrete(
                 abiencode("unlock(bytes32)") + Uint256(0).unwrap(bytes)
             ),
@@ -395,12 +376,9 @@ def test_vault() -> None:
 
 def test_king() -> None:
     program = load_solidity("fixtures/09_King.sol")
-    state = make_state(
-        contract=make_contract(program=program),
-        transaction=make_transaction(
-            callvalue=Uint256(0x1234),
-            calldata=FrozenBytes.concrete(b""),
-        ),
+    state = State(
+        contract=Contract(program=program),
+        transaction=Transaction(callvalue=Uint256(0x1234)),
     )
 
     state = execute(state)
@@ -412,9 +390,9 @@ def test_king() -> None:
 
 def test_reentrancy() -> None:
     program = load_solidity("fixtures/10_Reentrancy.sol")
-    state = make_state(
-        contract=make_contract(program=program),
-        transaction=make_transaction(
+    state = State(
+        contract=Contract(program=program),
+        transaction=Transaction(
             callvalue=Uint256(0x1234),
             calldata=FrozenBytes.concrete(
                 abiencode("donate(address)") + Uint256(1).unwrap(bytes)
@@ -432,18 +410,17 @@ def test_reentrancy() -> None:
 def test_elevator() -> None:
     programs = loads_solidity("fixtures/11_Elevator.sol")
 
-    state = make_state(
-        contract=make_contract(program=programs["Elevator"]),
-        transaction=make_transaction(
+    state = State(
+        contract=Contract(program=programs["Elevator"]),
+        transaction=Transaction(
             caller=Uint160(0x76543210),
-            callvalue=Uint256(0),
             calldata=FrozenBytes.concrete(
                 abiencode("goTo(uint256)") + Uint256(1).unwrap(bytes)
             ),
         ),
     )
     state.universe.add_contract(
-        make_contract(address=Uint160(0x76543210), program=programs["TestBuilding"])
+        Contract(address=Uint160(0x76543210), program=programs["TestBuilding"])
     )
 
     state = execute(state)
@@ -455,10 +432,9 @@ def test_elevator() -> None:
 
 def test_privacy() -> None:
     program = load_binary("fixtures/12_Privacy.bin")
-    state = make_state(
-        contract=make_contract(program=program),
-        transaction=make_transaction(
-            callvalue=Uint256(0),
+    state = State(
+        contract=Contract(program=program),
+        transaction=Transaction(
             calldata=FrozenBytes.concrete(
                 abiencode("unlock(bytes16)") + Uint256(0x4321 << 128).unwrap(bytes)
             ),
@@ -481,10 +457,9 @@ def test_gatekeeper_one() -> None:
 
 def test_gatekeeper_two() -> None:
     program = load_solidity("fixtures/14_GatekeeperTwo.sol")
-    state = make_state(
-        contract=make_contract(program=program),
-        transaction=make_transaction(
-            callvalue=Uint256(0),
+    state = State(
+        contract=Contract(program=program),
+        transaction=Transaction(
             calldata=FrozenBytes.concrete(
                 abiencode("enter(bytes8)")
                 + bytes.fromhex(
@@ -503,16 +478,15 @@ def test_gatekeeper_two() -> None:
 
 def test_preservation() -> None:
     programs = loads_solidity("fixtures/15_Preservation.sol")
-    preservation = make_contract(program=programs["Preservation"])
-    library = make_contract(
+    preservation = Contract(program=programs["Preservation"])
+    library = Contract(
         address=Uint160(0x1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B),
         program=programs["LibraryContract"],
     )
 
-    state = make_state(
+    state = State(
         contract=preservation,
-        transaction=make_transaction(
-            callvalue=Uint256(0),
+        transaction=Transaction(
             calldata=FrozenBytes.concrete(
                 abiencode("setFirstTime(uint256)") + Uint256(0x5050).unwrap(bytes)
             ),

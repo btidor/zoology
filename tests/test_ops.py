@@ -3,6 +3,7 @@
 import pytest
 
 from disassembler import Instruction, disassemble
+from environment import Block
 from ops import *
 from smt.arrays import Array
 from smt.bytes import FrozenBytes, MutableBytes
@@ -10,11 +11,11 @@ from smt.smt import Uint160, Uint256
 from smt.solver import Solver
 from state import Termination
 
-from .helpers import concretize, make_block, make_contract, make_state, make_transaction
+from .helpers import concretize
 
 
 def test_STOP() -> None:
-    s = make_state(latest_return=FrozenBytes.concrete(b"\x12\x34"))
+    s = State(latest_return=FrozenBytes.concrete(b"\x12\x34"))
     STOP(s)
     assert isinstance(s.pc, Termination)
     assert s.pc.success is True
@@ -282,7 +283,7 @@ def test_SAR() -> None:
 
 
 def test_SHA3() -> None:
-    s = make_state(memory=MutableBytes.concrete(b"\xff\xff\xff\xff"))
+    s = State(memory=MutableBytes.concrete(b"\xff\xff\xff\xff"))
     digest = SHA3(s, Uint256(0), Uint256(4))
 
     solver = Solver()
@@ -295,15 +296,13 @@ def test_SHA3() -> None:
 
 
 def test_ADDRESS() -> None:
-    contract = make_contract(
-        address=Uint160(0x9BBFED6889322E016E0A02EE459D306FC19545D8)
-    )
-    s = make_state(contract=contract)
+    contract = Contract(address=Uint160(0x9BBFED6889322E016E0A02EE459D306FC19545D8))
+    s = State(contract=contract)
     assert concretize(ADDRESS(s)) == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
 
 
 def test_BALANCE() -> None:
-    s = make_state()
+    s = State()
     s.universe.balances[Uint160(0x9BBFED6889322E016E0A02EE459D306FC19545D8)] = Uint256(
         125985
     )
@@ -314,34 +313,34 @@ def test_BALANCE() -> None:
 
 
 def test_ORIGIN() -> None:
-    transaction = make_transaction(
+    transaction = Transaction(
         origin=Uint160(0x9BBFED6889322E016E0A02EE459D306FC19545D8)
     )
-    s = make_state(transaction=transaction)
+    s = State(transaction=transaction)
     assert concretize(ORIGIN(s)) == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
 
 
 def test_CALLER() -> None:
-    transaction = make_transaction(
+    transaction = Transaction(
         caller=Uint160(0x9BBFED6889322E016E0A02EE459D306FC19545D8)
     )
-    s = make_state(transaction=transaction)
+    s = State(transaction=transaction)
     assert concretize(CALLER(s)) == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
 
 
 def test_CALLVALUE() -> None:
-    transaction = make_transaction(callvalue=Uint256(123456789))
-    s = make_state(transaction=transaction)
+    transaction = Transaction(callvalue=Uint256(123456789))
+    s = State(transaction=transaction)
     assert concretize(CALLVALUE(s)) == 123456789
 
 
 def test_CALLDATALOAD() -> None:
-    transaction = make_transaction(
+    transaction = Transaction(
         calldata=FrozenBytes.concrete(
             b"\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff"
         )
     )
-    s = make_state(transaction=transaction)
+    s = State(transaction=transaction)
     assert (
         concretize(CALLDATALOAD(s, Uint256(0)))
         == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
@@ -354,18 +353,18 @@ def test_CALLDATALOAD() -> None:
 
 
 def test_CALLDATASIZE() -> None:
-    transaction = make_transaction(calldata=FrozenBytes.concrete(b"\xff"))
-    s = make_state(transaction=transaction)
+    transaction = Transaction(calldata=FrozenBytes.concrete(b"\xff"))
+    s = State(transaction=transaction)
     assert concretize(CALLDATASIZE(s)) == 1
 
 
 def test_CALLDATACOPY() -> None:
-    transaction = make_transaction(
+    transaction = Transaction(
         calldata=FrozenBytes.concrete(
             b"\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff"
         )
     )
-    s = make_state(transaction=transaction)
+    s = State(transaction=transaction)
 
     CALLDATACOPY(s, Uint256(0), Uint256(0), Uint256(32))
     assert (
@@ -381,8 +380,8 @@ def test_CALLDATACOPY() -> None:
 
 
 def test_CODESIZE() -> None:
-    s = make_state(
-        contract=make_contract(
+    s = State(
+        contract=Contract(
             program=disassemble(bytes.fromhex("66000000000000005B")),
         )
     )
@@ -390,8 +389,8 @@ def test_CODESIZE() -> None:
 
 
 def test_CODECOPY() -> None:
-    s = make_state(
-        contract=make_contract(
+    s = State(
+        contract=Contract(
             program=disassemble(bytes.fromhex("66000000000000005B")),
         )
     )
@@ -407,18 +406,18 @@ def test_CODECOPY() -> None:
 
 
 def test_GASPRICE() -> None:
-    transaction = make_transaction(gasprice=Uint256(10))
-    s = make_state(transaction=transaction)
+    transaction = Transaction(gasprice=Uint256(10))
+    s = State(transaction=transaction)
     assert concretize(GASPRICE(s)) == 10
 
 
 def test_EXTCODESIZE() -> None:
     address = 0xABCDABCDABCDABCDABCDABCDABCDABCDABCDABCD
-    contract = make_contract(
+    contract = Contract(
         address=Uint160(address),
         program=disassemble(bytes.fromhex("66000000000000005B")),
     )
-    s = make_state()
+    s = State()
     s.universe.add_contract(contract)
     assert concretize(EXTCODESIZE(s, Uint256(address))) == 9
     assert concretize(EXTCODESIZE(s, Uint256(0x1234))) == 0
@@ -426,11 +425,11 @@ def test_EXTCODESIZE() -> None:
 
 def test_EXTCODECOPY() -> None:
     address = 0xABCDABCDABCDABCDABCDABCDABCDABCDABCDABCD
-    contract = make_contract(
+    contract = Contract(
         address=Uint160(address),
         program=disassemble(bytes.fromhex("66000000000000005B")),
     )
-    s = make_state()
+    s = State()
     s.universe.add_contract(contract)
 
     EXTCODECOPY(s, Uint256(address), Uint256(3), Uint256(5), Uint256(7))
@@ -441,12 +440,12 @@ def test_EXTCODECOPY() -> None:
 
 
 def test_RETURNDATASIZE() -> None:
-    s = make_state(latest_return=FrozenBytes.concrete(b"abcdefghijklmnopqrstuvwxyz"))
+    s = State(latest_return=FrozenBytes.concrete(b"abcdefghijklmnopqrstuvwxyz"))
     assert concretize(RETURNDATASIZE(s)) == 26
 
 
 def test_RETURNDATACOPY() -> None:
-    s = make_state(
+    s = State(
         latest_return=FrozenBytes.concrete(
             b"\x7d\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\x7f"
         )
@@ -467,11 +466,11 @@ def test_RETURNDATACOPY() -> None:
 
 def test_EXTCODEHASH() -> None:
     address = 0xABCDABCDABCDABCDABCDABCDABCDABCDABCDABCD
-    contract = make_contract(
+    contract = Contract(
         address=Uint160(address),
         program=disassemble(bytes.fromhex("66000000000000005B")),
     )
-    s = make_state()
+    s = State()
     s.universe.add_contract(contract)
 
     assert (
@@ -482,7 +481,7 @@ def test_EXTCODEHASH() -> None:
 
 
 def test_BLOCKHASH() -> None:
-    s = make_state()
+    s = State()
     s.universe.blockhashes = Array.concrete(Uint256, Uint256(0x9999))
     assert concretize(BLOCKHASH(s, s.block.number - Uint256(10))) == 0x9999
     assert concretize(BLOCKHASH(s, s.block.number - Uint256(256))) == 0x9999
@@ -492,30 +491,30 @@ def test_BLOCKHASH() -> None:
 
 
 def test_COINBASE() -> None:
-    block = make_block(coinbase=Uint160(0x9BBFED6889322E016E0A02EE459D306FC19545D8))
-    s = make_state(block=block)
+    block = Block(coinbase=Uint160(0x9BBFED6889322E016E0A02EE459D306FC19545D8))
+    s = State(block=block)
     assert concretize(COINBASE(s)) == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
 
 
 def test_TIMESTAMP() -> None:
-    block = make_block(timestamp=Uint256(1636704767))
-    s = make_state(block=block)
+    block = Block(timestamp=Uint256(1636704767))
+    s = State(block=block)
     assert concretize(TIMESTAMP(s)) == 1636704767
 
 
 def test_NUMBER() -> None:
-    block = make_block(number=Uint256(1636704767))
-    s = make_state(block=block)
+    block = Block(number=Uint256(1636704767))
+    s = State(block=block)
     assert concretize(NUMBER(s)) == 1636704767
 
 
 def test_PREVRANDAO() -> None:
-    block = make_block(
+    block = Block(
         prevrandao=Uint256(
             0xCE124DEE50136F3F93F19667FB4198C6B94EECBACFA300469E5280012757BE94
         )
     )
-    s = make_state(block=block)
+    s = State(block=block)
     assert (
         concretize(PREVRANDAO(s))
         == 0xCE124DEE50136F3F93F19667FB4198C6B94EECBACFA300469E5280012757BE94
@@ -523,24 +522,24 @@ def test_PREVRANDAO() -> None:
 
 
 def test_GASLIMIT() -> None:
-    block = make_block(gaslimit=Uint256(0xFFFFFFFFFFFF))
-    s = make_state(block=block)
+    block = Block(gaslimit=Uint256(0xFFFFFFFFFFFF))
+    s = State(block=block)
     assert concretize(GASLIMIT(s)) == 0xFFFFFFFFFFFF
 
 
 def test_CHAINID() -> None:
-    s = make_state()
+    s = State()
     assert concretize(CHAINID(s)) == 1
 
 
 def test_BASEFEE() -> None:
-    block = make_block(basefee=Uint256(10))
-    s = make_state(block=block)
+    block = Block(basefee=Uint256(10))
+    s = State(block=block)
     assert concretize(BASEFEE(s)) == 10
 
 
 def test_MLOAD() -> None:
-    s = make_state(
+    s = State(
         memory=MutableBytes.concrete(
             bytes.fromhex(
                 "00000000000000000000000000000000000000000000000000000000000000FF"
@@ -552,7 +551,7 @@ def test_MLOAD() -> None:
 
 
 def test_MSTORE() -> None:
-    s = make_state()
+    s = State()
     MSTORE(s, Uint256(0), Uint256(0xFF))
     assert (
         s.memory.unwrap().hex()
@@ -566,7 +565,7 @@ def test_MSTORE() -> None:
 
 
 def test_MSTORE8() -> None:
-    s = make_state()
+    s = State()
     MSTORE8(s, Uint256(0), Uint256(0xFFFF))
 
     assert s.memory.unwrap().hex() == "ff"
@@ -575,7 +574,7 @@ def test_MSTORE8() -> None:
 
 
 def test_SLOAD() -> None:
-    s = make_state()
+    s = State()
     s.contract.storage[Uint256(0)] = Uint256(46)
     assert concretize(SLOAD(s, Uint256(0))) == 46
     assert len(s.contract.storage.accessed) == 1
@@ -583,7 +582,7 @@ def test_SLOAD() -> None:
 
 
 def test_SSTORE() -> None:
-    s = make_state()
+    s = State()
 
     SSTORE(s, Uint256(0), Uint256(0xFFFF))
     assert concretize(s.contract.storage[Uint256(0)]) == 0xFFFF
@@ -594,10 +593,10 @@ def test_SSTORE() -> None:
 
 
 def test_JUMP() -> None:
-    contract = make_contract(
+    contract = Contract(
         program=disassemble(bytes.fromhex("66000000000000005B")),
     )
-    s = make_state(contract=contract)
+    s = State(contract=contract)
     JUMP(s, Uint256(8))
     assert s.pc == 1
     with pytest.raises(KeyError):
@@ -610,7 +609,7 @@ def test_PC() -> None:
 
 
 def test_MSIZE() -> None:
-    s = make_state(memory=MutableBytes.concrete(b"\x00" * 123 + b"\x01"))
+    s = State(memory=MutableBytes.concrete(b"\x00" * 123 + b"\x01"))
     assert concretize(MSIZE(s)) == 124
 
 
@@ -624,7 +623,7 @@ def test_PUSH() -> None:
 
 
 def test_DUP() -> None:
-    s = make_state(stack=[Uint256(0x1234)])
+    s = State(stack=[Uint256(0x1234)])
 
     ins = Instruction(0x0, 1, "DUP", 1)
     assert concretize(DUP(ins, s)) == 0x1234
@@ -635,7 +634,7 @@ def test_DUP() -> None:
 
 
 def test_SWAP() -> None:
-    s = make_state(stack=[Uint256(0x1234), Uint256(0x5678)])
+    s = State(stack=[Uint256(0x1234), Uint256(0x5678)])
 
     ins = Instruction(0x0, 1, "SWAP", 1)
     SWAP(ins, s)
@@ -648,7 +647,7 @@ def test_SWAP() -> None:
 
 
 def test_RETURN() -> None:
-    s = make_state(
+    s = State(
         latest_return=FrozenBytes.concrete(b"\x12\x34"),
         memory=MutableBytes.concrete(b"\xff\x01"),
     )
@@ -659,7 +658,7 @@ def test_RETURN() -> None:
 
 
 def test_REVERT() -> None:
-    s = make_state(
+    s = State(
         latest_return=FrozenBytes.concrete(b"\x12\x34"),
         memory=MutableBytes.concrete(b"\xff\x01"),
     )
@@ -670,7 +669,7 @@ def test_REVERT() -> None:
 
 
 def test_INVALID() -> None:
-    s = make_state(latest_return=FrozenBytes.concrete(b"\x12\x34"))
+    s = State(latest_return=FrozenBytes.concrete(b"\x12\x34"))
     INVALID(s)
     assert isinstance(s.pc, Termination)
     assert s.pc.success is False
