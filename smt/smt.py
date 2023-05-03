@@ -6,7 +6,7 @@ import abc
 from typing import Any, Generic, Type, TypeVar, overload
 
 from Crypto.Hash import keccak
-from pybitwuzla import BitwuzlaSort, BitwuzlaTerm, Kind
+from pybitwuzla import BitwuzlaTerm, Kind
 
 from .bitwuzla import cache, get_value_int, mk_bv_value, mk_const, mk_term, sort
 
@@ -66,7 +66,7 @@ class BitVector(Symbolic[int]):
     def __init__(self, arg: str | BitwuzlaTerm | int):
         """Create a new BitVector."""
         if isinstance(arg, str):
-            self.node = mk_const(self._sort(), arg)
+            self.node = mk_const(sort(self.length()), arg)
         elif isinstance(arg, BitwuzlaTerm):
             assert arg.is_bv()
             assert (
@@ -74,14 +74,9 @@ class BitVector(Symbolic[int]):
             ), f"can't initialize {type(self).__name__} with {arg.get_sort().bv_get_size()} bits"
             self.node = arg
         elif isinstance(arg, int):
-            self.node = mk_bv_value(self._sort(), arg)
+            self.node = mk_bv_value(sort(self.length()), arg)
         else:
             raise TypeError
-
-    @classmethod
-    @abc.abstractmethod
-    def _sort(cls) -> BitwuzlaSort:
-        ...
 
     @classmethod
     @abc.abstractmethod
@@ -176,7 +171,9 @@ class BitVector(Symbolic[int]):
                 v >>= 256
             return f"0x[{'.'.join(reversed(p))}]"
         else:
-            digest = keccak.new(data=node.dump("smt2").encode(), digest_bits=256).digest()
+            digest = keccak.new(
+                data=node.dump("smt2").encode(), digest_bits=256
+            ).digest()
             return "#" + digest[:3].hex()
 
 
@@ -253,10 +250,6 @@ class Uint8(Uint):
     __slots__ = ()
 
     @classmethod
-    def _sort(cls) -> BitwuzlaSort:
-        return sort(8)
-
-    @classmethod
     def length(cls) -> int:
         """Return the number of bits in the bitvector."""
         return 8
@@ -268,10 +261,6 @@ class Uint160(Uint):
     __slots__ = ()
 
     @classmethod
-    def _sort(cls) -> BitwuzlaSort:
-        return sort(160)
-
-    @classmethod
     def length(cls) -> int:
         """Return the number of bits in the bitvector."""
         return 160
@@ -281,10 +270,6 @@ class Uint256(Uint):
     """A uint256."""
 
     __slots__ = ()
-
-    @classmethod
-    def _sort(cls) -> BitwuzlaSort:
-        return sort(256)
 
     @classmethod
     def length(cls) -> int:
@@ -320,10 +305,6 @@ class Sint256(Sint):
     __slots__ = ()
 
     @classmethod
-    def _sort(cls) -> BitwuzlaSort:
-        return sort(256)
-
-    @classmethod
     def length(cls) -> int:
         """Return the number of bits in the bitvector."""
         return 256
@@ -345,10 +326,6 @@ class Uint257(Uint):
     __slots__ = ()
 
     @classmethod
-    def _sort(cls) -> BitwuzlaSort:
-        return sort(257)
-
-    @classmethod
     def length(cls) -> int:
         """Return the number of bits in the bitvector."""
         return 257
@@ -358,10 +335,6 @@ class Uint512(Uint):
     """A uint512."""
 
     __slots__ = ()
-
-    @classmethod
-    def _sort(cls) -> BitwuzlaSort:
-        return sort(512)
 
     @classmethod
     def length(cls) -> int:

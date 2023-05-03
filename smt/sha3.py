@@ -73,7 +73,7 @@ class SHA3:
 
         if size not in self.hashes:
             self.hashes[size] = mk_const(
-                mk_array_sort(mk_bv_sort(size * 8), Uint256._sort()),
+                mk_array_sort(mk_bv_sort(size * 8), sort(256)),
                 f"SHA3({size}){self.suffix}",
             )
             self.accessed[size] = []

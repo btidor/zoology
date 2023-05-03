@@ -7,7 +7,7 @@ from typing import Any, Generic, Iterable, Type, TypeVar
 
 from pybitwuzla import BitwuzlaTerm, Kind
 
-from .bitwuzla import mk_array_sort, mk_const, mk_const_array, mk_term
+from .bitwuzla import mk_array_sort, mk_const, mk_const_array, mk_term, sort
 from .smt import BitVector
 from .solver import Solver
 
@@ -39,14 +39,18 @@ class Array(Generic[K, V]):
     def concrete(cls, key: Type[K], val: V) -> Array[K, V]:
         """Create a new Array with a concrete default value."""
         return Array(
-            mk_const_array(mk_array_sort(key._sort(), val._sort()), val.node),
+            mk_const_array(
+                mk_array_sort(sort(key.length()), sort(val.length())), val.node
+            ),
             val.__class__,
         )
 
     @classmethod
     def symbolic(cls, name: str, key: Type[K], val: Type[V]) -> Array[K, V]:
         """Create a new Array as an uninterpreted function."""
-        return Array(mk_const(mk_array_sort(key._sort(), val._sort()), name), val)
+        return Array(
+            mk_const(mk_array_sort(sort(key.length()), sort(val.length())), name), val
+        )
 
     def __getitem__(self, key: K) -> V:
         """Look up the given symbolic key."""
