@@ -7,7 +7,7 @@ from disassembler import Program
 from smt.sha3 import SHA3
 from solidity import load_binary, load_solidity, loads_solidity
 from state import State
-from universal import _universal_transaction, symbolic_start
+from universal import symbolic_start, universal_transaction
 
 
 def check_paths(input: Program | State, branches: tuple[Any, ...]) -> None:
@@ -15,7 +15,7 @@ def check_paths(input: Program | State, branches: tuple[Any, ...]) -> None:
     if isinstance(input, Program):
         input = symbolic_start(input, SHA3(), "")
     actual = set()
-    for end in _universal_transaction(input):
+    for end in universal_transaction(input):
         assert end.px() not in actual, "duplicate path"
         actual.add(end.px())
     assert actual == expected

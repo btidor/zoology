@@ -1,5 +1,6 @@
 #!/usr/bin/env pytest
 
+import copy
 from typing import Any
 
 import pytest
@@ -12,7 +13,6 @@ from smt.solver import Solver
 from solidity import abiencode, load_binary, load_solidity, loads_solidity
 from state import State, Termination
 from universal import (
-    _universal_transaction,
     constrain_to_goal,
     printable_transition,
     symbolic_start,
@@ -25,7 +25,7 @@ def check_transitions(start: Program | State, branches: tuple[Any, ...]) -> None
         start = symbolic_start(start, SHA3(), "")
 
     expected = dict((b[0], b[1:]) for b in branches)
-    for end in _universal_transaction(start):
+    for end in universal_transaction(start):
         assert end.px() in expected, f"unexpected path: {end.px()}"
         assert isinstance(end.pc, Termination)
         assert end.pc.success is True
@@ -73,11 +73,17 @@ def check_transitions(start: Program | State, branches: tuple[Any, ...]) -> None
 def test_basic() -> None:
     code = bytes.fromhex("60FF60EE5560AA60AA03600E57005B60006000FD")
     program = disassemble(code)
-    sha3 = SHA3()
 
-    universal = universal_transaction(program, sha3, "")
+    start = symbolic_start(program, SHA3(), "")
+    init = copy.deepcopy(start)
+    init.universe.transfer(
+        init.transaction.caller,
+        init.contract.address,
+        init.transaction.callvalue,
+    )
+    universal = universal_transaction(init)
 
-    start, end = next(universal)
+    end = next(universal)
     assert isinstance(end.pc, Termination)
     assert end.pc.success == True
 

@@ -17,7 +17,7 @@ from smt.solver import NarrowingError, Solver
 from snapshot import LEVEL_FACTORIES, apply_snapshot
 from solidity import abiencode
 from state import State, Termination
-from universal import _universal_transaction, symbolic_start
+from universal import symbolic_start, universal_transaction
 from vm import concrete_start, printable_execution
 
 SETUP = Uint160(0x5757575757575757575757575757575757575757)
@@ -115,7 +115,7 @@ def validateInstance(
     start.universe = universe
     start.sha3 = sha3
 
-    for end in _universal_transaction(start, prints=prints):
+    for end in universal_transaction(start, prints=prints):
         assert isinstance(end.pc, Termination)
         ok = Uint256(end.pc.returndata.bigvector(32)) != Uint256(0)
         yield (end, ok)
@@ -161,7 +161,7 @@ def search(
             )
             start.contract.storage.written = []
 
-            for end in _universal_transaction(start):
+            for end in universal_transaction(start):
                 candidate = history.extend(end)
 
                 if prints:
