@@ -102,8 +102,8 @@ class State:
                 break
 
         # Minimize callvalue
-        for i in range(1025):
-            constraint = self.transaction.callvalue == Uint256(i)
+        for i in range(257):
+            constraint = self.transaction.callvalue == Uint256(2**i - 1)
             if solver.check(constraint):
                 solver.assert_and_track(constraint)
                 break
