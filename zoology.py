@@ -26,6 +26,7 @@ PROXY = Uint160(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0)
 def starting_universe() -> Universe:
     """Set up a symbolic universe with factory levels loaded."""
     universe = Universe.symbolic("")
+    universe.codesizes.poke(SETUP, Uint256(0))
     universe.codesizes.poke(PLAYER, Uint256(0))
     apply_snapshot(universe)
     return universe
@@ -43,6 +44,7 @@ def createInstance(universe: Universe, address: Uint160) -> tuple[Uint160, Histo
             origin=SETUP,
             caller=SETUP,
             calldata=FrozenBytes.concrete(calldata),
+            callvalue=Uint256(10**15),
         ),
         universe=universe,
     )
