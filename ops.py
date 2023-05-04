@@ -495,8 +495,10 @@ def CALL(
 ) -> ControlFlow | None:
     """F1 - Message-call into an account."""
     codesize = s.universe.codesizes[_address.into(Uint160)]
-    if codesize.maybe_unwrap() == 0:
-        # Simple transfer to an EOA: always succeeds.
+    if codesize.maybe_unwrap() == 0 or _address.maybe_unwrap() == 0:
+        # Simple transfer to an EOA: always succeeds. (We're special-casing the
+        # zero address, unfortunately. It has no code and no one controls its
+        # keypair.)
         s.universe.transfer(s.contract.address, _address.into(Uint160), value)
         s.latest_return = FrozenBytes.concrete()
         s.memory.graft(s.latest_return.slice(Uint256(0), retSize), retOffset)
