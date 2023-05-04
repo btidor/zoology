@@ -26,7 +26,6 @@ class Array(Generic[K, V]):
 
     def __init__(self, array: BitwuzlaTerm, vtype: Type[V]) -> None:
         """Create a new Array. For internal use."""
-        # TODO: like Symbolic, we need to copy these across resets
         self.array = array
         self.vtype = vtype
         self.accessed: list[K] = []

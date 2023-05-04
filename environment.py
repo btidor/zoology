@@ -8,7 +8,8 @@ from dataclasses import dataclass, field
 from disassembler import Program, disassemble
 from smt.arrays import Array
 from smt.bytes import FrozenBytes
-from smt.smt import BitVector, Constraint, Uint160, Uint256
+from smt.sha3 import concrete_hash
+from smt.smt import BitVector, Constraint, Uint8, Uint160, Uint256
 from smt.solver import Solver
 
 
@@ -26,6 +27,12 @@ class Block:
     chainid: Uint256 = Uint256(1)
     basefee: Uint256 = Uint256(12267131109)
 
+    # Map from offset -> blockhash for the last 256 complete blocks. The most
+    # recent block has offset 255.
+    hashes: Array[Uint8, Uint256] = field(
+        default_factory=lambda: Block.__concrete_hashes()
+    )
+
     @classmethod
     def symbolic(cls, suffix: str) -> Block:
         """Create a fully-symbolic Block."""
@@ -37,6 +44,35 @@ class Block:
             gaslimit=Uint256(f"GASLIMIT{suffix}"),
             chainid=Uint256(f"CHAINID"),
             basefee=Uint256(f"BASEFEE{suffix}"),
+            hashes=Array.symbolic(f"BLOCKHASH{suffix}", Uint8, Uint256),
+        )
+
+    @classmethod
+    def __concrete_hashes(cls) -> Array[Uint8, Uint256]:
+        hashes = Array.concrete(Uint8, Uint256(0))
+        hashes[Uint8(255)] = Uint256(
+            0xF798B79831B745F4F756FBD50CFEBAE9FE8AF348CB8EF47F739939142EC9D1E0
+        )
+        for i in range(254, 0, -1):
+            hashes[Uint8(i)] = concrete_hash(hashes[Uint8(i + 1)].unwrap(bytes))
+        return hashes
+
+    def successor(self) -> Block:
+        """Produce a plausible next block."""
+        hashes = Array.concrete(Uint8, Uint256(0))
+        hashes[Uint8(0)] = concrete_hash(self.hashes[Uint8(0)].unwrap(bytes))
+        for i in range(1, 256):
+            hashes[Uint8(i)] = self.hashes[Uint8(i - 1)]
+
+        return Block(
+            number=self.number + Uint256(1),
+            coinbase=self.coinbase,
+            timestamp=self.timestamp + Uint256(12),
+            prevrandao=self.prevrandao * Uint256(2147483647),
+            gaslimit=self.gaslimit,
+            chainid=self.chainid,
+            basefee=self.basefee,
+            hashes=hashes,
         )
 
 
@@ -121,9 +157,6 @@ class Universe:
         # address -> code size
         default_factory=lambda: Array.concrete(Uint160, Uint256(0))
     )
-    blockhashes: Array[Uint256, Uint256] = field(
-        default_factory=lambda: Array.concrete(Uint256, Uint256(0))
-    )
 
     # These variables track how much value has been moved from the contracts
     # under test to our agent's accounts. To avoid overflow errors, we track
@@ -142,7 +175,6 @@ class Universe:
             transfer_constraints=[],
             contracts={},
             codesizes=Array.symbolic(f"CODESIZE{suffix}", Uint160, Uint256),
-            blockhashes=Array.symbolic(f"BLOCKHASH{suffix}", Uint256, Uint256),
             agents=[],
             contribution=Uint256(f"CONTRIBUTION{suffix}"),
             extraction=Uint256(f"EXTRACTION{suffix}"),

@@ -196,3 +196,10 @@ class SHA3:
 
         if line == "":
             yield ""
+
+
+def concrete_hash(data: bytes | str) -> Uint256:
+    """Hash a concrete input and return the digest as a Uint256."""
+    encoded = data if isinstance(data, bytes) else data.encode()
+    digest = keccak.new(data=encoded, digest_bits=256).digest()
+    return Uint256(int.from_bytes(digest))

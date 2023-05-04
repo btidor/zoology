@@ -481,8 +481,7 @@ def test_EXTCODEHASH() -> None:
 
 
 def test_BLOCKHASH() -> None:
-    s = State()
-    s.universe.blockhashes = Array.concrete(Uint256, Uint256(0x9999))
+    s = State(block=Block(hashes=Array.concrete(Uint8, Uint256(0x9999))))
     assert concretize(BLOCKHASH(s, s.block.number - Uint256(10))) == 0x9999
     assert concretize(BLOCKHASH(s, s.block.number - Uint256(256))) == 0x9999
     assert concretize(BLOCKHASH(s, s.block.number - Uint256(257))) == 0

@@ -1,4 +1,5 @@
 """Wrapper around pybitwuzla for state management."""
+
 import gc
 from collections import defaultdict
 from typing import Any

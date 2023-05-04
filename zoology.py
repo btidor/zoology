@@ -10,8 +10,7 @@ from typing import Iterator
 from disassembler import abiencode
 from environment import Block, Transaction, Universe
 from history import History
-from smt.bytes import FrozenBytes, MutableBytes
-from smt.sha3 import SHA3
+from smt.bytes import FrozenBytes
 from smt.smt import Constraint, Uint160, Uint256
 from smt.solver import NarrowingError, Solver
 from snapshot import LEVEL_FACTORIES, apply_snapshot
@@ -39,8 +38,7 @@ def createInstance(universe: Universe, address: Uint160) -> tuple[Uint160, Histo
     # on. Inaccuracies in the environment may result in an inaccurate analysis.
     calldata = abiencode("createInstance(address)") + PLAYER.into(Uint256).unwrap(bytes)
     start = State(
-        suffix="",
-        block=_block(0, universe),
+        block=Block(),
         contract=universe.contracts[address.unwrap()],
         transaction=Transaction(
             origin=SETUP,
@@ -48,17 +46,6 @@ def createInstance(universe: Universe, address: Uint160) -> tuple[Uint160, Histo
             calldata=FrozenBytes.concrete(calldata),
         ),
         universe=universe,
-        sha3=SHA3(),
-        pc=0,
-        stack=[],
-        memory=MutableBytes.concrete(),
-        children=0,
-        latest_return=FrozenBytes.concrete(),
-        logs=[],
-        gas_variables=None,
-        call_variables=[],
-        path_constraints=[],
-        path=1,
     )
 
     generator = printable_execution(start)
@@ -88,9 +75,10 @@ def validateInstance(
         + PLAYER.into(Uint256).unwrap(bytes)
     )
 
-    universe, sha3 = history.subsequent()
+    universe, sha3, block = history.subsequent()
     contract = universe.contracts[factory.unwrap()]
     start = concrete_start(contract, Uint256(0), calldata)
+    start.block = block
     start.transaction = Transaction(
         origin=SETUP,
         caller=SETUP,
@@ -120,14 +108,14 @@ def search(
             print(f"\tTxn {suffix}:")
         subsequent: list[History] = []
         for history in histories:
-            universe, sha3 = history.subsequent()
+            universe, sha3, block = history.subsequent()
             contract = universe.contracts[instance.unwrap()]
             start = symbolic_start(contract, sha3, suffix)
             start.universe = universe
 
             # ASSUMPTION: each call to the level takes place in a different
             # block, and the blocks are consecutive.
-            start.block = _block(i + 1, start.universe)
+            start.block = block
 
             # ASSUMPTION: all transactions are originated by the player, but may
             # (or may not!) be bounced through a "proxy" contract
@@ -197,25 +185,6 @@ def search(
         assert len(histories) < 256
 
     return None
-
-
-def _block(offset: int, universe: Universe) -> Block:
-    """Create a simulated Block."""
-    # As an approximation, assume the blockhash of the `n`th block is
-    # `999999*n`.
-    number = Uint256(16030969 + offset)
-    universe.blockhashes[number] = Uint256(999999) * number
-    return Block(
-        number=number,
-        coinbase=Uint160(0xDAFEA492D9C6733AE3D56B7ED1ADB60692C98BC5),
-        timestamp=Uint256(1669214471 + offset),
-        prevrandao=Uint256(
-            0xCC7E0A66B3B9E3F54B7FDB9DCF98D57C03226D73BFFBB4E0BA7B08F92CE00D19
-        ),
-        gaslimit=Uint256(30000000000000000),
-        chainid=Uint256(1),
-        basefee=Uint256(12267131109),
-    )
 
 
 if __name__ == "__main__":

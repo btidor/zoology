@@ -278,13 +278,8 @@ def EXTCODEHASH(s: State, _address: Uint256) -> Uint256:
 
 def BLOCKHASH(s: State, blockNumber: Uint256) -> Uint256:
     """40 - Get the hash of one of the 256 most recent complete blocks."""
-    return (blockNumber < s.block.number - Uint256(256)).ite(
-        Uint256(0),
-        (blockNumber >= s.block.number).ite(
-            Uint256(0),
-            s.universe.blockhashes[blockNumber],
-        ),
-    )
+    offset = s.block.number - blockNumber - Uint256(1)
+    return (offset < Uint256(256)).ite(s.block.hashes[offset.into(Uint8)], Uint256(0))
 
 
 def COINBASE(s: State) -> Uint256:

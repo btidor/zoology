@@ -6,7 +6,7 @@ from typing import Generator
 
 import ops
 from disassembler import Instruction, Program, abiencode
-from environment import Block, Contract, Transaction, Universe
+from environment import Contract, Transaction, Universe
 from smt.bytes import FrozenBytes
 from smt.smt import Uint160, Uint256
 from state import ControlFlow, Descend, Jump, State, Termination
@@ -104,24 +104,12 @@ def printable_execution(state: State) -> Generator[str, None, State]:
 
 def concrete_start(program: Contract | Program, value: Uint256, data: bytes) -> State:
     """Return a concrete start state with realistic values."""
-    block = Block(
-        number=Uint256(16030969),
-        coinbase=Uint160(0xDAFEA492D9C6733AE3D56B7ED1ADB60692C98BC5),
-        timestamp=Uint256(1669214471),
-        prevrandao=Uint256(
-            0xCC7E0A66B3B9E3F54B7FDB9DCF98D57C03226D73BFFBB4E0BA7B08F92CE00D19
-        ),
-        gaslimit=Uint256(30000000000000000),
-        chainid=Uint256(1),
-        basefee=Uint256(12267131109),
-    )
     contract = program if isinstance(program, Contract) else Contract(program=program)
     transaction = Transaction(callvalue=value, calldata=FrozenBytes.concrete(data))
     universe = Universe()
     universe.add_contract(contract)
     universe.codesizes[Uint160(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0)] = Uint256(0)
     return State(
-        block=block,
         contract=contract,
         transaction=transaction,
         universe=universe,

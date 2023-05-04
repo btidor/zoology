@@ -5,7 +5,7 @@ from __future__ import annotations
 import copy
 from typing import Iterable
 
-from environment import Universe
+from environment import Block, Universe
 from smt.sha3 import SHA3
 from smt.smt import Constraint, Uint160
 from smt.solver import ConstrainingError, NarrowingError, Solver
@@ -28,13 +28,17 @@ class History:
         """Return a human-readable version of the sequence of paths."""
         return ":".join(map(lambda s: s.px(), self.states))
 
-    def subsequent(self) -> tuple[Universe, SHA3]:
+    def subsequent(self) -> tuple[Universe, SHA3, Block]:
         """Set up the execution of a new transaction."""
         if len(self.states) == 0:
-            pair = (self.starting_universe, self.starting_sha3)
+            universe = self.starting_universe
+            sha3 = self.starting_sha3
+            block = Block()
         else:
-            pair = (self.states[-1].universe, self.states[-1].sha3)
-        return copy.deepcopy(pair)
+            universe = self.states[-1].universe
+            sha3 = self.states[-1].sha3
+            block = self.states[-1].block.successor()
+        return copy.deepcopy(universe), copy.deepcopy(sha3), block
 
     def extend(self, state: State) -> History:
         """Add a new transaction to the History."""
