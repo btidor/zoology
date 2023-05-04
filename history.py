@@ -46,11 +46,11 @@ class History:
         other.states.append(state)
         return other
 
-    def constrain(self, solver: Solver) -> None:
+    def constrain(self, solver: Solver, check: bool = True) -> None:
         """Apply hard constraints to the given solver instance."""
         for state in self.states:
             state.constrain(solver)
-        if not solver.check():
+        if check and not solver.check():
             raise ConstrainingError
 
     def narrow(self, solver: Solver, skip_sha3: bool = False) -> None:

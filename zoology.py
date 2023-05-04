@@ -12,7 +12,7 @@ from environment import Block, Transaction, Universe
 from history import History
 from smt.bytes import FrozenBytes
 from smt.smt import Constraint, Uint160, Uint256
-from smt.solver import NarrowingError, Solver
+from smt.solver import ConstrainingError, NarrowingError, Solver
 from snapshot import LEVEL_FACTORIES, apply_snapshot
 from state import State, Termination
 from universal import symbolic_start, universal_transaction
@@ -145,7 +145,7 @@ def search(
                     complete = candidate.extend(post)
 
                     solver = Solver()
-                    complete.constrain(solver)
+                    complete.constrain(solver, check=False)
                     solver.assert_and_track(ok)
 
                     if not solver.check():
@@ -163,9 +163,9 @@ def search(
                     solver = Solver()
                     candidate.constrain(solver)
                     candidate.narrow(solver)
-                except NarrowingError:
+                except (ConstrainingError, NarrowingError):
                     if prints:
-                        print("  [narrowing error]")
+                        print("  [constraining/narrowing error]")
                     continue
 
                 if len(end.contract.storage.written) == 0:

@@ -1,12 +1,10 @@
 #!/usr/bin/env pytest
 
-from typing import Iterable
-
 from snapshot import LEVEL_FACTORIES
 from zoology import createInstance, search, starting_universe, validateInstance
 
 
-def check_level(i: int) -> Iterable[str]:
+def check_level(i: int, fixture: list[str]) -> None:
     universe = starting_universe()
     factory = LEVEL_FACTORIES[i]
 
@@ -14,11 +12,15 @@ def check_level(i: int) -> Iterable[str]:
     for _, ok in validateInstance(factory, instance, beginning):
         assert ok.unwrap() is False
 
-    result = search(factory, instance, beginning, 1)
+    result = search(factory, instance, beginning, 4)
     assert result is not None
 
     solution, ok = result
-    yield from solution.describe(ok, skip_final=True)
+
+    for actual, expected in zip(
+        solution.describe(ok, skip_final=True), fixture, strict=True
+    ):
+        assert actual == expected
 
 
 def test_starting_universe() -> None:
@@ -31,18 +33,18 @@ def test_starting_universe() -> None:
 #     check_level(0)
 
 
-# def test_fallback() -> None:
-#     check_level(1)
+def test_fallback() -> None:
+    fixture = [
+        "Px8F\td7bb99ba\t(value: 1)",
+        "Px19\t(empty) \t(value: 1)",
+        "Px5F\t3ccfd60b",
+    ]
+    check_level(1, fixture)
 
 
 def test_fallout() -> None:
-    raw = """
-        PxB\t6fab5ddf
-    """.splitlines()
-    fixture = map(lambda x: x[8:], raw[1:-1])
-
-    for actual, expected in zip(check_level(2), fixture, strict=True):
-        assert actual == expected
+    fixture = ["PxB\t6fab5ddf"]
+    check_level(2, fixture)
 
 
 # def test_coinflip() -> None:
@@ -50,23 +52,17 @@ def test_fallout() -> None:
 
 
 def test_telephone() -> None:
-    raw = """
-        PxCE\ta6f9dae1 000000000000000000000000cacacacacacacacacacacacacacacacacacacaca\t(via proxy)
-    """.splitlines()
-    fixture = map(lambda x: x[8:], raw[1:-1])
-
-    for actual, expected in zip(check_level(4), fixture, strict=True):
-        assert actual == expected
+    fixture = [
+        "PxCE\ta6f9dae1 000000000000000000000000cacacacacacacacacacacacacacacacacacacaca\t(via proxy)"
+    ]
+    check_level(4, fixture)
 
 
 def test_token() -> None:
-    raw = """
-        Px63\ta9059cbb ffffffffffffffffffffffffcacacacacacacacacacacacacacacacacacacacb4000000000000000000000000000000000000000000000000000000000000000
-    """.splitlines()
-    fixture = map(lambda x: x[8:], raw[1:-1])
-
-    for actual, expected in zip(check_level(5), fixture, strict=True):
-        assert actual == expected
+    fixture = [
+        "Px63\ta9059cbb ffffffffffffffffffffffffcacacacacacacacacacacacacacacacacacacacb4000000000000000000000000000000000000000000000000000000000000000"
+    ]
+    check_level(5, fixture)
 
 
 # def test_delegation() -> None:
@@ -78,13 +74,10 @@ def test_token() -> None:
 
 
 def test_vault() -> None:
-    raw = """
-        Px66\tec9b5b3a 412076657279207374726f6e67207365637265742070617373776f7264203a29
-    """.splitlines()
-    fixture = map(lambda x: x[8:], raw[1:-1])
-
-    for actual, expected in zip(check_level(8), fixture, strict=True):
-        assert actual == expected
+    fixture = [
+        "Px66\tec9b5b3a 412076657279207374726f6e67207365637265742070617373776f7264203a29"
+    ]
+    check_level(8, fixture)
 
 
 # def test_king() -> None:
@@ -96,43 +89,31 @@ def test_vault() -> None:
 
 
 def test_elevator() -> None:
-    raw = """
-        Px19F7\ted9a7134 ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\t(via proxy)
-    """.splitlines()
-    fixture = map(lambda x: x[8:], raw[1:-1])
-
-    for actual, expected in zip(check_level(11), fixture, strict=True):
-        assert actual == expected
+    fixture = [
+        "Px19F7\ted9a7134 ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\t(via proxy)"
+    ]
+    check_level(11, fixture)
 
 
 def test_privacy() -> None:
-    raw = """
-        Px18F\te1afb08c 8d3e0f3be93413600f15f3408ac39e7000000000000000000000000000000000
-    """.splitlines()
-    fixture = map(lambda x: x[8:], raw[1:-1])
-
-    for actual, expected in zip(check_level(12), fixture, strict=True):
-        assert actual == expected
+    fixture = [
+        "Px18F\te1afb08c 8d3e0f3be93413600f15f3408ac39e7000000000000000000000000000000000"
+    ]
+    check_level(12, fixture)
 
 
 def test_gatekeeper_one() -> None:
-    raw = """
-        PxDFF\t3370204e 000000010000caca000000000000000000000000000000000000000000000000\t(via proxy)
-    """.splitlines()
-    fixture = map(lambda x: x[8:], raw[1:-1])
-
-    for actual, expected in zip(check_level(13), fixture, strict=True):
-        assert actual == expected
+    fixture = [
+        "PxDFF\t3370204e 000000010000caca000000000000000000000000000000000000000000000000\t(via proxy)"
+    ]
+    check_level(13, fixture)
 
 
 def test_gatekeeper_two() -> None:
-    raw = """
-        Px1BF\t3370204e 2433b6aeb6cc3764000000000000000000000000000000000000000000000000\t(via proxy)
-    """.splitlines()
-    fixture = map(lambda x: x[8:], raw[1:-1])
-
-    for actual, expected in zip(check_level(14), fixture, strict=True):
-        assert actual == expected
+    fixture = [
+        "Px1BF\t3370204e 2433b6aeb6cc3764000000000000000000000000000000000000000000000000\t(via proxy)"
+    ]
+    check_level(14, fixture)
 
 
 # def test_naughtcoin() -> None:
@@ -160,13 +141,8 @@ def test_gatekeeper_two() -> None:
 
 
 def test_shop() -> None:
-    raw = """
-        Px673\ta6f2ae3a\t(via proxy)
-    """.splitlines()
-    fixture = map(lambda x: x[8:], raw[1:-1])
-
-    for actual, expected in zip(check_level(21), fixture, strict=True):
-        assert actual == expected
+    fixture = ["Px673\ta6f2ae3a\t(via proxy)"]
+    check_level(21, fixture)
 
 
 # def test_dex() -> None:
