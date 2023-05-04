@@ -32,7 +32,9 @@ def starting_universe() -> Universe:
     return universe
 
 
-def createInstance(universe: Universe, address: Uint160) -> tuple[Uint160, History]:
+def createInstance(
+    universe: Universe, address: Uint160, prints: bool = False
+) -> tuple[Uint160, History]:
     """Call createInstance to set up the level."""
     # Warning: this symbolic universe will be used in symbolic execution later
     # on. Inaccuracies in the environment may result in an inaccurate analysis.
@@ -52,7 +54,9 @@ def createInstance(universe: Universe, address: Uint160) -> tuple[Uint160, Histo
     generator = printable_execution(start)
     try:
         while True:
-            next(generator)
+            line = next(generator)
+            if prints:
+                print(line)
     except StopIteration as e:
         end = e.value
         assert isinstance(end, State)
@@ -99,13 +103,13 @@ def search(
     instance: Uint160,
     beginning: History,
     depth: int,
-    prints: bool = False,
+    verbose: int = 0,
 ) -> tuple[History, Constraint] | None:
     """Symbolically execute the given level until a solution is found."""
     histories: list[History] = [beginning]
     for i in range(depth):
         suffix = str(i + 1)
-        if prints:
+        if verbose > 1:
             print(f"\tTxn {suffix}:")
         subsequent: list[History] = []
         for history in histories:
@@ -132,10 +136,10 @@ def search(
             )
             start.contract.storage.written = []
 
-            for end in universal_transaction(start):
+            for end in universal_transaction(start, prints=(verbose > 2)):
                 candidate = history.extend(end)
 
-                if prints:
+                if verbose > 1:
                     sp = "-"
                     output = ""
                     for line in candidate.describe():
@@ -155,7 +159,7 @@ def search(
 
                     try:
                         complete.narrow(solver)
-                        if prints:
+                        if verbose > 1:
                             print("  [found solution!]")
                         return complete, ok
                     except NarrowingError:
@@ -166,7 +170,7 @@ def search(
                     candidate.constrain(solver)
                     candidate.narrow(solver)
                 except (ConstrainingError, NarrowingError):
-                    if prints:
+                    if verbose > 1:
                         print("  [constraining/narrowing error]")
                     continue
 
@@ -174,11 +178,11 @@ def search(
                     # TODO: check if *any* contract's storage was written; also
                     # note that this ignores transactions that only change
                     # contract balances, which can also be material
-                    if prints:
+                    if verbose > 1:
                         print("  [read-only]")
                     continue
 
-                if prints:
+                if verbose > 1:
                     print("  [candidate]")
                 subsequent.append(candidate)
 
@@ -210,12 +214,14 @@ if __name__ == "__main__":
         factory = LEVEL_FACTORIES[i]
         print(f"{i:04}", end="")
         try:
-            instance, beginning = createInstance(copy.deepcopy(universe), factory)
+            instance, beginning = createInstance(
+                copy.deepcopy(universe), factory, prints=(args.verbose > 2)
+            )
             for _, ok in validateInstance(factory, instance, beginning):
                 assert ok.unwrap() is False
 
             result = search(
-                factory, instance, beginning, args.depth, prints=(args.verbose > 1)
+                factory, instance, beginning, args.depth, verbose=args.verbose
             )
             if result is None:
                 print("\tno solution")
