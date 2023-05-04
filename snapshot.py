@@ -2,8 +2,8 @@
 """A client for the Ethereum JSON-RPC API."""
 
 import json
+from pathlib import Path
 from time import sleep
-from typing import TextIO
 
 import requests
 
@@ -15,20 +15,22 @@ from smt.smt import Uint160, Uint256
 # For consistency, make requests at a fixed block offset
 TAG = "0x86a800"
 
-with open(".key") as f:
-    API_KEY = f.read().strip()
+_ROOT = Path(__file__).resolve().parent
+
+_apikey: str | None = None
 
 
-with open("ethernaut.json") as f:
+with open(_ROOT / "ethernaut.json") as f:
     _eth = json.load(f)
     LEVEL_FACTORIES = [
         Uint160(int.from_bytes(bytes.fromhex(_eth[str(i)][2:]))) for i in range(29)
     ]
 
 
-def apply_snapshot(file: TextIO, universe: Universe) -> None:
+def apply_snapshot(universe: Universe) -> None:
     """Load a snapshot and add the contracts to the given universe."""
-    snapshot = json.load(file)
+    with open(_ROOT / "snapshot.json") as f:
+        snapshot = json.load(f)
     for addr, saved in snapshot.items():
         address = Uint160(int(addr, 16))
         program = disassemble(bytes.fromhex(saved["code"]))
@@ -65,6 +67,11 @@ def get_storage_at(address: Uint160, position: Uint256) -> Uint256:
 
 
 def _api_request(action: str, **kwargs: str) -> bytes:
+    global _apikey
+    if _apikey is None:
+        with open(_ROOT / ".key") as f:
+            _apikey = f.read().strip()
+
     i = 0
     while True:
         i += 1
@@ -74,7 +81,7 @@ def _api_request(action: str, **kwargs: str) -> bytes:
                 **kwargs,
                 "module": "proxy",
                 "action": action,
-                "apikey": API_KEY,
+                "apikey": _apikey,
             },
             headers={
                 "User-Agent": "zoology",
@@ -110,6 +117,6 @@ if __name__ == "__main__":
         # TODO: some level factories reference other contracts (e.g. via storage
         # slots), we may need to include those as well.
 
-    with open("snapshot.json", "w") as f:
+    with open(_ROOT / "snapshot.json", "w") as f:
         json.dump(snapshot, f, indent=4)
         f.write("\n")

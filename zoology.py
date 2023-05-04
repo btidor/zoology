@@ -27,8 +27,7 @@ def starting_universe() -> Universe:
     """Set up a symbolic universe with factory levels loaded."""
     universe = Universe.symbolic("")
     universe.codesizes.poke(PLAYER, Uint256(0))
-    with open("snapshot.json", "r") as f:
-        apply_snapshot(f, universe)
+    apply_snapshot(universe)
     return universe
 
 
