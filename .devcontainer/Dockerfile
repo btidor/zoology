@@ -17,7 +17,7 @@ RUN git clone https://github.com/bitwuzla/bitwuzla && \
     ./contrib/setup-symfpu.sh && \
     ./configure.sh --python && \
     cd build && make && make install && \
-    mv /usr/local/lib/pybitwuzla.so /usr/local/lib/python3.11/dist-packages/ && \
+    mv /usr/local/lib/pybitwuzla.so /usr/lib/python3/dist-packages/ && \
     ldconfig
 
 RUN apt -y install nodejs

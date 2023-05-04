@@ -22,7 +22,7 @@
     "python.analysis.typeCheckingMode": "strict",
     "python.formatting.provider": "black",
     "python.linting.pydocstyleArgs": [
-        "--match=^((?!test|speedscope).)*\\.py$",
+        "--match=^((?!test).)*\\.py$",
         "--add-ignore=D105"
     ],
     "python.linting.pydocstyleEnabled": true,
