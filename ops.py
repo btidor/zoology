@@ -461,7 +461,7 @@ def CREATE(s: State, value: Uint256, offset: Uint256, size: Uint256) -> ControlF
     contract = Contract(address, program, Array.concrete(Uint256, Uint256(0)))
     transaction = Transaction(
         origin=s.transaction.origin,
-        caller=s.transaction.caller,
+        caller=s.contract.address,
         gasprice=s.transaction.gasprice,
     )
 
