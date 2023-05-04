@@ -462,6 +462,7 @@ def CREATE(s: State, value: Uint256, offset: Uint256, size: Uint256) -> ControlF
     transaction = Transaction(
         origin=s.transaction.origin,
         caller=s.contract.address,
+        callvalue=value,
         gasprice=s.transaction.gasprice,
     )
 
@@ -475,7 +476,6 @@ def CREATE(s: State, value: Uint256, offset: Uint256, size: Uint256) -> ControlF
 
             contract = Contract(address, program, substate.contract.storage)
             state.universe.add_contract(contract)
-            state.universe.balances[address] = value
 
             state.stack.append(address.into(Uint256))
         return state
