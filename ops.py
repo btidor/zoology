@@ -4,7 +4,6 @@ import copy
 
 from disassembler import Instruction, disassemble
 from environment import Contract, Transaction
-from smt.arrays import Array
 from smt.bytes import FrozenBytes
 from smt.smt import Constraint, Uint8, Uint160, Uint256, Uint257, Uint512
 from state import ControlFlow, Descend, Jump, Log, State, Termination
@@ -454,11 +453,38 @@ def LOG(ins: Instruction, s: State, offset: Uint256, size: Uint256) -> None:
 
 def CREATE(s: State, value: Uint256, offset: Uint256, size: Uint256) -> ControlFlow:
     """F0 - Create a new account with associated code."""
-    # TODO: this isn't quite right
-    init = s.memory.slice(offset, size).unwrap("CREATE requires concrete program data")
-    address = Uint160(0x70D070D070D070D070D070D070D070D070D070D0)
-    program = disassemble(init)
-    contract = Contract(address, program, Array.concrete(Uint256, Uint256(0)))
+    initcode = s.memory.slice(offset, size).unwrap(
+        "CREATE requires concrete program data"
+    )
+    sender_address = s.contract.address.unwrap(
+        bytes, "CREATE requires concrete sender address"
+    )
+
+    # HACK: the destination address depends on the value of this contract's
+    # nonce. But we need the destination address to be concrete! So we can only
+    # handle CREATE with a concrete state, not a symbolic one. Sorry :(
+    nonce = s.contract.nonce.unwrap(int, "CREATE require concrete nonce")
+    if nonce >= 0x80:
+        raise NotImplementedError  # TODO: implement a full RLP encoder
+
+    # https://ethereum.stackexchange.com/a/761
+    seed = FrozenBytes.concrete(b"\xd6\x94" + sender_address + nonce.to_bytes())
+    return _CREATE(s, value, initcode, seed)
+
+
+def _CREATE(
+    s: State, value: Uint256, initcode: bytes, seed: FrozenBytes
+) -> ControlFlow:
+    address = s.sha3[seed].into(Uint160)
+    if address.unwrap() in s.universe.contracts:
+        raise ValueError(f"CREATE destination exists: 0x{address.unwrap(bytes).hex()}")
+
+    s.contract.nonce += Uint256(1)
+
+    program = disassemble(initcode)
+    contract = Contract(address, program)
+    s.universe.codesizes[address] = Uint256(0)
+
     transaction = Transaction(
         origin=s.transaction.origin,
         caller=s.contract.address,
@@ -625,9 +651,25 @@ def DELEGATECALL(
     return Descend.new(s, contract, transaction, callback)
 
 
-def CREATE2(value: Uint256, offset: Uint256, size: Uint256, salt: Uint256) -> Uint256:
+def CREATE2(
+    s: State, value: Uint256, offset: Uint256, size: Uint256, _salt: Uint256
+) -> ControlFlow:
     """F5 - Create a new account with associated code at a predictable address."""
-    raise NotImplementedError("CREATE2")
+    initcode = s.memory.slice(offset, size).unwrap(
+        "CREATE2 requires concrete program data"
+    )
+    salt = _salt.unwrap(bytes, "CREATE2 requires concrete salt")
+    sender_address = s.contract.address.unwrap(
+        bytes, "CREATE2 requires concrete sender address"
+    )
+    # https://ethereum.stackexchange.com/a/761
+    seed = FrozenBytes.concrete(
+        b"\xff"
+        + sender_address
+        + salt
+        + s.sha3[FrozenBytes.concrete(initcode)].unwrap(bytes)
+    )
+    return _CREATE(s, value, initcode, seed)
 
 
 def STATICCALL(

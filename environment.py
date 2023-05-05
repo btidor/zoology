@@ -85,6 +85,7 @@ class Contract:
     storage: Array[Uint256, Uint256] = field(
         default_factory=lambda: Array.concrete(Uint256, Uint256(0))
     )
+    nonce: Uint256 = Uint256(1)  # starts at 1, see EIP-161
 
 
 @dataclass(frozen=True)

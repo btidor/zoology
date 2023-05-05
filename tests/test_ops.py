@@ -655,7 +655,26 @@ def test_LOG() -> None:
     assert len(s.logs) == 1
     assert s.logs[0].data.unwrap() == b"\x34"
     assert len(s.logs[0].topics) == 1
-    assert s.logs[0].topics[0].unwrap() == 0xABCD
+    assert concretize(s.logs[0].topics[0]) == 0xABCD
+
+
+def test_CREATE() -> None:
+    contract = Contract(
+        address=Uint160(0x6AC7EA33F8831EA9DCC53393AAA88B25A785DBF0),
+    )
+    s = State(
+        memory=MutableBytes.concrete(
+            b"\xFE\x63\xFF\xFF\xFF\xFF\x60\x00\x52\x60\x04\x60\x1C\xF3"
+        ),
+        contract=contract,
+    )
+    flow = CREATE(s, Uint256(999), Uint256(2), Uint256(100))
+    assert isinstance(flow, Descend)
+    assert (
+        concretize(flow.state.contract.address)
+        == 0x343C43A37D37DFF08AE8C4A11544C718ABB4FCF8
+    )
+    assert concretize(contract.nonce) == 2
 
 
 def test_RETURN() -> None:
@@ -667,6 +686,18 @@ def test_RETURN() -> None:
     assert isinstance(s.pc, Termination)
     assert s.pc.success is True
     assert s.pc.returndata.unwrap() == b"\xff\x01"
+
+
+def test_CREATE2() -> None:
+    contract = Contract(address=Uint160(0x0))
+    s = State(contract=contract)
+    flow = CREATE2(s, Uint256(999), Uint256(0), Uint256(0), Uint256(0x0))
+    assert isinstance(flow, Descend)
+    assert (
+        concretize(flow.state.contract.address)
+        == 0xE33C0C7F7DF4809055C3EBA6C09CFE4BAF1BD9E0  # from EIP-1014
+    )
+    assert concretize(contract.nonce) == 2
 
 
 def test_REVERT() -> None:

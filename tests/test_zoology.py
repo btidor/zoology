@@ -129,8 +129,11 @@ def test_gatekeeper_two() -> None:
 #     check_level(17, [])
 
 
-# def test_magic_number() -> None:
-#     check_level(18, [])
+def test_magic_number() -> None:
+    fixture = [
+        "Px37\t1f879433 000000000000000000000000ffffffffffffffffffffffffffffffffffffffff"
+    ]
+    check_level(18, fixture)
 
 
 # def test_alien_codex() -> None:
