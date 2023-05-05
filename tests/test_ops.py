@@ -645,6 +645,19 @@ def test_SWAP() -> None:
         SWAP(ins, s)
 
 
+def test_LOG() -> None:
+    s = State(
+        stack=[Uint256(0xABCD)],
+        memory=MutableBytes.concrete(b"\x12\x34"),
+    )
+    ins = Instruction(0x0, 1, "LOG", 1)
+    LOG(ins, s, Uint256(1), Uint256(1))
+    assert len(s.logs) == 1
+    assert s.logs[0].data.unwrap() == b"\x34"
+    assert len(s.logs[0].topics) == 1
+    assert s.logs[0].topics[0].unwrap() == 0xABCD
+
+
 def test_RETURN() -> None:
     s = State(
         latest_return=FrozenBytes.concrete(b"\x12\x34"),

@@ -70,7 +70,7 @@ def symbolic_start(program: Contract | Program, sha3: SHA3, suffix: str) -> Stat
         contract = program
     else:
         contract = Contract(
-            address=Uint160("ADDRESS"),
+            address=Uint160(f"ADDRESS{suffix}"),
             program=program,
             storage=Array.symbolic(f"STORAGE{suffix}", Uint256, Uint256),
         )

@@ -9,7 +9,6 @@ import requests
 
 from disassembler import disassemble
 from environment import Contract, Universe
-from smt.arrays import Array
 from smt.smt import Uint160, Uint256
 
 # For consistency, make requests at a fixed block offset
@@ -34,7 +33,7 @@ def apply_snapshot(universe: Universe) -> None:
     for addr, saved in snapshot.items():
         address = Uint160(int(addr, 16))
         program = disassemble(bytes.fromhex(saved["code"]))
-        contract = Contract(address, program, Array.concrete(Uint256, Uint256(0)))
+        contract = Contract(address, program)
 
         for k, v in saved.items():
             if k == "code":
@@ -52,7 +51,7 @@ def get_code(address: Uint160) -> Contract:
         tag=TAG,
     )
     program = disassemble(code)
-    return Contract(address, program, Array.concrete(Uint256, Uint256(0)))
+    return Contract(address, program)
 
 
 def get_storage_at(address: Uint160, position: Uint256) -> Uint256:

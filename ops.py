@@ -109,7 +109,7 @@ def SGT(a: Uint256, b: Uint256) -> Uint256:
 
 
 def EQ(a: Uint256, b: Uint256) -> Uint256:
-    """14 -     ity comparison."""
+    """14 - Equality comparison."""
     return (a == b).ite(Uint256(1), Uint256(0))
 
 
@@ -448,7 +448,7 @@ def LOG(ins: Instruction, s: State, offset: Uint256, size: Uint256) -> None:
     """AX - Append log record with N topics."""
     if ins.suffix is None:
         raise ValueError("somehow got a LOG without a suffix")
-    topics = [s.stack.pop() for _ in range(ins.suffix)]
+    topics = tuple(s.stack.pop() for _ in range(ins.suffix))
     s.logs.append(Log(s.memory.slice(offset, size), topics))
 
 
