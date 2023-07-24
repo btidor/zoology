@@ -12,6 +12,7 @@ RUN pip install cython && \
     apt -y install build-essential cmake libgmp3-dev
 RUN git clone https://github.com/bitwuzla/bitwuzla && \
     cd bitwuzla && \
+    git checkout 1230d80a5275ddf525da9c218c2bcd29c3130e49 && \
     ./contrib/setup-cadical.sh && \
     ./contrib/setup-btor2tools.sh && \
     ./contrib/setup-symfpu.sh && \
