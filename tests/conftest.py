@@ -9,7 +9,7 @@ pytest.register_assert_rewrite("helpers")
 ### ### ### ### ###
 
 from pathlib import Path
-from typing import Iterator
+from typing import Any, Iterator
 
 from pyinstrument.profiler import Profiler
 from pyinstrument.renderers.speedscope import SpeedscopeRenderer
@@ -22,7 +22,6 @@ RENDER_OPTS = {
         "filter_threshold": 0,
         "show_regex": r".*",
     },
-    "show_all": True,
 }
 
 combined = None
@@ -37,7 +36,7 @@ def pytest_addoption(
 # https://pyinstrument.readthedocs.io/en/latest/guide.html#profile-pytest-tests
 @pytest.fixture(autouse=True)
 def pyinstrument_single(
-    request: pytest.FixtureRequest,
+    request: Any,
     reset_bitwuzla: None,  # reset *before* starting profiler
 ) -> Iterator[None]:
     if not request.config.getoption("profile"):
