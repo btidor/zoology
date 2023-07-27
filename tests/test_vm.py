@@ -279,7 +279,9 @@ def test_coinflip() -> None:
 
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
-    assert state.contract.storage[Uint256(1)].unwrap(bytes) == Uint256(0).unwrap(bytes)
+    assert state.contract.storage[Uint256(1)].unwrap(bytes) == Uint256(
+        0x1F6D785BDB6AE9ECE46F3323FB3289240BD2D1C4C683CF558EE200C89933DF4F
+    ).unwrap(bytes)
 
 
 def test_telephone() -> None:

@@ -53,7 +53,7 @@ class Block:
         hashes[Uint8(255)] = Uint256(
             0xF798B79831B745F4F756FBD50CFEBAE9FE8AF348CB8EF47F739939142EC9D1E0
         )
-        for i in range(254, 0, -1):
+        for i in range(254, -1, -1):
             hashes[Uint8(i)] = concrete_hash(hashes[Uint8(i + 1)].unwrap(bytes))
         return hashes
 

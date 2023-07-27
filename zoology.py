@@ -83,7 +83,7 @@ def validateInstance(
     universe, sha3, block = history.subsequent()
     contract = universe.contracts[factory.unwrap()]
     start = concrete_start(contract, Uint256(0), calldata)
-    start.block = block
+    start.block = block.successor()
     start.transaction = Transaction(
         origin=SETUP,
         caller=SETUP,
