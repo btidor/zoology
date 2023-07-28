@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import copy
-from typing import Iterable
+from typing import Any, Iterable
 
 from environment import Block, Universe
 from smt.sha3 import SHA3
@@ -23,6 +23,11 @@ class History:
         self.starting_sha3 = starting_sha3
         self.player = player
         self.states: list[State] = []
+
+    def __deepcopy__(self, memo: Any) -> History:
+        result = History(self.starting_universe, self.starting_sha3, self.player)
+        result.states = copy.copy(self.states)
+        return result
 
     def pxs(self) -> str:
         """Return a human-readable version of the sequence of paths."""
