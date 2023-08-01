@@ -15,11 +15,8 @@ def check_level(i: int, fixture: list[str]) -> None:
     result = search(factory, instance, beginning, 4)
     assert result is not None
 
-    solution, ok = result
-
-    for actual, expected in zip(
-        solution.describe(ok, skip_final=True), fixture, strict=True
-    ):
+    solution, solver = result
+    for actual, expected in zip(solution.describe(solver), fixture, strict=True):
         assert actual == expected
 
 

@@ -12,7 +12,7 @@ from environment import Block, Transaction, Universe
 from history import History
 from smt.bytes import FrozenBytes
 from smt.smt import Constraint, Uint160, Uint256
-from smt.solver import ConstrainingError, Solver
+from smt.solver import ConstrainingError, NarrowingError, Solver
 from snapshot import LEVEL_FACTORIES, apply_snapshot
 from state import State, Termination
 from universal import symbolic_start, universal_transaction
@@ -104,7 +104,7 @@ def search(
     beginning: History,
     depth: int,
     verbose: int = 0,
-) -> tuple[History, Constraint] | None:
+) -> tuple[History, Solver] | None:
     """Symbolically execute the given level until a solution is found."""
     histories: list[History] = [beginning]
     for i in range(depth):
@@ -140,34 +140,39 @@ def search(
                 candidate = history.extend(end)
 
                 if verbose > 1:
-                    sp = "-"
-                    output = ""
-                    for line in candidate.describe():
-                        output += f"{sp} {line}\n"
-                        sp = " "
-                    print(output, end="")
+                    try:
+                        solver = Solver()
+                        candidate.constrain(solver)
+                        candidate.narrow(solver)
+                        sp = "-"
+                        output = ""
+                        for line in candidate.describe(solver):
+                            output += f"{sp} {line}\n"
+                            sp = " "
+                        print(output, end="")
+                    except ConstrainingError:
+                        print(f"- [{candidate.pxs()}] unprintable: unsatisfiable")
+                        continue
+                    except NarrowingError:
+                        print(f"- [{candidate.pxs()}] unprintable: narrowing error")
+                        continue
 
                 for post, ok in validateInstance(factory, instance, candidate):
-                    complete = candidate.extend(post)
-
                     solver = Solver()
-                    complete.constrain(solver, check=False)
+                    candidate.constrain(solver, check=False)
+                    post.constrain(solver)
                     solver.assert_and_track(ok)
 
                     if not solver.check():
                         continue
-
                     if verbose > 1:
-                        print("  [found likely solution!]")
-                    return complete, ok
+                        print("  [found solution!]")
 
-                try:
-                    solver = Solver()
-                    candidate.constrain(solver)
-                except ConstrainingError:
-                    if verbose > 1:
-                        print("  [constraining error]")
-                    continue
+                    post.sha3.narrow(solver)
+                    post.narrow(solver)
+                    for state in candidate.states:
+                        state.narrow(solver)
+                    return candidate, solver
 
                 if len(end.contract.storage.written) == 0:
                     # TODO: check if *any* contract's storage was written; also
@@ -175,6 +180,14 @@ def search(
                     # contract balances, which can also be material
                     if verbose > 1:
                         print("  [read-only]")
+                    continue
+
+                try:
+                    solver = Solver()
+                    candidate.constrain(solver)
+                except ConstrainingError:
+                    if verbose > 1:
+                        print("  [constraining error]")
                     continue
 
                 if verbose > 1:
@@ -221,8 +234,8 @@ if __name__ == "__main__":
                 print("\tno solution")
                 continue
 
-            solution, ok = result
-            for line in solution.describe(ok, skip_final=True):
+            solution, solver = result
+            for line in solution.describe(solver):
                 print("\t" + line)
 
         except Exception as e:

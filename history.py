@@ -7,8 +7,8 @@ from typing import Any, Iterable
 
 from environment import Block, Universe
 from smt.sha3 import SHA3
-from smt.smt import Constraint, Uint160
-from smt.solver import ConstrainingError, NarrowingError, Solver
+from smt.smt import Uint160
+from smt.solver import ConstrainingError, Solver
 from state import State
 
 
@@ -58,44 +58,19 @@ class History:
         if check and not solver.check():
             raise ConstrainingError
 
-    def narrow(self, solver: Solver, skip_sha3: bool = False) -> None:
+    def narrow(self, solver: Solver) -> None:
         """Apply soft and deferred constraints to a given solver instance."""
-        if not skip_sha3:
-            if len(self.states) > 0:
-                self.states[-1].sha3.narrow(solver)
-            else:
-                self.starting_sha3.narrow(solver)
+        if len(self.states) > 0:
+            self.states[-1].sha3.narrow(solver)
+        else:
+            self.starting_sha3.narrow(solver)
 
         for state in self.states:
             state.narrow(solver)
 
-    def describe(
-        self, *constraints: Constraint, skip_final: bool = False
-    ) -> Iterable[str]:
+    def describe(self, solver: Solver) -> Iterable[str]:
         """Yield a human-readable description of the transaction sequence."""
-        solver = Solver()
-        for constraint in constraints:
-            solver.assert_and_track(constraint)
-        try:
-            self.constrain(solver)
-        except ConstrainingError:
-            yield f"[{self.pxs()}] unprintable: unsatisfiable"
-            return
-
-        try:
-            self.narrow(solver)
-        except NarrowingError:
-            yield f"[{self.pxs()}] unprintable: narrowing error"
-            solver = Solver()
-            for constraint in constraints:
-                solver.assert_and_track(constraint)
-            self.constrain(solver)
-            self.narrow(solver, skip_sha3=True)
-
-        states = self.states
-        if skip_final:
-            states = states[:-1]
-        for state in states:
+        for state in self.states:
             data = state.transaction.calldata.describe(solver)
             if len(data) == 0:
                 data = "(empty) "
