@@ -49,8 +49,8 @@ class State:
     gas_count: int | None = None
 
     # Every time the CALL instruction is invoked we return a symbolic result,
-    # tracked here.
-    call_variables: list[tuple[FrozenBytes, Constraint]] = field(default_factory=list)
+    # suffixed with this counter to make it unique.
+    call_count: int = 0
 
     # List of constraints that must be satisfied in order for the program to
     # reach this state. Based on the JUMPI instructions (if statements) seen so
@@ -196,7 +196,7 @@ class Descend(ControlFlow):
             sha3=state.sha3,
             logs=state.logs,
             gas_count=state.gas_count,
-            call_variables=state.call_variables,
+            call_count=state.call_count,
             path_constraint=state.path_constraint,
             path=state.path,
         )
@@ -212,7 +212,7 @@ class Descend(ControlFlow):
             state.logs = substate.logs
             state.latest_return = substate.pc.returndata
             state.gas_count = substate.gas_count
-            state.call_variables = substate.call_variables
+            state.call_count = substate.call_count
             state.path_constraint = substate.path_constraint
             state.path = substate.path
             return callback(state, substate)

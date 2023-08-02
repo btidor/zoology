@@ -556,7 +556,7 @@ def CALL(
     else:
         # Call to a symbolic address: return a fully-symbolic response.
         s.latest_return = FrozenBytes.conditional(
-            f"RETURNDATA{len(s.call_variables)}{s.suffix}",
+            f"RETURNDATA{s.call_count}{s.suffix}",
             s.universe.codesizes[_address.into(Uint160)] == Uint256(0),
         )
         s.memory.graft(s.latest_return.slice(Uint256(0), retSize), retOffset)
@@ -564,10 +564,10 @@ def CALL(
             # Calls (transfers) to an EOA always succeed.
             (s.universe.codesizes[_address.into(Uint160)] == Uint256(0)),
             # Create a variable for if the call succeeded.
-            Constraint(f"RETURNOK{len(s.call_variables)}{s.suffix}"),
+            Constraint(f"RETURNOK{s.call_count}{s.suffix}"),
         )
         s.universe.transfer(s.contract.address, _address.into(Uint160), value)
-        s.call_variables.append((s.latest_return, success))
+        s.call_count += 1
         s.stack.append((success).ite(Uint256(1), Uint256(0)))
         return None
 
