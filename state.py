@@ -51,7 +51,7 @@ class State:
     # List of constraints that must be satisfied in order for the program to
     # reach this state. Based on the JUMPI instructions (if statements) seen so
     # far.
-    path_constraints: list[Constraint] = field(default_factory=list)
+    path_constraint: Constraint = field(default=Constraint(True))
 
     # Tracks the path of the program's execution. Each JUMPI is a bit, 1 if
     # taken, 0 if not. MSB-first with a leading 1 prepended.
@@ -63,8 +63,7 @@ class State:
 
     def constrain(self, solver: Solver) -> None:
         """Apply accumulated constraints to the given solver instance."""
-        for i, constraint in enumerate(self.path_constraints):
-            solver.assert_and_track(constraint)
+        solver.assert_and_track(self.path_constraint)
 
         # ASSUMPTION: the current block number is at least 256. This prevents
         # the BLOCKHASH instruction from overflowing.
@@ -200,7 +199,7 @@ class Descend(ControlFlow):
             logs=state.logs,
             gas_variables=state.gas_variables,
             call_variables=state.call_variables,
-            path_constraints=state.path_constraints,
+            path_constraint=state.path_constraint,
             path=state.path,
         )
         substate.universe.transfer(
@@ -216,7 +215,7 @@ class Descend(ControlFlow):
             state.latest_return = substate.pc.returndata
             state.gas_variables = substate.gas_variables
             state.call_variables = substate.call_variables
-            state.path_constraints = substate.path_constraints
+            state.path_constraint = substate.path_constraint
             state.path = substate.path
             return callback(state, substate)
 

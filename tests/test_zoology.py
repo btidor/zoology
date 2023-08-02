@@ -88,7 +88,7 @@ def test_king() -> None:
 
 def test_elevator() -> None:
     fixture = [
-        "Px19F7\ted9a7134 ffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000\t(via proxy)"
+        "Px19F7\ted9a7134 ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\t(via proxy)"
     ]
     check_level(11, fixture)
 

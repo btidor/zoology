@@ -7,7 +7,7 @@ import pytest
 
 from disassembler import Program, abiencode, disassemble
 from smt.sha3 import SHA3
-from smt.smt import Uint160, Uint256
+from smt.smt import Constraint, Uint160, Uint256
 from smt.solver import Solver
 from state import State, Termination
 from universal import (
@@ -89,13 +89,12 @@ def test_basic() -> None:
     assert end.pc.success == True
 
     # These extra constraints makes the test deterministic
-    end.path_constraints.append(
+    end.path_constraint = Constraint.all(
+        end.path_constraint,
         start.universe.balances[Uint160(0xADADADADADADADADADADADADADADADADADADADAD)]
-        == Uint256(0x8000000000001)
-    )
-    end.path_constraints.append(
+        == Uint256(0x8000000000001),
         start.universe.balances[Uint160(0xCACACACACACACACACACACACACACACACACACACACA)]
-        == Uint256(0xAAAAAAAAAAAAA)
+        == Uint256(0xAAAAAAAAAAAAA),
     )
     solver = Solver()
     end.constrain(solver)
