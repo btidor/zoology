@@ -408,11 +408,11 @@ def GAS(s: State) -> Uint256:
     Since we don't actually track gas usage, return either a symbolic value or a
     concrete dummy value based on the execution mode.
     """
-    if s.gas_variables is None:
+    if s.gas_count is None:
         return Uint256(0x00A500A500A500A500A5)
     else:
-        gas = Uint256(f"GAS{len(s.gas_variables)}{s.suffix}")
-        s.gas_variables.append(gas)
+        gas = Uint256(f"GAS{s.gas_count}{s.suffix}")
+        s.gas_count += 1
         return gas
 
 

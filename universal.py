@@ -100,7 +100,7 @@ def symbolic_start(program: Contract | Program, sha3: SHA3, suffix: str) -> Stat
         transaction=transaction,
         universe=universe,
         sha3=sha3,
-        gas_variables=[],
+        gas_count=0,
     )
 
 

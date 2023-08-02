@@ -108,14 +108,9 @@ def validateInstance(
         assert isinstance(end.pc, Termination)
 
         # This logic needs to match State.constrain()
-        gas_constraints: list[Constraint] = []
-        if end.gas_variables is not None:
-            for i in range(1, len(end.gas_variables)):
-                gas_constraints.append(end.gas_variables[i - 1] >= end.gas_variables[i])
         predicates.append(
             Constraint.all(
                 end.path_constraint,
-                *gas_constraints,
                 end.block.number >= Uint256(256),
                 Uint256(end.pc.returndata.bigvector(32)) != Uint256(0),
             )

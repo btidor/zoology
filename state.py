@@ -40,9 +40,13 @@ class State:
     logs: list[Log] = field(default_factory=list)
 
     # Every time the GAS instruction is invoked we return a symbolic result,
-    # tracked here. These should be monotonically decreasing. In the case of a
-    # concrete execution, this value is set to None.
-    gas_variables: list[Uint256] | None = None
+    # suffixed with this counter to make it unique. In the case of a concrete
+    # execution, this value is set to None.
+    #
+    # ASSUMPTION: because we do not track gas consumption, we place no
+    # constraints whatsoever on the gas variables.
+    #
+    gas_count: int | None = None
 
     # Every time the CALL instruction is invoked we return a symbolic result,
     # tracked here.
@@ -68,12 +72,6 @@ class State:
         # ASSUMPTION: the current block number is at least 256. This prevents
         # the BLOCKHASH instruction from overflowing.
         solver.assert_and_track(self.block.number >= Uint256(256))
-
-        if self.gas_variables is not None:
-            for i in range(1, len(self.gas_variables)):
-                solver.assert_and_track(
-                    self.gas_variables[i - 1] >= self.gas_variables[i]
-                )
 
         self.sha3.constrain(solver)
         self.universe.constrain(solver)
@@ -197,7 +195,7 @@ class Descend(ControlFlow):
             universe=state.universe,
             sha3=state.sha3,
             logs=state.logs,
-            gas_variables=state.gas_variables,
+            gas_count=state.gas_count,
             call_variables=state.call_variables,
             path_constraint=state.path_constraint,
             path=state.path,
@@ -213,7 +211,7 @@ class Descend(ControlFlow):
             assert isinstance(substate.pc, Termination)
             state.logs = substate.logs
             state.latest_return = substate.pc.returndata
-            state.gas_variables = substate.gas_variables
+            state.gas_count = substate.gas_count
             state.call_variables = substate.call_variables
             state.path_constraint = substate.path_constraint
             state.path = substate.path
