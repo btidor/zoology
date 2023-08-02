@@ -190,7 +190,7 @@ class Descend(ControlFlow):
     ) -> Descend:
         """Descend into a subcontext."""
         substate = State(
-            suffix=f"{state.children}.{state.suffix}",
+            suffix=f"{state.suffix}-{state.children}",
             block=state.block,
             contract=contract,
             transaction=transaction,
