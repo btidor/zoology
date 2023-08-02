@@ -525,7 +525,7 @@ def CALL(
         # Simple transfer to an EOA: always succeeds. (We're special-casing the
         # zero address, unfortunately. It has no code and no one controls its
         # keypair.)
-        s.universe.transfer(s.contract.address, _address.into(Uint160), value)
+        s.transfer(s.contract.address, _address.into(Uint160), value)
         s.latest_return = FrozenBytes.concrete()
         s.memory.graft(s.latest_return.slice(Uint256(0), retSize), retOffset)
         s.stack.append(Uint256(1))
@@ -566,7 +566,7 @@ def CALL(
             # Create a variable for if the call succeeded.
             Constraint(f"RETURNOK{s.call_count}{s.suffix}"),
         )
-        s.universe.transfer(s.contract.address, _address.into(Uint160), value)
+        s.transfer(s.contract.address, _address.into(Uint160), value)
         s.call_count += 1
         s.stack.append((success).ite(Uint256(1), Uint256(0)))
         return None

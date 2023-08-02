@@ -30,7 +30,7 @@ def test_transfer() -> None:
     end = copy.deepcopy(start)
     src, dst = Uint160(0x1234), Uint160(0x5678)
 
-    end.universe.transfer(src, dst, Uint256(0x100))
+    end.transfer(src, dst, Uint256(0x100))
 
     solver = Solver()
     end.constrain(solver)
@@ -47,7 +47,7 @@ def test_impossible_transfer() -> None:
     end = copy.deepcopy(start)
     src, dst = Uint160(0x1234), Uint160(0x5678)
 
-    end.universe.transfer(src, dst, Uint256(0x100))
+    end.transfer(src, dst, Uint256(0x100))
 
     solver = Solver()
     end.constrain(solver)

@@ -9,7 +9,7 @@ from disassembler import Program, disassemble
 from smt.arrays import Array
 from smt.bytes import FrozenBytes
 from smt.sha3 import concrete_hash
-from smt.smt import BitVector, Constraint, Uint8, Uint160, Uint256
+from smt.smt import BitVector, Uint8, Uint160, Uint256
 from smt.solver import Solver
 
 
@@ -151,7 +151,6 @@ class Universe:
         # address -> balance in wei
         default_factory=lambda: Array.concrete(Uint160, Uint256(0))
     )
-    transfer_constraints: list[Constraint] = field(default_factory=list)
 
     contracts: dict[int, Contract] = field(default_factory=dict)  # address -> Contract
     codesizes: Array[Uint160, Uint256] = field(
@@ -165,7 +164,6 @@ class Universe:
         return Universe(
             suffix=suffix,
             balances=Array.symbolic(f"BALANCE{suffix}", Uint160, Uint256),
-            transfer_constraints=[],
             contracts={},
             codesizes=Array.symbolic(f"CODESIZE{suffix}", Uint160, Uint256),
         )
@@ -178,22 +176,3 @@ class Universe:
         """
         self.contracts[contract.address.unwrap()] = contract
         self.codesizes[contract.address] = contract.program.code.length
-
-    def transfer(self, src: Uint160, dst: Uint160, val: Uint256) -> None:
-        """Transfer value from one account to another."""
-        # ASSUMPTION: If `balances[src]` drops below zero, execution will
-        # revert. Therefore, `balances[src] >= val`.
-        self.transfer_constraints.append(
-            Uint256.underflow_safe(self.balances[src], val)
-        )
-        self.balances[src] -= val
-
-        # ASSUMPTION: There isn't enough ETH in existence to overflow an
-        # account's balance; all balances are less than 2^255 wei.
-        self.transfer_constraints.append(Uint256.overflow_safe(self.balances[dst], val))
-        self.balances[dst] += val
-
-    def constrain(self, solver: Solver) -> None:
-        """Apply accumulated constraints to the given solver instance."""
-        for _, constraint in enumerate(self.transfer_constraints):
-            solver.assert_and_track(constraint)

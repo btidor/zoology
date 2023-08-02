@@ -126,7 +126,7 @@ def delegation_start(programs: dict[str, Program]) -> State:
     """Set up the Delegation level."""
     other = Contract(address=Uint160(0xABCDEF), program=programs["Delegate"])
     start = symbolic_start(programs["Delegation"], SHA3(), "")
-    start.universe.transfer(
+    start.transfer(
         start.transaction.caller, start.contract.address, start.transaction.callvalue
     )
     start.universe.add_contract(other)
@@ -143,7 +143,7 @@ def preservation_start(programs: dict[str, Program]) -> State:
     )
 
     start = symbolic_start(preservation.program, SHA3(), "")
-    start.universe.transfer(
+    start.transfer(
         start.transaction.caller, start.contract.address, start.transaction.callvalue
     )
     start.universe.add_contract(library)

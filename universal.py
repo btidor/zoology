@@ -168,7 +168,7 @@ if __name__ == "__main__":
 
     start = symbolic_start(program, SHA3(), "")
     init = copy.deepcopy(start)
-    init.universe.transfer(
+    init.transfer(
         init.transaction.caller,
         init.contract.address,
         init.transaction.callvalue,

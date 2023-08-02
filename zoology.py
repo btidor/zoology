@@ -206,7 +206,7 @@ def search(
                 origin=PLAYER,
                 caller=Constraint(f"CALLERAB{suffix}").ite(PLAYER, PROXY),
             )
-            start.universe.transfer(
+            start.transfer(
                 start.transaction.origin,
                 start.contract.address,
                 start.transaction.callvalue,
