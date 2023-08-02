@@ -57,7 +57,7 @@ def test_telephone() -> None:
 
 def test_token() -> None:
     fixture = [
-        "Px63\ta9059cbb ffffffffffffffffffffffffcacacacacacacacacacacacacacacacacacacacb4000000000000000000000000000000000000000000000000000000000000000"
+        "Px63\ta9059cbb ffffffffffffffffffffffffcacacacacacacacacacacacacacacacacacacaca8000000000000000000000000000000000000000000000000000000000000000\t(via proxy)"
     ]
     check_level(5, fixture)
 
@@ -88,7 +88,7 @@ def test_king() -> None:
 
 def test_elevator() -> None:
     fixture = [
-        "Px19F7\ted9a7134 ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\t(via proxy)"
+        "Px19F7\ted9a7134 ffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000\t(via proxy)"
     ]
     check_level(11, fixture)
 

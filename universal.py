@@ -15,7 +15,7 @@ from vm import step
 
 
 def universal_transaction(
-    state: State, filter: bool = True, prints: bool = False
+    state: State, /, filter: bool = True, check: bool = True, prints: bool = False
 ) -> Iterator[State]:
     """
     Compute the "universal transaction" over a fully symbolic input.
@@ -38,30 +38,38 @@ def universal_transaction(
                         print(" ", x.describe())
                 continue
             case Jump(targets):
-                for _, next in targets:
-                    solver = Solver()
-                    next.constrain(solver)
-                    if not solver.check():
+                for constraint, next in targets:
+                    if constraint.maybe_unwrap() is False:
                         continue
-                    yield from universal_transaction(next, filter=filter, prints=prints)
+                    yield from universal_transaction(
+                        next, filter=filter, check=check, prints=prints
+                    )
                 return
             case Descend(substate, callback):
                 # We need to collect *all* terminal states, since if the
                 # subcontract reverts the parent contract will continue to
                 # execute.
                 for subend in universal_transaction(
-                    substate, filter=False, prints=prints
+                    substate, filter=False, check=check, prints=prints
                 ):
                     next = copy.deepcopy(state)
                     next = callback(next, subend)
-                    yield from universal_transaction(next, filter=filter, prints=prints)
+                    yield from universal_transaction(
+                        next, filter=filter, check=check, prints=prints
+                    )
                 return
             case unknown:
                 raise ValueError(f"unknown action: {unknown}")
 
     assert isinstance(state.pc, Termination)
-    if state.pc.success or not filter:
-        yield state
+    if filter and not state.pc.success:
+        return
+    if check:
+        solver = Solver()
+        state.constrain(solver)
+        if not solver.check():
+            return
+    yield state
 
 
 def symbolic_start(program: Contract | Program, sha3: SHA3, suffix: str) -> State:
