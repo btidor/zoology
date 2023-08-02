@@ -5,18 +5,19 @@ from __future__ import annotations
 
 import argparse
 import copy
-from typing import Iterator
 
 from disassembler import abiencode
-from environment import Block, Transaction, Universe
-from history import History
+from environment import Block, Contract, Transaction, Universe
+from history import History, Validator
+from smt.arrays import Array
 from smt.bytes import FrozenBytes
+from smt.sha3 import SHA3
 from smt.smt import Constraint, Uint160, Uint256
 from smt.solver import ConstrainingError, NarrowingError, Solver
 from snapshot import LEVEL_FACTORIES, apply_snapshot
 from state import State, Termination
 from universal import symbolic_start, universal_transaction
-from vm import concrete_start, printable_execution
+from vm import printable_execution
 
 SETUP = Uint160(0x5757575757575757575757575757575757575757)
 PLAYER = Uint160(0xCACACACACACACACACACACACACACACACACACACACA)
@@ -72,8 +73,80 @@ def createInstance(
 
 def validateInstance(
     factory: Uint160, instance: Uint160, history: History, prints: bool = False
-) -> Iterator[tuple[State, Constraint]]:
-    """Call validateInstance to check the solution."""
+) -> Validator | None:
+    """Symbolically interpret validateInstance as a function, if possible."""
+    calldata = (
+        abiencode("validateInstance(address,address)")
+        + instance.into(Uint256).unwrap(bytes)
+        + PLAYER.into(Uint256).unwrap(bytes)
+    )
+
+    sha3 = SHA3()
+    universe, _, _ = history.subsequent()
+    contract = universe.contracts[factory.unwrap()]
+    start = symbolic_start(contract, sha3, "")
+    start.transaction = Transaction(
+        origin=SETUP,
+        caller=SETUP,
+        calldata=FrozenBytes.concrete(calldata),
+    )
+
+    for reference in universe.contracts.values():
+        start.universe.add_contract(
+            Contract(
+                address=reference.address,
+                program=reference.program,
+                storage=Array.symbolic(
+                    f"STORAGE@{reference.address.unwrap(bytes).hex()}", Uint256, Uint256
+                ),
+                nonce=reference.nonce,
+            )
+        )
+
+    predicates: list[Constraint] = []
+    for end in universal_transaction(start, check=False, prints=prints):
+        assert isinstance(end.pc, Termination)
+
+        # This logic needs to match State.constrain()
+        gas_constraints: list[Constraint] = []
+        if end.gas_variables is not None:
+            for i in range(1, len(end.gas_variables)):
+                gas_constraints.append(end.gas_variables[i - 1] >= end.gas_variables[i])
+        predicates.append(
+            Constraint.all(
+                end.path_constraint,
+                *gas_constraints,
+                end.block.number >= Uint256(256),
+                Uint256(end.pc.returndata.bigvector(32)) != Uint256(0),
+            )
+        )
+
+    assert predicates
+    if sha3.constraints:
+        # We can't currently handle feeding the global SHA3 instance into the
+        # validator. Fall back to running validateInstance with concrete inputs
+        # at every step.
+        return None
+    try:
+        # Eligible for validator optimization!
+        return Validator(Constraint.any(*predicates))
+    except ValueError:
+        # Validator expression uses an unsupported variable; fall back.
+        return None
+
+
+def constrainWithValidator(
+    factory: Uint160,
+    instance: Uint160,
+    history: History,
+    validator: Validator | None,
+) -> Solver:
+    """Simulate the execution of validateInstance on the given history."""
+    if validator is not None:
+        solver = Solver()
+        solver.assert_and_track(validator.translate(history))
+        return solver
+
     calldata = (
         abiencode("validateInstance(address,address)")
         + instance.into(Uint256).unwrap(bytes)
@@ -82,26 +155,36 @@ def validateInstance(
 
     universe, sha3, block = history.subsequent()
     contract = universe.contracts[factory.unwrap()]
-    start = concrete_start(contract, Uint256(0), calldata)
-    start.block = block.successor()
+    start = symbolic_start(contract, sha3, "")
     start.transaction = Transaction(
         origin=SETUP,
         caller=SETUP,
         calldata=FrozenBytes.concrete(calldata),
     )
     start.universe = universe
-    start.sha3 = sha3
+    start.block = block
 
-    for end in universal_transaction(start, prints=prints):
+    for end in universal_transaction(start):
         assert isinstance(end.pc, Termination)
+        solver = Solver()
+        candidate = history.extend(end)
+        candidate.constrain(solver, check=False)
         ok = Uint256(end.pc.returndata.bigvector(32)) != Uint256(0)
-        yield (end, ok)
+        solver.assert_and_track(ok)
+        if solver.check():
+            end.sha3.narrow(solver)
+            return solver
+
+    solver = Solver()
+    solver.assert_and_track(Constraint(False))
+    return solver
 
 
 def search(
     factory: Uint160,
     instance: Uint160,
     beginning: History,
+    validator: Validator | None,
     depth: int,
     verbose: int = 0,
 ) -> tuple[History, Solver] | None:
@@ -138,7 +221,6 @@ def search(
 
             for end in universal_transaction(start, prints=(verbose > 2)):
                 candidate = history.extend(end)
-
                 if verbose > 1:
                     try:
                         solver = Solver()
@@ -157,21 +239,12 @@ def search(
                         print(f"- [{candidate.pxs()}] unprintable: narrowing error")
                         continue
 
-                for post, ok in validateInstance(factory, instance, candidate):
-                    solver = Solver()
-                    candidate.constrain(solver, check=False)
-                    post.constrain(solver)
-                    solver.assert_and_track(ok)
-
-                    if not solver.check():
-                        continue
+                solver = constrainWithValidator(factory, instance, candidate, validator)
+                candidate.constrain(solver, check=False)
+                if solver.check():
+                    candidate.narrow(solver)
                     if verbose > 1:
                         print("  [found solution!]")
-
-                    post.sha3.narrow(solver)
-                    post.narrow(solver)
-                    for state in candidate.states:
-                        state.narrow(solver)
                     return candidate, solver
 
                 if len(end.contract.storage.written) == 0:
@@ -224,11 +297,19 @@ if __name__ == "__main__":
             instance, beginning = createInstance(
                 copy.deepcopy(universe), factory, prints=(args.verbose > 2)
             )
-            for _, ok in validateInstance(factory, instance, beginning):
-                assert ok.unwrap() is False
+            validator = validateInstance(
+                factory, instance, beginning, prints=(args.verbose > 2)
+            )
+            solver = constrainWithValidator(factory, instance, beginning, validator)
+            assert not solver.check()
 
             result = search(
-                factory, instance, beginning, args.depth, verbose=args.verbose
+                factory,
+                instance,
+                beginning,
+                validator,
+                args.depth,
+                verbose=args.verbose,
             )
             if result is None:
                 print("\tno solution")

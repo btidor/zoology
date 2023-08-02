@@ -116,3 +116,26 @@ def mk_array_sort(index: BitwuzlaSort, elem: BitwuzlaSort) -> BitwuzlaSort:
 def mk_const_array(sort: BitwuzlaSort, value: BitwuzlaTerm) -> BitwuzlaTerm:
     """Create a const array."""
     return _bzla.mk_const_array(sort, value)
+
+
+def get_constants(term: BitwuzlaTerm) -> dict[str, BitwuzlaTerm]:
+    """Recursively search the term for constants."""
+    constants: dict[str, BitwuzlaTerm] = {}
+    queue = set([term])
+    while queue:
+        item = queue.pop()
+        queue.update(item.get_children())
+        if item.is_const():
+            constants[item.get_symbol()] = item
+    return constants
+
+
+def substitute(
+    term: BitwuzlaTerm, subst_map: dict[BitwuzlaTerm, BitwuzlaTerm]
+) -> BitwuzlaTerm:
+    """Perform term substitution according to the given map."""
+    if len(subst_map) == 0:
+        return term
+    result = _bzla.substitute(term, subst_map)
+    assert isinstance(result, BitwuzlaTerm)
+    return result

@@ -1,7 +1,13 @@
 #!/usr/bin/env pytest
 
 from snapshot import LEVEL_FACTORIES
-from zoology import createInstance, search, starting_universe, validateInstance
+from zoology import (
+    constrainWithValidator,
+    createInstance,
+    search,
+    starting_universe,
+    validateInstance,
+)
 
 
 def check_level(i: int, fixture: list[str]) -> None:
@@ -9,10 +15,11 @@ def check_level(i: int, fixture: list[str]) -> None:
     factory = LEVEL_FACTORIES[i]
 
     instance, beginning = createInstance(universe, factory)
-    for _, ok in validateInstance(factory, instance, beginning):
-        assert ok.unwrap() is False
+    validator = validateInstance(factory, instance, beginning)
+    solver = constrainWithValidator(factory, instance, beginning, validator)
+    assert not solver.check()
 
-    result = search(factory, instance, beginning, 4)
+    result = search(factory, instance, beginning, validator, 10)
     assert result is not None
 
     solution, solver = result
@@ -44,8 +51,22 @@ def test_fallout() -> None:
     check_level(2, fixture)
 
 
-# def test_coinflip() -> None:
-#     check_level(3)
+def test_coinflip() -> None:
+    check_level(
+        3,
+        [
+            "PxDF9\t1d263f67 0000000000000000000000000000000000000000000000000000000000000000",
+            "PxDFD\t1d263f67 0000000000000000000000000000000000000000000000000000000000000001",
+            "PxDFD\t1d263f67 0000000000000000000000000000000000000000000000000000000000000001",
+            "PxDF9\t1d263f67 0000000000000000000000000000000000000000000000000000000000000000",
+            "PxDF9\t1d263f67 0000000000000000000000000000000000000000000000000000000000000000",
+            "PxDFD\t1d263f67 0000000000000000000000000000000000000000000000000000000000000001",
+            "PxDF9\t1d263f67 0000000000000000000000000000000000000000000000000000000000000000",
+            "PxDF9\t1d263f67 0000000000000000000000000000000000000000000000000000000000000000",
+            "PxDF9\t1d263f67 0000000000000000000000000000000000000000000000000000000000000000",
+            "PxDF9\t1d263f67 0000000000000000000000000000000000000000000000000000000000000000",
+        ],
+    )
 
 
 def test_telephone() -> None:
@@ -57,7 +78,7 @@ def test_telephone() -> None:
 
 def test_token() -> None:
     fixture = [
-        "Px63\ta9059cbb ffffffffffffffffffffffffcacacacacacacacacacacacacacacacacacacaca8000000000000000000000000000000000000000000000000000000000000000\t(via proxy)"
+        "Px63\ta9059cbb ffffffffffffffffffffffffcacacacacacacacacacacacacacacacacacacacb4000000000000000000000000000000000000000000000000000000000000000"
     ]
     check_level(5, fixture)
 
