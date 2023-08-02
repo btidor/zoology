@@ -52,10 +52,10 @@ class State:
     # suffixed with this counter to make it unique.
     call_count: int = 0
 
-    # List of constraints that must be satisfied in order for the program to
-    # reach this state. Based on the JUMPI instructions (if statements) seen so
-    # far.
-    path_constraint: Constraint = field(default=Constraint(True))
+    # Symbolic constraint that must be satisfied in order for the program to
+    # reach this state. Largely based on the JUMPI instructions (if statements)
+    # encountered in the execution.
+    constraint: Constraint = field(default=Constraint(True))
 
     # Tracks the path of the program's execution. Each JUMPI is a bit, 1 if
     # taken, 0 if not. MSB-first with a leading 1 prepended.
@@ -65,14 +65,17 @@ class State:
         """Return a human-readable version of the path."""
         return "Px" + hex(self.path)[2:].upper()
 
-    def constrain(self, solver: Solver) -> None:
-        """Apply accumulated constraints to the given solver instance."""
-        solver.assert_and_track(self.path_constraint)
-
+    def __post__init__(self) -> None:
+        """Initialize starting constraints."""
         # ASSUMPTION: the current block number is at least 256. This prevents
         # the BLOCKHASH instruction from overflowing.
-        solver.assert_and_track(self.block.number >= Uint256(256))
+        self.constraint = Constraint.all(
+            self.constraint, self.block.number >= Uint256(256)
+        )
 
+    def constrain(self, solver: Solver) -> None:
+        """Apply accumulated constraints to the given solver instance."""
+        solver.assert_and_track(self.constraint)
         self.sha3.constrain(solver)
         self.universe.constrain(solver)
 
@@ -197,7 +200,7 @@ class Descend(ControlFlow):
             logs=state.logs,
             gas_count=state.gas_count,
             call_count=state.call_count,
-            path_constraint=state.path_constraint,
+            constraint=state.constraint,
             path=state.path,
         )
         substate.universe.transfer(
@@ -213,7 +216,7 @@ class Descend(ControlFlow):
             state.latest_return = substate.pc.returndata
             state.gas_count = substate.gas_count
             state.call_count = substate.call_count
-            state.path_constraint = substate.path_constraint
+            state.constraint = substate.constraint
             state.path = substate.path
             return callback(state, substate)
 

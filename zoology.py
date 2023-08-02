@@ -110,8 +110,7 @@ def validateInstance(
         # This logic needs to match State.constrain()
         predicates.append(
             Constraint.all(
-                end.path_constraint,
-                end.block.number >= Uint256(256),
+                end.constraint,
                 Uint256(end.pc.returndata.bigvector(32)) != Uint256(0),
             )
         )

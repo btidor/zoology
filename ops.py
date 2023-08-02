@@ -371,13 +371,13 @@ def JUMPI(s: State, _counter: Uint256, b: Uint256) -> ControlFlow:
 
     next = copy.deepcopy(s)
     next.path = (next.path << 1) | 0
-    next.path_constraint = Constraint.all(next.path_constraint, b == Uint256(0))
+    next.constraint = Constraint.all(next.constraint, b == Uint256(0))
     jump.targets.append((b == Uint256(0), next))
 
     next = s
     next.pc = s.contract.program.jumps[counter]
     next.path = (next.path << 1) | 1
-    next.path_constraint = Constraint.all(next.path_constraint, b != Uint256(0))
+    next.constraint = Constraint.all(next.constraint, b != Uint256(0))
     jump.targets.append((b != Uint256(0), next))
 
     return jump

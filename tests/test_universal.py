@@ -89,8 +89,8 @@ def test_basic() -> None:
     assert end.pc.success == True
 
     # These extra constraints makes the test deterministic
-    end.path_constraint = Constraint.all(
-        end.path_constraint,
+    end.constraint = Constraint.all(
+        end.constraint,
         start.universe.balances[Uint160(0xADADADADADADADADADADADADADADADADADADADAD)]
         == Uint256(0x8000000000001),
         start.universe.balances[Uint160(0xCACACACACACACACACACACACACACACACACACACACA)]
