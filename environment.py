@@ -159,14 +159,6 @@ class Universe:
         default_factory=lambda: Array.concrete(Uint160, Uint256(0))
     )
 
-    # These variables track how much value has been moved from the contracts
-    # under test to our agent's accounts. To avoid overflow errors, we track
-    # value contributed to and value extracted from the contracts under test as
-    # two separate unsigned (nonnegative) integers.
-    agents: list[Uint160] = field(default_factory=list)
-    contribution: Uint256 = Uint256(0)
-    extraction: Uint256 = Uint256(0)
-
     @classmethod
     def symbolic(cls, suffix: str) -> Universe:
         """Create a fully-symbolic Universe."""
@@ -176,9 +168,6 @@ class Universe:
             transfer_constraints=[],
             contracts={},
             codesizes=Array.symbolic(f"CODESIZE{suffix}", Uint160, Uint256),
-            agents=[],
-            contribution=Uint256(f"CONTRIBUTION{suffix}"),
-            extraction=Uint256(f"EXTRACTION{suffix}"),
         )
 
     def add_contract(self, contract: Contract) -> None:
@@ -203,18 +192,6 @@ class Universe:
         # account's balance; all balances are less than 2^255 wei.
         self.transfer_constraints.append(Uint256.overflow_safe(self.balances[dst], val))
         self.balances[dst] += val
-
-        de = Constraint.any(*[dst == agent for agent in self.agents]).ite(
-            val, Uint256(0)
-        )
-        self.transfer_constraints.append(Uint256.overflow_safe(self.extraction, de))
-        self.extraction += de
-
-        dc = Constraint.any(*[src == agent for agent in self.agents]).ite(
-            val, Uint256(0)
-        )
-        self.transfer_constraints.append(Uint256.overflow_safe(self.contribution, dc))
-        self.contribution += dc
 
     def constrain(self, solver: Solver) -> None:
         """Apply accumulated constraints to the given solver instance."""

@@ -10,12 +10,7 @@ from smt.sha3 import SHA3
 from smt.smt import Constraint, Uint160, Uint256
 from smt.solver import Solver
 from state import State, Termination
-from universal import (
-    constrain_to_goal,
-    printable_transition,
-    symbolic_start,
-    universal_transaction,
-)
+from universal import printable_transition, symbolic_start, universal_transaction
 
 from . import helpers as cases
 from .solidity import load_binary, load_solidity, loads_solidity
@@ -35,11 +30,7 @@ def check_transitions(start: Program | State, branches: tuple[Any, ...]) -> None
 
         solver = Solver()
         end.constrain(solver)
-        constrain_to_goal(solver, start, end)
-        assert solver.check() == (kind == "GOAL")
-
-        if kind != "GOAL":
-            assert end.is_changed(start) == (kind == "SAVE")
+        assert end.is_changed(start) == (kind == "SAVE")
 
         solver = Solver()
         end.constrain(solver)
@@ -96,11 +87,6 @@ def test_basic() -> None:
         start.universe.balances[Uint160(0xCACACACACACACACACACACACACACACACACACACACA)]
         == Uint256(0xAAAAAAAAAAAAA),
     )
-    solver = Solver()
-    end.constrain(solver)
-    constrain_to_goal(solver, start, end)
-    assert not solver.check()
-
     solver = Solver()
     end.constrain(solver)
     assert solver.check()

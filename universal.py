@@ -90,7 +90,6 @@ def symbolic_start(program: Contract | Program, sha3: SHA3, suffix: str) -> Stat
     # (and the balance of this contract account too, via SELFDESTRUCT). How
     # do we model this?
     universe = Universe.symbolic(suffix)
-    universe.agents = [transaction.origin, transaction.caller]
     universe.codesizes[contract.address] = contract.program.code.length
     universe.codesizes[transaction.origin] = Uint256(0)
     return State(
@@ -104,29 +103,11 @@ def symbolic_start(program: Contract | Program, sha3: SHA3, suffix: str) -> Stat
     )
 
 
-def constrain_to_goal(solver: Solver, start: State, end: State) -> None:
-    """
-    Apply goal constraints to the given solver instance.
-
-    The "goal" here is our definition of a potential security vulnerability: a
-    state tranisition that results in our agent extracting net value from the
-    contract.
-    """
-    solver.assert_and_track(start.universe.extraction <= start.universe.contribution)
-    solver.assert_and_track(end.universe.extraction > end.universe.contribution)
-
-
 def printable_transition(start: State, end: State) -> Iterable[str]:
     """Produce a human-readable description of a given state transition."""
     solver = Solver()
     end.constrain(solver)
     assert solver.check()
-
-    constrain_to_goal(solver, start, end)
-    if solver.check():
-        for line in _printable_transition(solver, start, end, "🚩 GOAL"):
-            yield line
-        return
 
     if end.is_changed(start):
         kind = "📒 SAVE"
@@ -164,20 +145,6 @@ def _printable_transition(
         yield f"{k}\t{v}"
     if len(values) > 0:
         yield ""
-
-    a = solver.evaluate(start.universe.contribution).unwrap(bytes).hex()
-    b = solver.evaluate(end.universe.contribution).unwrap(bytes).hex()
-    if a != b:
-        yield f"Contrib\tETH 0x{a}"
-        yield f"\t->  0x{b}"
-        yield f""
-
-    a = solver.evaluate(start.universe.extraction).unwrap(bytes).hex()
-    b = solver.evaluate(end.universe.extraction).unwrap(bytes).hex()
-    if a != b:
-        yield f"Extract\tETH 0x{a}"
-        yield f"\t->  0x{b}"
-        yield f""
 
     for line in end.universe.balances.printable_diff(
         "Balance", solver, start.universe.balances

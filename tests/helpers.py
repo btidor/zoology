@@ -17,7 +17,7 @@ def concretize(value: BitVector | None) -> int | None:
 
 Fallback = (
     ("Px19", "SAVE", None, 1),
-    ("Px2F", "GOAL", "withdraw()"),
+    ("Px2F", "SAVE", "withdraw()"),
     ("Px4F", "VIEW", "contributions(address)"),
     ("Px23", "VIEW", "owner()"),
     ("Px10F", "SAVE", "contribute()"),
@@ -27,9 +27,9 @@ Fallback = (
 
 Fallout = (
     ("Px5", "SAVE", "Fal1out()"),
-    ("Px4F", "GOAL", "collectAllocations()"),
+    ("Px4F", "SAVE", "collectAllocations()"),
     ("Px23", "VIEW", "owner()"),
-    ("Px43F", "GOAL", "sendAllocation(address)"),
+    ("Px43F", "SAVE", "sendAllocation(address)"),
     ("Px83", "SAVE", "allocate()"),
     ("Px40F", "VIEW", "allocatorBalance(address)"),
 )
@@ -73,8 +73,8 @@ Vault = (
 )
 
 King = (
-    ("Px37", "GOAL", None, None),
-    ("Px33", "GOAL", None, None),
+    ("Px37", "SAVE", None, None),
+    ("Px33", "SAVE", None, None),
     ("PxB", "VIEW", "_king()"),
     ("Px13", "VIEW", "owner()"),
     ("Px23", "VIEW", "prize()"),
@@ -85,8 +85,8 @@ Reentrancy = (
     ("Px2F", "SAVE", "donate(address)"),
     ("Px4F", "VIEW", "balances(address)"),
     ("Px11F", "VIEW", "withdraw(uint256)"),
-    ("Px47B", "GOAL", "withdraw(uint256)"),
-    ("Px479", "GOAL", "withdraw(uint256)"),
+    ("Px47B", "SAVE", "withdraw(uint256)"),
+    ("Px479", "SAVE", "withdraw(uint256)"),
     ("Px10F", "VIEW", "balanceOf(address)"),
 )
 
