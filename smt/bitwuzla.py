@@ -20,6 +20,7 @@ def reset() -> None:
     _bzla = Bitwuzla()
     _bzla.set_option(Option.INCREMENTAL, True)
     _bzla.set_option(Option.PRODUCE_MODELS, True)
+    _bzla.set_option(Option.OUTPUT_NUMBER_FORMAT, "hex")
 
     tmp: dict[Any, WeakValueDictionary[Any, Any]] = defaultdict(WeakValueDictionary)
     for cls, subcache in _cache.items():
@@ -100,6 +101,8 @@ def get_value_int(term: BitwuzlaTerm) -> int:
     if _checked == 0:
         assert _bzla.check_sat() == Result.SAT
         _checked = 1
+    # Results are always returned as an unprefixed base-2 string regardless of
+    # the OUTPUT_NUMBER_FORMAT mode.
     return int(_bzla.get_value_str(term), 2)
 
 

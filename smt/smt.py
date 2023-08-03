@@ -162,7 +162,7 @@ class BitVector(Symbolic[int]):
     @classmethod
     def _describe(cls, node: BitwuzlaTerm) -> str:
         if node.is_bv_value():
-            v = int(node.dump("smt2")[2:], 2)
+            v = get_value_int(node)
             if v < (1 << 256):
                 return hex(v)
             p: list[str] = []
