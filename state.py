@@ -184,9 +184,9 @@ class ControlFlow:
 
 @dataclass(frozen=True)
 class Jump(ControlFlow):
-    """A JUMP or JUMPI instruction."""
+    """A JUMPI instruction that branches the control flow."""
 
-    targets: list[tuple[Constraint, State]]
+    targets: tuple[State, ...]
 
 
 @dataclass(frozen=True)

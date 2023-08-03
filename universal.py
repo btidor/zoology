@@ -38,9 +38,7 @@ def universal_transaction(
                         print(" ", x.describe())
                 continue
             case Jump(targets):
-                for constraint, next in targets:
-                    if constraint.maybe_unwrap() is False:
-                        continue
+                for next in targets:
                     yield from universal_transaction(
                         next, filter=filter, check=check, prints=prints
                     )

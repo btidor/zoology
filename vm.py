@@ -77,12 +77,8 @@ def printable_execution(state: State) -> Generator[str, None, State]:
         match step(state):
             case None:
                 pass
-            case Jump(targets):
-                matched = [
-                    s for (c, s) in targets if c.unwrap("JUMPI requires concrete b")
-                ]
-                assert len(matched) == 1, "no matching jump target"
-                state = matched[0]
+            case Jump(_):
+                raise ValueError("control flow branches on symbolic condition")
             case Descend(substate, callback):
                 descent = printable_execution(substate)
                 substate = yield from descent

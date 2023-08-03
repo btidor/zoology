@@ -4,7 +4,7 @@ from disassembler import abiencode, disassemble
 from environment import Contract, Transaction
 from smt.bytes import FrozenBytes
 from smt.smt import Uint160, Uint256
-from state import Jump, State, Termination
+from state import State, Termination
 from vm import printable_execution, step
 
 from .solidity import compile_solidity, load_binary, load_solidity, loads_solidity
@@ -53,13 +53,7 @@ def test_basic() -> None:
     assert concretize_stack(state) == [0x100, 0x09]
 
     action = step(state)
-    assert isinstance(action, Jump)
-    assert len(action.targets) == 2
-    constraint, state = action.targets[0]
-    assert constraint.unwrap() is False
-    assert state.pc == 5
-    constraint, state = action.targets[1]
-    assert constraint.unwrap() is True
+    assert action is None  # internally-handled JUMPI
     assert state.pc == 6
     assert concretize_stack(state) == []
 

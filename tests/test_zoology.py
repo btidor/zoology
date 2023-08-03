@@ -79,7 +79,7 @@ def test_telephone() -> None:
 
 def test_token() -> None:
     fixture = [
-        "Px63\ta9059cbb ffffffffffffffffffffffffcacacacacacacacacacacacacacacacacacacacb4000000000000000000000000000000000000000000000000000000000000000"
+        "Px63\ta9059cbb ffffffffffffffffffffffffcacacacacacacacacacacacacacacacacacacacb4000000000000000000000000000000000000000000000000000000000000014"
     ]
     check_level(5, fixture)
 

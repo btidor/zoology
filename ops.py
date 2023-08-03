@@ -364,23 +364,27 @@ def JUMP(s: State, _counter: Uint256) -> None:
     s.pc = s.contract.program.jumps[counter]
 
 
-def JUMPI(s: State, _counter: Uint256, b: Uint256) -> ControlFlow:
+def JUMPI(s: State, _counter: Uint256, b: Uint256) -> ControlFlow | None:
     """57 - Conditionally alter the program counter."""
     counter = _counter.unwrap(int, "JUMPI requires concrete counter")
-    jump = Jump(targets=[])
 
-    next = copy.deepcopy(s)
-    next.path = (next.path << 1) | 0
-    next.constraint = Constraint.all(next.constraint, b == Uint256(0))
-    jump.targets.append((b == Uint256(0), next))
+    s.path <<= 1
+    c: Constraint = b == Uint256(0)
+    match c.maybe_unwrap():
+        case None:  # unknown, must prepare both branches :(
+            s0, s1 = copy.deepcopy(s), s
+            s0.constraint = Constraint.all(s.constraint, c)
 
-    next = s
-    next.pc = s.contract.program.jumps[counter]
-    next.path = (next.path << 1) | 1
-    next.constraint = Constraint.all(next.constraint, b != Uint256(0))
-    jump.targets.append((b != Uint256(0), next))
-
-    return jump
+            s1.pc = s.contract.program.jumps[counter]
+            s1.path |= 1
+            s1.constraint = Constraint.all(s.constraint, ~c)
+            return Jump(targets=(s0, s1))
+        case True:  # branch never taken, fall through
+            return None
+        case False:  # branch always taken
+            s.pc = s.contract.program.jumps[counter]
+            s.path |= 1
+            return None
 
 
 def PC(ins: Instruction) -> Uint256:
