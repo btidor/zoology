@@ -41,6 +41,7 @@ def apply_snapshot(universe: Universe) -> None:
             contract.storage.poke(Uint256(int(k)), Uint256(int(v, 16)))
 
         universe.add_contract(contract)
+        universe.balances[contract.address] = Uint256(0)
 
 
 def get_code(address: Uint160) -> Contract:

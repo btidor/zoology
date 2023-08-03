@@ -34,7 +34,8 @@ def test_starting_universe() -> None:
 
 
 # def test_hello() -> None:
-#     check_level(0)
+#     # Gets stuck exploring abi.encodePacked(...) with symbolic input
+#     check_level(0, [])
 
 
 def test_fallback() -> None:
@@ -88,6 +89,7 @@ def test_token() -> None:
 
 
 # def test_force() -> None:
+#     # balance changes via SELFDESTRUCT are not supported
 #     check_level(7, [])
 
 

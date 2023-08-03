@@ -51,6 +51,9 @@ def createInstance(
         ),
         universe=universe,
     )
+    start.transfer(
+        start.transaction.caller, start.contract.address, start.transaction.callvalue
+    )
 
     generator = printable_execution(start)
     try:

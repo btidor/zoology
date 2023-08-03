@@ -483,6 +483,11 @@ def _CREATE(
 
     program = disassemble(initcode)
     contract = Contract(address, program)
+
+    # ASSUMPTION: it's possible for a contract to have a non-zero balance upon
+    # creation if funds were sent to the address before it was created. Let's
+    # ignore this case for now.
+    s.universe.balances[address] = Uint256(0)
     s.universe.codesizes[address] = Uint256(0)
 
     transaction = Transaction(
