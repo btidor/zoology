@@ -39,7 +39,7 @@ def test_symbolic() -> None:
     assert input.describe(solver) == b"testing".hex()
     sha3.narrow(solver)
     assert (
-        solver.evaluate(sha3[input]).unwrap(bytes).hex()
+        solver.evaluate(sha3[input], bytes).hex()
         == "5f16f4c7f149ac4f9510d9cf8cf384038ad348b3bcdc01915f95de12df9d1b02"
     )
 
@@ -65,7 +65,7 @@ def test_fully_symbolic() -> None:
     assert input.describe(solver) == b"testing".hex()
     sha3.narrow(solver)
     assert (
-        solver.evaluate(sha3[input]).unwrap(bytes).hex()
+        solver.evaluate(sha3[input], bytes).hex()
         == "5f16f4c7f149ac4f9510d9cf8cf384038ad348b3bcdc01915f95de12df9d1b02"
     )
 

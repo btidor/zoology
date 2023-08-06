@@ -290,7 +290,7 @@ def test_SHA3() -> None:
     s.sha3.constrain(solver)
     assert solver.check()
     assert (
-        concretize(solver.evaluate(digest))
+        solver.evaluate(digest)
         == 0x29045A592007D0C246EF02C2223570DA9522D0CF0F73282C79A1BC8F0BB2C238
     )
 

@@ -82,11 +82,12 @@ class History:
             line = f"{state.px()}\t{data}"
 
             suffixes: list[str] = []
-            value = solver.evaluate(state.transaction.callvalue).unwrap()
+            value = solver.evaluate(state.transaction.callvalue)
             if value > 0:
                 suffixes.append(f"value: {value}")
             caller = solver.evaluate(state.transaction.caller)
-            if (caller != self.player).unwrap():
+            player = solver.evaluate(self.player)
+            if caller != player:
                 suffixes.append(f"via proxy")
             if len(suffixes) > 0:
                 line += f"\t({', '.join(suffixes)})"

@@ -9,8 +9,6 @@ from smt.solver import Solver
 from state import State
 from universal import symbolic_start
 
-from .helpers import concretize
-
 
 def test_transaction_evaluate() -> None:
     state = State()
@@ -38,8 +36,8 @@ def test_transfer() -> None:
     solver.assert_and_track(start.universe.balances[dst] == Uint256(0x0))
     assert solver.check()
 
-    assert concretize(solver.evaluate(end.universe.balances[src])) == 0x9AA
-    assert concretize(solver.evaluate(end.universe.balances[dst])) == 0x100
+    assert solver.evaluate(end.universe.balances[src]) == 0x9AA
+    assert solver.evaluate(end.universe.balances[dst]) == 0x100
 
 
 def test_impossible_transfer() -> None:

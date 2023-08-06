@@ -100,7 +100,7 @@ class SHA3:
                 Kind.ARRAY_SELECT, [self.hashes[size], key.bigvector(size)]
             )
             assert isinstance(select, BitwuzlaTerm)
-            # Assumption: no hash may have more than 128 leading zero bits. This
+            # ASSUMPTION: no hash may have more than 128 leading zero bits. This
             # avoids hash collisions between maps/arrays and ordinary storage
             # slots.
             self.constraints.append(
@@ -118,7 +118,7 @@ class SHA3:
             symbolic = Uint256(select)
 
         for n, okey, oval in self.items():
-            # Assumption: every hash digest is distinct, there are no collisions
+            # ASSUMPTION: every hash digest is distinct, there are no collisions
             # ever.
             if n == size:
                 a = mk_term(Kind.DISTINCT, [key.bigvector(n), okey.bigvector(n)])
@@ -188,7 +188,7 @@ class SHA3:
             if len(k) > 34:
                 yield line
                 line = "\t"
-            v = solver.evaluate(val).describe()
+            v = Uint256(solver.evaluate(val)).describe()
             line += f"-> {v}"
             yield line
             line = ""

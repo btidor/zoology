@@ -57,7 +57,6 @@ def step(state: State) -> ControlFlow | None:
                 raise Exception("evm stack overflow")
             return None
         case ControlFlow():
-            # TODO: reduce number of state copies for performance
             return result
 
 

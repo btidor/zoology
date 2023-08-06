@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-from typing import TypeVar
+from typing import Type, overload
 
 from pybitwuzla import Result
 
-from .bitwuzla import assume_formula, check_sat, get_unsat_assumptions, get_value
+from .bitwuzla import assume_formula, check_sat, get_unsat_assumptions, get_value_int
 from .smt import BitVector, Constraint
-
-T = TypeVar("T", bound=BitVector)
 
 
 class Solver:
@@ -53,11 +51,27 @@ class Solver:
             core.append(Constraint(term))
         return core
 
-    def evaluate(self, value: T) -> T:
+    @overload
+    def evaluate(self, value: BitVector, into: Type[int] = int) -> int:
+        ...
+
+    @overload
+    def evaluate(self, value: BitVector, into: Type[bytes]) -> bytes:
+        ...
+
+    def evaluate(
+        self, value: BitVector, into: Type[int] | Type[bytes] = int
+    ) -> int | bytes:
         """Evaluate a given bitvector expression with the given model."""
         assert self.latest_result is True
-        # TODO: model completion is *not* implemented
-        return value.__class__(get_value(value.node))
+
+        v = get_value_int(value.node)
+        if into == int:
+            return v
+        elif into == bytes:
+            return v.to_bytes(value.length() // 8)
+        else:
+            raise TypeError(f"unknown into type: {into}")
 
 
 class ConstrainingError(Exception):

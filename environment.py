@@ -133,9 +133,9 @@ class Transaction:
                     if v.maybe_unwrap():
                         s[k] = "0x" + v.unwrap(bytes).hex()
                     else:
-                        v = solver.evaluate(v)
-                        if v.maybe_unwrap():
-                            s[k] = "0x" + v.unwrap(bytes).hex()
+                        v = solver.evaluate(v, bytes)
+                        if int.from_bytes(v) > 0:
+                            s[k] = "0x" + v.hex()
                 case str():
                     s[k] = v
         return s

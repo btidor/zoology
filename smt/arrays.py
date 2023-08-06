@@ -8,7 +8,7 @@ from typing import Any, Generic, Iterable, Type, TypeVar
 from pybitwuzla import BitwuzlaTerm, Kind
 
 from .bitwuzla import mk_array_sort, mk_const, mk_const_array, mk_term, sort
-from .smt import BitVector
+from .smt import BitVector, Uint512
 from .solver import Solver
 
 K = TypeVar("K", bound=BitVector)
@@ -92,9 +92,13 @@ class Array(Generic[K, V]):
         for prefix, rows in diffs:
             concrete: dict[str, tuple[str, str | None]] = {}
             for key, value, prior in rows:
-                k = solver.evaluate(key).describe()
-                v = solver.evaluate(value).describe()
-                p = solver.evaluate(prior).describe() if prior is not None else None
+                k = Uint512(solver.evaluate(key)).describe()
+                v = self.vtype(solver.evaluate(value)).describe()
+                p = (
+                    self.vtype(solver.evaluate(prior)).describe()
+                    if prior is not None
+                    else None
+                )
                 if v != p:
                     concrete[k] = (v, p)
 
