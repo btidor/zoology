@@ -55,8 +55,8 @@ class Instruction:
         if self.suffix is not None:
             msg += str(self.suffix)
         if self.operand is not None and self.suffix is not None:
-            operand = self.operand.unwrap().to_bytes(self.suffix)
-            msg += "\t0x" + operand.hex()
+            assert (operand := self.operand.maybe_unwrap()) is not None
+            msg += "\t0x" + operand.to_bytes(self.suffix).hex()
         return msg
 
 

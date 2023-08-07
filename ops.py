@@ -71,7 +71,9 @@ def MULMOD(a: Uint256, b: Uint256, N: Uint256) -> Uint256:
 
 def EXP(a: Uint256, _exponent: Uint256) -> Uint256:
     """0A - Exponential operation."""
-    exponent = _exponent.unwrap(int, "EXP requires concrete exponent")
+    exponent = _exponent.maybe_unwrap()
+    assert exponent is not None, "EXP requires concrete exponent"
+
     if exponent == 0:
         return Uint256(1)
     for _ in range(exponent - 1):
@@ -240,7 +242,8 @@ def EXTCODECOPY(
     size: Uint256,
 ) -> None:
     """3C - Copy an account's code to memory."""
-    address = _address.unwrap(int, "EXTCODECOPY requires concrete address")
+    address = _address.maybe_unwrap()
+    assert address is not None, "EXTCODECOPY requires concrete address"
 
     contract = s.universe.contracts.get(address, None)
     code = contract.program.code if contract else FrozenBytes.concrete()
@@ -265,7 +268,8 @@ def RETURNDATACOPY(
 
 def EXTCODEHASH(s: State, _address: Uint256) -> Uint256:
     """3F - Get hash of an account's code."""
-    address = _address.unwrap(int, "EXTCODEHASH requires concrete address")
+    address = _address.maybe_unwrap()
+    assert address is not None, "EXTCODEHASH requires concrete address"
 
     contract = s.universe.contracts.get(address, None)
     if contract is None:
@@ -355,7 +359,8 @@ def SSTORE(s: State, key: Uint256, value: Uint256) -> None:
 
 def JUMP(s: State, _counter: Uint256) -> None:
     """56 - Alter the program counter."""
-    counter = _counter.unwrap(int, "JUMP requires concrete counter")
+    counter = _counter.maybe_unwrap()
+    assert counter is not None, "JUMP requires concrete counter"
 
     # In theory, JUMP should revert if counter is not a valid jump target.
     # Instead, raise an error and fail the whole analysis. This lets us prove
@@ -366,7 +371,8 @@ def JUMP(s: State, _counter: Uint256) -> None:
 
 def JUMPI(s: State, _counter: Uint256, b: Uint256) -> ControlFlow | None:
     """57 - Conditionally alter the program counter."""
-    counter = _counter.unwrap(int, "JUMPI requires concrete counter")
+    counter = _counter.maybe_unwrap()
+    assert counter is not None, "JUMPI requires concrete counter"
 
     s.path <<= 1
     c: Constraint = b == Uint256(0)
@@ -457,17 +463,16 @@ def LOG(ins: Instruction, s: State, offset: Uint256, size: Uint256) -> None:
 
 def CREATE(s: State, value: Uint256, offset: Uint256, size: Uint256) -> ControlFlow:
     """F0 - Create a new account with associated code."""
-    initcode = s.memory.slice(offset, size).unwrap(
-        "CREATE requires concrete program data"
-    )
-    sender_address = s.contract.address.unwrap(
-        bytes, "CREATE requires concrete sender address"
-    )
+    initcode = s.memory.slice(offset, size).maybe_unwrap()
+    assert initcode is not None, "CREATE requires concrete program data"
+    sender_address = s.contract.address.maybe_unwrap(bytes)
+    assert sender_address is not None, "CREATE requires concrete sender address"
 
     # HACK: the destination address depends on the value of this contract's
     # nonce. But we need the destination address to be concrete! So we can only
     # handle CREATE with a concrete state, not a symbolic one. Sorry :(
-    nonce = s.contract.nonce.unwrap(int, "CREATE require concrete nonce")
+    nonce = s.contract.nonce.maybe_unwrap()
+    assert nonce is not None, "CREATE require concrete nonce"
     if nonce >= 0x80:
         raise NotImplementedError  # TODO: implement a full RLP encoder
 
@@ -480,8 +485,9 @@ def _CREATE(
     s: State, value: Uint256, initcode: bytes, seed: FrozenBytes
 ) -> ControlFlow:
     address = s.sha3[seed].into(Uint160)
-    if address.unwrap() in s.universe.contracts:
-        raise ValueError(f"CREATE destination exists: 0x{address.unwrap(bytes).hex()}")
+    if address.maybe_unwrap() in s.universe.contracts:
+        assert (a := address.maybe_unwrap(bytes)) is not None
+        raise ValueError(f"CREATE destination exists: 0x{a.hex()}")
 
     s.contract.nonce += Uint256(1)
 
@@ -506,7 +512,8 @@ def _CREATE(
         if substate.pc.success is False:
             state.stack.append(Uint256(0))
         else:
-            code = substate.pc.returndata.unwrap()
+            code = substate.pc.returndata.maybe_unwrap()
+            assert code is not None
             program = disassemble(code)
 
             contract = Contract(address, program, substate.contract.storage)
@@ -592,6 +599,9 @@ def CALLCODE(
     retSize: Uint256,
 ) -> ControlFlow:
     """F2 - Message-call into this account with alternative account's code."""
+    address = _address.maybe_unwrap()
+    assert address is not None, "CALLCODE requires concrete address"
+
     transaction = Transaction(
         origin=s.transaction.origin,
         caller=s.contract.address,
@@ -599,7 +609,6 @@ def CALLCODE(
         calldata=s.memory.slice(argsOffset, argsSize),
         gasprice=s.transaction.gasprice,
     )
-    address = _address.unwrap(msg="CALLCODE requires concrete address")
     destination = s.universe.contracts.get(address, None)
     if not destination:
         raise ValueError("CALLCODE to unknown contract: " + hex(address))
@@ -636,6 +645,9 @@ def DELEGATECALL(
     Message-call into this account with an alternative account's code, but
     persisting the current values for sender and value.
     """
+    address = _address.maybe_unwrap()
+    assert address is not None, "DELEGATECALL requires concrete address"
+
     transaction = Transaction(
         origin=s.transaction.origin,
         caller=s.transaction.caller,
@@ -643,7 +655,6 @@ def DELEGATECALL(
         calldata=s.memory.slice(argsOffset, argsSize),
         gasprice=s.transaction.gasprice,
     )
-    address = _address.unwrap(msg="DELEGATECALL requires concrete address")
     destination = s.universe.contracts.get(address, None)
     if not destination:
         raise ValueError("DELEGATECALL to unknown contract: " + hex(address))
@@ -664,20 +675,16 @@ def CREATE2(
     s: State, value: Uint256, offset: Uint256, size: Uint256, _salt: Uint256
 ) -> ControlFlow:
     """F5 - Create a new account with associated code at a predictable address."""
-    initcode = s.memory.slice(offset, size).unwrap(
-        "CREATE2 requires concrete program data"
-    )
-    salt = _salt.unwrap(bytes, "CREATE2 requires concrete salt")
-    sender_address = s.contract.address.unwrap(
-        bytes, "CREATE2 requires concrete sender address"
-    )
+    initcode = s.memory.slice(offset, size).maybe_unwrap()
+    assert initcode is not None, "CREATE2 requires concrete program data"
+    salt = _salt.maybe_unwrap(bytes)
+    assert salt is not None, "CREATE2 requires concrete salt"
+    sender_address = s.contract.address.maybe_unwrap(bytes)
+    assert sender_address is not None, "CREATE2 requires concrete sender address"
+
     # https://ethereum.stackexchange.com/a/761
-    seed = FrozenBytes.concrete(
-        b"\xff"
-        + sender_address
-        + salt
-        + s.sha3[FrozenBytes.concrete(initcode)].unwrap(bytes)
-    )
+    assert (h := s.sha3[FrozenBytes.concrete(initcode)].maybe_unwrap(bytes)) is not None
+    seed = FrozenBytes.concrete(b"\xff" + sender_address + salt + h)
     return _CREATE(s, value, initcode, seed)
 
 

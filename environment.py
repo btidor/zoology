@@ -54,13 +54,15 @@ class Block:
             0xF798B79831B745F4F756FBD50CFEBAE9FE8AF348CB8EF47F739939142EC9D1E0
         )
         for i in range(254, -1, -1):
-            hashes[Uint8(i)] = concrete_hash(hashes[Uint8(i + 1)].unwrap(bytes))
+            assert (prev := hashes[Uint8(i + 1)].maybe_unwrap(bytes)) is not None
+            hashes[Uint8(i)] = concrete_hash(prev)
         return hashes
 
     def successor(self) -> Block:
         """Produce a plausible next block."""
         hashes = Array.concrete(Uint8, Uint256(0))
-        hashes[Uint8(0)] = concrete_hash(self.hashes[Uint8(0)].unwrap(bytes))
+        assert (start := self.hashes[Uint8(0)].maybe_unwrap(bytes)) is not None
+        hashes[Uint8(0)] = concrete_hash(start)
         for i in range(1, 256):
             hashes[Uint8(i)] = self.hashes[Uint8(i - 1)]
 
@@ -130,12 +132,9 @@ class Transaction:
                 case None:
                     pass
                 case BitVector():
-                    if v.maybe_unwrap():
-                        s[k] = "0x" + v.unwrap(bytes).hex()
-                    else:
-                        v = solver.evaluate(v, bytes)
-                        if int.from_bytes(v) > 0:
-                            s[k] = "0x" + v.hex()
+                    b = solver.evaluate(v, bytes)
+                    if int.from_bytes(b) > 0:
+                        s[k] = "0x" + b.hex()
                 case str():
                     s[k] = v
         return s
@@ -174,5 +173,6 @@ class Universe:
 
         The contract must have a concrete address.
         """
-        self.contracts[contract.address.unwrap()] = contract
+        assert (address := contract.address.maybe_unwrap()) is not None
+        self.contracts[address] = contract
         self.codesizes[contract.address] = contract.program.code.length

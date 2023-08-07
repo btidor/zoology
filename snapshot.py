@@ -46,23 +46,17 @@ def apply_snapshot(universe: Universe) -> None:
 
 def get_code(address: Uint160) -> Contract:
     """Load the Contract at a given address."""
-    code = _api_request(
-        "eth_getCode",
-        address=address.unwrap(bytes).hex(),
-        tag=TAG,
-    )
+    assert (a := address.maybe_unwrap(bytes)) is not None
+    code = _api_request("eth_getCode", address=a.hex(), tag=TAG)
     program = disassemble(code)
     return Contract(address, program)
 
 
 def get_storage_at(address: Uint160, position: Uint256) -> Uint256:
     """Load the contents of a given storage slot."""
-    value = _api_request(
-        "eth_getStorageAt",
-        address=address.unwrap(bytes).hex(),
-        position=position.unwrap(bytes).hex(),
-        tag=TAG,
-    )
+    assert (a := address.maybe_unwrap(bytes)) is not None
+    assert (p := position.maybe_unwrap(bytes)) is not None
+    value = _api_request("eth_getStorageAt", address=a.hex(), position=p.hex(), tag=TAG)
     return Uint256(int.from_bytes(value))
 
 
@@ -102,17 +96,19 @@ if __name__ == "__main__":
     snapshot = {}
     for i, address in enumerate(LEVEL_FACTORIES):
         print(f"Downloading level {i}")
-        key = address.unwrap(bytes).hex()
+        assert (a := address.maybe_unwrap(bytes)) is not None
         contract = get_code(address)
-        snapshot[key] = {"code": contract.program.code.unwrap().hex()}
+        assert (c := contract.program.code.maybe_unwrap()) is not None
+        snapshot[a.hex()] = {"code": c.hex()}
 
         for j in range(8):
             # HACK: level factories only use the first few storage slots. Higher
             # slots are for maps keyed by player, which we can initialize to
             # zero.
             storage = get_storage_at(address, Uint256(j))
-            if storage.unwrap(int) != 0:
-                snapshot[key][str(j)] = storage.unwrap(bytes).hex()
+            assert (v := storage.maybe_unwrap(bytes)) is not None
+            if int.from_bytes(v) != 0:
+                snapshot[a.hex()][str(j)] = v.hex()
 
         # TODO: some level factories reference other contracts (e.g. via storage
         # slots), we may need to include those as well.
