@@ -11,8 +11,6 @@ from smt.smt import Uint160, Uint256
 from smt.solver import Solver
 from state import Termination
 
-from .helpers import concretize
-
 
 def test_STOP() -> None:
     s = State(latest_return=FrozenBytes.concrete(b"\x12\x34"))
@@ -23,261 +21,215 @@ def test_STOP() -> None:
 
 
 def test_ADD() -> None:
-    assert concretize(ADD(Uint256(10), Uint256(10))) == 20
+    assert ADD(Uint256(10), Uint256(10)).maybe_unwrap() == 20
     assert (
-        concretize(
-            ADD(
-                Uint256(
-                    0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-                ),
-                Uint256(1),
-            )
-        )
+        ADD(
+            Uint256(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF),
+            Uint256(1),
+        ).maybe_unwrap()
         == 0
     )
 
 
 def test_MUL() -> None:
-    assert concretize(MUL(Uint256(10), Uint256(10))) == 100
+    assert MUL(Uint256(10), Uint256(10)).maybe_unwrap() == 100
     assert (
-        concretize(
-            MUL(
-                Uint256(
-                    0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-                ),
-                Uint256(2),
-            )
-        )
+        MUL(
+            Uint256(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF),
+            Uint256(2),
+        ).maybe_unwrap()
         == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE
     )
 
 
 def test_SUB() -> None:
-    assert concretize(SUB(Uint256(10), Uint256(10))) == 0
+    assert SUB(Uint256(10), Uint256(10)).maybe_unwrap() == 0
     assert (
-        concretize(SUB(Uint256(0), Uint256(1)))
+        SUB(Uint256(0), Uint256(1)).maybe_unwrap()
         == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
     )
 
 
 def test_DIV() -> None:
-    assert concretize(DIV(Uint256(10), Uint256(10))) == 1
-    assert concretize(DIV(Uint256(1), Uint256(2))) == 0
-    assert concretize(DIV(Uint256(10), Uint256(0))) == 0
+    assert DIV(Uint256(10), Uint256(10)).maybe_unwrap() == 1
+    assert DIV(Uint256(1), Uint256(2)).maybe_unwrap() == 0
+    assert DIV(Uint256(10), Uint256(0)).maybe_unwrap() == 0
 
 
 def test_SDIV() -> None:
-    assert concretize(SDIV(Uint256(10), Uint256(10))) == 1
+    assert SDIV(Uint256(10), Uint256(10)).maybe_unwrap() == 1
     assert (
-        concretize(
-            SDIV(
-                Uint256(
-                    0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE
-                ),
-                Uint256(
-                    0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-                ),
-            )
-        )
+        SDIV(
+            Uint256(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE),
+            Uint256(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF),
+        ).maybe_unwrap()
         == 2
     )
-    assert concretize(SDIV(Uint256(10), Uint256(0))) == 0
+    assert SDIV(Uint256(10), Uint256(0)).maybe_unwrap() == 0
 
 
 def test_MOD() -> None:
-    assert concretize(MOD(Uint256(10), Uint256(3))) == 1
-    assert concretize(MOD(Uint256(17), Uint256(5))) == 2
-    assert concretize(MOD(Uint256(10), Uint256(0))) == 0
+    assert MOD(Uint256(10), Uint256(3)).maybe_unwrap() == 1
+    assert MOD(Uint256(17), Uint256(5)).maybe_unwrap() == 2
+    assert MOD(Uint256(10), Uint256(0)).maybe_unwrap() == 0
 
 
 def test_SMOD() -> None:
-    assert concretize(SMOD(Uint256(10), Uint256(3))) == 1
+    assert SMOD(Uint256(10), Uint256(3)).maybe_unwrap() == 1
     assert (
-        concretize(
-            SMOD(
-                Uint256(
-                    0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF8
-                ),
-                Uint256(
-                    0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFD
-                ),
-            )
-        )
+        SMOD(
+            Uint256(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF8),
+            Uint256(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFD),
+        ).maybe_unwrap()
         == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE
     )
-    assert concretize(SMOD(Uint256(10), Uint256(0))) == 0
+    assert SMOD(Uint256(10), Uint256(0)).maybe_unwrap() == 0
 
 
 def test_ADDMOD() -> None:
-    assert concretize(ADDMOD(Uint256(10), Uint256(10), Uint256(8))) == 4
+    assert ADDMOD(Uint256(10), Uint256(10), Uint256(8)).maybe_unwrap() == 4
     assert (
-        concretize(
-            ADDMOD(
-                Uint256(
-                    0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-                ),
-                Uint256(2),
-                Uint256(2),
-            )
-        )
+        ADDMOD(
+            Uint256(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF),
+            Uint256(2),
+            Uint256(2),
+        ).maybe_unwrap()
         == 1
     )
 
 
 def test_MULMOD() -> None:
-    assert concretize(MULMOD(Uint256(10), Uint256(10), Uint256(8))) == 4
+    assert MULMOD(Uint256(10), Uint256(10), Uint256(8)).maybe_unwrap() == 4
     assert (
-        concretize(
-            MULMOD(
-                Uint256(
-                    0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-                ),
-                Uint256(
-                    0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-                ),
-                Uint256(12),
-            )
-        )
+        MULMOD(
+            Uint256(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF),
+            Uint256(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF),
+            Uint256(12),
+        ).maybe_unwrap()
         == 9
     )
 
 
 def test_EXP() -> None:
-    assert concretize(EXP(Uint256(10), Uint256(2))) == 100
-    assert concretize(EXP(Uint256(2), Uint256(2))) == 4
+    assert EXP(Uint256(10), Uint256(2)).maybe_unwrap() == 100
+    assert EXP(Uint256(2), Uint256(2)).maybe_unwrap() == 4
 
 
 def test_SIGNEXTEND() -> None:
     assert (
-        concretize(SIGNEXTEND(Uint256(0), Uint256(0xFF)))
+        SIGNEXTEND(Uint256(0), Uint256(0xFF)).maybe_unwrap()
         == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
     )
     assert (
-        concretize(SIGNEXTEND(Uint256(0), Uint256(0xAAAA)))
+        SIGNEXTEND(Uint256(0), Uint256(0xAAAA)).maybe_unwrap()
         == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFAA
     )
     assert (
-        concretize(SIGNEXTEND(Uint256(1), Uint256(0xABCD)))
+        SIGNEXTEND(Uint256(1), Uint256(0xABCD)).maybe_unwrap()
         == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFABCD
     )
-    assert concretize(SIGNEXTEND(Uint256(0), Uint256(0x7F))) == 0x7F
-    assert concretize(SIGNEXTEND(Uint256(1), Uint256(0x5BCD))) == 0x5BCD
-    assert concretize(SIGNEXTEND(Uint256(2), Uint256(0xFF))) == 0xFF
-    assert concretize(SIGNEXTEND(Uint256(2), Uint256(0xABCD))) == 0xABCD
-    assert concretize(SIGNEXTEND(Uint256(0x7F), Uint256(0x7F))) == 0x7F
+    assert SIGNEXTEND(Uint256(0), Uint256(0x7F)).maybe_unwrap() == 0x7F
+    assert SIGNEXTEND(Uint256(1), Uint256(0x5BCD)).maybe_unwrap() == 0x5BCD
+    assert SIGNEXTEND(Uint256(2), Uint256(0xFF)).maybe_unwrap() == 0xFF
+    assert SIGNEXTEND(Uint256(2), Uint256(0xABCD)).maybe_unwrap() == 0xABCD
+    assert SIGNEXTEND(Uint256(0x7F), Uint256(0x7F)).maybe_unwrap() == 0x7F
 
 
 def test_LT() -> None:
-    assert concretize(LT(Uint256(8), Uint256(10))) == 1
-    assert concretize(LT(Uint256(10), Uint256(10))) == 0
+    assert LT(Uint256(8), Uint256(10)).maybe_unwrap() == 1
+    assert LT(Uint256(10), Uint256(10)).maybe_unwrap() == 0
 
 
 def test_GT() -> None:
-    assert concretize(GT(Uint256(10), Uint256(8))) == 1
-    assert concretize(GT(Uint256(10), Uint256(10))) == 0
+    assert GT(Uint256(10), Uint256(8)).maybe_unwrap() == 1
+    assert GT(Uint256(10), Uint256(10)).maybe_unwrap() == 0
 
 
 def test_SLT() -> None:
     assert (
-        concretize(
-            SLT(
-                Uint256(
-                    0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-                ),
-                Uint256(0),
-            )
-        )
+        SLT(
+            Uint256(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF),
+            Uint256(0),
+        ).maybe_unwrap()
         == 1
     )
-    assert concretize(SLT(Uint256(10), Uint256(10))) == 0
+    assert SLT(Uint256(10), Uint256(10)).maybe_unwrap() == 0
 
 
 def test_SGT() -> None:
     assert (
-        concretize(
-            SGT(
-                Uint256(0),
-                Uint256(
-                    0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-                ),
-            )
-        )
+        SGT(
+            Uint256(0),
+            Uint256(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF),
+        ).maybe_unwrap()
         == 1
     )
-    assert concretize(SGT(Uint256(10), Uint256(10))) == 0
+    assert SGT(Uint256(10), Uint256(10)).maybe_unwrap() == 0
 
 
 def test_EQ() -> None:
-    assert concretize(EQ(Uint256(10), Uint256(10))) == 1
-    assert concretize(EQ(Uint256(10), Uint256(8))) == 0
+    assert EQ(Uint256(10), Uint256(10)).maybe_unwrap() == 1
+    assert EQ(Uint256(10), Uint256(8)).maybe_unwrap() == 0
 
 
 def test_ISZERO() -> None:
-    assert concretize(ISZERO(Uint256(10))) == 0
-    assert concretize(ISZERO(Uint256(0))) == 1
+    assert ISZERO(Uint256(10)).maybe_unwrap() == 0
+    assert ISZERO(Uint256(0)).maybe_unwrap() == 1
 
 
 def test_AND() -> None:
-    assert concretize(AND(Uint256(0x0F), Uint256(0x0F))) == 0xF
-    assert concretize(AND(Uint256(0xFF), Uint256(0))) == 0
+    assert AND(Uint256(0x0F), Uint256(0x0F)).maybe_unwrap() == 0xF
+    assert AND(Uint256(0xFF), Uint256(0)).maybe_unwrap() == 0
 
 
 def test_OR() -> None:
-    assert concretize(OR(Uint256(0xF0), Uint256(0x0F))) == 0xFF
-    assert concretize(OR(Uint256(0xFF), Uint256(0xFF))) == 0xFF
+    assert OR(Uint256(0xF0), Uint256(0x0F)).maybe_unwrap() == 0xFF
+    assert OR(Uint256(0xFF), Uint256(0xFF)).maybe_unwrap() == 0xFF
 
 
 def test_XOR() -> None:
-    assert concretize(XOR(Uint256(0xF0), Uint256(0x0F))) == 0xFF
-    assert concretize(XOR(Uint256(0xFF), Uint256(0xFF))) == 0
+    assert XOR(Uint256(0xF0), Uint256(0x0F)).maybe_unwrap() == 0xFF
+    assert XOR(Uint256(0xFF), Uint256(0xFF)).maybe_unwrap() == 0
 
 
 def test_NOT() -> None:
     assert (
-        concretize(NOT(Uint256(0)))
+        NOT(Uint256(0)).maybe_unwrap()
         == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
     )
 
 
 def test_BYTE() -> None:
-    assert concretize(BYTE(Uint256(31), Uint256(0xFF))) == 0xFF
-    assert concretize(BYTE(Uint256(30), Uint256(0x8800))) == 0x88
-    assert concretize(BYTE(Uint256(30), Uint256(0xAABBCC))) == 0xBB
-    assert concretize(BYTE(Uint256(123456), Uint256(0xAABBCC))) == 0
+    assert BYTE(Uint256(31), Uint256(0xFF)).maybe_unwrap() == 0xFF
+    assert BYTE(Uint256(30), Uint256(0x8800)).maybe_unwrap() == 0x88
+    assert BYTE(Uint256(30), Uint256(0xAABBCC)).maybe_unwrap() == 0xBB
+    assert BYTE(Uint256(123456), Uint256(0xAABBCC)).maybe_unwrap() == 0
 
 
 def test_SHL() -> None:
-    assert concretize(SHL(Uint256(1), Uint256(1))) == 2
+    assert SHL(Uint256(1), Uint256(1)).maybe_unwrap() == 2
     assert (
-        concretize(
-            SHL(
-                Uint256(4),
-                Uint256(
-                    0xFF00000000000000000000000000000000000000000000000000000000000000
-                ),
-            )
-        )
+        SHL(
+            Uint256(4),
+            Uint256(0xFF00000000000000000000000000000000000000000000000000000000000000),
+        ).maybe_unwrap()
         == 0xF000000000000000000000000000000000000000000000000000000000000000
     )
 
 
 def test_SHR() -> None:
-    assert concretize(SHR(Uint256(1), Uint256(2))) == 1
-    assert concretize(SHR(Uint256(4), Uint256(0xFF))) == 0xF
-    assert concretize(SHR(Uint256(123), Uint256(0xAA))) == 0
+    assert SHR(Uint256(1), Uint256(2)).maybe_unwrap() == 1
+    assert SHR(Uint256(4), Uint256(0xFF)).maybe_unwrap() == 0xF
+    assert SHR(Uint256(123), Uint256(0xAA)).maybe_unwrap() == 0
 
 
 def test_SAR() -> None:
-    assert concretize(SAR(Uint256(1), Uint256(2))) == 1
+    assert SAR(Uint256(1), Uint256(2)).maybe_unwrap() == 1
     assert (
-        concretize(
-            SAR(
-                Uint256(4),
-                Uint256(
-                    0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF0
-                ),
-            )
-        )
+        SAR(
+            Uint256(4),
+            Uint256(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF0),
+        ).maybe_unwrap()
         == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
     )
 
@@ -298,7 +250,7 @@ def test_SHA3() -> None:
 def test_ADDRESS() -> None:
     contract = Contract(address=Uint160(0x9BBFED6889322E016E0A02EE459D306FC19545D8))
     s = State(contract=contract)
-    assert concretize(ADDRESS(s)) == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
+    assert ADDRESS(s).maybe_unwrap() == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
 
 
 def test_BALANCE() -> None:
@@ -307,7 +259,7 @@ def test_BALANCE() -> None:
         125985
     )
     assert (
-        concretize(BALANCE(s, Uint256(0x9BBFED6889322E016E0A02EE459D306FC19545D8)))
+        BALANCE(s, Uint256(0x9BBFED6889322E016E0A02EE459D306FC19545D8)).maybe_unwrap()
         == 125985
     )
 
@@ -317,7 +269,7 @@ def test_ORIGIN() -> None:
         origin=Uint160(0x9BBFED6889322E016E0A02EE459D306FC19545D8)
     )
     s = State(transaction=transaction)
-    assert concretize(ORIGIN(s)) == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
+    assert ORIGIN(s).maybe_unwrap() == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
 
 
 def test_CALLER() -> None:
@@ -325,13 +277,13 @@ def test_CALLER() -> None:
         caller=Uint160(0x9BBFED6889322E016E0A02EE459D306FC19545D8)
     )
     s = State(transaction=transaction)
-    assert concretize(CALLER(s)) == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
+    assert CALLER(s).maybe_unwrap() == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
 
 
 def test_CALLVALUE() -> None:
     transaction = Transaction(callvalue=Uint256(123456789))
     s = State(transaction=transaction)
-    assert concretize(CALLVALUE(s)) == 123456789
+    assert CALLVALUE(s).maybe_unwrap() == 123456789
 
 
 def test_CALLDATALOAD() -> None:
@@ -342,20 +294,20 @@ def test_CALLDATALOAD() -> None:
     )
     s = State(transaction=transaction)
     assert (
-        concretize(CALLDATALOAD(s, Uint256(0)))
+        CALLDATALOAD(s, Uint256(0)).maybe_unwrap()
         == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
     )
     assert (
-        concretize(CALLDATALOAD(s, Uint256(31)))
+        CALLDATALOAD(s, Uint256(31)).maybe_unwrap()
         == 0xFF00000000000000000000000000000000000000000000000000000000000000
     )
-    assert concretize(CALLDATALOAD(s, Uint256(32))) == 0
+    assert CALLDATALOAD(s, Uint256(32)).maybe_unwrap() == 0
 
 
 def test_CALLDATASIZE() -> None:
     transaction = Transaction(calldata=FrozenBytes.concrete(b"\xff"))
     s = State(transaction=transaction)
-    assert concretize(CALLDATASIZE(s)) == 1
+    assert CALLDATASIZE(s).maybe_unwrap() == 1
 
 
 def test_CALLDATACOPY() -> None:
@@ -385,7 +337,7 @@ def test_CODESIZE() -> None:
             program=disassemble(bytes.fromhex("66000000000000005B")),
         )
     )
-    assert concretize(CODESIZE(s)) == 9
+    assert CODESIZE(s).maybe_unwrap() == 9
 
 
 def test_CODECOPY() -> None:
@@ -408,7 +360,7 @@ def test_CODECOPY() -> None:
 def test_GASPRICE() -> None:
     transaction = Transaction(gasprice=Uint256(10))
     s = State(transaction=transaction)
-    assert concretize(GASPRICE(s)) == 10
+    assert GASPRICE(s).maybe_unwrap() == 10
 
 
 def test_EXTCODESIZE() -> None:
@@ -419,8 +371,8 @@ def test_EXTCODESIZE() -> None:
     )
     s = State()
     s.universe.add_contract(contract)
-    assert concretize(EXTCODESIZE(s, Uint256(address))) == 9
-    assert concretize(EXTCODESIZE(s, Uint256(0x1234))) == 0
+    assert EXTCODESIZE(s, Uint256(address)).maybe_unwrap() == 9
+    assert EXTCODESIZE(s, Uint256(0x1234)).maybe_unwrap() == 0
 
 
 def test_EXTCODECOPY() -> None:
@@ -441,7 +393,7 @@ def test_EXTCODECOPY() -> None:
 
 def test_RETURNDATASIZE() -> None:
     s = State(latest_return=FrozenBytes.concrete(b"abcdefghijklmnopqrstuvwxyz"))
-    assert concretize(RETURNDATASIZE(s)) == 26
+    assert RETURNDATASIZE(s).maybe_unwrap() == 26
 
 
 def test_RETURNDATACOPY() -> None:
@@ -474,37 +426,37 @@ def test_EXTCODEHASH() -> None:
     s.universe.add_contract(contract)
 
     assert (
-        concretize(EXTCODEHASH(s, Uint256(address)))
+        EXTCODEHASH(s, Uint256(address)).maybe_unwrap()
         == 0xD579742AEE22A336CAC42EFE05B2CF1281DB892E213257B929C2338EA0675B00
     )
-    assert concretize(EXTCODEHASH(s, Uint256(0x1234))) == 0x0
+    assert EXTCODEHASH(s, Uint256(0x1234)).maybe_unwrap() == 0x0
 
 
 def test_BLOCKHASH() -> None:
     s = State(block=Block(hashes=Array.concrete(Uint8, Uint256(0x9999))))
-    assert concretize(BLOCKHASH(s, s.block.number - Uint256(10))) == 0x9999
-    assert concretize(BLOCKHASH(s, s.block.number - Uint256(256))) == 0x9999
-    assert concretize(BLOCKHASH(s, s.block.number - Uint256(257))) == 0
-    assert concretize(BLOCKHASH(s, s.block.number)) == 0
-    assert concretize(BLOCKHASH(s, s.block.number + Uint256(10))) == 0
+    assert BLOCKHASH(s, s.block.number - Uint256(10)).maybe_unwrap() == 0x9999
+    assert BLOCKHASH(s, s.block.number - Uint256(256)).maybe_unwrap() == 0x9999
+    assert BLOCKHASH(s, s.block.number - Uint256(257)).maybe_unwrap() == 0
+    assert BLOCKHASH(s, s.block.number).maybe_unwrap() == 0
+    assert BLOCKHASH(s, s.block.number + Uint256(10)).maybe_unwrap() == 0
 
 
 def test_COINBASE() -> None:
     block = Block(coinbase=Uint160(0x9BBFED6889322E016E0A02EE459D306FC19545D8))
     s = State(block=block)
-    assert concretize(COINBASE(s)) == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
+    assert COINBASE(s).maybe_unwrap() == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
 
 
 def test_TIMESTAMP() -> None:
     block = Block(timestamp=Uint256(1636704767))
     s = State(block=block)
-    assert concretize(TIMESTAMP(s)) == 1636704767
+    assert TIMESTAMP(s).maybe_unwrap() == 1636704767
 
 
 def test_NUMBER() -> None:
     block = Block(number=Uint256(1636704767))
     s = State(block=block)
-    assert concretize(NUMBER(s)) == 1636704767
+    assert NUMBER(s).maybe_unwrap() == 1636704767
 
 
 def test_PREVRANDAO() -> None:
@@ -515,7 +467,7 @@ def test_PREVRANDAO() -> None:
     )
     s = State(block=block)
     assert (
-        concretize(PREVRANDAO(s))
+        PREVRANDAO(s).maybe_unwrap()
         == 0xCE124DEE50136F3F93F19667FB4198C6B94EECBACFA300469E5280012757BE94
     )
 
@@ -523,18 +475,18 @@ def test_PREVRANDAO() -> None:
 def test_GASLIMIT() -> None:
     block = Block(gaslimit=Uint256(0xFFFFFFFFFFFF))
     s = State(block=block)
-    assert concretize(GASLIMIT(s)) == 0xFFFFFFFFFFFF
+    assert GASLIMIT(s).maybe_unwrap() == 0xFFFFFFFFFFFF
 
 
 def test_CHAINID() -> None:
     s = State()
-    assert concretize(CHAINID(s)) == 1
+    assert CHAINID(s).maybe_unwrap() == 1
 
 
 def test_BASEFEE() -> None:
     block = Block(basefee=Uint256(10))
     s = State(block=block)
-    assert concretize(BASEFEE(s)) == 10
+    assert BASEFEE(s).maybe_unwrap() == 10
 
 
 def test_MLOAD() -> None:
@@ -545,8 +497,8 @@ def test_MLOAD() -> None:
             )
         )
     )
-    assert concretize(MLOAD(s, Uint256(0))) == 0xFF
-    assert concretize(MLOAD(s, Uint256(1))) == 0xFF00
+    assert MLOAD(s, Uint256(0)).maybe_unwrap() == 0xFF
+    assert MLOAD(s, Uint256(1)).maybe_unwrap() == 0xFF00
 
 
 def test_MSTORE() -> None:
@@ -575,20 +527,20 @@ def test_MSTORE8() -> None:
 def test_SLOAD() -> None:
     s = State()
     s.contract.storage[Uint256(0)] = Uint256(46)
-    assert concretize(SLOAD(s, Uint256(0))) == 46
+    assert SLOAD(s, Uint256(0)).maybe_unwrap() == 46
     assert len(s.contract.storage.accessed) == 1
-    assert concretize(s.contract.storage.accessed[0]) == 0
+    assert s.contract.storage.accessed[0].maybe_unwrap() == 0
 
 
 def test_SSTORE() -> None:
     s = State()
 
     SSTORE(s, Uint256(0), Uint256(0xFFFF))
-    assert concretize(s.contract.storage[Uint256(0)]) == 0xFFFF
+    assert s.contract.storage[Uint256(0)].maybe_unwrap() == 0xFFFF
 
     SSTORE(s, Uint256(8965), Uint256(0xFF))
-    assert concretize(s.contract.storage[Uint256(0)]) == 0xFFFF
-    assert concretize(s.contract.storage[Uint256(8965)]) == 0xFF
+    assert s.contract.storage[Uint256(0)].maybe_unwrap() == 0xFFFF
+    assert s.contract.storage[Uint256(8965)].maybe_unwrap() == 0xFF
 
 
 def test_JUMP() -> None:
@@ -604,17 +556,17 @@ def test_JUMP() -> None:
 
 def test_PC() -> None:
     ins = Instruction(0x12, 1, "PC")
-    assert concretize(PC(ins)) == 0x12
+    assert PC(ins).maybe_unwrap() == 0x12
 
 
 def test_MSIZE() -> None:
     s = State(memory=MutableBytes.concrete(b"\x00" * 123 + b"\x01"))
-    assert concretize(MSIZE(s)) == 124
+    assert MSIZE(s).maybe_unwrap() == 124
 
 
 def test_PUSH() -> None:
     ins = Instruction(0x0, 2, "PUSH", 1, Uint256(0x01))
-    assert concretize(PUSH(ins)) == 0x01
+    assert PUSH(ins).maybe_unwrap() == 0x01
 
     ins = Instruction(0x1, 2, "PUSH", 1)
     with pytest.raises(ValueError):
@@ -625,7 +577,7 @@ def test_DUP() -> None:
     s = State(stack=[Uint256(0x1234)])
 
     ins = Instruction(0x0, 1, "DUP", 1)
-    assert concretize(DUP(ins, s)) == 0x1234
+    assert DUP(ins, s).maybe_unwrap() == 0x1234
 
     ins = Instruction(0x0, 1, "DUP")
     with pytest.raises(ValueError):
@@ -637,7 +589,7 @@ def test_SWAP() -> None:
 
     ins = Instruction(0x0, 1, "SWAP", 1)
     SWAP(ins, s)
-    stack = [concretize(x) for x in s.stack]
+    stack = [x.maybe_unwrap() for x in s.stack]
     assert stack == [0x5678, 0x1234]
 
     ins = Instruction(0x0, 1, "SWAP")
@@ -655,7 +607,7 @@ def test_LOG() -> None:
     assert len(s.logs) == 1
     assert s.logs[0].data.unwrap() == b"\x34"
     assert len(s.logs[0].topics) == 1
-    assert concretize(s.logs[0].topics[0]) == 0xABCD
+    assert s.logs[0].topics[0].maybe_unwrap() == 0xABCD
 
 
 def test_CREATE() -> None:
@@ -671,10 +623,10 @@ def test_CREATE() -> None:
     flow = CREATE(s, Uint256(999), Uint256(2), Uint256(100))
     assert isinstance(flow, Descend)
     assert (
-        concretize(flow.state.contract.address)
+        flow.state.contract.address.maybe_unwrap()
         == 0x343C43A37D37DFF08AE8C4A11544C718ABB4FCF8
     )
-    assert concretize(contract.nonce) == 2
+    assert contract.nonce.maybe_unwrap() == 2
 
 
 def test_RETURN() -> None:
@@ -694,10 +646,10 @@ def test_CREATE2() -> None:
     flow = CREATE2(s, Uint256(999), Uint256(0), Uint256(0), Uint256(0x0))
     assert isinstance(flow, Descend)
     assert (
-        concretize(flow.state.contract.address)
+        flow.state.contract.address.maybe_unwrap()
         == 0xE33C0C7F7DF4809055C3EBA6C09CFE4BAF1BD9E0  # from EIP-1014
     )
-    assert concretize(contract.nonce) == 2
+    assert contract.nonce.maybe_unwrap() == 2
 
 
 def test_REVERT() -> None:

@@ -3,17 +3,9 @@
 from disassembler import Program
 from environment import Contract
 from smt.sha3 import SHA3
-from smt.smt import BitVector, Uint160, Uint256
+from smt.smt import Uint160, Uint256
 from state import State
 from universal import symbolic_start
-
-
-def concretize(value: BitVector | None) -> int | None:
-    """Unwrap the given value, passing through Nones."""
-    if value is None:
-        return None
-    return value.unwrap()
-
 
 Fallback = (
     ("Px19", "SAVE", None, 1),
