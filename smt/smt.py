@@ -126,28 +126,6 @@ class BitVector(Symbolic[int]):
         else:
             raise TypeError(f"unexpected type: {into}")
 
-    @overload
-    def unwrap(
-        self, into: Type[int] = int, msg: str = "unexpected symbolic value"
-    ) -> int:
-        ...
-
-    @overload
-    def unwrap(
-        self, into: Type[bytes], msg: str = "unexpected symbolic value"
-    ) -> bytes:
-        ...
-
-    def unwrap(
-        self,
-        into: Type[int] | Type[bytes] = int,
-        msg: str = "unexpected symbolic value",
-    ) -> int | bytes:
-        """Unwrap the bitvector or raise an error."""
-        if (u := self.maybe_unwrap(into)) is None:
-            raise ValueError(msg)
-        return u
-
     def describe(self) -> str:
         """
         Produce a human-readable description of the given bitvector.
@@ -419,9 +397,3 @@ class Constraint(Symbolic[bool]):
             return False
         else:
             return None
-
-    def unwrap(self, msg: str = "unexpected symbolic value") -> bool:
-        """Unwrap the constraint or raise an error."""
-        if (value := self.maybe_unwrap()) is None:
-            raise ValueError(msg)
-        return value

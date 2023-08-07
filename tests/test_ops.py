@@ -17,7 +17,7 @@ def test_STOP() -> None:
     STOP(s)
     assert isinstance(s.pc, Termination)
     assert s.pc.success is True
-    assert s.pc.returndata.unwrap() == b""
+    assert s.pc.returndata.maybe_unwrap() == b""
 
 
 def test_ADD() -> None:
@@ -319,15 +319,13 @@ def test_CALLDATACOPY() -> None:
     s = State(transaction=transaction)
 
     CALLDATACOPY(s, Uint256(0), Uint256(0), Uint256(32))
-    assert (
-        s.memory.unwrap().hex()
-        == "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    assert s.memory.maybe_unwrap() == bytes.fromhex(
+        "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
     )
 
     CALLDATACOPY(s, Uint256(0), Uint256(31), Uint256(8))
-    assert (
-        s.memory.unwrap().hex()
-        == "ff00000000000000ffffffffffffffffffffffffffffffffffffffffffffffff"
+    assert s.memory.maybe_unwrap() == bytes.fromhex(
+        "ff00000000000000ffffffffffffffffffffffffffffffffffffffffffffffff"
     )
 
 
@@ -348,12 +346,11 @@ def test_CODECOPY() -> None:
     )
 
     CODECOPY(s, Uint256(0), Uint256(0), Uint256(0x09))
-    assert s.memory.unwrap().hex() == "66000000000000005b"
+    assert s.memory.maybe_unwrap() == bytes.fromhex("66000000000000005b")
 
     CODECOPY(s, Uint256(1), Uint256(8), Uint256(0x20))
-    assert (
-        s.memory.unwrap().hex()
-        == "665b00000000000000000000000000000000000000000000000000000000000000"
+    assert s.memory.maybe_unwrap() == bytes.fromhex(
+        "665b00000000000000000000000000000000000000000000000000000000000000"
     )
 
 
@@ -385,10 +382,10 @@ def test_EXTCODECOPY() -> None:
     s.universe.add_contract(contract)
 
     EXTCODECOPY(s, Uint256(address), Uint256(3), Uint256(5), Uint256(7))
-    assert s.memory.unwrap().hex() == "0000000000005b000000"
+    assert s.memory.maybe_unwrap() == bytes.fromhex("0000000000005b000000")
 
     EXTCODECOPY(s, Uint256(0x1234), Uint256(0), Uint256(0), Uint256(10))
-    assert s.memory.unwrap().hex() == "00000000000000000000"
+    assert s.memory.maybe_unwrap() == bytes.fromhex("00000000000000000000")
 
 
 def test_RETURNDATASIZE() -> None:
@@ -404,15 +401,13 @@ def test_RETURNDATACOPY() -> None:
     )
 
     RETURNDATACOPY(s, Uint256(0), Uint256(0), Uint256(32))
-    assert (
-        s.memory.unwrap().hex()
-        == "7dffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f"
+    assert s.memory.maybe_unwrap() == bytes.fromhex(
+        "7dffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f"
     )
 
     RETURNDATACOPY(s, Uint256(0), Uint256(31), Uint256(8))
-    assert (
-        s.memory.unwrap().hex()
-        == "7f00000000000000ffffffffffffffffffffffffffffffffffffffffffffff7f"
+    assert s.memory.maybe_unwrap() == bytes.fromhex(
+        "7f00000000000000ffffffffffffffffffffffffffffffffffffffffffffff7f"
     )
 
 
@@ -504,14 +499,12 @@ def test_MLOAD() -> None:
 def test_MSTORE() -> None:
     s = State()
     MSTORE(s, Uint256(0), Uint256(0xFF))
-    assert (
-        s.memory.unwrap().hex()
-        == "00000000000000000000000000000000000000000000000000000000000000ff"
+    assert s.memory.maybe_unwrap() == bytes.fromhex(
+        "00000000000000000000000000000000000000000000000000000000000000ff"
     )
     MSTORE(s, Uint256(1), Uint256(0xFF))
-    assert (
-        s.memory.unwrap().hex()
-        == "0000000000000000000000000000000000000000000000000000000000000000ff"
+    assert s.memory.maybe_unwrap() == bytes.fromhex(
+        "0000000000000000000000000000000000000000000000000000000000000000ff"
     )
 
 
@@ -519,9 +512,9 @@ def test_MSTORE8() -> None:
     s = State()
     MSTORE8(s, Uint256(0), Uint256(0xFFFF))
 
-    assert s.memory.unwrap().hex() == "ff"
+    assert s.memory.maybe_unwrap() == b"\xff"
     MSTORE8(s, Uint256(1), Uint256(0xAABBCCDDEE))
-    assert s.memory.unwrap().hex() == "ffee"
+    assert s.memory.maybe_unwrap() == b"\xff\xee"
 
 
 def test_SLOAD() -> None:
@@ -605,7 +598,7 @@ def test_LOG() -> None:
     ins = Instruction(0x0, 1, "LOG", 1)
     LOG(ins, s, Uint256(1), Uint256(1))
     assert len(s.logs) == 1
-    assert s.logs[0].data.unwrap() == b"\x34"
+    assert s.logs[0].data.maybe_unwrap() == b"\x34"
     assert len(s.logs[0].topics) == 1
     assert s.logs[0].topics[0].maybe_unwrap() == 0xABCD
 
@@ -637,7 +630,7 @@ def test_RETURN() -> None:
     RETURN(s, Uint256(0), Uint256(2))
     assert isinstance(s.pc, Termination)
     assert s.pc.success is True
-    assert s.pc.returndata.unwrap() == b"\xff\x01"
+    assert s.pc.returndata.maybe_unwrap() == b"\xff\x01"
 
 
 def test_CREATE2() -> None:
@@ -660,7 +653,7 @@ def test_REVERT() -> None:
     REVERT(s, Uint256(0), Uint256(2))
     assert isinstance(s.pc, Termination)
     assert s.pc.success is False
-    assert s.pc.returndata.unwrap() == b"\xff\x01"
+    assert s.pc.returndata.maybe_unwrap() == b"\xff\x01"
 
 
 def test_INVALID() -> None:
@@ -668,7 +661,7 @@ def test_INVALID() -> None:
     INVALID(s)
     assert isinstance(s.pc, Termination)
     assert s.pc.success is False
-    assert s.pc.returndata.unwrap() == b""
+    assert s.pc.returndata.maybe_unwrap() == b""
 
 
 def test_SELFDESTRUCT() -> None:

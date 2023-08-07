@@ -11,7 +11,7 @@ from .solidity import compile_solidity, load_binary, load_solidity, loads_solidi
 
 
 def concretize_stack(state: State) -> list[int]:
-    return [x.unwrap() for x in state.stack]
+    return [v for v in (x.maybe_unwrap() for x in state.stack) if v is not None]
 
 
 def execute(state: State) -> State:
@@ -76,7 +76,7 @@ def test_basic() -> None:
     assert action is None
     assert isinstance(state.pc, Termination)
     assert state.pc.success is False
-    assert state.pc.returndata.unwrap() == b""
+    assert state.pc.returndata.maybe_unwrap() == b""
     assert concretize_stack(state) == []
 
 
@@ -137,7 +137,7 @@ def test_basic_solidity() -> None:
     state = execute(state)
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
-    assert state.pc.returndata.unwrap() == b"\x00" * 32
+    assert state.pc.returndata.maybe_unwrap() == b"\x00" * 32
 
     state = State(
         contract=state.contract,  # carries forward storage
@@ -149,7 +149,8 @@ def test_basic_solidity() -> None:
     state = execute(state)
     assert isinstance(state.pc, Termination)
     assert state.pc.success is False
-    assert state.pc.returndata.unwrap()[68:91] == b"caller is not the owner"
+    assert (data := state.pc.returndata.maybe_unwrap()) is not None
+    assert data[68:91] == b"caller is not the owner"
 
     state = State(
         contract=state.contract,
@@ -162,7 +163,7 @@ def test_basic_solidity() -> None:
     state = execute(state)
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
-    assert state.pc.returndata.unwrap() == b""
+    assert state.pc.returndata.maybe_unwrap() == b""
 
     state = State(
         contract=state.contract,
@@ -174,7 +175,8 @@ def test_basic_solidity() -> None:
     state = execute(state)
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
-    assert state.pc.returndata.unwrap()[-20:] == b"\xca" * 20
+    assert (data := state.pc.returndata.maybe_unwrap()) is not None
+    assert data[-20:] == b"\xca" * 20
 
 
 def test_basic_printable() -> None:
@@ -233,7 +235,7 @@ def test_fallback() -> None:
 
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
-    assert state.pc.returndata.unwrap() == Uint256(0).unwrap(bytes)
+    assert state.pc.returndata.maybe_unwrap() == Uint256(0).maybe_unwrap(bytes)
 
 
 def test_fallout() -> None:
@@ -249,9 +251,9 @@ def test_fallout() -> None:
 
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
-    assert state.contract.storage[Uint256(1)].unwrap(bytes) == Uint256(
+    assert state.contract.storage[Uint256(1)].maybe_unwrap(bytes) == Uint256(
         0xCACACACACACACACACACACACACACACACACACACACA
-    ).unwrap(bytes)
+    ).maybe_unwrap(bytes)
 
 
 def test_coinflip() -> None:
@@ -260,7 +262,7 @@ def test_coinflip() -> None:
         contract=Contract(program=program),
         transaction=Transaction(
             calldata=FrozenBytes.concrete(
-                abiencode("flip(bool)") + Uint256(0).unwrap(bytes)
+                abiencode("flip(bool)") + Uint256(0).maybe_unwrap(bytes)
             ),
         ),
     )
@@ -273,9 +275,9 @@ def test_coinflip() -> None:
 
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
-    assert state.contract.storage[Uint256(1)].unwrap(bytes) == Uint256(
+    assert state.contract.storage[Uint256(1)].maybe_unwrap(bytes) == Uint256(
         0x1F6D785BDB6AE9ECE46F3323FB3289240BD2D1C4C683CF558EE200C89933DF4F
-    ).unwrap(bytes)
+    ).maybe_unwrap(bytes)
 
 
 def test_telephone() -> None:
@@ -286,7 +288,9 @@ def test_telephone() -> None:
             caller=Uint160(0xB1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1),
             calldata=FrozenBytes.concrete(
                 abiencode("changeOwner(address)")
-                + Uint256(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF).unwrap(bytes)
+                + Uint256(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF).maybe_unwrap(
+                    bytes
+                )
             ),
         ),
     )
@@ -295,7 +299,7 @@ def test_telephone() -> None:
 
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
-    assert state.pc.returndata.unwrap() == b""
+    assert state.pc.returndata.maybe_unwrap() == b""
 
 
 def test_token() -> None:
@@ -305,8 +309,10 @@ def test_token() -> None:
         transaction=Transaction(
             calldata=FrozenBytes.concrete(
                 abiencode("transfer(address,uint256)")
-                + Uint256(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF).unwrap(bytes)
-                + Uint256(0xEEEE).unwrap(bytes)
+                + Uint256(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF).maybe_unwrap(
+                    bytes
+                )
+                + Uint256(0xEEEE).maybe_unwrap(bytes)
             ),
         ),
     )
@@ -315,7 +321,7 @@ def test_token() -> None:
 
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
-    assert state.pc.returndata.unwrap() == Uint256(1).unwrap(bytes)
+    assert state.pc.returndata.maybe_unwrap() == Uint256(1).maybe_unwrap(bytes)
 
 
 def test_delegation() -> None:
@@ -335,7 +341,7 @@ def test_delegation() -> None:
 
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
-    assert state.pc.returndata.unwrap() == b""
+    assert state.pc.returndata.maybe_unwrap() == b""
 
 
 def test_force() -> None:
@@ -349,7 +355,7 @@ def test_force() -> None:
 
     assert isinstance(state.pc, Termination)
     assert state.pc.success is False
-    assert state.pc.returndata.unwrap() == b""
+    assert state.pc.returndata.maybe_unwrap() == b""
 
 
 def test_vault() -> None:
@@ -358,7 +364,7 @@ def test_vault() -> None:
         contract=Contract(program=program),
         transaction=Transaction(
             calldata=FrozenBytes.concrete(
-                abiencode("unlock(bytes32)") + Uint256(0).unwrap(bytes)
+                abiencode("unlock(bytes32)") + Uint256(0).maybe_unwrap(bytes)
             ),
         ),
     )
@@ -367,7 +373,7 @@ def test_vault() -> None:
 
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
-    assert state.pc.returndata.unwrap() == b""
+    assert state.pc.returndata.maybe_unwrap() == b""
 
 
 def test_king() -> None:
@@ -381,7 +387,7 @@ def test_king() -> None:
 
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
-    assert state.pc.returndata.unwrap() == b""
+    assert state.pc.returndata.maybe_unwrap() == b""
 
 
 def test_reentrancy() -> None:
@@ -391,7 +397,7 @@ def test_reentrancy() -> None:
         transaction=Transaction(
             callvalue=Uint256(0x1234),
             calldata=FrozenBytes.concrete(
-                abiencode("donate(address)") + Uint256(1).unwrap(bytes)
+                abiencode("donate(address)") + Uint256(1).maybe_unwrap(bytes)
             ),
         ),
     )
@@ -400,7 +406,7 @@ def test_reentrancy() -> None:
 
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
-    assert state.pc.returndata.unwrap() == b""
+    assert state.pc.returndata.maybe_unwrap() == b""
 
 
 def test_elevator() -> None:
@@ -411,7 +417,7 @@ def test_elevator() -> None:
         transaction=Transaction(
             caller=Uint160(0x76543210),
             calldata=FrozenBytes.concrete(
-                abiencode("goTo(uint256)") + Uint256(1).unwrap(bytes)
+                abiencode("goTo(uint256)") + Uint256(1).maybe_unwrap(bytes)
             ),
         ),
     )
@@ -423,7 +429,7 @@ def test_elevator() -> None:
 
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
-    assert state.pc.returndata.unwrap() == b""
+    assert state.pc.returndata.maybe_unwrap() == b""
 
 
 def test_privacy() -> None:
@@ -432,7 +438,8 @@ def test_privacy() -> None:
         contract=Contract(program=program),
         transaction=Transaction(
             calldata=FrozenBytes.concrete(
-                abiencode("unlock(bytes16)") + Uint256(0x4321 << 128).unwrap(bytes)
+                abiencode("unlock(bytes16)")
+                + Uint256(0x4321 << 128).maybe_unwrap(bytes)
             ),
         ),
     )
@@ -442,7 +449,7 @@ def test_privacy() -> None:
 
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
-    assert state.pc.returndata.unwrap() == b""
+    assert state.pc.returndata.maybe_unwrap() == b""
 
 
 def test_gatekeeper_one() -> None:
@@ -469,7 +476,7 @@ def test_gatekeeper_two() -> None:
 
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
-    assert state.pc.returndata.unwrap() == Uint256(1).unwrap(bytes)
+    assert state.pc.returndata.maybe_unwrap() == Uint256(1).maybe_unwrap(bytes)
 
 
 def test_preservation() -> None:
@@ -484,7 +491,7 @@ def test_preservation() -> None:
         contract=preservation,
         transaction=Transaction(
             calldata=FrozenBytes.concrete(
-                abiencode("setFirstTime(uint256)") + Uint256(0x5050).unwrap(bytes)
+                abiencode("setFirstTime(uint256)") + Uint256(0x5050).maybe_unwrap(bytes)
             ),
         ),
     )
@@ -496,4 +503,4 @@ def test_preservation() -> None:
 
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
-    assert state.pc.returndata.unwrap() == b""
+    assert state.pc.returndata.maybe_unwrap() == b""

@@ -95,16 +95,6 @@ class Bytes(abc.ABC):
             return None
         return bytes(data)
 
-    def unwrap(self, msg: str = "unexpected symbolic value") -> bytes:
-        """
-        Unwrap this instance to bytes.
-
-        Requires a concrete length and all-concrete values.
-        """
-        if (data := self.maybe_unwrap()) is None:
-            raise ValueError(msg)
-        return data
-
     def describe(self, solver: Solver) -> str:
         """Use a model to evaluate this instance as a hexadecimal string."""
         length = solver.evaluate(self.length)

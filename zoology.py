@@ -39,10 +39,13 @@ def createInstance(
     """Call createInstance to set up the level."""
     # Warning: this symbolic universe will be used in symbolic execution later
     # on. Inaccuracies in the environment may result in an inaccurate analysis.
-    calldata = abiencode("createInstance(address)") + PLAYER.into(Uint256).unwrap(bytes)
+    calldata = abiencode("createInstance(address)") + PLAYER.into(Uint256).maybe_unwrap(
+        bytes
+    )
+    assert (a := address.maybe_unwrap()) is not None
     start = State(
         block=Block(),
-        contract=universe.contracts[address.unwrap()],
+        contract=universe.contracts[a],
         transaction=Transaction(
             origin=SETUP,
             caller=SETUP,
@@ -66,27 +69,28 @@ def createInstance(
         assert isinstance(end, State)
 
     assert isinstance(end.pc, Termination)
-    error = end.pc.returndata.unwrap()[68:].strip().decode()
+    assert (data := end.pc.returndata.maybe_unwrap()) is not None
+    error = data[68:].strip().decode()
     assert end.pc.success, f"createInstance() failed{': ' + error if error else ''}"
 
     end.universe.add_contract(end.contract)
-    address = Uint160(int.from_bytes(end.pc.returndata.unwrap()))
-    return address, History(end.universe, end.sha3, PLAYER)
+    assert (data := end.pc.returndata.maybe_unwrap()) is not None
+    return Uint160(int.from_bytes(data)), History(end.universe, end.sha3, PLAYER)
 
 
 def validateInstance(
-    factory: Uint160, instance: Uint160, history: History, prints: bool = False
+    _factory: Uint160, instance: Uint160, history: History, prints: bool = False
 ) -> Validator | None:
     """Symbolically interpret validateInstance as a function, if possible."""
-    calldata = (
-        abiencode("validateInstance(address,address)")
-        + instance.into(Uint256).unwrap(bytes)
-        + PLAYER.into(Uint256).unwrap(bytes)
-    )
+    assert (factory := _factory.maybe_unwrap()) is not None
+
+    assert (arg0 := instance.into(Uint256).maybe_unwrap(bytes)) is not None
+    assert (arg1 := PLAYER.into(Uint256).maybe_unwrap(bytes)) is not None
+    calldata = abiencode("validateInstance(address,address)") + arg0 + arg1
 
     sha3 = SHA3()
     universe, _, _ = history.subsequent()
-    contract = universe.contracts[factory.unwrap()]
+    contract = universe.contracts[factory]
     start = symbolic_start(contract, sha3, "")
     start.transaction = Transaction(
         origin=SETUP,
@@ -95,13 +99,12 @@ def validateInstance(
     )
 
     for reference in universe.contracts.values():
+        assert (a := reference.address.maybe_unwrap(bytes)) is not None
         start.universe.add_contract(
             Contract(
                 address=reference.address,
                 program=reference.program,
-                storage=Array.symbolic(
-                    f"STORAGE@{reference.address.unwrap(bytes).hex()}", Uint256, Uint256
-                ),
+                storage=Array.symbolic(f"STORAGE@{a.hex()}", Uint256, Uint256),
                 nonce=reference.nonce,
             )
         )
@@ -133,7 +136,7 @@ def validateInstance(
 
 
 def constrainWithValidator(
-    factory: Uint160,
+    _factory: Uint160,
     instance: Uint160,
     history: History,
     validator: Validator | None,
@@ -144,14 +147,14 @@ def constrainWithValidator(
         solver.assert_and_track(validator.translate(history))
         return solver
 
-    calldata = (
-        abiencode("validateInstance(address,address)")
-        + instance.into(Uint256).unwrap(bytes)
-        + PLAYER.into(Uint256).unwrap(bytes)
-    )
+    assert (factory := _factory.maybe_unwrap()) is not None
+
+    assert (arg0 := instance.into(Uint256).maybe_unwrap(bytes)) is not None
+    assert (arg1 := PLAYER.into(Uint256).maybe_unwrap(bytes)) is not None
+    calldata = abiencode("validateInstance(address,address)") + arg0 + arg1
 
     universe, sha3, block = history.subsequent()
-    contract = universe.contracts[factory.unwrap()]
+    contract = universe.contracts[factory]
     start = symbolic_start(contract, sha3, "")
     start.transaction = Transaction(
         origin=SETUP,
@@ -179,13 +182,15 @@ def constrainWithValidator(
 
 def search(
     factory: Uint160,
-    instance: Uint160,
+    _instance: Uint160,
     beginning: History,
     validator: Validator | None,
     depth: int,
     verbose: int = 0,
 ) -> tuple[History, Solver] | None:
     """Symbolically execute the given level until a solution is found."""
+    assert (instance := _instance.maybe_unwrap()) is not None
+
     histories: list[History] = [beginning]
     for i in range(depth):
         suffix = str(i + 1)
@@ -194,7 +199,7 @@ def search(
         subsequent: list[History] = []
         for history in histories:
             universe, sha3, block = history.subsequent()
-            contract = universe.contracts[instance.unwrap()]
+            contract = universe.contracts[instance]
             start = symbolic_start(contract, sha3, suffix)
             start.universe = universe
 
@@ -236,7 +241,7 @@ def search(
                         print(f"- [{candidate.pxs()}] unprintable: narrowing error")
                         continue
 
-                solver = constrainWithValidator(factory, instance, candidate, validator)
+                solver = constrainWithValidator(factory, _instance, candidate, validator)
                 candidate.constrain(solver, check=False)
                 if solver.check():
                     candidate.narrow(solver)

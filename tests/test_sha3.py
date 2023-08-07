@@ -13,9 +13,8 @@ from smt.solver import NarrowingError, Solver
 def test_concrete() -> None:
     sha3 = SHA3()
     input = FrozenBytes.concrete(b"testing")
-    assert (
-        sha3[input].unwrap(bytes).hex()
-        == "5f16f4c7f149ac4f9510d9cf8cf384038ad348b3bcdc01915f95de12df9d1b02"
+    assert sha3[input].maybe_unwrap(bytes) == bytes.fromhex(
+        "5f16f4c7f149ac4f9510d9cf8cf384038ad348b3bcdc01915f95de12df9d1b02"
     )
 
 
@@ -72,13 +71,11 @@ def test_fully_symbolic() -> None:
 
 def test_zero() -> None:
     sha3 = SHA3()
-    assert (
-        sha3[FrozenBytes.symbolic("INPUT", 0)].unwrap(bytes).hex()
-        == "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+    assert sha3[FrozenBytes.symbolic("INPUT", 0)].maybe_unwrap(bytes) == bytes.fromhex(
+        "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
     )
-    assert (
-        sha3[FrozenBytes.concrete()].unwrap(bytes).hex()
-        == "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+    assert sha3[FrozenBytes.concrete()].maybe_unwrap(bytes) == bytes.fromhex(
+        "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
     )
 
 
