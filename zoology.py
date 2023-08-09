@@ -39,9 +39,8 @@ def createInstance(
     """Call createInstance to set up the level."""
     # Warning: this symbolic universe will be used in symbolic execution later
     # on. Inaccuracies in the environment may result in an inaccurate analysis.
-    calldata = abiencode("createInstance(address)") + PLAYER.into(Uint256).maybe_unwrap(
-        bytes
-    )
+    assert (p := PLAYER.into(Uint256).maybe_unwrap(bytes)) is not None
+    calldata = abiencode("createInstance(address)") + p
     assert (a := address.maybe_unwrap()) is not None
     start = State(
         block=Block(),
@@ -241,7 +240,9 @@ def search(
                         print(f"- [{candidate.pxs()}] unprintable: narrowing error")
                         continue
 
-                solver = constrainWithValidator(factory, _instance, candidate, validator)
+                solver = constrainWithValidator(
+                    factory, _instance, candidate, validator
+                )
                 candidate.constrain(solver, check=False)
                 if solver.check():
                     candidate.narrow(solver)

@@ -14,6 +14,11 @@ def concretize_stack(state: State) -> list[int]:
     return [v for v in (x.maybe_unwrap() for x in state.stack) if v is not None]
 
 
+def must(value: bytes | None) -> bytes:
+    assert value is not None
+    return value
+
+
 def execute(state: State) -> State:
     generator = printable_execution(state)
     try:
@@ -262,7 +267,7 @@ def test_coinflip() -> None:
         contract=Contract(program=program),
         transaction=Transaction(
             calldata=FrozenBytes.concrete(
-                abiencode("flip(bool)") + Uint256(0).maybe_unwrap(bytes)
+                abiencode("flip(bool)") + must(Uint256(0).maybe_unwrap(bytes))
             ),
         ),
     )
@@ -288,8 +293,10 @@ def test_telephone() -> None:
             caller=Uint160(0xB1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1),
             calldata=FrozenBytes.concrete(
                 abiencode("changeOwner(address)")
-                + Uint256(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF).maybe_unwrap(
-                    bytes
+                + must(
+                    Uint256(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF).maybe_unwrap(
+                        bytes
+                    )
                 )
             ),
         ),
@@ -309,10 +316,12 @@ def test_token() -> None:
         transaction=Transaction(
             calldata=FrozenBytes.concrete(
                 abiencode("transfer(address,uint256)")
-                + Uint256(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF).maybe_unwrap(
-                    bytes
+                + must(
+                    Uint256(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF).maybe_unwrap(
+                        bytes
+                    )
                 )
-                + Uint256(0xEEEE).maybe_unwrap(bytes)
+                + must(Uint256(0xEEEE).maybe_unwrap(bytes))
             ),
         ),
     )
@@ -364,7 +373,7 @@ def test_vault() -> None:
         contract=Contract(program=program),
         transaction=Transaction(
             calldata=FrozenBytes.concrete(
-                abiencode("unlock(bytes32)") + Uint256(0).maybe_unwrap(bytes)
+                abiencode("unlock(bytes32)") + must(Uint256(0).maybe_unwrap(bytes))
             ),
         ),
     )
@@ -397,7 +406,7 @@ def test_reentrancy() -> None:
         transaction=Transaction(
             callvalue=Uint256(0x1234),
             calldata=FrozenBytes.concrete(
-                abiencode("donate(address)") + Uint256(1).maybe_unwrap(bytes)
+                abiencode("donate(address)") + must(Uint256(1).maybe_unwrap(bytes))
             ),
         ),
     )
@@ -417,7 +426,7 @@ def test_elevator() -> None:
         transaction=Transaction(
             caller=Uint160(0x76543210),
             calldata=FrozenBytes.concrete(
-                abiencode("goTo(uint256)") + Uint256(1).maybe_unwrap(bytes)
+                abiencode("goTo(uint256)") + must(Uint256(1).maybe_unwrap(bytes))
             ),
         ),
     )
@@ -439,7 +448,7 @@ def test_privacy() -> None:
         transaction=Transaction(
             calldata=FrozenBytes.concrete(
                 abiencode("unlock(bytes16)")
-                + Uint256(0x4321 << 128).maybe_unwrap(bytes)
+                + must(Uint256(0x4321 << 128).maybe_unwrap(bytes))
             ),
         ),
     )
@@ -476,7 +485,7 @@ def test_gatekeeper_two() -> None:
 
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
-    assert state.pc.returndata.maybe_unwrap() == Uint256(1).maybe_unwrap(bytes)
+    assert state.pc.returndata.maybe_unwrap() == must(Uint256(1).maybe_unwrap(bytes))
 
 
 def test_preservation() -> None:
@@ -491,7 +500,8 @@ def test_preservation() -> None:
         contract=preservation,
         transaction=Transaction(
             calldata=FrozenBytes.concrete(
-                abiencode("setFirstTime(uint256)") + Uint256(0x5050).maybe_unwrap(bytes)
+                abiencode("setFirstTime(uint256)")
+                + must(Uint256(0x5050).maybe_unwrap(bytes))
             ),
         ),
     )
