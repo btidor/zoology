@@ -6,9 +6,9 @@ from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Callable
 
+from bytes import FrozenBytes, MutableBytes
 from environment import Block, Contract, Transaction, Universe
-from smt.bytes import FrozenBytes, MutableBytes
-from smt.sha3 import SHA3
+from sha3 import SHA3
 from smt.smt import Constraint, Uint160, Uint256
 from smt.solver import Solver
 

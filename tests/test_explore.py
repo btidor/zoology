@@ -3,7 +3,7 @@
 from typing import Any
 
 from disassembler import Program
-from smt.sha3 import SHA3
+from sha3 import SHA3
 from state import State
 from universal import symbolic_start, universal_transaction
 

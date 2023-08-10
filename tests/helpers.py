@@ -2,7 +2,7 @@
 
 from disassembler import Program
 from environment import Contract
-from smt.sha3 import SHA3
+from sha3 import SHA3
 from smt.smt import Uint160, Uint256
 from state import State
 from universal import symbolic_start

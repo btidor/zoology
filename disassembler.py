@@ -8,8 +8,8 @@ from typing import Any, Iterable
 
 from Crypto.Hash import keccak
 
+from bytes import FrozenBytes
 from opcodes import REFERENCE, UNIMPLEMENTED
-from smt.bytes import FrozenBytes
 from smt.smt import Uint256
 
 

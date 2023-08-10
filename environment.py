@@ -5,10 +5,10 @@ from __future__ import annotations
 from collections import OrderedDict
 from dataclasses import dataclass, field
 
+from bytes import FrozenBytes
 from disassembler import Program, disassemble
+from sha3 import concrete_hash
 from smt.arrays import Array
-from smt.bytes import FrozenBytes
-from smt.sha3 import concrete_hash
 from smt.smt import BitVector, Uint8, Uint160, Uint256
 from smt.solver import Solver
 

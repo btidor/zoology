@@ -3,9 +3,9 @@
 import pytest
 from pybitwuzla import Kind
 
+from bytes import FrozenBytes
+from sha3 import SHA3
 from smt.bitwuzla import mk_term
-from smt.bytes import FrozenBytes
-from smt.sha3 import SHA3
 from smt.smt import Constraint, Uint256
 from smt.solver import NarrowingError, Solver
 

@@ -2,9 +2,9 @@
 
 import copy
 
+from bytes import FrozenBytes
 from disassembler import Instruction, disassemble
 from environment import Contract, Transaction
-from smt.bytes import FrozenBytes
 from smt.smt import Constraint, Uint8, Uint160, Uint256, Uint257, Uint512
 from state import ControlFlow, Descend, Jump, Log, State, Termination
 

@@ -1,8 +1,8 @@
 #!/usr/bin/env pytest
 
+from bytes import FrozenBytes
 from disassembler import abiencode, disassemble
 from environment import Contract, Transaction
-from smt.bytes import FrozenBytes
 from smt.smt import Uint160, Uint256
 from state import State, Termination
 from vm import printable_execution, step

@@ -6,12 +6,12 @@ from __future__ import annotations
 import argparse
 import copy
 
+from bytes import FrozenBytes
 from disassembler import abiencode
 from environment import Block, Contract, Transaction, Universe
 from history import History, Validator
+from sha3 import SHA3
 from smt.arrays import Array
-from smt.bytes import FrozenBytes
-from smt.sha3 import SHA3
 from smt.smt import Constraint, Uint160, Uint256
 from smt.solver import ConstrainingError, NarrowingError, Solver
 from snapshot import LEVEL_FACTORIES, apply_snapshot

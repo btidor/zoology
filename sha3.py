@@ -9,10 +9,10 @@ from typing import Any, Iterable, Iterator
 from Crypto.Hash import keccak
 from pybitwuzla import BitwuzlaTerm, Kind
 
-from .bitwuzla import mk_array_sort, mk_bv_sort, mk_bv_value, mk_const, mk_term, sort
-from .bytes import Bytes
-from .smt import Constraint, Uint8, Uint256
-from .solver import NarrowingError, Solver
+from bytes import Bytes
+from smt.bitwuzla import mk_array_sort, mk_bv_sort, mk_bv_value, mk_const, mk_term, sort
+from smt.smt import Constraint, Uint8, Uint256
+from smt.solver import NarrowingError, Solver
 
 
 @dataclass

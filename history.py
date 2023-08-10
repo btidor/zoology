@@ -8,8 +8,8 @@ from typing import Any, Iterable
 from pybitwuzla import BitwuzlaTerm
 
 from environment import Block, Universe
+from sha3 import SHA3
 from smt.bitwuzla import get_constants, substitute
-from smt.sha3 import SHA3
 from smt.smt import Constraint, Uint160, Uint256
 from smt.solver import ConstrainingError, Solver
 from state import State

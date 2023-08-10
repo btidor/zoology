@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 
 from disassembler import Program, abiencode, disassemble
-from smt.sha3 import SHA3
+from sha3 import SHA3
 from smt.smt import Constraint, Uint160, Uint256
 from smt.solver import Solver
 from state import State, Termination

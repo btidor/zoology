@@ -6,8 +6,8 @@ from typing import Iterable, Iterator
 
 from disassembler import Program, disassemble
 from environment import Block, Contract, Transaction, Universe
+from sha3 import SHA3
 from smt.arrays import Array
-from smt.sha3 import SHA3
 from smt.smt import Uint160, Uint256
 from smt.solver import Solver
 from state import Descend, Jump, State, Termination

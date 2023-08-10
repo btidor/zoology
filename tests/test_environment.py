@@ -3,7 +3,7 @@
 import copy
 
 from disassembler import disassemble
-from smt.sha3 import SHA3
+from sha3 import SHA3
 from smt.smt import Uint160, Uint256
 from smt.solver import Solver
 from state import State
