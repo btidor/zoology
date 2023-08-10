@@ -40,9 +40,9 @@ def test_starting_universe() -> None:
 
 def test_fallback() -> None:
     fixture = [
-        "Px8F\td7bb99ba\t(value: 1)",
+        "Px8F\td7bb99ba 000000000000000000000000cacacacacacacacacacacacacacacacacacacaca\t(value: 1)",
         "Px19\t(empty) \t(value: 1)",
-        "Px5F\t3ccfd60b",
+        "Px5F\t3ccfd60b 000000000000000000000000cacacacacacacacacacacacacacacacacacacaca",
     ]
     check_level(1, fixture)
 

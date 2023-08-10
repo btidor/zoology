@@ -4,14 +4,11 @@ from __future__ import annotations
 
 import abc
 import copy
-from typing import Type, TypeGuard, TypeVar
+from typing import Any, Type, TypeGuard, TypeVar
 
-from pybitwuzla import BitwuzlaTerm, Kind
+from zbitvector import Constraint, Solver, Uint
 
-from smt.arrays import Array
-from smt.bitwuzla import mk_term
-from smt.smt import Constraint, Uint8, Uint256
-from smt.solver import Solver
+from smt import Array, Uint8, Uint256, concat_bytes
 
 T = TypeVar("T", bound="Bytes")
 
@@ -36,9 +33,9 @@ class Bytes(abc.ABC):
     def concrete(cls: Type[T], data: bytes | list[Uint8] = b"") -> T:
         """Create a new Bytes from a concrete list of bytes."""
         length = Uint256(len(data))
-        array = Array.concrete(Uint256, Uint8(0))
+        array = Array[Uint256, Uint8](Uint8(0))
         for i, b in enumerate(data):
-            if isinstance(b, Uint8):
+            if isinstance(b, Uint):
                 array[Uint256(i)] = b
             else:
                 assert isinstance(b, int)
@@ -50,7 +47,7 @@ class Bytes(abc.ABC):
         """Create a new, fully-symbolic Bytes."""
         return cls(
             Uint256(length if length is not None else f"{name}.length"),
-            Array.symbolic(name, Uint256, Uint8),
+            Array[Uint256, Uint8](name),
         )
 
     @classmethod
@@ -62,7 +59,7 @@ class Bytes(abc.ABC):
         """
         return cls(
             constraint.ite(Uint256(0), Uint256(f"{name}.length")),
-            Array.symbolic(name, Uint256, Uint8),
+            Array[Uint256, Uint8](name),
         )
 
     @abc.abstractmethod
@@ -78,13 +75,11 @@ class Bytes(abc.ABC):
         """Return a symbolic slice of this instance."""
         return ByteSlice(self, offset, size)
 
-    def bigvector(self, expected_length: int) -> BitwuzlaTerm:
+    def bigvector(self, expected_length: int) -> Uint[Any]:
         """Return a single, large bitvector of this instance's bytes."""
-        length = self.length.reveal() or expected_length
-        assert length == expected_length
-        result = mk_term(Kind.BV_CONCAT, [self[Uint256(i)].node for i in range(length)])
-        assert isinstance(result, BitwuzlaTerm)
-        return result
+        if (v := self.length.reveal()) is not None:
+            assert expected_length == v
+        return concat_bytes(*(self[Uint256(i)] for i in range(expected_length)))
 
     def reveal(self) -> bytes | None:
         """Unwrap this instance to bytes."""
@@ -149,7 +144,7 @@ class MutableBytes(Bytes):
         for k, v in self.writes:
             if isinstance(v, ByteSlice):
                 destOffset = k
-                item = Constraint.all(i >= destOffset, i < destOffset + v.length).ite(
+                item = ((i >= destOffset) & (i < destOffset + v.length)).ite(
                     v[i - destOffset],
                     item,
                 )

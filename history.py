@@ -5,13 +5,11 @@ from __future__ import annotations
 import copy
 from typing import Any, Iterable
 
-from pybitwuzla import BitwuzlaTerm
+from zbitvector import Constraint, Solver, Symbolic
 
 from environment import Block, Universe
 from sha3 import SHA3
-from smt.bitwuzla import get_constants, substitute
-from smt.smt import Constraint, Uint160, Uint256
-from smt.solver import ConstrainingError, Solver
+from smt import Array, ConstrainingError, Uint160, Uint256, get_constants, substitute
 from state import State
 
 
@@ -101,7 +99,7 @@ class Validator:
     def __init__(self, constraint: Constraint) -> None:
         """Create a new Validator."""
         self.constraint = constraint
-        self._constants = get_constants(constraint.node)
+        self._constants = get_constants(constraint)
         for name in self._constants.keys():
             if name.startswith("STORAGE@"):
                 continue
@@ -120,16 +118,16 @@ class Validator:
             universe = history.states[-1].universe
             number = history.states[-1].block.number + Uint256(1)
 
-        substitutions: dict[BitwuzlaTerm, BitwuzlaTerm] = {}
+        substitutions: dict[Any, Symbolic | Array[Any, Any]] = {}
         for name, term in self._constants.items():
             if name.startswith("STORAGE@"):
                 addr = int(name[8:], 16)
-                substitutions[term] = universe.contracts[addr].storage.array
+                substitutions[term] = universe.contracts[addr].storage
             elif name == "BALANCE":
-                substitutions[term] = universe.balances.array
+                substitutions[term] = universe.balances
             elif name == "NUMBER":
-                substitutions[term] = number.node
+                substitutions[term] = number
             else:
                 raise ValueError(f"unknown variable: {name}")
 
-        return Constraint(substitute(self.constraint.node, substitutions))
+        return substitute(self.constraint, substitutions)

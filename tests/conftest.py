@@ -35,10 +35,7 @@ def pytest_addoption(
 
 # https://pyinstrument.readthedocs.io/en/latest/guide.html#profile-pytest-tests
 @pytest.fixture(autouse=True)
-def pyinstrument_single(
-    request: Any,
-    reset_bitwuzla: None,  # reset *before* starting profiler
-) -> Iterator[None]:
+def pyinstrument_single(request: Any) -> Iterator[None]:
     if not request.config.getoption("profile"):
         yield
         return
@@ -79,17 +76,6 @@ def pyinstrument_combined(pytestconfig: pytest.Config) -> Iterator[None]:
         renderer = SpeedscopeRenderer(**RENDER_OPTS)
         with open(filename, "w", encoding="utf-8") as f:
             f.write(renderer.render(combined))
-
-
-### ### ### ### ###
-
-from smt import bitwuzla
-
-
-@pytest.fixture(autouse=True)
-def reset_bitwuzla() -> Iterator[None]:
-    bitwuzla.reset()
-    yield
 
 
 ### ### ### ### ###

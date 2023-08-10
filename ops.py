@@ -1,12 +1,19 @@
 """A library of EVM instruction implementations."""
 
 import copy
+from typing import Literal
+
+from zbitvector import Constraint, Int, Uint
 
 from bytes import FrozenBytes
 from disassembler import Instruction, disassemble
 from environment import Contract, Transaction
-from smt.smt import Constraint, Uint8, Uint160, Uint256, Uint257, Uint512
+from smt import Uint8, Uint160, Uint256, concat_bytes
 from state import ControlFlow, Descend, Jump, Log, State, Termination
+
+Int256 = Int[Literal[256]]
+Uint257 = Uint[Literal[257]]
+Uint512 = Uint[Literal[512]]
 
 
 def STOP(s: State) -> None:
@@ -31,13 +38,13 @@ def SUB(a: Uint256, b: Uint256) -> Uint256:
 
 def DIV(a: Uint256, b: Uint256) -> Uint256:
     """04 - Integer division operation."""
-    return (b == Uint256(0)).ite(Uint256(0), a // b)
+    return (b == Uint256(0)).ite(Uint256(0), a / b)
 
 
 def SDIV(a: Uint256, b: Uint256) -> Uint256:
     """05 - Signed integer division operation (truncated)."""
     return (b == Uint256(0)).ite(
-        Uint256(0), (a.as_signed() // b.as_signed()).as_unsigned()
+        Uint256(0), (a.into(Int256) / b.into(Int256)).into(Uint256)
     )
 
 
@@ -49,7 +56,7 @@ def MOD(a: Uint256, b: Uint256) -> Uint256:
 def SMOD(a: Uint256, b: Uint256) -> Uint256:
     """07 - Signed modulo remainder operation."""
     return (b == Uint256(0)).ite(
-        Uint256(0), (a.as_signed() % b.as_signed()).as_unsigned()
+        Uint256(0), (a.into(Int256) % b.into(Int256)).into(Uint256)
     )
 
 
@@ -86,7 +93,7 @@ def SIGNEXTEND(b: Uint256, x: Uint256) -> Uint256:
     signoffset = Uint256(8) * b + Uint256(7)
     signbit = (x >> signoffset) & Uint256(0x1)
     mask = ~((Uint256(1) << signoffset) - Uint256(1))
-    return Constraint.all(b < Uint256(32), signbit == Uint256(1)).ite(x | mask, x)
+    return ((b < Uint256(32)) & (signbit == Uint256(1))).ite(x | mask, x)
 
 
 def LT(a: Uint256, b: Uint256) -> Uint256:
@@ -101,12 +108,12 @@ def GT(a: Uint256, b: Uint256) -> Uint256:
 
 def SLT(a: Uint256, b: Uint256) -> Uint256:
     """12 - Signed less-than comparison."""
-    return (a.as_signed() < b.as_signed()).ite(Uint256(1), Uint256(0))
+    return (a.into(Int256) < b.into(Int256)).ite(Uint256(1), Uint256(0))
 
 
 def SGT(a: Uint256, b: Uint256) -> Uint256:
     """13 - Signed greater-than comparison."""
-    return (a.as_signed() > b.as_signed()).ite(Uint256(1), Uint256(0))
+    return (a.into(Int256) > b.into(Int256)).ite(Uint256(1), Uint256(0))
 
 
 def EQ(a: Uint256, b: Uint256) -> Uint256:
@@ -159,7 +166,7 @@ def SHR(shift: Uint256, value: Uint256) -> Uint256:
 
 def SAR(shift: Uint256, value: Uint256) -> Uint256:
     """1D - Arithmetic (signed) right shift operation."""
-    return (value.as_signed() >> shift).as_unsigned()
+    return (value.into(Int256) >> shift).into(Uint256)
 
 
 def SHA3(s: State, offset: Uint256, size: Uint256) -> Uint256:
@@ -199,9 +206,7 @@ def CALLVALUE(s: State) -> Uint256:
 
 def CALLDATALOAD(s: State, i: Uint256) -> Uint256:
     """35 - Get input data of current environment."""
-    return Uint256.from_bytes(
-        *[s.transaction.calldata[i + Uint256(j)] for j in range(32)]
-    )
+    return concat_bytes(*[s.transaction.calldata[i + Uint256(j)] for j in range(32)])
 
 
 def CALLDATASIZE(s: State) -> Uint256:
@@ -332,7 +337,7 @@ def POP(y: Uint256) -> None:
 
 def MLOAD(s: State, offset: Uint256) -> Uint256:
     """51 - Load word from memory."""
-    return Uint256.from_bytes(*[s.memory[offset + Uint256(i)] for i in range(32)])
+    return concat_bytes(*[s.memory[offset + Uint256(i)] for i in range(32)])
 
 
 def MSTORE(s: State, offset: Uint256, value: Uint256) -> None:
@@ -375,15 +380,15 @@ def JUMPI(s: State, _counter: Uint256, b: Uint256) -> ControlFlow | None:
     assert counter is not None, "JUMPI requires concrete counter"
 
     s.path <<= 1
-    c: Constraint = b == Uint256(0)
+    c = b == Uint256(0)
     match c.reveal():
         case None:  # unknown, must prepare both branches :(
             s0, s1 = copy.deepcopy(s), s
-            s0.constraint = Constraint.all(s.constraint, c)
+            s0.constraint &= c
 
             s1.pc = s.contract.program.jumps[counter]
             s1.path |= 1
-            s1.constraint = Constraint.all(s.constraint, ~c)
+            s1.constraint &= ~c
             return Jump(targets=(s0, s1))
         case True:  # branch never taken, fall through
             return None
@@ -578,15 +583,15 @@ def CALL(
             s.universe.codesizes[_address.into(Uint160)] == Uint256(0),
         )
         s.memory.graft(s.latest_return.slice(Uint256(0), retSize), retOffset)
-        success = Constraint.any(
+        success = (
             # Calls (transfers) to an EOA always succeed.
-            (s.universe.codesizes[_address.into(Uint160)] == Uint256(0)),
+            (s.universe.codesizes[_address.into(Uint160)] == Uint256(0))
             # Create a variable for if the call succeeded.
-            Constraint(f"RETURNOK{s.call_count}{s.suffix}"),
+            | Constraint(f"RETURNOK{s.call_count}{s.suffix}")
         )
         s.transfer(s.contract.address, _address.into(Uint160), value)
         s.call_count += 1
-        s.stack.append((success).ite(Uint256(1), Uint256(0)))
+        s.stack.append(success.ite(Uint256(1), Uint256(0)))
         return None
 
 

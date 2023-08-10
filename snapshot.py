@@ -9,7 +9,7 @@ import requests
 
 from disassembler import disassemble
 from environment import Contract, Universe
-from smt.smt import Uint160, Uint256
+from smt import Uint160, Uint256
 
 # For consistency, make requests at a fixed block offset
 TAG = "0x86a800"

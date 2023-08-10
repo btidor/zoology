@@ -3,7 +3,7 @@
 from bytes import FrozenBytes
 from disassembler import abiencode, disassemble
 from environment import Contract, Transaction
-from smt.smt import Uint160, Uint256
+from smt import Uint160, Uint256
 from state import State, Termination
 from vm import printable_execution, step
 
@@ -308,7 +308,7 @@ def test_token() -> None:
             calldata=FrozenBytes.concrete(
                 abiencode("transfer(address,uint256)")
                 + (0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF).to_bytes(32)
-                + ((0xEEEE).to_bytes(32))
+                + (0xEEEE).to_bytes(32)
             ),
         ),
     )

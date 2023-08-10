@@ -5,15 +5,16 @@ from __future__ import annotations
 
 import argparse
 import copy
+from functools import reduce
+
+from zbitvector import Constraint, Solver
 
 from bytes import FrozenBytes
 from disassembler import abiencode
 from environment import Block, Contract, Transaction, Universe
 from history import History, Validator
 from sha3 import SHA3
-from smt.arrays import Array
-from smt.smt import Constraint, Uint160, Uint256
-from smt.solver import ConstrainingError, NarrowingError, Solver
+from smt import Array, ConstrainingError, NarrowingError, Uint160, Uint256
 from snapshot import LEVEL_FACTORIES, apply_snapshot
 from state import State, Termination
 from universal import symbolic_start, universal_transaction
@@ -107,9 +108,7 @@ def validateInstance(
             Contract(
                 address=reference.address,
                 program=reference.program,
-                storage=Array.symbolic(
-                    f"STORAGE@{a.to_bytes(20).hex()}", Uint256, Uint256
-                ),
+                storage=Array[Uint256, Uint256](f"STORAGE@{a.to_bytes(20).hex()}"),
                 nonce=reference.nonce,
             )
         )
@@ -119,12 +118,8 @@ def validateInstance(
         assert isinstance(end.pc, Termination)
 
         # This logic needs to match State.constrain()
-        predicates.append(
-            Constraint.all(
-                end.constraint,
-                Uint256(end.pc.returndata.bigvector(32)) != Uint256(0),
-            )
-        )
+        b: Uint256 = end.pc.returndata.bigvector(32)
+        predicates.append(end.constraint & (b != Uint256(0)))
 
     assert predicates
     if sha3.constraints:
@@ -134,7 +129,7 @@ def validateInstance(
         return None
     try:
         # Eligible for validator optimization!
-        return Validator(Constraint.any(*predicates))
+        return Validator(reduce(lambda p, q: p | q, predicates, Constraint(False)))
     except ValueError:
         # Validator expression uses an unsupported variable; fall back.
         return None
@@ -178,7 +173,7 @@ def constrainWithValidator(
         solver = Solver()
         candidate = history.extend(end)
         candidate.constrain(solver, check=False)
-        ok = Uint256(end.pc.returndata.bigvector(32)) != Uint256(0)
+        ok = end.pc.returndata.bigvector(32) != Uint256(0)
         solver.add(ok)
         if solver.check():
             end.sha3.narrow(solver)

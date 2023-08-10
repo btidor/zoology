@@ -1,13 +1,11 @@
 #!/usr/bin/env pytest
 
 import pytest
-from pybitwuzla import Kind
+from zbitvector import Solver
 
 from bytes import FrozenBytes
 from sha3 import SHA3
-from smt.bitwuzla import mk_term
-from smt.smt import Constraint, Uint256
-from smt.solver import NarrowingError, Solver
+from smt import NarrowingError, Uint256
 
 
 def test_concrete() -> None:
@@ -26,14 +24,7 @@ def test_symbolic() -> None:
 
     solver = Solver()
     sha3.constrain(solver)
-    solver.add(
-        Constraint(
-            mk_term(
-                Kind.EQUAL,
-                [input.bigvector(7), FrozenBytes.concrete(b"testing").bigvector(7)],
-            )
-        )
-    )
+    solver.add(input.bigvector(7) == FrozenBytes.concrete(b"testing").bigvector(7))
     assert solver.check()
 
     assert input.describe(solver) == b"testing".hex()
@@ -51,14 +42,7 @@ def test_fully_symbolic() -> None:
 
     solver = Solver()
     sha3.constrain(solver)
-    solver.add(
-        Constraint(
-            mk_term(
-                Kind.EQUAL,
-                [input.bigvector(7), FrozenBytes.concrete(b"testing").bigvector(7)],
-            )
-        )
-    )
+    solver.add(input.bigvector(7) == FrozenBytes.concrete(b"testing").bigvector(7))
     solver.add(input.length == Uint256(7))
     assert solver.check()
 
@@ -89,14 +73,7 @@ def test_impossible_concrete() -> None:
 
     solver = Solver()
     sha3.constrain(solver)
-    solver.add(
-        Constraint(
-            mk_term(
-                Kind.EQUAL,
-                [input.bigvector(7), FrozenBytes.concrete(b"testing").bigvector(7)],
-            )
-        )
-    )
+    solver.add(input.bigvector(7) == FrozenBytes.concrete(b"testing").bigvector(7))
     solver.add(
         digest
         == Uint256(0x0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF)
@@ -130,10 +107,10 @@ def test_items() -> None:
 
     items = sha3.items()
     n, k, _ = next(items)
-    assert (n, k.reveal()) == (5, b"hello")
+    assert (n, k.reveal()) == (5, int.from_bytes(b"hello"))
 
     n, k, _ = next(items)
-    assert (n, k.reveal()) == (7, b"testing")
+    assert (n, k.reveal()) == (7, int.from_bytes(b"testing"))
 
     with pytest.raises(StopIteration):
         next(items)

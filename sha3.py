@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass, field
-from typing import Any, Iterable, Iterator
+from typing import Any, Iterable, Iterator, Literal, TypeAlias
 
 from Crypto.Hash import keccak
-from pybitwuzla import BitwuzlaTerm, Kind
+from zbitvector import Constraint, Solver, Uint
 
 from bytes import Bytes
-from smt.bitwuzla import mk_array_sort, mk_bv_sort, mk_bv_value, mk_const, mk_term, sort
-from smt.smt import Constraint, Uint8, Uint256
-from smt.solver import NarrowingError, Solver
+from smt import Array, NarrowingError, Uint8, Uint256, describe, implies, mk_uint
+
+Uint128: TypeAlias = Uint[Literal[128]]
 
 
 @dataclass
@@ -32,13 +32,11 @@ class SHA3:
     # We model the SHA-3 function as a symbolic uninterpreted function from
     # n-byte inputs to 32-byte outputs. Z3 requires n to be constant for any
     # given function, so we store a mapping from `n -> func_n(x)`.
-    hashes: dict[int, BitwuzlaTerm] = field(default_factory=dict)
+    hashes: dict[int, Array[Uint[Any], Uint256]] = field(default_factory=dict)
 
     # If the input has a symbolic length, we don't really know what it's going
     # to hash to. In this case, mint a new variable for the return value.
     free_digests: list[tuple[Bytes, Uint256]] = field(default_factory=list)
-
-    accessed: dict[int, list[Bytes]] = field(default_factory=dict)
 
     constraints: list[Constraint] = field(default_factory=list)
 
@@ -47,7 +45,6 @@ class SHA3:
             suffix=self.suffix,
             hashes=copy.copy(self.hashes),
             free_digests=copy.deepcopy(self.free_digests, memo),
-            accessed=copy.deepcopy(self.accessed, memo),
             constraints=copy.deepcopy(self.constraints, memo),
         )
 
@@ -62,9 +59,7 @@ class SHA3:
                 # HACK: to avoid introducing quantifiers, if this instance has a
                 # symbolic length, we return a fixed 1024-byte vector. This is
                 # an unsound assumption!
-                result = Constraint(
-                    mk_term(Kind.EQUAL, [key.bigvector(1024), key2.bigvector(1024)])
-                ).ite(val2, result)
+                result = (key.bigvector(1024) == key2.bigvector(1024)).ite(val2, result)
             return result
 
         if size == 0:
@@ -72,75 +67,42 @@ class SHA3:
             return Uint256(int.from_bytes(digest))
 
         if size not in self.hashes:
-            self.hashes[size] = mk_const(
-                mk_array_sort(mk_bv_sort(size * 8), sort(256)),
-                f"SHA3({size}){self.suffix}",
+            self.hashes[size] = Array[mk_uint(size * 8), Uint256](
+                f"SHA3({size}){self.suffix}"
             )
-            self.accessed[size] = []
 
+        free = self.hashes[size][key.bigvector(size)]
         if (data := key.reveal()) is not None:
             digest = keccak.new(data=data, digest_bits=256).digest()
-            symbolic = Uint256(int.from_bytes(digest))
-            self.constraints.append(
-                Constraint(
-                    mk_term(
-                        Kind.EQUAL,
-                        [
-                            mk_term(
-                                Kind.ARRAY_SELECT,
-                                [self.hashes[size], key.bigvector(size)],
-                            ),
-                            symbolic.node,
-                        ],
-                    )
-                )
-            )
+            hash = Uint256(int.from_bytes(digest))
+            self.constraints.append(free == hash)
         else:
-            select = mk_term(
-                Kind.ARRAY_SELECT, [self.hashes[size], key.bigvector(size)]
-            )
-            assert isinstance(select, BitwuzlaTerm)
             # ASSUMPTION: no hash may have more than 128 leading zero bits. This
             # avoids hash collisions between maps/arrays and ordinary storage
             # slots.
-            self.constraints.append(
-                Constraint(
-                    mk_term(
-                        Kind.DISTINCT,
-                        [
-                            mk_term(Kind.BV_EXTRACT, [select], [255, 128]),
-                            mk_bv_value(sort(128), 0),
-                        ],
-                    )
-                )
-            )
-            self.accessed[size].append(key)
-            symbolic = Uint256(select)
+            self.constraints.append((free >> Uint256(128)).into(Uint128) != Uint128(0))
+            hash = free
 
         for n, okey, oval in self.items():
             # ASSUMPTION: every hash digest is distinct, there are no collisions
             # ever.
             if n == size:
-                a = mk_term(Kind.DISTINCT, [key.bigvector(n), okey.bigvector(n)])
-                b = mk_term(Kind.DISTINCT, [symbolic.node, oval.node])
-                self.constraints.append(Constraint(mk_term(Kind.IMPLIES, [a, b])))
+                self.constraints.append(implies(key.bigvector(n) != okey, hash != oval))
             else:
-                self.constraints.append(symbolic != oval)
+                self.constraints.append(hash != oval)
 
-        self.accessed[size].append(key)
-        return symbolic
+        return hash
 
-    def items(self) -> Iterator[tuple[int, Bytes, Uint256]]:
+    def items(self) -> Iterator[tuple[int, Uint[Any], Uint256]]:
         """
         Iterate over (n, key, value) tuples.
 
         Note: does not include free digests, which must be handled manually.
         """
         for n, array in self.hashes.items():
-            for key in self.accessed[n]:
-                result = mk_term(Kind.ARRAY_SELECT, [array, key.bigvector(n)])
-                assert isinstance(result, BitwuzlaTerm)
-                yield (n, key, Uint256(result))
+            for key in array.accessed:
+                result = array.peek(key)
+                yield (n, key, result)
 
     def constrain(self, solver: Solver) -> None:
         """Apply computed SHA3 constraints to the given solver instance."""
@@ -155,11 +117,10 @@ class SHA3:
         # step to fail while a different evaluation would allow it to succeed.
         # Therefore, narrowing errors should always bubble up as hard failures.
         for n, key, val in self.items():
-            data = key.evaluate(solver)
+            data = solver.evaluate(key).to_bytes(key.width // 8)
             hash = keccak.new(data=data, digest_bits=256)
             assert len(data) == n
-            for i, b in enumerate(data):
-                solver.add(key[Uint256(i)] == Uint8(b))
+            solver.add(key == key.__class__(int.from_bytes(data)))
             solver.add(val == Uint256(int.from_bytes(hash.digest())))
             if not solver.check():
                 raise NarrowingError(data)
@@ -181,14 +142,14 @@ class SHA3:
         line = "SHA3"
         seen: set[str] = set()
         for _, key, val in self.items():
-            k = "0x" + key.describe(solver)
+            k = "0x" + solver.evaluate(key).to_bytes(key.width // 8).hex()
             if k in seen:
                 continue
             line += f"\t{k} "
             if len(k) > 34:
                 yield line
                 line = "\t"
-            v = Uint256(solver.evaluate(val)).describe()
+            v = describe(Uint256(solver.evaluate(val)))
             line += f"-> {v}"
             yield line
             line = ""

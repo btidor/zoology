@@ -10,7 +10,7 @@ from Crypto.Hash import keccak
 
 from bytes import FrozenBytes
 from opcodes import REFERENCE, UNIMPLEMENTED
-from smt.smt import Uint256
+from smt import Uint256
 
 
 @dataclass(frozen=True)

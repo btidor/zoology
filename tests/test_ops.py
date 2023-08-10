@@ -1,14 +1,13 @@
 #!/usr/bin/env pytest
 
 import pytest
+from zbitvector import Solver
 
 from bytes import FrozenBytes, MutableBytes
 from disassembler import Instruction, disassemble
 from environment import Block
 from ops import *
-from smt.arrays import Array
-from smt.smt import Uint160, Uint256
-from smt.solver import Solver
+from smt import Array, Uint160, Uint256
 from state import Termination
 
 
@@ -428,7 +427,7 @@ def test_EXTCODEHASH() -> None:
 
 
 def test_BLOCKHASH() -> None:
-    s = State(block=Block(hashes=Array.concrete(Uint8, Uint256(0x9999))))
+    s = State(block=Block(hashes=Array[Uint8, Uint256](Uint256(0x9999))))
     assert BLOCKHASH(s, s.block.number - Uint256(10)).reveal() == 0x9999
     assert BLOCKHASH(s, s.block.number - Uint256(256)).reveal() == 0x9999
     assert BLOCKHASH(s, s.block.number - Uint256(257)).reveal() == 0

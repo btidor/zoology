@@ -4,13 +4,14 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from dataclasses import dataclass, field
+from typing import Any
+
+from zbitvector import BitVector, Solver
 
 from bytes import FrozenBytes
 from disassembler import Program, disassemble
 from sha3 import concrete_hash
-from smt.arrays import Array
-from smt.smt import BitVector, Uint8, Uint160, Uint256
-from smt.solver import Solver
+from smt import Array, Uint8, Uint160, Uint256
 
 
 @dataclass(frozen=True)
@@ -44,12 +45,12 @@ class Block:
             gaslimit=Uint256(f"GASLIMIT{suffix}"),
             chainid=Uint256(f"CHAINID"),
             basefee=Uint256(f"BASEFEE{suffix}"),
-            hashes=Array.symbolic(f"BLOCKHASH{suffix}", Uint8, Uint256),
+            hashes=Array[Uint8, Uint256](f"BLOCKHASH{suffix}"),
         )
 
     @classmethod
     def __concrete_hashes(cls) -> Array[Uint8, Uint256]:
-        hashes = Array.concrete(Uint8, Uint256(0))
+        hashes = Array[Uint8, Uint256](Uint256(0))
         hashes[Uint8(255)] = Uint256(
             0xF798B79831B745F4F756FBD50CFEBAE9FE8AF348CB8EF47F739939142EC9D1E0
         )
@@ -60,7 +61,7 @@ class Block:
 
     def successor(self) -> Block:
         """Produce a plausible next block."""
-        hashes = Array.concrete(Uint8, Uint256(0))
+        hashes = Array[Uint8, Uint256](Uint256(0))
         assert (start := self.hashes[Uint8(0)].reveal()) is not None
         hashes[Uint8(0)] = concrete_hash(start.to_bytes(32))
         for i in range(1, 256):
@@ -85,7 +86,7 @@ class Contract:
     address: Uint160 = Uint160(0xADADADADADADADADADADADADADADADADADADADAD)
     program: Program = disassemble(b"")
     storage: Array[Uint256, Uint256] = field(
-        default_factory=lambda: Array.concrete(Uint256, Uint256(0))
+        default_factory=lambda: Array[Uint256, Uint256](Uint256(0)),
     )
     nonce: Uint256 = Uint256(1)  # starts at 1, see EIP-161
 
@@ -119,7 +120,7 @@ class Transaction:
 
         Only attributes present in the model will be included.
         """
-        r: OrderedDict[str, BitVector | str | None] = OrderedDict()
+        r: OrderedDict[str, BitVector[Any] | str | None] = OrderedDict()
         calldata = self.calldata.describe(solver)
         r["Data"] = f"0x{calldata[:8]} {calldata[8:]}".strip() if calldata else None
         r["Value"] = self.callvalue
@@ -134,7 +135,7 @@ class Transaction:
                 case BitVector():
                     b = solver.evaluate(v)
                     if b > 0:
-                        s[k] = "0x" + b.to_bytes(v.length() // 8).hex()
+                        s[k] = "0x" + b.to_bytes(v.width // 8).hex()
                 case str():
                     s[k] = v
         return s
@@ -148,13 +149,13 @@ class Universe:
 
     balances: Array[Uint160, Uint256] = field(
         # address -> balance in wei
-        default_factory=lambda: Array.concrete(Uint160, Uint256(0))
+        default_factory=lambda: Array[Uint160, Uint256](Uint256(0))
     )
 
     contracts: dict[int, Contract] = field(default_factory=dict)  # address -> Contract
     codesizes: Array[Uint160, Uint256] = field(
         # address -> code size
-        default_factory=lambda: Array.concrete(Uint160, Uint256(0))
+        default_factory=lambda: Array[Uint160, Uint256](Uint256(0))
     )
 
     @classmethod
@@ -162,9 +163,9 @@ class Universe:
         """Create a fully-symbolic Universe."""
         return Universe(
             suffix=suffix,
-            balances=Array.symbolic(f"BALANCE{suffix}", Uint160, Uint256),
+            balances=Array[Uint160, Uint256](f"BALANCE{suffix}"),
             contracts={},
-            codesizes=Array.symbolic(f"CODESIZE{suffix}", Uint160, Uint256),
+            codesizes=Array[Uint160, Uint256](f"CODESIZE{suffix}"),
         )
 
     def add_contract(self, contract: Contract) -> None:

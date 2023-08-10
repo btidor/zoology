@@ -6,11 +6,12 @@ from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Callable
 
+from zbitvector import Constraint, Solver
+
 from bytes import FrozenBytes, MutableBytes
 from environment import Block, Contract, Transaction, Universe
 from sha3 import SHA3
-from smt.smt import Constraint, Uint160, Uint256
-from smt.solver import Solver
+from smt import Uint160, Uint256, overflow_safe, underflow_safe
 
 
 @dataclass
@@ -69,23 +70,20 @@ class State:
         """Initialize starting constraints."""
         # ASSUMPTION: the current block number is at least 256. This prevents
         # the BLOCKHASH instruction from overflowing.
-        self.constraint = Constraint.all(
-            self.constraint, self.block.number >= Uint256(256)
-        )
+        self.constraint &= self.block.number >= Uint256(256)
 
     def transfer(self, src: Uint160, dst: Uint160, val: Uint256) -> None:
         """Transfer value from one account to another."""
         if val.reveal() == 0:
             return
-        self.constraint = Constraint.all(
-            self.constraint,
-            # ASSUMPTION: If `balances[src]` drops below zero, execution will
-            # revert. Therefore, `balances[src] >= val`.
-            Uint256.underflow_safe(self.universe.balances[src], val),
-            # ASSUMPTION: There isn't enough ETH in existence to overflow an
-            # account's balance; all balances are less than 2^255 wei.
-            Uint256.overflow_safe(self.universe.balances[dst], val),
-        )
+
+        # ASSUMPTION: If `balances[src]` drops below zero, execution will
+        # revert. Therefore, `balances[src] >= val`.
+        self.constraint &= underflow_safe(self.universe.balances[src], val)
+        # ASSUMPTION: There isn't enough ETH in existence to overflow an
+        # account's balance; all balances are less than 2^255 wei.
+        self.constraint &= overflow_safe(self.universe.balances[dst], val)
+
         self.universe.balances[src] -= val
         self.universe.balances[dst] += val
 

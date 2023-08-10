@@ -4,11 +4,11 @@ import copy
 from typing import Any
 
 import pytest
+from zbitvector import Solver
 
 from disassembler import Program, abiencode, disassemble
 from sha3 import SHA3
-from smt.smt import Constraint, Uint160, Uint256
-from smt.solver import Solver
+from smt import Uint160, Uint256
 from state import State, Termination
 from universal import printable_transition, symbolic_start, universal_transaction
 
@@ -80,13 +80,13 @@ def test_basic() -> None:
     assert end.pc.success == True
 
     # These extra constraints makes the test deterministic
-    end.constraint = Constraint.all(
-        end.constraint,
-        start.universe.balances[Uint160(0xADADADADADADADADADADADADADADADADADADADAD)]
-        == Uint256(0x8000000000001),
-        start.universe.balances[Uint160(0xCACACACACACACACACACACACACACACACACACACACA)]
-        == Uint256(0xAAAAAAAAAAAAA),
-    )
+    end.constraint &= start.universe.balances[
+        Uint160(0xADADADADADADADADADADADADADADADADADADADAD)
+    ] == Uint256(0x8000000000001)
+    end.constraint &= start.universe.balances[
+        Uint160(0xCACACACACACACACACACACACACACACACACACACACA)
+    ] == Uint256(0xAAAAAAAAAAAAA)
+
     solver = Solver()
     end.constrain(solver)
     assert solver.check()
