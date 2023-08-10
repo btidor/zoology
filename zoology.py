@@ -149,7 +149,7 @@ def constrainWithValidator(
     """Simulate the execution of validateInstance on the given history."""
     if validator is not None:
         solver = Solver()
-        solver.assert_and_track(validator.translate(history))
+        solver.add(validator.translate(history))
         return solver
 
     assert (factory := _factory.reveal()) is not None
@@ -179,13 +179,13 @@ def constrainWithValidator(
         candidate = history.extend(end)
         candidate.constrain(solver, check=False)
         ok = Uint256(end.pc.returndata.bigvector(32)) != Uint256(0)
-        solver.assert_and_track(ok)
+        solver.add(ok)
         if solver.check():
             end.sha3.narrow(solver)
             return solver
 
     solver = Solver()
-    solver.assert_and_track(Constraint(False))
+    solver.add(Constraint(False))
     return solver
 
 

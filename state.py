@@ -91,7 +91,7 @@ class State:
 
     def constrain(self, solver: Solver) -> None:
         """Apply accumulated constraints to the given solver instance."""
-        solver.assert_and_track(self.constraint)
+        solver.add(self.constraint)
         self.sha3.constrain(solver)
 
     def narrow(self, solver: Solver) -> None:
@@ -100,27 +100,27 @@ class State:
             0xADADADADADADADADADADADADADADADADADADADAD
         )
         if solver.check(constraint):
-            solver.assert_and_track(constraint)
+            solver.add(constraint)
 
         constraint = self.transaction.caller == Uint160(
             0xCACACACACACACACACACACACACACACACACACACACA
         )
 
         if solver.check(constraint):
-            solver.assert_and_track(constraint)
+            solver.add(constraint)
 
         # Minimize calldata length
         for i in range(257):
             constraint = self.transaction.calldata.length == Uint256(i)
             if solver.check(constraint):
-                solver.assert_and_track(constraint)
+                solver.add(constraint)
                 break
 
         # Minimize callvalue
         for i in range(257):
             constraint = self.transaction.callvalue == Uint256(2**i - 1)
             if solver.check(constraint):
-                solver.assert_and_track(constraint)
+                solver.add(constraint)
                 break
 
         assert solver.check()

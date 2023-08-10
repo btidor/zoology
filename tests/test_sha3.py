@@ -26,7 +26,7 @@ def test_symbolic() -> None:
 
     solver = Solver()
     sha3.constrain(solver)
-    solver.assert_and_track(
+    solver.add(
         Constraint(
             mk_term(
                 Kind.EQUAL,
@@ -51,7 +51,7 @@ def test_fully_symbolic() -> None:
 
     solver = Solver()
     sha3.constrain(solver)
-    solver.assert_and_track(
+    solver.add(
         Constraint(
             mk_term(
                 Kind.EQUAL,
@@ -59,7 +59,7 @@ def test_fully_symbolic() -> None:
             )
         )
     )
-    solver.assert_and_track(input.length == Uint256(7))
+    solver.add(input.length == Uint256(7))
     assert solver.check()
 
     assert input.describe(solver) == b"testing".hex()
@@ -89,7 +89,7 @@ def test_impossible_concrete() -> None:
 
     solver = Solver()
     sha3.constrain(solver)
-    solver.assert_and_track(
+    solver.add(
         Constraint(
             mk_term(
                 Kind.EQUAL,
@@ -97,7 +97,7 @@ def test_impossible_concrete() -> None:
             )
         )
     )
-    solver.assert_and_track(
+    solver.add(
         digest
         == Uint256(0x0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF)
     )
@@ -116,7 +116,7 @@ def test_impossible_symbolic() -> None:
 
     solver = Solver()
     sha3.constrain(solver)
-    solver.assert_and_track(
+    solver.add(
         digest
         == Uint256(0x0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF)
     )

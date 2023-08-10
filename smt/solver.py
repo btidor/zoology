@@ -16,7 +16,7 @@ class Solver:
         self.constraints: list[Constraint] = []
         self.latest_result: bool | None = None
 
-    def assert_and_track(self, constraint: Constraint) -> None:
+    def add(self, constraint: Constraint) -> None:
         """Track a new constraint."""
         self.latest_result = None
         self.constraints.append(constraint)
@@ -50,8 +50,9 @@ class Solver:
         return core
 
     def evaluate(
-        self, value: BitVector,
-    ) -> int :
+        self,
+        value: BitVector,
+    ) -> int:
         """Evaluate a given bitvector expression with the given model."""
         assert self.latest_result is True
         return get_value_int(value.node)

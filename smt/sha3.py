@@ -146,7 +146,7 @@ class SHA3:
         """Apply computed SHA3 constraints to the given solver instance."""
         # TODO: extend assumptions above to also constrain free digests
         for constraint in self.constraints:
-            solver.assert_and_track(constraint)
+            solver.add(constraint)
 
     def narrow(self, solver: Solver) -> None:
         """Apply concrete SHA3 constraints to a given model instance."""
@@ -159,18 +159,18 @@ class SHA3:
             hash = keccak.new(data=data, digest_bits=256)
             assert len(data) == n
             for i, b in enumerate(data):
-                solver.assert_and_track(key[Uint256(i)] == Uint8(b))
-            solver.assert_and_track(val == Uint256(int.from_bytes(hash.digest())))
+                solver.add(key[Uint256(i)] == Uint8(b))
+            solver.add(val == Uint256(int.from_bytes(hash.digest())))
             if not solver.check():
                 raise NarrowingError(data)
 
         for key, val in self.free_digests:
             data = key.evaluate(solver)
             hash = keccak.new(data=data, digest_bits=256)
-            solver.assert_and_track(key.length == Uint256(len(data)))
+            solver.add(key.length == Uint256(len(data)))
             for i, b in enumerate(data):
-                solver.assert_and_track(key[Uint256(i)] == Uint8(b))
-            solver.assert_and_track(val == Uint256(int.from_bytes(hash.digest())))
+                solver.add(key[Uint256(i)] == Uint8(b))
+            solver.add(val == Uint256(int.from_bytes(hash.digest())))
             if not solver.check():
                 raise NarrowingError(data)
 
