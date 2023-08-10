@@ -54,15 +54,15 @@ class Block:
             0xF798B79831B745F4F756FBD50CFEBAE9FE8AF348CB8EF47F739939142EC9D1E0
         )
         for i in range(254, -1, -1):
-            assert (prev := hashes[Uint8(i + 1)].reveal(bytes)) is not None
-            hashes[Uint8(i)] = concrete_hash(prev)
+            assert (prev := hashes[Uint8(i + 1)].reveal()) is not None
+            hashes[Uint8(i)] = concrete_hash(prev.to_bytes(32))
         return hashes
 
     def successor(self) -> Block:
         """Produce a plausible next block."""
         hashes = Array.concrete(Uint8, Uint256(0))
-        assert (start := self.hashes[Uint8(0)].reveal(bytes)) is not None
-        hashes[Uint8(0)] = concrete_hash(start)
+        assert (start := self.hashes[Uint8(0)].reveal()) is not None
+        hashes[Uint8(0)] = concrete_hash(start.to_bytes(32))
         for i in range(1, 256):
             hashes[Uint8(i)] = self.hashes[Uint8(i - 1)]
 
@@ -132,9 +132,9 @@ class Transaction:
                 case None:
                     pass
                 case BitVector():
-                    b = solver.evaluate(v, bytes)
-                    if int.from_bytes(b) > 0:
-                        s[k] = "0x" + b.hex()
+                    b = solver.evaluate(v)
+                    if b > 0:
+                        s[k] = "0x" + b.to_bytes(v.length() // 8).hex()
                 case str():
                     s[k] = v
         return s

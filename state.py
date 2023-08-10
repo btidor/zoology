@@ -151,9 +151,9 @@ class State:
         """
         assert isinstance(self.pc, Termination)
         r: OrderedDict[str, str] = OrderedDict()
-        a = solver.evaluate(self.contract.address, bytes)
-        if int.from_bytes(a) > 0:
-            r["Address"] = "0x" + a.hex()
+        a = solver.evaluate(self.contract.address)
+        if a > 0:
+            r["Address"] = "0x" + a.to_bytes(20).hex()
         returndata = self.pc.returndata.describe(solver)
         if returndata:
             r["Return"] = "0x" + returndata

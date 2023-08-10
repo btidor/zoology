@@ -465,7 +465,7 @@ def CREATE(s: State, value: Uint256, offset: Uint256, size: Uint256) -> ControlF
     """F0 - Create a new account with associated code."""
     initcode = s.memory.slice(offset, size).reveal()
     assert initcode is not None, "CREATE requires concrete program data"
-    sender_address = s.contract.address.reveal(bytes)
+    sender_address = s.contract.address.reveal()
     assert sender_address is not None, "CREATE requires concrete sender address"
 
     # HACK: the destination address depends on the value of this contract's
@@ -477,7 +477,9 @@ def CREATE(s: State, value: Uint256, offset: Uint256, size: Uint256) -> ControlF
         raise NotImplementedError  # TODO: implement a full RLP encoder
 
     # https://ethereum.stackexchange.com/a/761
-    seed = FrozenBytes.concrete(b"\xd6\x94" + sender_address + nonce.to_bytes())
+    seed = FrozenBytes.concrete(
+        b"\xd6\x94" + sender_address.to_bytes(20) + nonce.to_bytes(1)
+    )
     return _CREATE(s, value, initcode, seed)
 
 
@@ -486,8 +488,8 @@ def _CREATE(
 ) -> ControlFlow:
     address = s.sha3[seed].into(Uint160)
     if address.reveal() in s.universe.contracts:
-        assert (a := address.reveal(bytes)) is not None
-        raise ValueError(f"CREATE destination exists: 0x{a.hex()}")
+        assert (a := address.reveal()) is not None
+        raise ValueError(f"CREATE destination exists: 0x{a.to_bytes(20).hex()}")
 
     s.contract.nonce += Uint256(1)
 
@@ -677,14 +679,16 @@ def CREATE2(
     """F5 - Create a new account with associated code at a predictable address."""
     initcode = s.memory.slice(offset, size).reveal()
     assert initcode is not None, "CREATE2 requires concrete program data"
-    salt = _salt.reveal(bytes)
+    salt = _salt.reveal()
     assert salt is not None, "CREATE2 requires concrete salt"
-    sender_address = s.contract.address.reveal(bytes)
+    sender_address = s.contract.address.reveal()
     assert sender_address is not None, "CREATE2 requires concrete sender address"
 
     # https://ethereum.stackexchange.com/a/761
-    assert (h := s.sha3[FrozenBytes.concrete(initcode)].reveal(bytes)) is not None
-    seed = FrozenBytes.concrete(b"\xff" + sender_address + salt + h)
+    assert (h := s.sha3[FrozenBytes.concrete(initcode)].reveal()) is not None
+    seed = FrozenBytes.concrete(
+        b"\xff" + sender_address.to_bytes(20) + salt.to_bytes(32) + h.to_bytes(32)
+    )
     return _CREATE(s, value, initcode, seed)
 
 

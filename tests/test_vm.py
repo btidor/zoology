@@ -14,11 +14,6 @@ def concretize_stack(state: State) -> list[int]:
     return [v for v in (x.reveal() for x in state.stack) if v is not None]
 
 
-def must(value: bytes | None) -> bytes:
-    assert value is not None
-    return value
-
-
 def execute(state: State) -> State:
     generator = printable_execution(state)
     try:
@@ -240,7 +235,7 @@ def test_fallback() -> None:
 
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
-    assert state.pc.returndata.reveal() == Uint256(0).reveal(bytes)
+    assert state.pc.returndata.reveal() == (0).to_bytes(32)
 
 
 def test_fallout() -> None:
@@ -256,9 +251,10 @@ def test_fallout() -> None:
 
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
-    assert state.contract.storage[Uint256(1)].reveal(bytes) == Uint256(
-        0xCACACACACACACACACACACACACACACACACACACACA
-    ).reveal(bytes)
+    assert (
+        state.contract.storage[Uint256(1)].reveal()
+        == 0xCACACACACACACACACACACACACACACACACACACACA
+    )
 
 
 def test_coinflip() -> None:
@@ -266,9 +262,7 @@ def test_coinflip() -> None:
     state = State(
         contract=Contract(program=program),
         transaction=Transaction(
-            calldata=FrozenBytes.concrete(
-                abiencode("flip(bool)") + must(Uint256(0).reveal(bytes))
-            ),
+            calldata=FrozenBytes.concrete(abiencode("flip(bool)") + (0).to_bytes(32)),
         ),
     )
     state.contract.storage[Uint256(1)] = Uint256(0xFEDC)
@@ -280,9 +274,10 @@ def test_coinflip() -> None:
 
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
-    assert state.contract.storage[Uint256(1)].reveal(bytes) == Uint256(
-        0x1F6D785BDB6AE9ECE46F3323FB3289240BD2D1C4C683CF558EE200C89933DF4F
-    ).reveal(bytes)
+    assert (
+        state.contract.storage[Uint256(1)].reveal()
+        == 0x1F6D785BDB6AE9ECE46F3323FB3289240BD2D1C4C683CF558EE200C89933DF4F
+    )
 
 
 def test_telephone() -> None:
@@ -293,9 +288,7 @@ def test_telephone() -> None:
             caller=Uint160(0xB1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1),
             calldata=FrozenBytes.concrete(
                 abiencode("changeOwner(address)")
-                + must(
-                    Uint256(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF).reveal(bytes)
-                )
+                + (0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF).to_bytes(32)
             ),
         ),
     )
@@ -314,10 +307,8 @@ def test_token() -> None:
         transaction=Transaction(
             calldata=FrozenBytes.concrete(
                 abiencode("transfer(address,uint256)")
-                + must(
-                    Uint256(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF).reveal(bytes)
-                )
-                + must(Uint256(0xEEEE).reveal(bytes))
+                + (0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF).to_bytes(32)
+                + ((0xEEEE).to_bytes(32))
             ),
         ),
     )
@@ -326,7 +317,7 @@ def test_token() -> None:
 
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
-    assert state.pc.returndata.reveal() == Uint256(1).reveal(bytes)
+    assert state.pc.returndata.reveal() == (1).to_bytes(32)
 
 
 def test_delegation() -> None:
@@ -369,7 +360,7 @@ def test_vault() -> None:
         contract=Contract(program=program),
         transaction=Transaction(
             calldata=FrozenBytes.concrete(
-                abiencode("unlock(bytes32)") + must(Uint256(0).reveal(bytes))
+                abiencode("unlock(bytes32)") + (0).to_bytes(32)
             ),
         ),
     )
@@ -402,7 +393,7 @@ def test_reentrancy() -> None:
         transaction=Transaction(
             callvalue=Uint256(0x1234),
             calldata=FrozenBytes.concrete(
-                abiencode("donate(address)") + must(Uint256(1).reveal(bytes))
+                abiencode("donate(address)") + (1).to_bytes(32)
             ),
         ),
     )
@@ -422,7 +413,7 @@ def test_elevator() -> None:
         transaction=Transaction(
             caller=Uint160(0x76543210),
             calldata=FrozenBytes.concrete(
-                abiencode("goTo(uint256)") + must(Uint256(1).reveal(bytes))
+                abiencode("goTo(uint256)") + (1).to_bytes(32)
             ),
         ),
     )
@@ -443,8 +434,7 @@ def test_privacy() -> None:
         contract=Contract(program=program),
         transaction=Transaction(
             calldata=FrozenBytes.concrete(
-                abiencode("unlock(bytes16)")
-                + must(Uint256(0x4321 << 128).reveal(bytes))
+                abiencode("unlock(bytes16)") + (0x4321 << 128).to_bytes(32)
             ),
         ),
     )
@@ -481,7 +471,7 @@ def test_gatekeeper_two() -> None:
 
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
-    assert state.pc.returndata.reveal() == must(Uint256(1).reveal(bytes))
+    assert state.pc.returndata.reveal() == (1).to_bytes(32)
 
 
 def test_preservation() -> None:
@@ -496,7 +486,7 @@ def test_preservation() -> None:
         contract=preservation,
         transaction=Transaction(
             calldata=FrozenBytes.concrete(
-                abiencode("setFirstTime(uint256)") + must(Uint256(0x5050).reveal(bytes))
+                abiencode("setFirstTime(uint256)") + (0x5050).to_bytes(32)
             ),
         ),
     )

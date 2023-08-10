@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import abc
-from typing import Any, Generic, Type, TypeVar, overload
+from typing import Any, Generic, Type, TypeVar
 
 from Crypto.Hash import keccak
 from pybitwuzla import BitwuzlaTerm, Kind
@@ -106,25 +106,11 @@ class BitVector(Symbolic[int]):
         assert type(result) == bool
         return result
 
-    @overload
-    def reveal(self, into: Type[int] = int) -> int | None:
-        ...
-
-    @overload
-    def reveal(self, into: Type[bytes]) -> bytes | None:
-        ...
-
-    def reveal(self, into: Type[int] | Type[bytes] = int) -> int | bytes | None:
+    def reveal(self) -> int | None:
         """Return the bitvector's underlying value, if a constant literal."""
         if not self.is_constant_literal():
             return None
-
-        if into == int:
-            return get_value_int(self.node)
-        elif into == bytes:
-            return get_value_int(self.node).to_bytes(self.length() // 8)
-        else:
-            raise TypeError(f"unexpected type: {into}")
+        return get_value_int(self.node)
 
     def describe(self) -> str:
         """

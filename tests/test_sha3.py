@@ -13,8 +13,9 @@ from smt.solver import NarrowingError, Solver
 def test_concrete() -> None:
     sha3 = SHA3()
     input = FrozenBytes.concrete(b"testing")
-    assert sha3[input].reveal(bytes) == bytes.fromhex(
-        "5f16f4c7f149ac4f9510d9cf8cf384038ad348b3bcdc01915f95de12df9d1b02"
+    assert (
+        sha3[input].reveal()
+        == 0x5F16F4C7F149AC4F9510D9CF8CF384038AD348B3BCDC01915F95DE12DF9D1B02
     )
 
 
@@ -38,8 +39,8 @@ def test_symbolic() -> None:
     assert input.describe(solver) == b"testing".hex()
     sha3.narrow(solver)
     assert (
-        solver.evaluate(sha3[input], bytes).hex()
-        == "5f16f4c7f149ac4f9510d9cf8cf384038ad348b3bcdc01915f95de12df9d1b02"
+        solver.evaluate(sha3[input])
+        == 0x5F16F4C7F149AC4F9510D9CF8CF384038AD348B3BCDC01915F95DE12DF9D1B02
     )
 
 
@@ -64,18 +65,20 @@ def test_fully_symbolic() -> None:
     assert input.describe(solver) == b"testing".hex()
     sha3.narrow(solver)
     assert (
-        solver.evaluate(sha3[input], bytes).hex()
-        == "5f16f4c7f149ac4f9510d9cf8cf384038ad348b3bcdc01915f95de12df9d1b02"
+        solver.evaluate(sha3[input])
+        == 0x5F16F4C7F149AC4F9510D9CF8CF384038AD348B3BCDC01915F95DE12DF9D1B02
     )
 
 
 def test_zero() -> None:
     sha3 = SHA3()
-    assert sha3[FrozenBytes.symbolic("INPUT", 0)].reveal(bytes) == bytes.fromhex(
-        "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+    assert (
+        sha3[FrozenBytes.symbolic("INPUT", 0)].reveal()
+        == 0xC5D2460186F7233C927E7DB2DCC703C0E500B653CA82273B7BFAD8045D85A470
     )
-    assert sha3[FrozenBytes.concrete()].reveal(bytes) == bytes.fromhex(
-        "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+    assert (
+        sha3[FrozenBytes.concrete()].reveal()
+        == 0xC5D2460186F7233C927E7DB2DCC703C0E500B653CA82273B7BFAD8045D85A470
     )
 
 

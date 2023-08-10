@@ -103,8 +103,8 @@ class Bytes(abc.ABC):
             if i > 256:
                 result += "..."
                 break
-            b = solver.evaluate(self[Uint256(i)], bytes)
-            result += b.hex()
+            b = solver.evaluate(self[Uint256(i)])
+            result += b.to_bytes(1).hex()
         return result
 
     def evaluate(self, solver: Solver) -> bytes:
@@ -114,7 +114,7 @@ class Bytes(abc.ABC):
             raise ValueError("length too long to evaluate!")
         result = b""
         for i in range(length):
-            result += solver.evaluate(self[Uint256(i)], bytes)
+            result += solver.evaluate(self[Uint256(i)]).to_bytes(1)
         return result
 
 

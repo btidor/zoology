@@ -39,8 +39,8 @@ def createInstance(
     """Call createInstance to set up the level."""
     # Warning: this symbolic universe will be used in symbolic execution later
     # on. Inaccuracies in the environment may result in an inaccurate analysis.
-    assert (p := PLAYER.into(Uint256).reveal(bytes)) is not None
-    calldata = abiencode("createInstance(address)") + p
+    assert (p := PLAYER.reveal()) is not None
+    calldata = abiencode("createInstance(address)") + p.to_bytes(32)
     assert (a := address.reveal()) is not None
     start = State(
         block=Block(),
@@ -83,9 +83,13 @@ def validateInstance(
     """Symbolically interpret validateInstance as a function, if possible."""
     assert (factory := _factory.reveal()) is not None
 
-    assert (arg0 := instance.into(Uint256).reveal(bytes)) is not None
-    assert (arg1 := PLAYER.into(Uint256).reveal(bytes)) is not None
-    calldata = abiencode("validateInstance(address,address)") + arg0 + arg1
+    assert (arg0 := instance.reveal()) is not None
+    assert (arg1 := PLAYER.reveal()) is not None
+    calldata = (
+        abiencode("validateInstance(address,address)")
+        + arg0.to_bytes(32)
+        + arg1.to_bytes(32)
+    )
 
     sha3 = SHA3()
     universe, _, _ = history.subsequent()
@@ -98,12 +102,14 @@ def validateInstance(
     )
 
     for reference in universe.contracts.values():
-        assert (a := reference.address.reveal(bytes)) is not None
+        assert (a := reference.address.reveal()) is not None
         start.universe.add_contract(
             Contract(
                 address=reference.address,
                 program=reference.program,
-                storage=Array.symbolic(f"STORAGE@{a.hex()}", Uint256, Uint256),
+                storage=Array.symbolic(
+                    f"STORAGE@{a.to_bytes(20).hex()}", Uint256, Uint256
+                ),
                 nonce=reference.nonce,
             )
         )
@@ -148,9 +154,13 @@ def constrainWithValidator(
 
     assert (factory := _factory.reveal()) is not None
 
-    assert (arg0 := instance.into(Uint256).reveal(bytes)) is not None
-    assert (arg1 := PLAYER.into(Uint256).reveal(bytes)) is not None
-    calldata = abiencode("validateInstance(address,address)") + arg0 + arg1
+    assert (arg0 := instance.reveal()) is not None
+    assert (arg1 := PLAYER.reveal()) is not None
+    calldata = (
+        abiencode("validateInstance(address,address)")
+        + arg0.to_bytes(32)
+        + arg1.to_bytes(32)
+    )
 
     universe, sha3, block = history.subsequent()
     contract = universe.contracts[factory]

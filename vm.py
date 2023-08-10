@@ -87,8 +87,8 @@ def printable_execution(state: State) -> Generator[str, None, State]:
 
         # Print stack
         for x in state.stack:
-            assert (v := x.reveal(bytes)) is not None
-            yield "  " + v.hex()
+            assert (v := x.reveal()) is not None
+            yield "  " + v.to_bytes(32).hex()
         yield ""
 
     assert isinstance(state.pc, Termination)
