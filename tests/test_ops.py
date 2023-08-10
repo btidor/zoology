@@ -17,132 +17,132 @@ def test_STOP() -> None:
     STOP(s)
     assert isinstance(s.pc, Termination)
     assert s.pc.success is True
-    assert s.pc.returndata.maybe_unwrap() == b""
+    assert s.pc.returndata.reveal() == b""
 
 
 def test_ADD() -> None:
-    assert ADD(Uint256(10), Uint256(10)).maybe_unwrap() == 20
+    assert ADD(Uint256(10), Uint256(10)).reveal() == 20
     assert (
         ADD(
             Uint256(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF),
             Uint256(1),
-        ).maybe_unwrap()
+        ).reveal()
         == 0
     )
 
 
 def test_MUL() -> None:
-    assert MUL(Uint256(10), Uint256(10)).maybe_unwrap() == 100
+    assert MUL(Uint256(10), Uint256(10)).reveal() == 100
     assert (
         MUL(
             Uint256(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF),
             Uint256(2),
-        ).maybe_unwrap()
+        ).reveal()
         == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE
     )
 
 
 def test_SUB() -> None:
-    assert SUB(Uint256(10), Uint256(10)).maybe_unwrap() == 0
+    assert SUB(Uint256(10), Uint256(10)).reveal() == 0
     assert (
-        SUB(Uint256(0), Uint256(1)).maybe_unwrap()
+        SUB(Uint256(0), Uint256(1)).reveal()
         == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
     )
 
 
 def test_DIV() -> None:
-    assert DIV(Uint256(10), Uint256(10)).maybe_unwrap() == 1
-    assert DIV(Uint256(1), Uint256(2)).maybe_unwrap() == 0
-    assert DIV(Uint256(10), Uint256(0)).maybe_unwrap() == 0
+    assert DIV(Uint256(10), Uint256(10)).reveal() == 1
+    assert DIV(Uint256(1), Uint256(2)).reveal() == 0
+    assert DIV(Uint256(10), Uint256(0)).reveal() == 0
 
 
 def test_SDIV() -> None:
-    assert SDIV(Uint256(10), Uint256(10)).maybe_unwrap() == 1
+    assert SDIV(Uint256(10), Uint256(10)).reveal() == 1
     assert (
         SDIV(
             Uint256(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE),
             Uint256(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF),
-        ).maybe_unwrap()
+        ).reveal()
         == 2
     )
-    assert SDIV(Uint256(10), Uint256(0)).maybe_unwrap() == 0
+    assert SDIV(Uint256(10), Uint256(0)).reveal() == 0
 
 
 def test_MOD() -> None:
-    assert MOD(Uint256(10), Uint256(3)).maybe_unwrap() == 1
-    assert MOD(Uint256(17), Uint256(5)).maybe_unwrap() == 2
-    assert MOD(Uint256(10), Uint256(0)).maybe_unwrap() == 0
+    assert MOD(Uint256(10), Uint256(3)).reveal() == 1
+    assert MOD(Uint256(17), Uint256(5)).reveal() == 2
+    assert MOD(Uint256(10), Uint256(0)).reveal() == 0
 
 
 def test_SMOD() -> None:
-    assert SMOD(Uint256(10), Uint256(3)).maybe_unwrap() == 1
+    assert SMOD(Uint256(10), Uint256(3)).reveal() == 1
     assert (
         SMOD(
             Uint256(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF8),
             Uint256(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFD),
-        ).maybe_unwrap()
+        ).reveal()
         == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE
     )
-    assert SMOD(Uint256(10), Uint256(0)).maybe_unwrap() == 0
+    assert SMOD(Uint256(10), Uint256(0)).reveal() == 0
 
 
 def test_ADDMOD() -> None:
-    assert ADDMOD(Uint256(10), Uint256(10), Uint256(8)).maybe_unwrap() == 4
+    assert ADDMOD(Uint256(10), Uint256(10), Uint256(8)).reveal() == 4
     assert (
         ADDMOD(
             Uint256(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF),
             Uint256(2),
             Uint256(2),
-        ).maybe_unwrap()
+        ).reveal()
         == 1
     )
 
 
 def test_MULMOD() -> None:
-    assert MULMOD(Uint256(10), Uint256(10), Uint256(8)).maybe_unwrap() == 4
+    assert MULMOD(Uint256(10), Uint256(10), Uint256(8)).reveal() == 4
     assert (
         MULMOD(
             Uint256(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF),
             Uint256(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF),
             Uint256(12),
-        ).maybe_unwrap()
+        ).reveal()
         == 9
     )
 
 
 def test_EXP() -> None:
-    assert EXP(Uint256(10), Uint256(2)).maybe_unwrap() == 100
-    assert EXP(Uint256(2), Uint256(2)).maybe_unwrap() == 4
+    assert EXP(Uint256(10), Uint256(2)).reveal() == 100
+    assert EXP(Uint256(2), Uint256(2)).reveal() == 4
 
 
 def test_SIGNEXTEND() -> None:
     assert (
-        SIGNEXTEND(Uint256(0), Uint256(0xFF)).maybe_unwrap()
+        SIGNEXTEND(Uint256(0), Uint256(0xFF)).reveal()
         == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
     )
     assert (
-        SIGNEXTEND(Uint256(0), Uint256(0xAAAA)).maybe_unwrap()
+        SIGNEXTEND(Uint256(0), Uint256(0xAAAA)).reveal()
         == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFAA
     )
     assert (
-        SIGNEXTEND(Uint256(1), Uint256(0xABCD)).maybe_unwrap()
+        SIGNEXTEND(Uint256(1), Uint256(0xABCD)).reveal()
         == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFABCD
     )
-    assert SIGNEXTEND(Uint256(0), Uint256(0x7F)).maybe_unwrap() == 0x7F
-    assert SIGNEXTEND(Uint256(1), Uint256(0x5BCD)).maybe_unwrap() == 0x5BCD
-    assert SIGNEXTEND(Uint256(2), Uint256(0xFF)).maybe_unwrap() == 0xFF
-    assert SIGNEXTEND(Uint256(2), Uint256(0xABCD)).maybe_unwrap() == 0xABCD
-    assert SIGNEXTEND(Uint256(0x7F), Uint256(0x7F)).maybe_unwrap() == 0x7F
+    assert SIGNEXTEND(Uint256(0), Uint256(0x7F)).reveal() == 0x7F
+    assert SIGNEXTEND(Uint256(1), Uint256(0x5BCD)).reveal() == 0x5BCD
+    assert SIGNEXTEND(Uint256(2), Uint256(0xFF)).reveal() == 0xFF
+    assert SIGNEXTEND(Uint256(2), Uint256(0xABCD)).reveal() == 0xABCD
+    assert SIGNEXTEND(Uint256(0x7F), Uint256(0x7F)).reveal() == 0x7F
 
 
 def test_LT() -> None:
-    assert LT(Uint256(8), Uint256(10)).maybe_unwrap() == 1
-    assert LT(Uint256(10), Uint256(10)).maybe_unwrap() == 0
+    assert LT(Uint256(8), Uint256(10)).reveal() == 1
+    assert LT(Uint256(10), Uint256(10)).reveal() == 0
 
 
 def test_GT() -> None:
-    assert GT(Uint256(10), Uint256(8)).maybe_unwrap() == 1
-    assert GT(Uint256(10), Uint256(10)).maybe_unwrap() == 0
+    assert GT(Uint256(10), Uint256(8)).reveal() == 1
+    assert GT(Uint256(10), Uint256(10)).reveal() == 0
 
 
 def test_SLT() -> None:
@@ -150,10 +150,10 @@ def test_SLT() -> None:
         SLT(
             Uint256(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF),
             Uint256(0),
-        ).maybe_unwrap()
+        ).reveal()
         == 1
     )
-    assert SLT(Uint256(10), Uint256(10)).maybe_unwrap() == 0
+    assert SLT(Uint256(10), Uint256(10)).reveal() == 0
 
 
 def test_SGT() -> None:
@@ -161,75 +161,75 @@ def test_SGT() -> None:
         SGT(
             Uint256(0),
             Uint256(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF),
-        ).maybe_unwrap()
+        ).reveal()
         == 1
     )
-    assert SGT(Uint256(10), Uint256(10)).maybe_unwrap() == 0
+    assert SGT(Uint256(10), Uint256(10)).reveal() == 0
 
 
 def test_EQ() -> None:
-    assert EQ(Uint256(10), Uint256(10)).maybe_unwrap() == 1
-    assert EQ(Uint256(10), Uint256(8)).maybe_unwrap() == 0
+    assert EQ(Uint256(10), Uint256(10)).reveal() == 1
+    assert EQ(Uint256(10), Uint256(8)).reveal() == 0
 
 
 def test_ISZERO() -> None:
-    assert ISZERO(Uint256(10)).maybe_unwrap() == 0
-    assert ISZERO(Uint256(0)).maybe_unwrap() == 1
+    assert ISZERO(Uint256(10)).reveal() == 0
+    assert ISZERO(Uint256(0)).reveal() == 1
 
 
 def test_AND() -> None:
-    assert AND(Uint256(0x0F), Uint256(0x0F)).maybe_unwrap() == 0xF
-    assert AND(Uint256(0xFF), Uint256(0)).maybe_unwrap() == 0
+    assert AND(Uint256(0x0F), Uint256(0x0F)).reveal() == 0xF
+    assert AND(Uint256(0xFF), Uint256(0)).reveal() == 0
 
 
 def test_OR() -> None:
-    assert OR(Uint256(0xF0), Uint256(0x0F)).maybe_unwrap() == 0xFF
-    assert OR(Uint256(0xFF), Uint256(0xFF)).maybe_unwrap() == 0xFF
+    assert OR(Uint256(0xF0), Uint256(0x0F)).reveal() == 0xFF
+    assert OR(Uint256(0xFF), Uint256(0xFF)).reveal() == 0xFF
 
 
 def test_XOR() -> None:
-    assert XOR(Uint256(0xF0), Uint256(0x0F)).maybe_unwrap() == 0xFF
-    assert XOR(Uint256(0xFF), Uint256(0xFF)).maybe_unwrap() == 0
+    assert XOR(Uint256(0xF0), Uint256(0x0F)).reveal() == 0xFF
+    assert XOR(Uint256(0xFF), Uint256(0xFF)).reveal() == 0
 
 
 def test_NOT() -> None:
     assert (
-        NOT(Uint256(0)).maybe_unwrap()
+        NOT(Uint256(0)).reveal()
         == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
     )
 
 
 def test_BYTE() -> None:
-    assert BYTE(Uint256(31), Uint256(0xFF)).maybe_unwrap() == 0xFF
-    assert BYTE(Uint256(30), Uint256(0x8800)).maybe_unwrap() == 0x88
-    assert BYTE(Uint256(30), Uint256(0xAABBCC)).maybe_unwrap() == 0xBB
-    assert BYTE(Uint256(123456), Uint256(0xAABBCC)).maybe_unwrap() == 0
+    assert BYTE(Uint256(31), Uint256(0xFF)).reveal() == 0xFF
+    assert BYTE(Uint256(30), Uint256(0x8800)).reveal() == 0x88
+    assert BYTE(Uint256(30), Uint256(0xAABBCC)).reveal() == 0xBB
+    assert BYTE(Uint256(123456), Uint256(0xAABBCC)).reveal() == 0
 
 
 def test_SHL() -> None:
-    assert SHL(Uint256(1), Uint256(1)).maybe_unwrap() == 2
+    assert SHL(Uint256(1), Uint256(1)).reveal() == 2
     assert (
         SHL(
             Uint256(4),
             Uint256(0xFF00000000000000000000000000000000000000000000000000000000000000),
-        ).maybe_unwrap()
+        ).reveal()
         == 0xF000000000000000000000000000000000000000000000000000000000000000
     )
 
 
 def test_SHR() -> None:
-    assert SHR(Uint256(1), Uint256(2)).maybe_unwrap() == 1
-    assert SHR(Uint256(4), Uint256(0xFF)).maybe_unwrap() == 0xF
-    assert SHR(Uint256(123), Uint256(0xAA)).maybe_unwrap() == 0
+    assert SHR(Uint256(1), Uint256(2)).reveal() == 1
+    assert SHR(Uint256(4), Uint256(0xFF)).reveal() == 0xF
+    assert SHR(Uint256(123), Uint256(0xAA)).reveal() == 0
 
 
 def test_SAR() -> None:
-    assert SAR(Uint256(1), Uint256(2)).maybe_unwrap() == 1
+    assert SAR(Uint256(1), Uint256(2)).reveal() == 1
     assert (
         SAR(
             Uint256(4),
             Uint256(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF0),
-        ).maybe_unwrap()
+        ).reveal()
         == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
     )
 
@@ -250,7 +250,7 @@ def test_SHA3() -> None:
 def test_ADDRESS() -> None:
     contract = Contract(address=Uint160(0x9BBFED6889322E016E0A02EE459D306FC19545D8))
     s = State(contract=contract)
-    assert ADDRESS(s).maybe_unwrap() == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
+    assert ADDRESS(s).reveal() == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
 
 
 def test_BALANCE() -> None:
@@ -259,7 +259,7 @@ def test_BALANCE() -> None:
         125985
     )
     assert (
-        BALANCE(s, Uint256(0x9BBFED6889322E016E0A02EE459D306FC19545D8)).maybe_unwrap()
+        BALANCE(s, Uint256(0x9BBFED6889322E016E0A02EE459D306FC19545D8)).reveal()
         == 125985
     )
 
@@ -269,7 +269,7 @@ def test_ORIGIN() -> None:
         origin=Uint160(0x9BBFED6889322E016E0A02EE459D306FC19545D8)
     )
     s = State(transaction=transaction)
-    assert ORIGIN(s).maybe_unwrap() == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
+    assert ORIGIN(s).reveal() == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
 
 
 def test_CALLER() -> None:
@@ -277,13 +277,13 @@ def test_CALLER() -> None:
         caller=Uint160(0x9BBFED6889322E016E0A02EE459D306FC19545D8)
     )
     s = State(transaction=transaction)
-    assert CALLER(s).maybe_unwrap() == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
+    assert CALLER(s).reveal() == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
 
 
 def test_CALLVALUE() -> None:
     transaction = Transaction(callvalue=Uint256(123456789))
     s = State(transaction=transaction)
-    assert CALLVALUE(s).maybe_unwrap() == 123456789
+    assert CALLVALUE(s).reveal() == 123456789
 
 
 def test_CALLDATALOAD() -> None:
@@ -294,20 +294,20 @@ def test_CALLDATALOAD() -> None:
     )
     s = State(transaction=transaction)
     assert (
-        CALLDATALOAD(s, Uint256(0)).maybe_unwrap()
+        CALLDATALOAD(s, Uint256(0)).reveal()
         == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
     )
     assert (
-        CALLDATALOAD(s, Uint256(31)).maybe_unwrap()
+        CALLDATALOAD(s, Uint256(31)).reveal()
         == 0xFF00000000000000000000000000000000000000000000000000000000000000
     )
-    assert CALLDATALOAD(s, Uint256(32)).maybe_unwrap() == 0
+    assert CALLDATALOAD(s, Uint256(32)).reveal() == 0
 
 
 def test_CALLDATASIZE() -> None:
     transaction = Transaction(calldata=FrozenBytes.concrete(b"\xff"))
     s = State(transaction=transaction)
-    assert CALLDATASIZE(s).maybe_unwrap() == 1
+    assert CALLDATASIZE(s).reveal() == 1
 
 
 def test_CALLDATACOPY() -> None:
@@ -319,12 +319,12 @@ def test_CALLDATACOPY() -> None:
     s = State(transaction=transaction)
 
     CALLDATACOPY(s, Uint256(0), Uint256(0), Uint256(32))
-    assert s.memory.maybe_unwrap() == bytes.fromhex(
+    assert s.memory.reveal() == bytes.fromhex(
         "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
     )
 
     CALLDATACOPY(s, Uint256(0), Uint256(31), Uint256(8))
-    assert s.memory.maybe_unwrap() == bytes.fromhex(
+    assert s.memory.reveal() == bytes.fromhex(
         "ff00000000000000ffffffffffffffffffffffffffffffffffffffffffffffff"
     )
 
@@ -335,7 +335,7 @@ def test_CODESIZE() -> None:
             program=disassemble(bytes.fromhex("66000000000000005B")),
         )
     )
-    assert CODESIZE(s).maybe_unwrap() == 9
+    assert CODESIZE(s).reveal() == 9
 
 
 def test_CODECOPY() -> None:
@@ -346,10 +346,10 @@ def test_CODECOPY() -> None:
     )
 
     CODECOPY(s, Uint256(0), Uint256(0), Uint256(0x09))
-    assert s.memory.maybe_unwrap() == bytes.fromhex("66000000000000005b")
+    assert s.memory.reveal() == bytes.fromhex("66000000000000005b")
 
     CODECOPY(s, Uint256(1), Uint256(8), Uint256(0x20))
-    assert s.memory.maybe_unwrap() == bytes.fromhex(
+    assert s.memory.reveal() == bytes.fromhex(
         "665b00000000000000000000000000000000000000000000000000000000000000"
     )
 
@@ -357,7 +357,7 @@ def test_CODECOPY() -> None:
 def test_GASPRICE() -> None:
     transaction = Transaction(gasprice=Uint256(10))
     s = State(transaction=transaction)
-    assert GASPRICE(s).maybe_unwrap() == 10
+    assert GASPRICE(s).reveal() == 10
 
 
 def test_EXTCODESIZE() -> None:
@@ -368,8 +368,8 @@ def test_EXTCODESIZE() -> None:
     )
     s = State()
     s.universe.add_contract(contract)
-    assert EXTCODESIZE(s, Uint256(address)).maybe_unwrap() == 9
-    assert EXTCODESIZE(s, Uint256(0x1234)).maybe_unwrap() == 0
+    assert EXTCODESIZE(s, Uint256(address)).reveal() == 9
+    assert EXTCODESIZE(s, Uint256(0x1234)).reveal() == 0
 
 
 def test_EXTCODECOPY() -> None:
@@ -382,15 +382,15 @@ def test_EXTCODECOPY() -> None:
     s.universe.add_contract(contract)
 
     EXTCODECOPY(s, Uint256(address), Uint256(3), Uint256(5), Uint256(7))
-    assert s.memory.maybe_unwrap() == bytes.fromhex("0000000000005b000000")
+    assert s.memory.reveal() == bytes.fromhex("0000000000005b000000")
 
     EXTCODECOPY(s, Uint256(0x1234), Uint256(0), Uint256(0), Uint256(10))
-    assert s.memory.maybe_unwrap() == bytes.fromhex("00000000000000000000")
+    assert s.memory.reveal() == bytes.fromhex("00000000000000000000")
 
 
 def test_RETURNDATASIZE() -> None:
     s = State(latest_return=FrozenBytes.concrete(b"abcdefghijklmnopqrstuvwxyz"))
-    assert RETURNDATASIZE(s).maybe_unwrap() == 26
+    assert RETURNDATASIZE(s).reveal() == 26
 
 
 def test_RETURNDATACOPY() -> None:
@@ -401,12 +401,12 @@ def test_RETURNDATACOPY() -> None:
     )
 
     RETURNDATACOPY(s, Uint256(0), Uint256(0), Uint256(32))
-    assert s.memory.maybe_unwrap() == bytes.fromhex(
+    assert s.memory.reveal() == bytes.fromhex(
         "7dffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f"
     )
 
     RETURNDATACOPY(s, Uint256(0), Uint256(31), Uint256(8))
-    assert s.memory.maybe_unwrap() == bytes.fromhex(
+    assert s.memory.reveal() == bytes.fromhex(
         "7f00000000000000ffffffffffffffffffffffffffffffffffffffffffffff7f"
     )
 
@@ -421,37 +421,37 @@ def test_EXTCODEHASH() -> None:
     s.universe.add_contract(contract)
 
     assert (
-        EXTCODEHASH(s, Uint256(address)).maybe_unwrap()
+        EXTCODEHASH(s, Uint256(address)).reveal()
         == 0xD579742AEE22A336CAC42EFE05B2CF1281DB892E213257B929C2338EA0675B00
     )
-    assert EXTCODEHASH(s, Uint256(0x1234)).maybe_unwrap() == 0x0
+    assert EXTCODEHASH(s, Uint256(0x1234)).reveal() == 0x0
 
 
 def test_BLOCKHASH() -> None:
     s = State(block=Block(hashes=Array.concrete(Uint8, Uint256(0x9999))))
-    assert BLOCKHASH(s, s.block.number - Uint256(10)).maybe_unwrap() == 0x9999
-    assert BLOCKHASH(s, s.block.number - Uint256(256)).maybe_unwrap() == 0x9999
-    assert BLOCKHASH(s, s.block.number - Uint256(257)).maybe_unwrap() == 0
-    assert BLOCKHASH(s, s.block.number).maybe_unwrap() == 0
-    assert BLOCKHASH(s, s.block.number + Uint256(10)).maybe_unwrap() == 0
+    assert BLOCKHASH(s, s.block.number - Uint256(10)).reveal() == 0x9999
+    assert BLOCKHASH(s, s.block.number - Uint256(256)).reveal() == 0x9999
+    assert BLOCKHASH(s, s.block.number - Uint256(257)).reveal() == 0
+    assert BLOCKHASH(s, s.block.number).reveal() == 0
+    assert BLOCKHASH(s, s.block.number + Uint256(10)).reveal() == 0
 
 
 def test_COINBASE() -> None:
     block = Block(coinbase=Uint160(0x9BBFED6889322E016E0A02EE459D306FC19545D8))
     s = State(block=block)
-    assert COINBASE(s).maybe_unwrap() == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
+    assert COINBASE(s).reveal() == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
 
 
 def test_TIMESTAMP() -> None:
     block = Block(timestamp=Uint256(1636704767))
     s = State(block=block)
-    assert TIMESTAMP(s).maybe_unwrap() == 1636704767
+    assert TIMESTAMP(s).reveal() == 1636704767
 
 
 def test_NUMBER() -> None:
     block = Block(number=Uint256(1636704767))
     s = State(block=block)
-    assert NUMBER(s).maybe_unwrap() == 1636704767
+    assert NUMBER(s).reveal() == 1636704767
 
 
 def test_PREVRANDAO() -> None:
@@ -462,7 +462,7 @@ def test_PREVRANDAO() -> None:
     )
     s = State(block=block)
     assert (
-        PREVRANDAO(s).maybe_unwrap()
+        PREVRANDAO(s).reveal()
         == 0xCE124DEE50136F3F93F19667FB4198C6B94EECBACFA300469E5280012757BE94
     )
 
@@ -470,18 +470,18 @@ def test_PREVRANDAO() -> None:
 def test_GASLIMIT() -> None:
     block = Block(gaslimit=Uint256(0xFFFFFFFFFFFF))
     s = State(block=block)
-    assert GASLIMIT(s).maybe_unwrap() == 0xFFFFFFFFFFFF
+    assert GASLIMIT(s).reveal() == 0xFFFFFFFFFFFF
 
 
 def test_CHAINID() -> None:
     s = State()
-    assert CHAINID(s).maybe_unwrap() == 1
+    assert CHAINID(s).reveal() == 1
 
 
 def test_BASEFEE() -> None:
     block = Block(basefee=Uint256(10))
     s = State(block=block)
-    assert BASEFEE(s).maybe_unwrap() == 10
+    assert BASEFEE(s).reveal() == 10
 
 
 def test_MLOAD() -> None:
@@ -492,18 +492,18 @@ def test_MLOAD() -> None:
             )
         )
     )
-    assert MLOAD(s, Uint256(0)).maybe_unwrap() == 0xFF
-    assert MLOAD(s, Uint256(1)).maybe_unwrap() == 0xFF00
+    assert MLOAD(s, Uint256(0)).reveal() == 0xFF
+    assert MLOAD(s, Uint256(1)).reveal() == 0xFF00
 
 
 def test_MSTORE() -> None:
     s = State()
     MSTORE(s, Uint256(0), Uint256(0xFF))
-    assert s.memory.maybe_unwrap() == bytes.fromhex(
+    assert s.memory.reveal() == bytes.fromhex(
         "00000000000000000000000000000000000000000000000000000000000000ff"
     )
     MSTORE(s, Uint256(1), Uint256(0xFF))
-    assert s.memory.maybe_unwrap() == bytes.fromhex(
+    assert s.memory.reveal() == bytes.fromhex(
         "0000000000000000000000000000000000000000000000000000000000000000ff"
     )
 
@@ -512,28 +512,28 @@ def test_MSTORE8() -> None:
     s = State()
     MSTORE8(s, Uint256(0), Uint256(0xFFFF))
 
-    assert s.memory.maybe_unwrap() == b"\xff"
+    assert s.memory.reveal() == b"\xff"
     MSTORE8(s, Uint256(1), Uint256(0xAABBCCDDEE))
-    assert s.memory.maybe_unwrap() == b"\xff\xee"
+    assert s.memory.reveal() == b"\xff\xee"
 
 
 def test_SLOAD() -> None:
     s = State()
     s.contract.storage[Uint256(0)] = Uint256(46)
-    assert SLOAD(s, Uint256(0)).maybe_unwrap() == 46
+    assert SLOAD(s, Uint256(0)).reveal() == 46
     assert len(s.contract.storage.accessed) == 1
-    assert s.contract.storage.accessed[0].maybe_unwrap() == 0
+    assert s.contract.storage.accessed[0].reveal() == 0
 
 
 def test_SSTORE() -> None:
     s = State()
 
     SSTORE(s, Uint256(0), Uint256(0xFFFF))
-    assert s.contract.storage[Uint256(0)].maybe_unwrap() == 0xFFFF
+    assert s.contract.storage[Uint256(0)].reveal() == 0xFFFF
 
     SSTORE(s, Uint256(8965), Uint256(0xFF))
-    assert s.contract.storage[Uint256(0)].maybe_unwrap() == 0xFFFF
-    assert s.contract.storage[Uint256(8965)].maybe_unwrap() == 0xFF
+    assert s.contract.storage[Uint256(0)].reveal() == 0xFFFF
+    assert s.contract.storage[Uint256(8965)].reveal() == 0xFF
 
 
 def test_JUMP() -> None:
@@ -549,17 +549,17 @@ def test_JUMP() -> None:
 
 def test_PC() -> None:
     ins = Instruction(0x12, 1, "PC")
-    assert PC(ins).maybe_unwrap() == 0x12
+    assert PC(ins).reveal() == 0x12
 
 
 def test_MSIZE() -> None:
     s = State(memory=MutableBytes.concrete(b"\x00" * 123 + b"\x01"))
-    assert MSIZE(s).maybe_unwrap() == 124
+    assert MSIZE(s).reveal() == 124
 
 
 def test_PUSH() -> None:
     ins = Instruction(0x0, 2, "PUSH", 1, Uint256(0x01))
-    assert PUSH(ins).maybe_unwrap() == 0x01
+    assert PUSH(ins).reveal() == 0x01
 
     ins = Instruction(0x1, 2, "PUSH", 1)
     with pytest.raises(ValueError):
@@ -570,7 +570,7 @@ def test_DUP() -> None:
     s = State(stack=[Uint256(0x1234)])
 
     ins = Instruction(0x0, 1, "DUP", 1)
-    assert DUP(ins, s).maybe_unwrap() == 0x1234
+    assert DUP(ins, s).reveal() == 0x1234
 
     ins = Instruction(0x0, 1, "DUP")
     with pytest.raises(ValueError):
@@ -582,7 +582,7 @@ def test_SWAP() -> None:
 
     ins = Instruction(0x0, 1, "SWAP", 1)
     SWAP(ins, s)
-    stack = [x.maybe_unwrap() for x in s.stack]
+    stack = [x.reveal() for x in s.stack]
     assert stack == [0x5678, 0x1234]
 
     ins = Instruction(0x0, 1, "SWAP")
@@ -598,9 +598,9 @@ def test_LOG() -> None:
     ins = Instruction(0x0, 1, "LOG", 1)
     LOG(ins, s, Uint256(1), Uint256(1))
     assert len(s.logs) == 1
-    assert s.logs[0].data.maybe_unwrap() == b"\x34"
+    assert s.logs[0].data.reveal() == b"\x34"
     assert len(s.logs[0].topics) == 1
-    assert s.logs[0].topics[0].maybe_unwrap() == 0xABCD
+    assert s.logs[0].topics[0].reveal() == 0xABCD
 
 
 def test_CREATE() -> None:
@@ -616,10 +616,10 @@ def test_CREATE() -> None:
     flow = CREATE(s, Uint256(999), Uint256(2), Uint256(100))
     assert isinstance(flow, Descend)
     assert (
-        flow.state.contract.address.maybe_unwrap()
+        flow.state.contract.address.reveal()
         == 0x343C43A37D37DFF08AE8C4A11544C718ABB4FCF8
     )
-    assert contract.nonce.maybe_unwrap() == 2
+    assert contract.nonce.reveal() == 2
 
 
 def test_RETURN() -> None:
@@ -630,7 +630,7 @@ def test_RETURN() -> None:
     RETURN(s, Uint256(0), Uint256(2))
     assert isinstance(s.pc, Termination)
     assert s.pc.success is True
-    assert s.pc.returndata.maybe_unwrap() == b"\xff\x01"
+    assert s.pc.returndata.reveal() == b"\xff\x01"
 
 
 def test_CREATE2() -> None:
@@ -639,10 +639,10 @@ def test_CREATE2() -> None:
     flow = CREATE2(s, Uint256(999), Uint256(0), Uint256(0), Uint256(0x0))
     assert isinstance(flow, Descend)
     assert (
-        flow.state.contract.address.maybe_unwrap()
+        flow.state.contract.address.reveal()
         == 0xE33C0C7F7DF4809055C3EBA6C09CFE4BAF1BD9E0  # from EIP-1014
     )
-    assert contract.nonce.maybe_unwrap() == 2
+    assert contract.nonce.reveal() == 2
 
 
 def test_REVERT() -> None:
@@ -653,7 +653,7 @@ def test_REVERT() -> None:
     REVERT(s, Uint256(0), Uint256(2))
     assert isinstance(s.pc, Termination)
     assert s.pc.success is False
-    assert s.pc.returndata.maybe_unwrap() == b"\xff\x01"
+    assert s.pc.returndata.reveal() == b"\xff\x01"
 
 
 def test_INVALID() -> None:
@@ -661,7 +661,7 @@ def test_INVALID() -> None:
     INVALID(s)
     assert isinstance(s.pc, Termination)
     assert s.pc.success is False
-    assert s.pc.returndata.maybe_unwrap() == b""
+    assert s.pc.returndata.reveal() == b""
 
 
 def test_SELFDESTRUCT() -> None:

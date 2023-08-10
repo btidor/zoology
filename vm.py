@@ -87,12 +87,12 @@ def printable_execution(state: State) -> Generator[str, None, State]:
 
         # Print stack
         for x in state.stack:
-            assert (v := x.maybe_unwrap(bytes)) is not None
+            assert (v := x.reveal(bytes)) is not None
             yield "  " + v.hex()
         yield ""
 
     assert isinstance(state.pc, Termination)
-    assert (r := state.pc.returndata.maybe_unwrap()) is not None
+    assert (r := state.pc.returndata.reveal()) is not None
     yield ("RETURN" if state.pc.success else "REVERT") + " " + str(r)
     return state
 

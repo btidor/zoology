@@ -53,7 +53,7 @@ class SHA3:
 
     def __getitem__(self, key: Bytes) -> Uint256:
         """Compute the SHA3 hash of a given key."""
-        size = key.length.maybe_unwrap()
+        size = key.length.reveal()
 
         if size is None:
             result = Uint256(f"SHA3(?{len(self.free_digests)}){self.suffix}")
@@ -78,7 +78,7 @@ class SHA3:
             )
             self.accessed[size] = []
 
-        if (data := key.maybe_unwrap()) is not None:
+        if (data := key.reveal()) is not None:
             digest = keccak.new(data=data, digest_bits=256).digest()
             symbolic = Uint256(int.from_bytes(digest))
             self.constraints.append(

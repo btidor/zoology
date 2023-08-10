@@ -15,7 +15,7 @@ def test_disassemble_basic() -> None:
     assert p.instructions[0].name == "PUSH"
     assert p.instructions[0].suffix == 1
     assert p.instructions[0].operand is not None
-    assert p.instructions[0].operand.maybe_unwrap() == 0xAA
+    assert p.instructions[0].operand.reveal() == 0xAA
 
     assert p.instructions[4].offset == 7
     assert p.instructions[4].name == "JUMPI"
@@ -35,7 +35,7 @@ def test_disassemble_suffix() -> None:
     assert p.instructions[0].name == "PUSH"
     assert p.instructions[0].suffix == 4
     assert p.instructions[0].operand is not None
-    assert p.instructions[0].operand.maybe_unwrap() == 0x01020304
+    assert p.instructions[0].operand.reveal() == 0x01020304
 
     assert p.instructions[1].name == "DUP"
     assert p.instructions[1].suffix == 16
@@ -56,7 +56,7 @@ def test_disassemble_trailer() -> None:
 
     assert p.instructions[0].name == "PUSH"
     assert p.instructions[0].operand is not None
-    assert p.instructions[0].operand.maybe_unwrap() == 0xFE
+    assert p.instructions[0].operand.reveal() == 0xFE
 
     assert p.instructions[1].name == "INVALID"
 

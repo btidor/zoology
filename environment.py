@@ -54,14 +54,14 @@ class Block:
             0xF798B79831B745F4F756FBD50CFEBAE9FE8AF348CB8EF47F739939142EC9D1E0
         )
         for i in range(254, -1, -1):
-            assert (prev := hashes[Uint8(i + 1)].maybe_unwrap(bytes)) is not None
+            assert (prev := hashes[Uint8(i + 1)].reveal(bytes)) is not None
             hashes[Uint8(i)] = concrete_hash(prev)
         return hashes
 
     def successor(self) -> Block:
         """Produce a plausible next block."""
         hashes = Array.concrete(Uint8, Uint256(0))
-        assert (start := self.hashes[Uint8(0)].maybe_unwrap(bytes)) is not None
+        assert (start := self.hashes[Uint8(0)].reveal(bytes)) is not None
         hashes[Uint8(0)] = concrete_hash(start)
         for i in range(1, 256):
             hashes[Uint8(i)] = self.hashes[Uint8(i - 1)]
@@ -173,6 +173,6 @@ class Universe:
 
         The contract must have a concrete address.
         """
-        assert (address := contract.address.maybe_unwrap()) is not None
+        assert (address := contract.address.reveal()) is not None
         self.contracts[address] = contract
         self.codesizes[contract.address] = contract.program.code.length

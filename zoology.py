@@ -39,9 +39,9 @@ def createInstance(
     """Call createInstance to set up the level."""
     # Warning: this symbolic universe will be used in symbolic execution later
     # on. Inaccuracies in the environment may result in an inaccurate analysis.
-    assert (p := PLAYER.into(Uint256).maybe_unwrap(bytes)) is not None
+    assert (p := PLAYER.into(Uint256).reveal(bytes)) is not None
     calldata = abiencode("createInstance(address)") + p
-    assert (a := address.maybe_unwrap()) is not None
+    assert (a := address.reveal()) is not None
     start = State(
         block=Block(),
         contract=universe.contracts[a],
@@ -68,12 +68,12 @@ def createInstance(
         assert isinstance(end, State)
 
     assert isinstance(end.pc, Termination)
-    assert (data := end.pc.returndata.maybe_unwrap()) is not None
+    assert (data := end.pc.returndata.reveal()) is not None
     error = data[68:].strip().decode()
     assert end.pc.success, f"createInstance() failed{': ' + error if error else ''}"
 
     end.universe.add_contract(end.contract)
-    assert (data := end.pc.returndata.maybe_unwrap()) is not None
+    assert (data := end.pc.returndata.reveal()) is not None
     return Uint160(int.from_bytes(data)), History(end.universe, end.sha3, PLAYER)
 
 
@@ -81,10 +81,10 @@ def validateInstance(
     _factory: Uint160, instance: Uint160, history: History, prints: bool = False
 ) -> Validator | None:
     """Symbolically interpret validateInstance as a function, if possible."""
-    assert (factory := _factory.maybe_unwrap()) is not None
+    assert (factory := _factory.reveal()) is not None
 
-    assert (arg0 := instance.into(Uint256).maybe_unwrap(bytes)) is not None
-    assert (arg1 := PLAYER.into(Uint256).maybe_unwrap(bytes)) is not None
+    assert (arg0 := instance.into(Uint256).reveal(bytes)) is not None
+    assert (arg1 := PLAYER.into(Uint256).reveal(bytes)) is not None
     calldata = abiencode("validateInstance(address,address)") + arg0 + arg1
 
     sha3 = SHA3()
@@ -98,7 +98,7 @@ def validateInstance(
     )
 
     for reference in universe.contracts.values():
-        assert (a := reference.address.maybe_unwrap(bytes)) is not None
+        assert (a := reference.address.reveal(bytes)) is not None
         start.universe.add_contract(
             Contract(
                 address=reference.address,
@@ -146,10 +146,10 @@ def constrainWithValidator(
         solver.assert_and_track(validator.translate(history))
         return solver
 
-    assert (factory := _factory.maybe_unwrap()) is not None
+    assert (factory := _factory.reveal()) is not None
 
-    assert (arg0 := instance.into(Uint256).maybe_unwrap(bytes)) is not None
-    assert (arg1 := PLAYER.into(Uint256).maybe_unwrap(bytes)) is not None
+    assert (arg0 := instance.into(Uint256).reveal(bytes)) is not None
+    assert (arg1 := PLAYER.into(Uint256).reveal(bytes)) is not None
     calldata = abiencode("validateInstance(address,address)") + arg0 + arg1
 
     universe, sha3, block = history.subsequent()
@@ -188,7 +188,7 @@ def search(
     verbose: int = 0,
 ) -> tuple[History, Solver] | None:
     """Symbolically execute the given level until a solution is found."""
-    assert (instance := _instance.maybe_unwrap()) is not None
+    assert (instance := _instance.reveal()) is not None
 
     histories: list[History] = [beginning]
     for i in range(depth):

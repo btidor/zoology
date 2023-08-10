@@ -75,7 +75,7 @@ class State:
 
     def transfer(self, src: Uint160, dst: Uint160, val: Uint256) -> None:
         """Transfer value from one account to another."""
-        if val.maybe_unwrap() == 0:
+        if val.reveal() == 0:
             return
         self.constraint = Constraint.all(
             self.constraint,

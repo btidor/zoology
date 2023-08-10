@@ -80,17 +80,17 @@ class Bytes(abc.ABC):
 
     def bigvector(self, expected_length: int) -> BitwuzlaTerm:
         """Return a single, large bitvector of this instance's bytes."""
-        length = self.length.maybe_unwrap() or expected_length
+        length = self.length.reveal() or expected_length
         assert length == expected_length
         result = mk_term(Kind.BV_CONCAT, [self[Uint256(i)].node for i in range(length)])
         assert isinstance(result, BitwuzlaTerm)
         return result
 
-    def maybe_unwrap(self) -> bytes | None:
+    def reveal(self) -> bytes | None:
         """Unwrap this instance to bytes."""
-        if (length := self.length.maybe_unwrap()) is None:
+        if (length := self.length.reveal()) is None:
             return None
-        data = [self[Uint256(i)].maybe_unwrap() for i in range(length)]
+        data = [self[Uint256(i)].reveal() for i in range(length)]
         if not present(data):
             return None
         return bytes(data)
@@ -169,7 +169,7 @@ class MutableBytes(Bytes):
 
     def graft(self, slice: ByteSlice, at: Uint256) -> None:
         """Graft another Bytes into this one at the given offset."""
-        if slice.length.maybe_unwrap() == 0:
+        if slice.length.reveal() == 0:
             # Short circuit e.g. in DELEGATECALL when retSize is zero.
             return
 
@@ -178,10 +178,7 @@ class MutableBytes(Bytes):
             at + slice.length,
         )
 
-        if (
-            len(self.writes) == 0
-            and (length := slice.length.maybe_unwrap()) is not None
-        ):
+        if len(self.writes) == 0 and (length := slice.length.reveal()) is not None:
             # Avoid creating custom writes when possible because of the
             # performance cliff (see above).
             for i in range(length):

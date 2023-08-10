@@ -46,7 +46,7 @@ def apply_snapshot(universe: Universe) -> None:
 
 def get_code(address: Uint160) -> Contract:
     """Load the Contract at a given address."""
-    assert (a := address.maybe_unwrap(bytes)) is not None
+    assert (a := address.reveal(bytes)) is not None
     code = _api_request("eth_getCode", address=a.hex(), tag=TAG)
     program = disassemble(code)
     return Contract(address, program)
@@ -54,8 +54,8 @@ def get_code(address: Uint160) -> Contract:
 
 def get_storage_at(address: Uint160, position: Uint256) -> Uint256:
     """Load the contents of a given storage slot."""
-    assert (a := address.maybe_unwrap(bytes)) is not None
-    assert (p := position.maybe_unwrap(bytes)) is not None
+    assert (a := address.reveal(bytes)) is not None
+    assert (p := position.reveal(bytes)) is not None
     value = _api_request("eth_getStorageAt", address=a.hex(), position=p.hex(), tag=TAG)
     return Uint256(int.from_bytes(value))
 
@@ -96,9 +96,9 @@ if __name__ == "__main__":
     snapshot = {}
     for i, address in enumerate(LEVEL_FACTORIES):
         print(f"Downloading level {i}")
-        assert (a := address.maybe_unwrap(bytes)) is not None
+        assert (a := address.reveal(bytes)) is not None
         contract = get_code(address)
-        assert (c := contract.program.code.maybe_unwrap()) is not None
+        assert (c := contract.program.code.reveal()) is not None
         snapshot[a.hex()] = {"code": c.hex()}
 
         for j in range(8):
@@ -106,7 +106,7 @@ if __name__ == "__main__":
             # slots are for maps keyed by player, which we can initialize to
             # zero.
             storage = get_storage_at(address, Uint256(j))
-            assert (v := storage.maybe_unwrap(bytes)) is not None
+            assert (v := storage.reveal(bytes)) is not None
             if int.from_bytes(v) != 0:
                 snapshot[a.hex()][str(j)] = v.hex()
 

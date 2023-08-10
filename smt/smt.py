@@ -107,14 +107,14 @@ class BitVector(Symbolic[int]):
         return result
 
     @overload
-    def maybe_unwrap(self, into: Type[int] = int) -> int | None:
+    def reveal(self, into: Type[int] = int) -> int | None:
         ...
 
     @overload
-    def maybe_unwrap(self, into: Type[bytes]) -> bytes | None:
+    def reveal(self, into: Type[bytes]) -> bytes | None:
         ...
 
-    def maybe_unwrap(self, into: Type[int] | Type[bytes] = int) -> int | bytes | None:
+    def reveal(self, into: Type[int] | Type[bytes] = int) -> int | bytes | None:
         """Return the bitvector's underlying value, if a constant literal."""
         if not self.is_constant_literal():
             return None
@@ -388,7 +388,7 @@ class Constraint(Symbolic[bool]):
         assert type(result) == bool
         return result
 
-    def maybe_unwrap(self) -> bool | None:
+    def reveal(self) -> bool | None:
         """Return the constraint's underlying value, if a constant literal."""
         result = self.node.dump("smt2")
         if result == "true":

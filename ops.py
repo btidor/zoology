@@ -71,7 +71,7 @@ def MULMOD(a: Uint256, b: Uint256, N: Uint256) -> Uint256:
 
 def EXP(a: Uint256, _exponent: Uint256) -> Uint256:
     """0A - Exponential operation."""
-    exponent = _exponent.maybe_unwrap()
+    exponent = _exponent.reveal()
     assert exponent is not None, "EXP requires concrete exponent"
 
     if exponent == 0:
@@ -242,7 +242,7 @@ def EXTCODECOPY(
     size: Uint256,
 ) -> None:
     """3C - Copy an account's code to memory."""
-    address = _address.maybe_unwrap()
+    address = _address.reveal()
     assert address is not None, "EXTCODECOPY requires concrete address"
 
     contract = s.universe.contracts.get(address, None)
@@ -268,7 +268,7 @@ def RETURNDATACOPY(
 
 def EXTCODEHASH(s: State, _address: Uint256) -> Uint256:
     """3F - Get hash of an account's code."""
-    address = _address.maybe_unwrap()
+    address = _address.reveal()
     assert address is not None, "EXTCODEHASH requires concrete address"
 
     contract = s.universe.contracts.get(address, None)
@@ -359,7 +359,7 @@ def SSTORE(s: State, key: Uint256, value: Uint256) -> None:
 
 def JUMP(s: State, _counter: Uint256) -> None:
     """56 - Alter the program counter."""
-    counter = _counter.maybe_unwrap()
+    counter = _counter.reveal()
     assert counter is not None, "JUMP requires concrete counter"
 
     # In theory, JUMP should revert if counter is not a valid jump target.
@@ -371,12 +371,12 @@ def JUMP(s: State, _counter: Uint256) -> None:
 
 def JUMPI(s: State, _counter: Uint256, b: Uint256) -> ControlFlow | None:
     """57 - Conditionally alter the program counter."""
-    counter = _counter.maybe_unwrap()
+    counter = _counter.reveal()
     assert counter is not None, "JUMPI requires concrete counter"
 
     s.path <<= 1
     c: Constraint = b == Uint256(0)
-    match c.maybe_unwrap():
+    match c.reveal():
         case None:  # unknown, must prepare both branches :(
             s0, s1 = copy.deepcopy(s), s
             s0.constraint = Constraint.all(s.constraint, c)
@@ -463,15 +463,15 @@ def LOG(ins: Instruction, s: State, offset: Uint256, size: Uint256) -> None:
 
 def CREATE(s: State, value: Uint256, offset: Uint256, size: Uint256) -> ControlFlow:
     """F0 - Create a new account with associated code."""
-    initcode = s.memory.slice(offset, size).maybe_unwrap()
+    initcode = s.memory.slice(offset, size).reveal()
     assert initcode is not None, "CREATE requires concrete program data"
-    sender_address = s.contract.address.maybe_unwrap(bytes)
+    sender_address = s.contract.address.reveal(bytes)
     assert sender_address is not None, "CREATE requires concrete sender address"
 
     # HACK: the destination address depends on the value of this contract's
     # nonce. But we need the destination address to be concrete! So we can only
     # handle CREATE with a concrete state, not a symbolic one. Sorry :(
-    nonce = s.contract.nonce.maybe_unwrap()
+    nonce = s.contract.nonce.reveal()
     assert nonce is not None, "CREATE require concrete nonce"
     if nonce >= 0x80:
         raise NotImplementedError  # TODO: implement a full RLP encoder
@@ -485,8 +485,8 @@ def _CREATE(
     s: State, value: Uint256, initcode: bytes, seed: FrozenBytes
 ) -> ControlFlow:
     address = s.sha3[seed].into(Uint160)
-    if address.maybe_unwrap() in s.universe.contracts:
-        assert (a := address.maybe_unwrap(bytes)) is not None
+    if address.reveal() in s.universe.contracts:
+        assert (a := address.reveal(bytes)) is not None
         raise ValueError(f"CREATE destination exists: 0x{a.hex()}")
 
     s.contract.nonce += Uint256(1)
@@ -512,7 +512,7 @@ def _CREATE(
         if substate.pc.success is False:
             state.stack.append(Uint256(0))
         else:
-            code = substate.pc.returndata.maybe_unwrap()
+            code = substate.pc.returndata.reveal()
             assert code is not None
             program = disassemble(code)
 
@@ -537,7 +537,7 @@ def CALL(
 ) -> ControlFlow | None:
     """F1 - Message-call into an account."""
     codesize = s.universe.codesizes[_address.into(Uint160)]
-    if codesize.maybe_unwrap() == 0 or _address.maybe_unwrap() == 0:
+    if codesize.reveal() == 0 or _address.reveal() == 0:
         # Simple transfer to an EOA: always succeeds. (We're special-casing the
         # zero address, unfortunately. It has no code and no one controls its
         # keypair.)
@@ -546,7 +546,7 @@ def CALL(
         s.memory.graft(s.latest_return.slice(Uint256(0), retSize), retOffset)
         s.stack.append(Uint256(1))
         return None
-    elif (address := _address.maybe_unwrap()) is not None:
+    elif (address := _address.reveal()) is not None:
         # Call to a concrete address: simulate the full execution.
         transaction = Transaction(
             origin=s.transaction.origin,
@@ -599,7 +599,7 @@ def CALLCODE(
     retSize: Uint256,
 ) -> ControlFlow:
     """F2 - Message-call into this account with alternative account's code."""
-    address = _address.maybe_unwrap()
+    address = _address.reveal()
     assert address is not None, "CALLCODE requires concrete address"
 
     transaction = Transaction(
@@ -645,7 +645,7 @@ def DELEGATECALL(
     Message-call into this account with an alternative account's code, but
     persisting the current values for sender and value.
     """
-    address = _address.maybe_unwrap()
+    address = _address.reveal()
     assert address is not None, "DELEGATECALL requires concrete address"
 
     transaction = Transaction(
@@ -675,15 +675,15 @@ def CREATE2(
     s: State, value: Uint256, offset: Uint256, size: Uint256, _salt: Uint256
 ) -> ControlFlow:
     """F5 - Create a new account with associated code at a predictable address."""
-    initcode = s.memory.slice(offset, size).maybe_unwrap()
+    initcode = s.memory.slice(offset, size).reveal()
     assert initcode is not None, "CREATE2 requires concrete program data"
-    salt = _salt.maybe_unwrap(bytes)
+    salt = _salt.reveal(bytes)
     assert salt is not None, "CREATE2 requires concrete salt"
-    sender_address = s.contract.address.maybe_unwrap(bytes)
+    sender_address = s.contract.address.reveal(bytes)
     assert sender_address is not None, "CREATE2 requires concrete sender address"
 
     # https://ethereum.stackexchange.com/a/761
-    assert (h := s.sha3[FrozenBytes.concrete(initcode)].maybe_unwrap(bytes)) is not None
+    assert (h := s.sha3[FrozenBytes.concrete(initcode)].reveal(bytes)) is not None
     seed = FrozenBytes.concrete(b"\xff" + sender_address + salt + h)
     return _CREATE(s, value, initcode, seed)
 
