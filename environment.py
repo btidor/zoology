@@ -6,12 +6,10 @@ from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Any
 
-from zbitvector import BitVector, Solver
-
 from bytes import FrozenBytes
 from disassembler import Program, disassemble
 from sha3 import concrete_hash
-from smt import Array, Uint8, Uint160, Uint256
+from smt import Array, Int, Solver, Uint, Uint8, Uint160, Uint256
 
 
 @dataclass(frozen=True)
@@ -120,7 +118,7 @@ class Transaction:
 
         Only attributes present in the model will be included.
         """
-        r: OrderedDict[str, BitVector[Any] | str | None] = OrderedDict()
+        r: OrderedDict[str, Uint[Any] | Int[Any] | str | None] = OrderedDict()
         calldata = self.calldata.describe(solver)
         r["Data"] = f"0x{calldata[:8]} {calldata[8:]}".strip() if calldata else None
         r["Value"] = self.callvalue
@@ -132,7 +130,7 @@ class Transaction:
             match (v := r[k]):
                 case None:
                     pass
-                case BitVector():
+                case Uint() | Int():
                     b = solver.evaluate(v)
                     if b > 0:
                         s[k] = "0x" + b.to_bytes(v.width // 8).hex()

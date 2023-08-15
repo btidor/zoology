@@ -7,14 +7,20 @@ import argparse
 import copy
 from functools import reduce
 
-from zbitvector import Constraint, Solver
-
 from bytes import FrozenBytes
 from disassembler import abiencode
 from environment import Block, Contract, Transaction, Universe
 from history import History, Validator
 from sha3 import SHA3
-from smt import Array, ConstrainingError, NarrowingError, Uint160, Uint256
+from smt import (
+    Array,
+    ConstrainingError,
+    Constraint,
+    NarrowingError,
+    Solver,
+    Uint160,
+    Uint256,
+)
 from snapshot import LEVEL_FACTORIES, apply_snapshot
 from state import State, Termination
 from universal import symbolic_start, universal_transaction

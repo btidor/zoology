@@ -6,12 +6,10 @@ from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Callable
 
-from zbitvector import Constraint, Solver
-
 from bytes import FrozenBytes, MutableBytes
 from environment import Block, Contract, Transaction, Universe
 from sha3 import SHA3
-from smt import Uint160, Uint256, overflow_safe, underflow_safe
+from smt import Constraint, Solver, Uint160, Uint256, overflow_safe, underflow_safe
 
 
 @dataclass

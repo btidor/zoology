@@ -7,10 +7,20 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable, Iterator, Literal, TypeAlias
 
 from Crypto.Hash import keccak
-from zbitvector import Constraint, Solver, Uint
 
 from bytes import Bytes
-from smt import Array, NarrowingError, Uint8, Uint256, describe, implies, mk_uint
+from smt import (
+    Array,
+    Constraint,
+    NarrowingError,
+    Solver,
+    Uint,
+    Uint8,
+    Uint256,
+    describe,
+    implies,
+    mk_uint,
+)
 
 Uint128: TypeAlias = Uint[Literal[128]]
 

@@ -1,11 +1,10 @@
 #!/usr/bin/env pytest
 
 import pytest
-from zbitvector import Solver
 
 from bytes import FrozenBytes
 from sha3 import SHA3
-from smt import NarrowingError, Uint256
+from smt import NarrowingError, Solver, Uint256
 
 
 def test_concrete() -> None:

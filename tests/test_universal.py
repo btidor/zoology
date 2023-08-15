@@ -4,11 +4,10 @@ import copy
 from typing import Any
 
 import pytest
-from zbitvector import Solver
 
 from disassembler import Program, abiencode, disassemble
 from sha3 import SHA3
-from smt import Uint160, Uint256
+from smt import Solver, Uint160, Uint256
 from state import State, Termination
 from universal import printable_transition, symbolic_start, universal_transaction
 

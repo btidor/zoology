@@ -5,11 +5,19 @@ from __future__ import annotations
 import copy
 from typing import Any, Iterable
 
-from zbitvector import Constraint, Solver, Symbolic
-
 from environment import Block, Universe
 from sha3 import SHA3
-from smt import Array, ConstrainingError, Uint160, Uint256, get_constants, substitute
+from smt import (
+    Array,
+    ConstrainingError,
+    Constraint,
+    Solver,
+    Symbolic,
+    Uint160,
+    Uint256,
+    get_constants,
+    substitute,
+)
 from state import State
 
 

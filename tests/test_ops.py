@@ -1,13 +1,12 @@
 #!/usr/bin/env pytest
 
 import pytest
-from zbitvector import Solver
 
 from bytes import FrozenBytes, MutableBytes
 from disassembler import Instruction, disassemble
 from environment import Block
 from ops import *
-from smt import Array, Uint160, Uint256
+from smt import Array, Solver, Uint160, Uint256
 from state import Termination
 
 

@@ -3,12 +3,10 @@
 import copy
 from typing import Literal
 
-from zbitvector import Constraint, Int, Uint
-
 from bytes import FrozenBytes
 from disassembler import Instruction, disassemble
 from environment import Contract, Transaction
-from smt import Uint8, Uint160, Uint256, concat_bytes
+from smt import Constraint, Int, Uint, Uint8, Uint160, Uint256, concat_bytes
 from state import ControlFlow, Descend, Jump, Log, State, Termination
 
 Int256 = Int[Literal[256]]

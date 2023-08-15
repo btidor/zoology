@@ -4,12 +4,10 @@
 import copy
 from typing import Iterable, Iterator
 
-from zbitvector import Solver
-
 from disassembler import Program, disassemble
 from environment import Block, Contract, Transaction, Universe
 from sha3 import SHA3
-from smt import Array, Uint160, Uint256, describe
+from smt import Array, Solver, Uint160, Uint256, describe
 from state import Descend, Jump, State, Termination
 from vm import step
 

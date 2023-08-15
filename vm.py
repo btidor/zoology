@@ -4,13 +4,11 @@
 import inspect
 from typing import Generator
 
-from zbitvector import Uint
-
 import ops
 from bytes import FrozenBytes
 from disassembler import Instruction, Program, abiencode
 from environment import Contract, Transaction, Universe
-from smt import Uint160, Uint256
+from smt import Uint, Uint160, Uint256
 from state import ControlFlow, Descend, Jump, State, Termination
 
 

@@ -6,9 +6,7 @@ import abc
 import copy
 from typing import Any, Type, TypeGuard, TypeVar
 
-from zbitvector import Constraint, Solver, Uint
-
-from smt import Array, Uint8, Uint256, concat_bytes
+from smt import Array, Constraint, Solver, Uint, Uint8, Uint256, concat_bytes
 
 T = TypeVar("T", bound="Bytes")
 
