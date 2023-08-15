@@ -19,7 +19,7 @@ from smt import (
     Uint256,
     describe,
     implies,
-    mk_uint,
+    make_uint,
 )
 
 Uint128: TypeAlias = Uint[Literal[128]]
@@ -34,11 +34,6 @@ class SHA3:
     there are no hash *collisions* (other preimage attacks are legal).
     """
 
-    # Caution: SHA3 hashes generally need to be consistent across contract
-    # invocations and even across parallel universes. A singleton SHA3 instance
-    # is probably the way to go.
-    suffix: str = "*"
-
     # We model the SHA-3 function as a symbolic uninterpreted function from
     # n-byte inputs to 32-byte outputs. Z3 requires n to be constant for any
     # given function, so we store a mapping from `n -> func_n(x)`.
@@ -52,10 +47,9 @@ class SHA3:
 
     def __deepcopy__(self, memo: Any) -> SHA3:
         return SHA3(
-            suffix=self.suffix,
             hashes=copy.copy(self.hashes),
-            free_digests=copy.deepcopy(self.free_digests, memo),
-            constraints=copy.deepcopy(self.constraints, memo),
+            free_digests=copy.copy(self.free_digests),
+            constraints=copy.copy(self.constraints),
         )
 
     def __getitem__(self, key: Bytes) -> Uint256:
@@ -63,7 +57,7 @@ class SHA3:
         size = key.length.reveal()
 
         if size is None:
-            result = Uint256(f"SHA3(?{len(self.free_digests)}){self.suffix}")
+            result = Uint256(f"DIGEST{len(self.free_digests)}")
             self.free_digests.append((key, result))
             for key2, val2 in reversed(self.free_digests[:-1]):
                 # HACK: to avoid introducing quantifiers, if this instance has a
@@ -77,9 +71,7 @@ class SHA3:
             return Uint256(int.from_bytes(digest))
 
         if size not in self.hashes:
-            self.hashes[size] = Array[mk_uint(size * 8), Uint256](
-                f"SHA3({size}){self.suffix}"
-            )
+            self.hashes[size] = Array[make_uint(size * 8), Uint256](f"SHA3-{size}")
 
         free = self.hashes[size][key.bigvector(size)]
         if (data := key.reveal()) is not None:

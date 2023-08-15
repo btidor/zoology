@@ -15,7 +15,7 @@ Uint160 = Uint[Literal[160]]
 Uint256 = Uint[Literal[256]]
 
 
-def mk_uint(n: int) -> type[Uint[Any]]:
+def make_uint(n: int) -> type[Uint[Any]]:
     """Create a new UintN class from a given N."""
     return Uint[Literal[n]]  # type: ignore
 
@@ -103,8 +103,8 @@ class Array(zArray[K, V]):
 
     def __deepcopy__(self, memo: Any) -> Self:
         result = super().__deepcopy__(memo)
-        result.accessed = copy.deepcopy(self.accessed, memo)
-        result.written = copy.deepcopy(self.written, memo)
+        result.accessed = copy.copy(self.accessed)
+        result.written = copy.copy(self.written)
         return result
 
     def __getitem__(self, key: K) -> V:
@@ -122,7 +122,7 @@ class Array(zArray[K, V]):
         return super().__getitem__(key)
 
     def poke(self, key: K, value: V) -> None:
-        """Set up the given symbolic key, but don't track the write."""
+        """Set the given symbolic key, but don't track the write."""
         super().__setitem__(key, value)
 
     def printable_diff(

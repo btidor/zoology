@@ -56,7 +56,7 @@ class Bytes(abc.ABC):
         If the constraint is True, the Bytes is empty.
         """
         return cls(
-            constraint.ite(Uint256(0), Uint256(f"{name}.length")),
+            constraint.ite(Uint256(0), Uint256(f"{name}-LEN")),
             Array[Uint256, Uint8](name),
         )
 
