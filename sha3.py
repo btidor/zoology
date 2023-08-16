@@ -18,7 +18,6 @@ from smt import (
     Uint8,
     Uint256,
     describe,
-    implies,
     make_uint,
 )
 
@@ -89,7 +88,7 @@ class SHA3:
             # ASSUMPTION: every hash digest is distinct, there are no collisions
             # ever.
             if n == size:
-                self.constraints.append(implies(key.bigvector(n) != okey, hash != oval))
+                self.constraints.append((hash != oval) | (key.bigvector(n) == okey))
             else:
                 self.constraints.append(hash != oval)
 

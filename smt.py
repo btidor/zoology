@@ -14,6 +14,8 @@ Uint8 = Uint[Literal[8]]
 Uint160 = Uint[Literal[160]]
 Uint256 = Uint[Literal[256]]
 
+_Uint257 = Uint[Literal[257]]
+
 
 def make_uint(n: int) -> type[Uint[Any]]:
     """Create a new UintN class from a given N."""
@@ -33,11 +35,6 @@ def overflow_safe(a: Uint256, b: Uint256) -> Constraint:
 def underflow_safe(a: Uint256, b: Uint256) -> Constraint:
     """Return a constraint asserting that a - b does not underflow."""
     return ~Constraint._from_expr(Kind.BV_USUB_OVERFLOW, a, b)  # type: ignore
-
-
-def implies(a: Constraint, b: Constraint) -> Constraint:
-    """Return a constraint asserting that a implies b."""
-    return Constraint._from_expr(Kind.IMPLIES, a, b)  # type: ignore
 
 
 def describe(bv: Uint[Any] | int) -> str:
