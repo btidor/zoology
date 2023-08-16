@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import copy
-from typing import Any, Iterable, Literal, Self, TypeVar, Union
+from typing import Any, Iterable, Literal, Self, TypeAlias, TypeVar, Union
 
 from Crypto.Hash import keccak
 from zbitvector import Array as zArray
@@ -14,7 +14,26 @@ Uint8 = Uint[Literal[8]]
 Uint160 = Uint[Literal[160]]
 Uint256 = Uint[Literal[256]]
 
-_Uint257 = Uint[Literal[257]]
+Expression: TypeAlias = "Symbolic | Array[Any, Any]"
+
+S = TypeVar("S", bound=Expression)
+
+K = TypeVar("K", bound=Union[Uint[Any], Int[Any]])
+V = TypeVar("V", bound=Union[Uint[Any], Int[Any]])
+
+
+def _make_symbolic(cls: type[S], term: Any) -> S:
+    instance = cls.__new__(cls)
+    instance._term = term  # type: ignore
+    return instance
+
+
+def _from_expr(cls: type[S], kind: Kind, *args: Expression) -> S:
+    return cls._from_expr(kind, *args)  # type: ignore
+
+
+def _term(expr: Expression) -> BitwuzlaTerm:
+    return expr._term  # type: ignore
 
 
 def make_uint(n: int) -> type[Uint[Any]]:
@@ -24,17 +43,40 @@ def make_uint(n: int) -> type[Uint[Any]]:
 
 def concat_bytes(*args: Uint8) -> Uint[Any]:
     """Concatenate a series of Uint8s into a longer UintN."""
-    return Uint[Literal[len(args) * 8]]._from_expr(Kind.BV_CONCAT, *args)  # type: ignore
+    return _from_expr(make_uint(len(args) * 8), Kind.BV_CONCAT, *args)
 
 
 def overflow_safe(a: Uint256, b: Uint256) -> Constraint:
     """Return a constraint asserting that a + b does not overflow."""
-    return ~Constraint._from_expr(Kind.BV_UADD_OVERFLOW, a, b)  # type: ignore
+    return ~_from_expr(Constraint, Kind.BV_UADD_OVERFLOW, a, b)
 
 
 def underflow_safe(a: Uint256, b: Uint256) -> Constraint:
     """Return a constraint asserting that a - b does not underflow."""
-    return ~Constraint._from_expr(Kind.BV_USUB_OVERFLOW, a, b)  # type: ignore
+    return ~_from_expr(Constraint, Kind.BV_USUB_OVERFLOW, a, b)
+
+
+def get_constants(s: Symbolic) -> dict[str, BitwuzlaTerm]:
+    """Recursively search the term for constants."""
+    constants: dict[str, BitwuzlaTerm] = {}
+    queue: set[BitwuzlaTerm] = set([_term(s)])
+    while queue:
+        item = queue.pop()
+        queue.update(item.get_children())
+        if item.is_const():
+            assert (sym := item.get_symbol()) is not None
+            constants[sym] = item
+    return constants
+
+
+def substitute(s: S, replacements: dict[BitwuzlaTerm, Expression]) -> S:
+    """Perform term substitution according to the given map."""
+    if len(replacements) == 0:
+        return s
+    return _make_symbolic(
+        s.__class__,
+        BZLA.substitute(_term(s), dict((k, _term(v)) for k, v in replacements.items())),
+    )
 
 
 def describe(bv: Uint[Any] | int) -> str:
@@ -57,8 +99,9 @@ def describe(bv: Uint[Any] | int) -> str:
             v >>= 256
         return f"0x[{'.'.join(reversed(p))}]"
     else:
+        assert isinstance(bv, Uint)
         digest = keccak.new(
-            data=bv._term.dump("smt2").encode(), digest_bits=256  # type: ignore
+            data=_term(bv).dump("smt2").encode(), digest_bits=256
         ).digest()
         return "#" + digest[:3].hex()
 
@@ -83,10 +126,6 @@ class NarrowingError(Exception):
 
     def __str__(self) -> str:
         return self.key.hex()
-
-
-K = TypeVar("K", bound=Union[Uint[Any], Int[Any]])
-V = TypeVar("V", bound=Union[Uint[Any], Int[Any]])
 
 
 class Array(zArray[K, V]):
@@ -165,28 +204,3 @@ class Array(zArray[K, V]):
 
         if line == "":
             yield ""
-
-
-S = TypeVar("S", bound=Symbolic)
-
-
-def get_constants(s: Symbolic) -> dict[str, BitwuzlaTerm]:
-    """Recursively search the term for constants."""
-    constants: dict[str, BitwuzlaTerm] = {}
-    queue: set[BitwuzlaTerm] = set([s._term])  # type: ignore
-    while queue:
-        item = queue.pop()
-        queue.update(item.get_children())
-        if item.is_const():
-            assert (sym := item.get_symbol()) is not None
-            constants[sym] = item
-    return constants
-
-
-def substitute(s: S, subst_map: dict[BitwuzlaTerm, Symbolic | Array[Any, Any]]) -> S:
-    """Perform term substitution according to the given map."""
-    if len(subst_map) == 0:
-        return s
-    result = s.__class__.__new__(s.__class__)
-    result._term = BZLA.substitute(s._term, dict((k, v._term) for k, v in subst_map.items()))  # type: ignore
-    return result

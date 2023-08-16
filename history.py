@@ -8,11 +8,10 @@ from typing import Any, Iterable
 from environment import Block, Universe
 from sha3 import SHA3
 from smt import (
-    Array,
     ConstrainingError,
     Constraint,
+    Expression,
     Solver,
-    Symbolic,
     Uint160,
     Uint256,
     get_constants,
@@ -126,7 +125,7 @@ class Validator:
             universe = history.states[-1].universe
             number = history.states[-1].block.number + Uint256(1)
 
-        substitutions: dict[Any, Symbolic | Array[Any, Any]] = {}
+        substitutions: dict[Any, Expression] = {}
         for name, term in self._constants.items():
             if name.startswith("STORAGE@"):
                 addr = int(name[8:], 16)
