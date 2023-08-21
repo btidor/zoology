@@ -40,9 +40,9 @@ def test_starting_universe() -> None:
 
 def test_fallback() -> None:
     fixture = [
-        "Px8F\td7bb99ba 000000000000000000000000cacacacacacacacacacacacacacacacacacacacb\t(value: 1)",
+        "Px8F\td7bb99ba 000000000000000000000000cacacacacacacacacacacacacacacacacacacaca\t(value: 1)",
         "Px19\t(empty) \t(value: 1)",
-        "Px5F\t3ccfd60b 000000000000000000000001cacacacacacacacacacacacacacacacacacacaca",
+        "Px5F\t3ccfd60b",
     ]
     check_level(1, fixture)
 
@@ -101,7 +101,7 @@ def test_vault() -> None:
 
 
 def test_king() -> None:
-    fixture = ["PxDD\t(empty) \t(value: 1125899906842623, via proxy)"]
+    fixture = ["PxDD\t(empty) \t(value: 1125899906842623)"]
     check_level(9, fixture)
 
 

@@ -2,6 +2,7 @@
 """A universal transaction solver."""
 
 import copy
+from collections import deque
 from typing import Iterable, Iterator
 
 from disassembler import Program, disassemble
@@ -26,46 +27,46 @@ def universal_transaction(
     prior execution of `universal_transaction()`, the two executions should have
     a different suffix.
     """
-    while isinstance(state.pc, int):
-        if prints:
-            print(state.contract.program.instructions[state.pc])
-        match step(state):
-            case None:
-                if prints:
-                    for x in reversed(state.stack):
-                        print(" ", describe(x))
-                continue
-            case Jump(targets):
-                for next in targets:
-                    yield from universal_transaction(
-                        next, filter=filter, check=check, prints=prints
-                    )
-                return
-            case Descend(substate, callback):
-                # We need to collect *all* terminal states, since if the
-                # subcontract reverts the parent contract will continue to
-                # execute.
-                for subend in universal_transaction(
-                    substate, filter=False, check=check, prints=prints
-                ):
-                    next = copy.deepcopy(state)
-                    next = callback(next, subend)
-                    yield from universal_transaction(
-                        next, filter=filter, check=check, prints=prints
-                    )
-                return
-            case unknown:
-                raise ValueError(f"unknown action: {unknown}")
+    queue = deque([state])
+    while queue:
+        state = queue.popleft()
+        while isinstance(state.pc, int):
+            if prints:
+                print(state.contract.program.instructions[state.pc])
+            match step(state):
+                case None:
+                    if prints:
+                        for x in reversed(state.stack):
+                            print(" ", describe(x))
+                    continue
+                case Jump(targets):
+                    queue.extend(targets[::-1])  # reverse for speed :(
+                    break
+                case Descend(substate, callback):
+                    # We need to collect *all* terminal states, since if the
+                    # subcontract reverts the parent contract will continue to
+                    # execute.
+                    for subend in universal_transaction(
+                        substate, filter=False, check=check, prints=prints
+                    ):
+                        next = copy.deepcopy(state)
+                        next = callback(next, subend)
+                        yield from universal_transaction(
+                            next, filter=filter, check=check, prints=prints
+                        )
+                    break
+                case unknown:
+                    raise ValueError(f"unknown action: {unknown}")
 
-    assert isinstance(state.pc, Termination)
-    if filter and not state.pc.success:
-        return
-    if check:
-        solver = Solver()
-        state.constrain(solver)
-        if not solver.check():
-            return
-    yield state
+        if isinstance(state.pc, Termination):
+            if filter and not state.pc.success:
+                continue
+            if check:
+                solver = Solver()
+                state.constrain(solver)
+                if not solver.check():
+                    continue
+            yield state
 
 
 def symbolic_start(program: Contract | Program, sha3: SHA3, suffix: str) -> State:
