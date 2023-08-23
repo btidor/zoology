@@ -3,6 +3,9 @@
 	"build": {
 		"dockerfile": "Dockerfile"
 	},
+	"capAdd": [
+		"SYS_PTRACE"
+	],
 	"customizations": {
 		"vscode": {
 			"extensions": [
