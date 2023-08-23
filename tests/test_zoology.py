@@ -85,6 +85,7 @@ def test_token() -> None:
 
 
 # def test_delegation() -> None:
+#     # recursive Descend leads to stack overflow
 #     check_level(6, [])
 
 
@@ -106,6 +107,7 @@ def test_king() -> None:
 
 
 # def test_reentrancy() -> None:
+#     # reentrance not supported
 #     check_level(10, [])
 
 
@@ -138,14 +140,17 @@ def test_gatekeeper_two() -> None:
 
 
 # def test_naughtcoin() -> None:
+#     # validator passes initially
 #     check_level(15, [])
 
 
 # def test_preservation() -> None:
+#     # DELEGATECALL to unknown contract: 0x424696691aaf82ca057ed8edd249db1d0d19745b
 #     check_level(16, [])
 
 
 # def test_recovery() -> None:
+#     # CREATE requires concrete program data
 #     check_level(17, [])
 
 
@@ -157,10 +162,12 @@ def test_magic_number() -> None:
 
 
 # def test_alien_codex() -> None:
+#     # KeyError: 942 (in JUMP)
 #     check_level(19, [])
 
 
 # def test_denial() -> None:
+#     # CALL to unknown contract: 0xa9e
 #     check_level(20, [])
 
 
