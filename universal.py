@@ -14,7 +14,7 @@ from vm import step
 
 
 def universal_transaction(
-    state: State, /, filter: bool = True, check: bool = True, prints: bool = False
+    state: State, /, check: bool = True, prints: bool = False
 ) -> Iterator[State]:
     """
     Compute the "universal transaction" over a fully symbolic input.
@@ -42,24 +42,20 @@ def universal_transaction(
                 case Jump(targets):
                     queue.extend(targets[::-1])  # reverse for speed :(
                     break
-                case Descend(substate, callback):
-                    # We need to collect *all* terminal states, since if the
-                    # subcontract reverts the parent contract will continue to
-                    # execute.
-                    for subend in universal_transaction(
-                        substate, filter=False, check=check, prints=prints
-                    ):
-                        next = copy.deepcopy(state)
-                        next = callback(next, subend)
-                        yield from universal_transaction(
-                            next, filter=filter, check=check, prints=prints
-                        )
+                case Descend(substate):
+                    queue.append(substate)
                     break
                 case unknown:
                     raise ValueError(f"unknown action: {unknown}")
 
         if isinstance(state.pc, Termination):
-            if filter and not state.pc.success:
+            if state.recursion is not None:
+                # We need to collect *all* terminal states, since if the
+                # subcontract reverts the parent contract will continue to
+                # execute.
+                queue.append(state.recursion(state))
+                continue
+            if not state.pc.success:
                 continue
             if check:
                 solver = Solver()

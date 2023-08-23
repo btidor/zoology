@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Callable
@@ -59,6 +60,11 @@ class State:
     # Tracks the path of the program's execution. Each JUMPI is a bit, 1 if
     # taken, 0 if not. MSB-first with a leading 1 prepended.
     path: int = 1
+
+    # If this State represents a subcontext, this callback should be called upon
+    # termination. It takes a copy of this State as an argument and returns the
+    # parent context as it should be resumed.
+    recursion: Callable[[State], State] | None = None
 
     def px(self) -> str:
         """Return a human-readable version of the path."""
@@ -190,7 +196,6 @@ class Descend(ControlFlow):
     """A CALL, DELEGATECALL, etc. instruction."""
 
     state: State
-    callback: Callable[[State, State], State]
 
     @classmethod
     def new(
@@ -217,16 +222,18 @@ class Descend(ControlFlow):
         substate.transfer(transaction.caller, contract.address, transaction.callvalue)
         state.children += 1
 
-        def metacallback(state: State, substate: State) -> State:
+        def metacallback(substate: State) -> State:
             # TODO: support reentrancy (apply storage changes to contract,
             # including on self-calls)
             assert isinstance(substate.pc, Termination)
-            state.logs = substate.logs
-            state.latest_return = substate.pc.returndata
-            state.gas_count = substate.gas_count
-            state.call_count = substate.call_count
-            state.constraint = substate.constraint
-            state.path = substate.path
-            return callback(state, substate)
+            next = copy.deepcopy(state)
+            next.logs = substate.logs
+            next.latest_return = substate.pc.returndata
+            next.gas_count = substate.gas_count
+            next.call_count = substate.call_count
+            next.constraint = substate.constraint
+            next.path = substate.path
+            return callback(next, substate)
 
-        return Descend(substate, metacallback)
+        substate.recursion = metacallback
+        return Descend(substate)
