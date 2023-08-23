@@ -231,7 +231,7 @@ def search(
             )
             start.contract.storage.written = []
 
-            for end in universal_transaction(start, prints=(verbose > 2)):
+            for end in universal_transaction(start, check=False, prints=(verbose > 2)):
                 candidate = history.extend(end)
                 if verbose > 1:
                     try:
@@ -245,7 +245,6 @@ def search(
                             sp = " "
                         print(output, end="")
                     except ConstrainingError:
-                        print(f"- [{candidate.pxs()}] unprintable: unsatisfiable")
                         continue
                     except NarrowingError:
                         print(f"- [{candidate.pxs()}] unprintable: narrowing error")
