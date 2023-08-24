@@ -84,9 +84,8 @@ def test_token() -> None:
     check_level(5, fixture)
 
 
-# def test_delegation() -> None:
-#     # recursive Descend leads to stack overflow
-#     check_level(6, [])
+def test_delegation() -> None:
+    check_level(6, ["Px193\tdd365b8b"])
 
 
 # def test_force() -> None:
@@ -145,7 +144,7 @@ def test_gatekeeper_two() -> None:
 
 
 # def test_preservation() -> None:
-#     # DELEGATECALL to unknown contract: 0x424696691aaf82ca057ed8edd249db1d0d19745b
+#     # DELEGATECALL requires concrete address
 #     check_level(16, [])
 
 

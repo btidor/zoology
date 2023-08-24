@@ -4,6 +4,7 @@
 import json
 from pathlib import Path
 from time import sleep
+from typing import TypeAlias
 
 import requests
 
@@ -18,6 +19,8 @@ _ROOT = Path(__file__).resolve().parent
 
 _apikey: str | None = None
 
+Snapshot: TypeAlias = dict[str, dict[str, str]]
+
 
 with open(_ROOT / "ethernaut.json") as f:
     _eth = json.load(f)
@@ -29,7 +32,7 @@ with open(_ROOT / "ethernaut.json") as f:
 def apply_snapshot(universe: Universe) -> None:
     """Load a snapshot and add the contracts to the given universe."""
     with open(_ROOT / "snapshot.json") as f:
-        snapshot = json.load(f)
+        snapshot: Snapshot = json.load(f)
     for addr, saved in snapshot.items():
         address = Uint160(int(addr, 16))
         program = disassemble(bytes.fromhex(saved["code"]))
@@ -39,6 +42,11 @@ def apply_snapshot(universe: Universe) -> None:
             if k == "code":
                 continue
             contract.storage.poke(Uint256(int(k)), Uint256(int(v, 16)))
+
+        # Some level factories create other contracts in their constructor. To
+        # avoid address collisions between these fixed contracts and created
+        # level contracts, bump up the nonce.
+        contract.nonce = Uint256(16)
 
         universe.add_contract(contract)
         universe.balances[contract.address] = Uint256(0)
@@ -97,27 +105,31 @@ def _api_request(action: str, **kwargs: str) -> bytes:
         return bytes.fromhex(result[2:])
 
 
+def download_contract(snapshot: Snapshot, address: Uint160) -> None:
+    """Download a given address's code and data."""
+    assert (a := address.reveal()) is not None
+    contract = get_code(address)
+    assert (c := contract.program.code.reveal()) is not None
+    snapshot[a.to_bytes(20).hex()] = {"code": c.hex()}
+
+    for j in range(8):
+        # HACK: level factories only use the first few storage slots. Higher
+        # slots are for maps keyed by player, which we can initialize to
+        # zero.
+        storage = get_storage_at(address, Uint256(j))
+        assert (v := storage.reveal()) is not None
+        if v != 0:
+            snapshot[a.to_bytes(20).hex()][str(j)] = v.to_bytes(32).hex()
+        if j > 0 and v > 2**156 and v < 2**160:
+            # The Level interface puts the owner in Slot 0; skip it.
+            download_contract(snapshot, Uint160(v))
+
+
 if __name__ == "__main__":
-    snapshot = {}
+    snapshot: Snapshot = {}
     for i, address in enumerate(LEVEL_FACTORIES):
         print(f"Downloading level {i}")
-        assert (a := address.reveal()) is not None
-        contract = get_code(address)
-        assert (c := contract.program.code.reveal()) is not None
-        snapshot[a.to_bytes(20).hex()] = {"code": c.hex()}
-
-        for j in range(8):
-            # HACK: level factories only use the first few storage slots. Higher
-            # slots are for maps keyed by player, which we can initialize to
-            # zero.
-            storage = get_storage_at(address, Uint256(j))
-            assert (v := storage.reveal()) is not None
-            if v != 0:
-                snapshot[a.to_bytes(20).hex()][str(j)] = v.to_bytes(32).hex()
-
-        # TODO: some level factories reference other contracts (e.g. via storage
-        # slots), we may need to include those as well.
-
+        download_contract(snapshot, address)
     with open(_ROOT / "snapshot.json", "w") as f:
         json.dump(snapshot, f, indent=4)
         f.write("\n")
