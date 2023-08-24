@@ -138,9 +138,14 @@ def test_gatekeeper_two() -> None:
     check_level(14, fixture)
 
 
-# def test_naughtcoin() -> None:
-#     # validator passes initially
-#     check_level(15, [])
+def test_naughtcoin() -> None:
+    check_level(
+        15,
+        [
+            "Px6DF\t095ea7b3 000000000000000000000000cacacacacacacacacacacacacacacacacacacacaffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            "Px35FF\t23b872dd 000000000000000000000000cacacacacacacacacacacacacacacacacacacaca000000000000000000000000cacacacacacacacacacacacacacacacacacacacb00000000000000000000000000000000000000000000d3c21bcecceda1000000",
+        ],
+    )
 
 
 # def test_preservation() -> None:

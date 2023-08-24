@@ -111,6 +111,8 @@ def test_MULMOD() -> None:
 def test_EXP() -> None:
     assert EXP(Uint256(10), Uint256(2)).reveal() == 100
     assert EXP(Uint256(2), Uint256(2)).reveal() == 4
+    assert EXP(Uint256(123), Uint256(0)).reveal() == 1
+    assert EXP(Uint256(10), Uint256(18)).reveal() == 10**18
 
 
 def test_SIGNEXTEND() -> None:

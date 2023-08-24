@@ -79,11 +79,10 @@ def EXP(a: Uint256, _exponent: Uint256) -> Uint256:
     exponent = _exponent.reveal()
     assert exponent is not None, "EXP requires concrete exponent"
 
-    if exponent == 0:
-        return Uint256(1)
-    for _ in range(exponent - 1):
-        a = a * a
-    return a
+    r = Uint256(1)
+    for _ in range(exponent):
+        r *= a
+    return r
 
 
 def SIGNEXTEND(b: Uint256, x: Uint256) -> Uint256:
