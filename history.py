@@ -14,6 +14,7 @@ from smt import (
     Solver,
     Uint160,
     Uint256,
+    evaluate,
     get_constants,
     substitute,
 )
@@ -98,6 +99,15 @@ class History:
                 line += f"\t({', '.join(suffixes)})"
 
             yield line
+
+            for dc in state.delegates:
+                ok = evaluate(solver, dc.ok)
+                yield f"\tProxy {'RETURN' if ok else 'REVERT'} {dc.returndata.describe(solver)}"
+                if ok:
+                    prev = evaluate(solver, dc.previous_storage)
+                    for k, v in evaluate(solver, dc.next_storage).items():
+                        if prev[k] != v:
+                            yield f"\tSet {hex(k)} to {hex(v)}"
 
 
 class Validator:

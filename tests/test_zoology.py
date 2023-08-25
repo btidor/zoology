@@ -143,14 +143,22 @@ def test_naughtcoin() -> None:
         15,
         [
             "Px6DF\t095ea7b3 000000000000000000000000cacacacacacacacacacacacacacacacacacacacaffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-            "Px35FF\t23b872dd 000000000000000000000000cacacacacacacacacacacacacacacacacacacaca000000000000000000000000cacacacacacacacacacacacacacacacacacacacb00000000000000000000000000000000000000000000d3c21bcecceda1000000",
+            "Px35FF\t23b872dd 000000000000000000000000cacacacacacacacacacacacacacacacacacacaca000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000d3c21bcecceda1000000",
         ],
     )
 
 
-# def test_preservation() -> None:
-#     # DELEGATECALL requires concrete address
-#     check_level(16, [])
+def test_preservation() -> None:
+    check_level(
+        16,
+        [
+            "Px6657\t5bda8fa4 ffffffffffffffffffffffffc0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0",
+            "Px1865\tf1e02620 ffffffffffffffffffffffffffffffffffffffffffffffffffffffff00000000",
+            "\tProxy RETURN ",
+            "\tSet 0x3 to 0x1",
+            "\tSet 0x2 to 0xcacacacacacacacacacacacacacacacacacacaca",
+        ],
+    )
 
 
 # def test_recovery() -> None:

@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import copy
-from typing import Any, Iterable, Literal, Self, TypeAlias, TypeVar, Union
+from typing import Any, Iterable, Literal, Self, TypeAlias, TypeVar, Union, overload
 
 from Crypto.Hash import keccak
 from zbitvector import Array as zArray
-from zbitvector import Constraint, Int, Solver, Symbolic, Uint
+from zbitvector import Constraint, Int, Solver, Symbolic, Uint, _bitwuzla
 from zbitvector._bitwuzla import BZLA, BitwuzlaTerm, Kind
 
 Uint8 = Uint[Literal[8]]
@@ -79,6 +79,30 @@ def substitute(s: S, replacements: dict[BitwuzlaTerm, Expression]) -> S:
     )
 
 
+@overload
+def evaluate(solver: Solver, s: Constraint) -> bool:
+    ...
+
+
+@overload
+def evaluate(solver: Solver, s: Array[K, V]) -> dict[int, int]:
+    ...
+
+
+def evaluate(solver: Solver, s: Constraint | Array[K, V]) -> bool | dict[int, int]:
+    """Backdoor method for evaluating non-bitvectors."""
+    if not solver._current or _bitwuzla.last_check is not solver:  # type: ignore
+        raise ValueError(f"solver is not ready for model evaluation.")
+
+    match s:
+        case Constraint():
+            return s._evaluate()  # type: ignore
+        case Array():
+            return dict(
+                (int(k, 2), int(v, 2)) for k, v in BZLA.get_value_str(s._term).items()  # type: ignore
+            )
+
+
 def describe(bv: Uint[Any] | int) -> str:
     """
     Produce a human-readable description of the given bitvector.
@@ -100,10 +124,11 @@ def describe(bv: Uint[Any] | int) -> str:
         return f"0x[{'.'.join(reversed(p))}]"
     else:
         assert isinstance(bv, Uint)
+        keys = sorted(get_constants(bv).keys())
         digest = keccak.new(
             data=_term(bv).dump("smt2").encode(), digest_bits=256
         ).digest()
-        return "#" + digest[:3].hex()
+        return f"[{','.join(keys)}]#{digest[:3].hex()}"
 
 
 class ConstrainingError(Exception):
@@ -160,6 +185,11 @@ class Array(zArray[K, V]):
     def poke(self, key: K, value: V) -> None:
         """Set the given symbolic key, but don't track the write."""
         super().__setitem__(key, value)
+
+    @classmethod
+    def equals(cls, left: Array[K, V], right: Array[K, V]) -> Constraint:
+        """Compare the two arrays for equality."""
+        return _from_expr(Constraint, Kind.EQUAL, left, right)
 
     def printable_diff(
         self, name: str, solver: Solver, original: Array[K, V]

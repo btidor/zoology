@@ -10,7 +10,15 @@ from typing import Callable
 from bytes import FrozenBytes, MutableBytes
 from environment import Block, Contract, Transaction, Universe
 from sha3 import SHA3
-from smt import Constraint, Solver, Uint160, Uint256, overflow_safe, underflow_safe
+from smt import (
+    Array,
+    Constraint,
+    Solver,
+    Uint160,
+    Uint256,
+    overflow_safe,
+    underflow_safe,
+)
 
 
 @dataclass
@@ -48,14 +56,23 @@ class State:
     #
     gas_count: int | None = None
 
-    # Every time the CALL instruction is invoked we return a symbolic result,
-    # suffixed with this counter to make it unique.
+    # Every time the CALL instruction is invoked with a symbolic address we
+    # return a symbolic result, suffixed with this counter to make it unique.
     call_count: int = 0
+
+    # Every time the DELEGATECALL instruction is invoked with a symbolic address
+    # we return a symbolic result, suffixed with this counter to make it unique
+    delegates: tuple[DelegateCall, ...] = ()
 
     # Symbolic constraint that must be satisfied in order for the program to
     # reach this state. Largely based on the JUMPI instructions (if statements)
     # encountered in the execution.
     constraint: Constraint = field(default=Constraint(True))
+
+    # Symbolic constraint that must be satisfied in order for narrowing to
+    # succeed. Currently used to check that DELEGATECALL to a symbolic address
+    # can be fully controlled.
+    narrower: Constraint = field(default=Constraint(True))
 
     # Tracks the path of the program's execution. Each JUMPI is a bit, 1 if
     # taken, 0 if not. MSB-first with a leading 1 prepended.
@@ -125,6 +142,7 @@ class State:
                 solver.add(constraint)
                 break
 
+        solver.add(self.narrower)
         assert solver.check()
 
     def is_changed(self, since: State) -> bool:
@@ -178,6 +196,16 @@ class Log:
     topics: tuple[Uint256]
 
 
+@dataclass(frozen=True)
+class DelegateCall:
+    """Information about a symbolic DELEGATECALL instruction."""
+
+    ok: Constraint
+    returndata: FrozenBytes
+    previous_storage: Array[Uint256, Uint256]
+    next_storage: Array[Uint256, Uint256]
+
+
 class ControlFlow:
     """A superclass for control-flow actions."""
 
@@ -216,7 +244,9 @@ class Descend(ControlFlow):
             logs=state.logs,
             gas_count=state.gas_count,
             call_count=state.call_count,
+            delegates=state.delegates,
             constraint=state.constraint,
+            narrower=state.narrower,
             path=state.path,
         )
         substate.transfer(transaction.caller, contract.address, transaction.callvalue)
@@ -231,7 +261,9 @@ class Descend(ControlFlow):
             next.latest_return = substate.pc.returndata
             next.gas_count = substate.gas_count
             next.call_count = substate.call_count
+            next.delegates = substate.delegates
             next.constraint = substate.constraint
+            next.narrower = substate.narrower
             next.path = substate.path
             return callback(next, substate)
 

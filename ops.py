@@ -6,8 +6,8 @@ from typing import Literal
 from bytes import FrozenBytes
 from disassembler import Instruction, disassemble
 from environment import Contract, Transaction
-from smt import Constraint, Int, Uint, Uint8, Uint160, Uint256, concat_bytes
-from state import ControlFlow, Descend, Jump, Log, State, Termination
+from smt import Array, Constraint, Int, Uint, Uint8, Uint160, Uint256, concat_bytes
+from state import ControlFlow, DelegateCall, Descend, Jump, Log, State, Termination
 
 Int256 = Int[Literal[256]]
 Uint257 = Uint[Literal[257]]
@@ -642,7 +642,7 @@ def DELEGATECALL(
     argsSize: Uint256,
     retOffset: Uint256,
     retSize: Uint256,
-) -> ControlFlow:
+) -> ControlFlow | None:
     """
     F4.
 
@@ -650,7 +650,25 @@ def DELEGATECALL(
     persisting the current values for sender and value.
     """
     address = _address.reveal()
-    assert address is not None, "DELEGATECALL requires concrete address"
+    if address is None:
+        # A DELEGATECALL to an arbitrary contract can overwrite any storage
+        # addresses. (Assume we can control the address completely; if not,
+        # narrowing will fail.)
+        n = len(s.delegates)
+        dc = DelegateCall(
+            Constraint(f"DCOK{n}{s.suffix}"),
+            FrozenBytes.symbolic(f"DCRETURN{n}{s.suffix}"),
+            s.contract.storage,
+            Array[Uint256, Uint256](f"DCSTORAGE{n}{s.suffix}"),
+        )
+        s.narrower &= _address == Uint256(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0)
+        s.contract.storage = copy.deepcopy(dc.next_storage)
+        s.latest_return = dc.returndata
+        s.memory.graft(s.latest_return.slice(Uint256(0), retSize), retOffset)
+        s.constraint &= dc.ok | Array.equals(dc.previous_storage, dc.next_storage)
+        s.stack.append(dc.ok.ite(Uint256(1), Uint256(0)))
+        s.delegates = (*s.delegates, dc)
+        return None
 
     transaction = Transaction(
         origin=s.transaction.origin,
