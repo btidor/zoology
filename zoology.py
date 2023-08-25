@@ -203,9 +203,9 @@ def search(
 
     histories: list[History] = [beginning]
     for i in range(depth):
-        suffix = str(i + 1)
+        suffix = f"-{i+1}"
         if verbose > 1:
-            print(f"\tTxn {suffix}:")
+            print(f"\tTxn {i+1}:")
         subsequent: list[History] = []
         for history in histories:
             universe, sha3, block = history.subsequent()
