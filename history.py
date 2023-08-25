@@ -80,6 +80,11 @@ class History:
     def describe(self, solver: Solver) -> Iterable[str]:
         """Yield a human-readable description of the transaction sequence."""
         for state in self.states:
+            if isinstance(state.pc, int):  # SELFDESTRUCT balance transfer
+                value = solver.evaluate(state.transaction.callvalue)
+                yield f"SELFDESTRUCT\t(value: {value})"
+                continue
+
             data = state.transaction.calldata.describe(solver)
             if len(data) == 0:
                 data = "(empty) "

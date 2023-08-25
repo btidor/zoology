@@ -88,9 +88,8 @@ def test_delegation() -> None:
     check_level(6, ["Px193\tdd365b8b"])
 
 
-# def test_force() -> None:
-#     # balance changes via SELFDESTRUCT are not supported
-#     check_level(7, [])
+def test_force() -> None:
+    check_level(7, ["SELFDESTRUCT\t(value: 1)"])
 
 
 def test_vault() -> None:

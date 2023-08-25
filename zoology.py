@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import copy
 from functools import reduce
+from itertools import chain
 
 from bytes import FrozenBytes
 from disassembler import abiencode
@@ -126,6 +127,7 @@ def validateInstance(
         # This logic needs to match State.constrain()
         b: Uint256 = end.pc.returndata.bigvector(32)
         predicates.append(end.constraint & (b != Uint256(0)))
+        # TODO: what about narrowing?!
 
     assert predicates
     if sha3.constraints:
@@ -231,7 +233,9 @@ def search(
             )
             start.contract.storage.written = []
 
-            for end in universal_transaction(start, check=False, prints=(verbose > 2)):
+            selfdestruct = copy.deepcopy(start)
+            universal = universal_transaction(start, check=False, prints=(verbose > 2))
+            for end in chain(universal, [selfdestruct]):
                 candidate = history.extend(end)
                 if verbose > 1:
                     try:
