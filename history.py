@@ -127,6 +127,8 @@ class Validator:
                 continue
             elif name == "BALANCE":
                 continue
+            elif name == "CODESIZE":
+                continue
             elif name == "NUMBER":
                 continue
             raise ValueError(f"validator depends on unsupported variable: {name}")
@@ -147,6 +149,8 @@ class Validator:
                 substitutions[term] = universe.contracts[addr].storage
             elif name == "BALANCE":
                 substitutions[term] = universe.balances
+            elif name == "CODESIZE":
+                pass
             elif name == "NUMBER":
                 substitutions[term] = number
             else:

@@ -161,7 +161,7 @@ def test_preservation() -> None:
 
 
 # def test_recovery() -> None:
-#     # CREATE requires concrete program data
+#     # CREATE requires concrete program data / interacting with wrong contract
 #     check_level(17, [])
 
 
@@ -188,6 +188,7 @@ def test_shop() -> None:
 
 
 # def test_dex() -> None:
+#     # read-only check ignores token contract storage changes
 #     check_level(22, [])
 
 

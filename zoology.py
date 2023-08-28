@@ -99,14 +99,24 @@ def validateInstance(
         + arg1.to_bytes(32)
     )
 
-    sha3 = SHA3()
-    universe, _, _ = history.subsequent()
-    contract = universe.contracts[factory]
-    start = symbolic_start(contract, sha3, "")
-    start.transaction = Transaction(
-        origin=SETUP,
-        caller=SETUP,
-        calldata=FrozenBytes.concrete(calldata),
+    universe_, _, block = history.subsequent()
+    for _ in range(16):
+        block = block.successor()
+    universe = Universe.symbolic("")
+    universe.contracts = universe_.contracts
+    sha3 = SHA3()  # validatior optimization assumes no SHA3
+    start = State(
+        suffix="-V",
+        block=block,
+        contract=universe.contracts[factory],
+        transaction=Transaction(
+            origin=SETUP,
+            caller=SETUP,
+            calldata=FrozenBytes.concrete(calldata),
+        ),
+        universe=universe,
+        sha3=sha3,
+        gas_count=0,
     )
 
     for reference in universe.contracts.values():
@@ -124,10 +134,10 @@ def validateInstance(
     for end in universal_transaction(start, check=False, prints=prints):
         assert isinstance(end.pc, Termination)
 
-        # This logic needs to match State.constrain()
+        # This logic needs to match State.constrain(). We don't need to worry
+        # about narrowing because SHA3 is not invoked (see check below).
         b: Uint256 = end.pc.returndata.bigvector(32)
         predicates.append(end.constraint & (b != Uint256(0)))
-        # TODO: what about narrowing?!
 
     assert predicates
     if sha3.constraints:
@@ -167,14 +177,19 @@ def constrainWithValidator(
 
     universe, sha3, block = history.subsequent()
     contract = universe.contracts[factory]
-    start = symbolic_start(contract, sha3, "")
-    start.transaction = Transaction(
-        origin=SETUP,
-        caller=SETUP,
-        calldata=FrozenBytes.concrete(calldata),
+    start = State(
+        suffix="-V",
+        block=block,
+        contract=contract,
+        transaction=Transaction(
+            origin=SETUP,
+            caller=SETUP,
+            calldata=FrozenBytes.concrete(calldata),
+        ),
+        universe=universe,
+        sha3=sha3,
+        gas_count=0,
     )
-    start.universe = universe
-    start.block = block
 
     for end in universal_transaction(start):
         assert isinstance(end.pc, Termination)
