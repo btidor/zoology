@@ -113,6 +113,51 @@ def test_basic() -> None:
         next(universal)
 
 
+def test_sudoku() -> None:
+    program = load_solidity("fixtures/99_Sudoku.sol")
+
+    start = symbolic_start(program, SHA3(), "")
+    universal = universal_transaction(start)
+
+    end = next(universal)
+    assert isinstance(end.pc, Termination)
+    assert end.pc.success == True
+
+    solver = Solver()
+    end.constrain(solver)
+    assert solver.check()
+
+    calldata = end.transaction.calldata
+    method = bytes(solver.evaluate(calldata[Uint256(i)]) for i in range(4))
+    assert method.hex() == abiencode("check(uint256[9][9])").hex()
+
+    offset = 4
+    actual = [[0 for _ in range(9)] for _ in range(9)]
+    for i in range(9):
+        for j in range(9):
+            value = bytes(
+                solver.evaluate(calldata[Uint256(offset + z)]) for z in range(32)
+            )
+            offset += 32
+            actual[i][j] = int.from_bytes(value)
+
+    expected = [
+        [4, 5, 6, 2, 1, 8, 9, 7, 3],
+        [8, 9, 2, 3, 6, 7, 5, 4, 1],
+        [7, 3, 1, 4, 9, 5, 2, 6, 8],
+        [1, 2, 9, 5, 8, 6, 4, 3, 7],
+        [3, 4, 8, 7, 2, 1, 6, 9, 5],
+        [5, 6, 7, 9, 3, 4, 1, 8, 2],
+        [2, 8, 5, 6, 7, 9, 3, 1, 4],
+        [6, 1, 4, 8, 5, 3, 7, 2, 9],
+        [9, 7, 3, 1, 4, 2, 8, 5, 6],
+    ]
+    assert actual == expected
+
+    with pytest.raises(StopIteration):
+        next(universal)
+
+
 def test_fallback() -> None:
     program = load_solidity("fixtures/01_Fallback.sol")
     check_transitions(program, cases.Fallback)
