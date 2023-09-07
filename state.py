@@ -193,7 +193,7 @@ class Log:
     """A log entry emitted by the LOG* instruction."""
 
     data: FrozenBytes
-    topics: tuple[Uint256]
+    topics: tuple[Uint256, ...]
 
 
 @dataclass(frozen=True)
