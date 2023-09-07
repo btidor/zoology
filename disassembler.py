@@ -65,8 +65,13 @@ def disassemble(code: bytes) -> Program:
     instructions: list[Instruction] = []
     jumps: dict[int, int] = {}
     offset = 0
+    trailer = None
+
     while offset < len(code):
-        instruction = _decode_instruction(code, offset)
+        instruction = _decode_instruction(code, offset, trailer is None)
+        if instruction is None:
+            instructions = instructions[:trailer]
+            break
 
         instructions.append(instruction)
         if instruction.name == "JUMPDEST":
@@ -74,10 +79,17 @@ def disassemble(code: bytes) -> Program:
 
         offset += instruction.size
 
-        # If we encounter the reserved opcode INVALID (0xFE), assume the
-        # remaining data is a non-code trailer, e.g. contract metadata.
+        # The Solidity compiler emits the opcode INVALID (0xFE) to separate the
+        # program from non-code trailers, like strings and contract metadata.
+        # However, INVALID is also emitted as part of some assertion checks.
+        #
+        # https://docs.soliditylang.org/en/latest/metadata.html
+        #
+        # If we encounter INVALID, try to decode the following bytes. If they're
+        # not valid code, discard them and end dissasembly.
+        #
         if instruction.name == "INVALID":
-            break
+            trailer = len(instructions)
 
     return Program(
         code=FrozenBytes.concrete(code),
@@ -94,7 +106,8 @@ def printable_disassembly(code: bytes) -> Iterable[str]:
     """
     offset = 0
     while offset < len(code):
-        ins = _decode_instruction(code, offset)
+        ins = _decode_instruction(code, offset, True)
+        assert ins is not None
         yield str(ins)
 
         offset += ins.size
@@ -103,7 +116,7 @@ def printable_disassembly(code: bytes) -> Iterable[str]:
             break
 
 
-def _decode_instruction(code: bytes, offset: int) -> Instruction:
+def _decode_instruction(code: bytes, offset: int, strict: bool) -> Instruction | None:
     """Decode a single instruction from the given offset within `code`."""
     opcode = code[offset]
     opref = REFERENCE.get(opcode)
@@ -112,7 +125,9 @@ def _decode_instruction(code: bytes, offset: int) -> Instruction:
     operand = None
 
     if opref is None:
-        raise ValueError(f"unknown opcode: 0x{opcode:02x}")
+        if strict:
+            raise ValueError(f"unknown opcode: 0x{opcode:02x}")
+        return None
     elif opref.name == "PUSH":
         # PUSH is the only opcode that takes an operand
         suffix = opref.code - 0x5F

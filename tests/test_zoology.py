@@ -172,9 +172,15 @@ def test_magic_number() -> None:
     check_level(18, fixture)
 
 
-# def test_alien_codex() -> None:
-#     # KeyError: 942 (in JUMP)
-#     check_level(19, [])
+def test_alien_codex() -> None:
+    check_level(
+        19,
+        [
+            "Px69\t58699c55",
+            "PxD7\t47f57b32",
+            "Px1BF\t0339f300 4ef1d2ad89edf8c4d91132028e8195cdf30bb4b5053d4f8cd260341d4805f30a000000000000000000000001cacacacacacacacacacacacacacacacacacacaca",
+        ],
+    )
 
 
 # def test_denial() -> None:

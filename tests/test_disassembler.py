@@ -52,13 +52,18 @@ def test_disassemble_trailer() -> None:
     code = bytes.fromhex("60FEFE97FE0F")
     p = disassemble(code)
 
-    assert len(p.instructions) == 2
+    assert len(p.instructions) == 4
 
     assert p.instructions[0].name == "PUSH"
     assert p.instructions[0].operand is not None
     assert p.instructions[0].operand.reveal() == 0xFE
 
     assert p.instructions[1].name == "INVALID"
+
+    assert p.instructions[2].name == "SWAP"
+    assert p.instructions[0].suffix == 1
+
+    assert p.instructions[3].name == "INVALID"
 
     assert len(p.jumps) == 0
 
