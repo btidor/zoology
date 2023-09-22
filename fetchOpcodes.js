@@ -5,6 +5,6 @@ const { EVM } = require('@ethereumjs/evm');
 
 const evm = new EVM({
     chain: Chain.Mainnet,
-    hardfork: Hardfork.Merge,
+    hardfork: Hardfork.Shanghai,
 })
 console.log(JSON.stringify(Array.from(evm._opcodes.values()), null, 4))

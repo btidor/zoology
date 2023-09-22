@@ -27,10 +27,10 @@ def test_disassemble_basic() -> None:
 
 
 def test_disassemble_suffix() -> None:
-    code = bytes.fromhex("63010203048F97")
+    code = bytes.fromhex("63010203048F975F")
     p = disassemble(code)
 
-    assert len(p.instructions) == 3
+    assert len(p.instructions) == 4
 
     assert p.instructions[0].name == "PUSH"
     assert p.instructions[0].suffix == 4
@@ -44,6 +44,11 @@ def test_disassemble_suffix() -> None:
     assert p.instructions[2].name == "SWAP"
     assert p.instructions[2].suffix == 8
     assert p.instructions[2].operand is None
+
+    assert p.instructions[3].name == "PUSH"
+    assert p.instructions[3].suffix == 0
+    assert p.instructions[3].operand is not None
+    assert p.instructions[3].operand.reveal() == 0x0
 
     assert len(p.jumps) == 0
 

@@ -234,9 +234,9 @@ def test_SAR() -> None:
     )
 
 
-def test_SHA3() -> None:
+def test_KECCAK256() -> None:
     s = State(memory=MutableBytes.concrete(b"\xff\xff\xff\xff"))
-    digest = SHA3(s, Uint256(0), Uint256(4))
+    digest = KECCAK256(s, Uint256(0), Uint256(4))
 
     solver = Solver()
     s.sha3.constrain(solver)

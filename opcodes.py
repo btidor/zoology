@@ -41,10 +41,9 @@ UNIMPLEMENTED = set(
     [
         # Handled specially
         "PUSH",
+        "PUSH0",
         "DUP",
         "SWAP",
         "LOG",
-        # Removed in Merge fork
-        "DIFFICULTY",
     ]
 )

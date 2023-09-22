@@ -128,7 +128,10 @@ def _decode_instruction(code: bytes, offset: int, strict: bool) -> Instruction |
         if strict:
             raise ValueError(f"unknown opcode: 0x{opcode:02x}")
         return None
-    elif opref.name == "PUSH":
+
+    name = opref.name
+    if name == "PUSH" or name == "PUSH0":
+        name = "PUSH"
         # PUSH is the only opcode that takes an operand
         suffix = opref.code - 0x5F
         buf = 0
@@ -136,16 +139,16 @@ def _decode_instruction(code: bytes, offset: int, strict: bool) -> Instruction |
             buf = (buf << 8) | code[offset + i + 1]
         operand = Uint256(buf)
         size = suffix + 1
-    elif opref.name == "DUP":
+    elif name == "DUP":
         suffix = opref.code - 0x7F
-    elif opref.name == "SWAP":
+    elif name == "SWAP":
         suffix = opref.code - 0x8F
-    elif opref.name == "LOG":
+    elif name == "LOG":
         suffix = opref.code - 0xA0
-    elif opref.name in UNIMPLEMENTED:
+    elif name in UNIMPLEMENTED:
         raise ValueError(f"unimplemented opcode: {opref.fullName}")
 
-    return Instruction(offset, size, opref.name, suffix, operand)
+    return Instruction(offset, size, name, suffix, operand)
 
 
 def abiencode(signature: str) -> bytes:

@@ -1,6 +1,7 @@
 {
   "dependencies": {
-    "@ethereumjs/common": "^3.0.1",
-    "@ethereumjs/evm": "^1.2.2"
+    "@ethereumjs/common": "^4.0.0",
+    "@ethereumjs/evm": "^2.0.0",
+    "@ethereumjs/trie": "^6.0.0"
   }
 }

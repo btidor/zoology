@@ -209,8 +209,8 @@
     },
     {
         "code": 32,
-        "name": "SHA3",
-        "fullName": "SHA3",
+        "name": "KECCAK256",
+        "fullName": "KECCAK256",
         "fee": 30,
         "isAsync": false,
         "dynamicGas": true
@@ -377,8 +377,8 @@
     },
     {
         "code": 68,
-        "name": "DIFFICULTY",
-        "fullName": "DIFFICULTY",
+        "name": "PREVRANDAO",
+        "fullName": "PREVRANDAO",
         "fee": 2,
         "isAsync": true,
         "dynamicGas": false
@@ -508,6 +508,14 @@
         "name": "JUMPDEST",
         "fullName": "JUMPDEST",
         "fee": 1,
+        "isAsync": false,
+        "dynamicGas": false
+    },
+    {
+        "code": 95,
+        "name": "PUSH0",
+        "fullName": "PUSH0",
+        "fee": 2,
         "isAsync": false,
         "dynamicGas": false
     },

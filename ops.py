@@ -166,8 +166,8 @@ def SAR(shift: Uint256, value: Uint256) -> Uint256:
     return (value.into(Int256) >> shift).into(Uint256)
 
 
-def SHA3(s: State, offset: Uint256, size: Uint256) -> Uint256:
-    """20 - Compute Keccak-256 hash."""
+def KECCAK256(s: State, offset: Uint256, size: Uint256) -> Uint256:
+    """20 - Compute Keccak-256 (SHA3) hash."""
     return s.sha3[s.memory.slice(offset, size)]
 
 
