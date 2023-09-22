@@ -1,12 +1,9 @@
+# syntax = btidor/syntax
+
 FROM mcr.microsoft.com/vscode/devcontainers/base:0-jammy
 
-COPY *.gpg /usr/share/keyrings/
-COPY *.list /etc/apt/sources.list.d/
+COPY *.sources /etc/apt/sources.list.d/
+ADD --apt nodejs python3.11 python3-pip
 
-RUN apt update && apt -y upgrade
-
-RUN apt -y install python3.11 python3-pip
 RUN ln -sf /usr/bin/python3.11 /usr/bin/python3
-
-RUN apt -y install nodejs
 RUN pip install black pydocstyle
