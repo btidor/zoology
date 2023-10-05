@@ -3,7 +3,8 @@
 FROM mcr.microsoft.com/vscode/devcontainers/base:0-jammy
 
 COPY *.sources /etc/apt/sources.list.d/
-ADD --apt nodejs python3.11 python3-pip
+ADD --apt nodejs python3.12 python3.12-venv
+RUN ln -sf /usr/bin/python3.12 /usr/bin/python3 && \
+    python3.12 -m ensurepip
 
-RUN ln -sf /usr/bin/python3.11 /usr/bin/python3
-RUN pip install black pydocstyle
+RUN pip3 install black pydocstyle

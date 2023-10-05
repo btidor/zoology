@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import copy
-from typing import Any, Iterable, Literal, Self, TypeAlias, TypeVar, Union, overload
+from typing import Any, Iterable, Literal, Self, TypeVar, Union, overload
 
 from Crypto.Hash import keccak
 from zbitvector import Array as zArray
@@ -14,7 +14,7 @@ Uint8 = Uint[Literal[8]]
 Uint160 = Uint[Literal[160]]
 Uint256 = Uint[Literal[256]]
 
-Expression: TypeAlias = "Symbolic | Array[Any, Any]"
+type Expression = "Symbolic | Array[Any, Any]"
 
 S = TypeVar("S", bound=Expression)
 

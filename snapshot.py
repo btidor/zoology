@@ -4,7 +4,6 @@
 import json
 from pathlib import Path
 from time import sleep
-from typing import TypeAlias
 
 import requests
 
@@ -19,7 +18,7 @@ _ROOT = Path(__file__).resolve().parent
 
 _apikey: str | None = None
 
-Snapshot: TypeAlias = dict[str, dict[str, str]]
+type Snapshot = dict[str, dict[str, str]]
 
 
 with open(_ROOT / "ethernaut.json") as f:
