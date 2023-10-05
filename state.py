@@ -7,7 +7,7 @@ from collections import OrderedDict, defaultdict
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
-from bytes import FrozenBytes, MutableBytes
+from bytes import Bytes, FrozenBytes, MutableBytes
 from environment import Block, Contract, Transaction, Universe
 from sha3 import SHA3
 from smt import (
@@ -158,7 +158,6 @@ class State:
 
     def is_changed(self, since: State) -> bool:
         """Check if any permanent state changes have been made."""
-        # TODO: constrain further to eliminate no-op writes?
         if len(self.contract.storage.written) > 0:
             return True
 
@@ -189,6 +188,12 @@ class State:
         if returndata:
             r["Return"] = "0x" + returndata
         return r
+
+    def require(self, bytes: Bytes, msg: str) -> bytes:
+        """Forcibly unwrap a Bytes instance to bytes."""
+        if (r := bytes.reveal()) is not None:
+            return r
+        raise ValueError(msg)
 
 
 @dataclass(frozen=True)

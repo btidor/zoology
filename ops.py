@@ -469,8 +469,9 @@ def LOG(ins: Instruction, s: State, offset: Uint256, size: Uint256) -> None:
 
 def CREATE(s: State, value: Uint256, offset: Uint256, size: Uint256) -> ControlFlow:
     """F0 - Create a new account with associated code."""
-    initcode = s.memory.slice(offset, size).reveal()
-    assert initcode is not None, "CREATE requires concrete program data"
+    initcode = s.require(
+        s.memory.slice(offset, size), "CREATE requires concrete program data"
+    )
     sender_address = s.contract.address.reveal()
     assert sender_address is not None, "CREATE requires concrete sender address"
 
@@ -480,7 +481,7 @@ def CREATE(s: State, value: Uint256, offset: Uint256, size: Uint256) -> ControlF
     nonce = s.contract.nonce.reveal()
     assert nonce is not None, "CREATE require concrete nonce"
     if nonce >= 0x80:
-        raise NotImplementedError  # TODO: implement a full RLP encoder
+        raise NotImplementedError("simplified RLP encoder insufficent")
 
     # https://ethereum.stackexchange.com/a/761
     seed = FrozenBytes.concrete(
@@ -520,8 +521,9 @@ def _CREATE(
         if substate.pc.success is False:
             state.stack.append(Uint256(0))
         else:
-            code = substate.pc.returndata.reveal()
-            assert code is not None
+            code = substate.require(
+                substate.pc.returndata, "constructor must produce concrete code"
+            )
             program = disassemble(code)
 
             contract = Contract(address, program, substate.contract.storage)
@@ -701,8 +703,9 @@ def CREATE2(
     s: State, value: Uint256, offset: Uint256, size: Uint256, _salt: Uint256
 ) -> ControlFlow:
     """F5 - Create a new account with associated code at a predictable address."""
-    initcode = s.memory.slice(offset, size).reveal()
-    assert initcode is not None, "CREATE2 requires concrete program data"
+    initcode = s.require(
+        s.memory.slice(offset, size), "CREATE2 requires concrete program data"
+    )
     salt = _salt.reveal()
     assert salt is not None, "CREATE2 requires concrete salt"
     sender_address = s.contract.address.reveal()

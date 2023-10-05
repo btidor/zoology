@@ -112,11 +112,12 @@ class SHA3:
             solver.add(constraint)
 
     def narrow(self, solver: Solver) -> None:
-        """Apply concrete SHA3 constraints to a given model instance."""
-        # TODO: narrowing is *unsound* because we concretize the key. It's
-        # possible that a given evaluation of the key causes a future narrowing
-        # step to fail while a different evaluation would allow it to succeed.
-        # Therefore, narrowing errors should always bubble up as hard failures.
+        """
+        Apply concrete SHA3 constraints to a given model instance.
+
+        Narrowing is *unsound* because we concretize the key. Narrowing errors
+        should always bubble up as a hard failure of the analysis.
+        """
         for n, key, val in self.items():
             data = solver.evaluate(key).to_bytes(key.width // 8)
             hash = keccak.new(data=data, digest_bits=256)
