@@ -2,7 +2,7 @@
 """A universal transaction solver."""
 
 import copy
-from collections import deque
+from heapq import heappop, heappush
 from typing import Iterable, Iterator
 
 from disassembler import Program, disassemble
@@ -27,9 +27,9 @@ def universal_transaction(
     prior execution of `universal_transaction()`, the two executions should have
     a different suffix.
     """
-    queue = deque([state])
+    queue = [state]
     while queue:
-        state = queue.popleft()
+        state = heappop(queue)
         while isinstance(state.pc, int):
             if prints:
                 print(state.contract.program.instructions[state.pc])
@@ -40,10 +40,11 @@ def universal_transaction(
                             print(" ", describe(x))
                     continue
                 case Jump(targets):
-                    queue.extend(targets[::-1])  # reverse for speed :(
+                    for target in targets:
+                        heappush(queue, target)
                     break
                 case Descend(substate):
-                    queue.append(substate)
+                    heappush(queue, substate)
                     break
                 case unknown:
                     raise ValueError(f"unknown action: {unknown}")
@@ -53,7 +54,7 @@ def universal_transaction(
                 # We need to collect *all* terminal states, since if the
                 # subcontract reverts the parent contract will continue to
                 # execute.
-                queue.append(state.recursion(state))
+                heappush(queue, state.recursion(state))
                 continue
             if not state.pc.success:
                 continue

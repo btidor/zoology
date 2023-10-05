@@ -371,12 +371,16 @@ def JUMP(s: State, _counter: Uint256) -> None:
     s.pc = s.contract.program.jumps[counter]
 
 
-def JUMPI(s: State, _counter: Uint256, b: Uint256) -> ControlFlow | None:
+def JUMPI(
+    s: State, ins: Instruction, _counter: Uint256, b: Uint256
+) -> ControlFlow | None:
     """57 - Conditionally alter the program counter."""
     counter = _counter.reveal()
     assert counter is not None, "JUMPI requires concrete counter"
 
     s.path <<= 1
+    s.cost += 2 ** (s.branching[ins.offset])
+    s.branching[ins.offset] += 1
     c = b == Uint256(0)
     match c.reveal():
         case None:  # unknown, must prepare both branches :(

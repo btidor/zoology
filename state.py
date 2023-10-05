@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import copy
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 from dataclasses import dataclass, field
-from typing import Callable
+from typing import Any, Callable
 
 from bytes import FrozenBytes, MutableBytes
 from environment import Block, Contract, Transaction, Universe
@@ -78,6 +78,12 @@ class State:
     # taken, 0 if not. MSB-first with a leading 1 prepended.
     path: int = 1
 
+    # Tracks the number of times each JUMPI instruction has been reached. States
+    # are prioritized by their cost, which is computed as the sum of the branch
+    # counts, exponentially weighted to penalize long or infinite loops.
+    branching: dict[int, int] = field(default_factory=lambda: defaultdict(lambda: 0))
+    cost: int = 0
+
     # If this State represents a subcontext, this callback should be called upon
     # termination. It takes a copy of this State as an argument and returns the
     # parent context as it should be resumed.
@@ -92,6 +98,11 @@ class State:
         # ASSUMPTION: the current block number is at least 256. This prevents
         # the BLOCKHASH instruction from overflowing.
         self.constraint &= self.block.number >= Uint256(256)
+
+    def __lt__(self, other: Any) -> bool:
+        if not isinstance(other, State):
+            return NotImplemented
+        return self.cost < other.cost
 
     def transfer(self, src: Uint160, dst: Uint160, val: Uint256) -> None:
         """Transfer value from one account to another."""
@@ -248,6 +259,7 @@ class Descend(ControlFlow):
             constraint=state.constraint,
             narrower=state.narrower,
             path=state.path,
+            cost=state.cost,
         )
         substate.transfer(transaction.caller, contract.address, transaction.callvalue)
         state.children += 1
@@ -265,6 +277,7 @@ class Descend(ControlFlow):
             next.constraint = substate.constraint
             next.narrower = substate.narrower
             next.path = substate.path
+            next.cost = substate.cost
             return callback(next, substate)
 
         substate.recursion = metacallback
