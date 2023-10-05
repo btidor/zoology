@@ -4,18 +4,13 @@ from __future__ import annotations
 
 import abc
 import copy
-from typing import Any, Type, TypeGuard, TypeVar
+from typing import Any, Type, TypeVar
 
 from smt import Constraint, Solver, Uint, Uint8, Uint256, concat_bytes, zArray
 
 T = TypeVar("T", bound="Bytes")
 
 BytesWrite = tuple[Uint256, "Uint8 | ByteSlice"]
-
-
-def present(values: list[int | None]) -> TypeGuard[list[int]]:
-    """Return true iff the given list has no Nones."""
-    return all(v is not None for v in values)
 
 
 class Bytes(abc.ABC):
@@ -83,9 +78,11 @@ class Bytes(abc.ABC):
         """Unwrap this instance to bytes."""
         if (length := self.length.reveal()) is None:
             return None
-        data = [self[Uint256(i)].reveal() for i in range(length)]
-        if not present(data):
-            return None
+        data = list[int]()
+        for i in range(length):
+            if (v := self[Uint256(i)].reveal()) is None:
+                return None
+            data.append(v)
         return bytes(data)
 
     def describe(self, solver: Solver) -> str:
