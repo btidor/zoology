@@ -31,7 +31,7 @@ class History:
         self.starting_universe = starting_universe
         self.starting_sha3 = starting_sha3
         self.player = player
-        self.states: list[State] = []
+        self.states = list[State]()
 
     def __deepcopy__(self, memo: Any) -> History:
         result = History(self.starting_universe, self.starting_sha3, self.player)
@@ -92,7 +92,7 @@ class History:
                 data = data[:8] + " " + data[8:]
             line = f"{state.px()}\t{data}"
 
-            suffixes: list[str] = []
+            suffixes = list[str]()
             value = solver.evaluate(state.transaction.callvalue)
             if value > 0:
                 suffixes.append(f"value: {value}")
@@ -142,7 +142,7 @@ class Validator:
             universe = history.states[-1].universe
             number = history.states[-1].block.number + Uint256(1)
 
-        substitutions: dict[Any, Expression] = {}
+        substitutions = dict[Any, Expression]()
         for name, term in self._constants.items():
             if name.startswith("STORAGE@"):
                 addr = int(name[8:], 16)

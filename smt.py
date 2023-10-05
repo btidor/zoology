@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import copy
-from typing import Any, Iterable, Literal, Self, TypeVar, Union, overload
+from typing import Any, Iterable, Literal, Self, TypeAlias, TypeVar, Union, overload
 
 from Crypto.Hash import keccak
 from zbitvector import Array as zArray
@@ -14,7 +14,7 @@ Uint8 = Uint[Literal[8]]
 Uint160 = Uint[Literal[160]]
 Uint256 = Uint[Literal[256]]
 
-type Expression = "Symbolic | Array[Any, Any]"
+Expression: TypeAlias = "Symbolic | Array[Any, Any]"
 
 S = TypeVar("S", bound=Expression)
 
@@ -58,8 +58,8 @@ def underflow_safe(a: Uint256, b: Uint256) -> Constraint:
 
 def get_constants(s: Symbolic) -> dict[str, BitwuzlaTerm]:
     """Recursively search the term for constants."""
-    constants: dict[str, BitwuzlaTerm] = {}
-    queue: set[BitwuzlaTerm] = set([_term(s)])
+    constants = dict[str, BitwuzlaTerm]()
+    queue = set([_term(s)])
     while queue:
         item = queue.pop()
         queue.update(item.get_children())
@@ -116,7 +116,7 @@ def describe(bv: Uint[Any] | int) -> str:
     if v is not None:
         if v < (1 << 256):
             return hex(v)
-        p: list[str] = []
+        p = list[str]()
         while v > 0:
             b = v & ((1 << 256) - 1)
             p.append(hex(b)[2:])
@@ -159,8 +159,8 @@ class Array(zArray[K, V]):
     def __init__(self, value: V | str, /) -> None:
         """Create a new Array."""
         super().__init__(value)
-        self.accessed: list[K] = []
-        self.written: list[K] = []
+        self.accessed = list[K]()
+        self.written = list[K]()
 
     def __deepcopy__(self, memo: Any) -> Self:
         result = super().__deepcopy__(memo)
@@ -209,7 +209,7 @@ class Array(zArray[K, V]):
         line = name
 
         for prefix, rows in diffs:
-            concrete: dict[str, tuple[str, str | None]] = {}
+            concrete = dict[str, tuple[str, str | None]]()
             for key, value, prior in rows:
                 k = describe(solver.evaluate(key))
                 v = describe(solver.evaluate(value))

@@ -130,7 +130,7 @@ def validateInstance(
             )
         )
 
-    predicates: list[Constraint] = []
+    predicates = list[Constraint]()
     for end in universal_transaction(start, check=False, prints=prints):
         assert isinstance(end.pc, Termination)
 
@@ -218,12 +218,12 @@ def search(
     """Symbolically execute the given level until a solution is found."""
     assert (instance := _instance.reveal()) is not None
 
-    histories: list[History] = [beginning]
+    histories = [beginning]
     for i in range(depth):
         suffix = f"-{i+1}"
         if verbose > 1:
             print(f"\tTxn {i+1}:")
-        subsequent: list[History] = []
+        subsequent = list[History]()
         for history in histories:
             universe, sha3, block = history.subsequent()
             contract = universe.contracts[instance]

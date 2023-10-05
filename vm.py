@@ -30,7 +30,7 @@ def step(state: State) -> ControlFlow | None:
     fn = getattr(ops, ins.name)
 
     sig = inspect.signature(fn)
-    args: list[object] = []
+    args = list[object]()
     for name in sig.parameters:
         kls = sig.parameters[name].annotation
         if kls == Uint256:

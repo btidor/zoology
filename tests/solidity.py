@@ -61,7 +61,7 @@ def compile_solidity(source: str) -> dict[str, bytes]:
     ).splitlines()
 
     current = "<unknown>"
-    matches: dict[str, bytes] = {}
+    matches = dict[str, bytes]()
     for i in range(len(output)):
         if output[i].startswith(b"======="):
             current = output[i].split(b" ")[1][8:].decode()

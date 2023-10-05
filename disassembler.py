@@ -62,8 +62,8 @@ class Instruction:
 
 def disassemble(code: bytes) -> Program:
     """Parse and validate an EVM contract's code."""
-    instructions: list[Instruction] = []
-    jumps: dict[int, int] = {}
+    instructions = list[Instruction]()
+    jumps = dict[int, int]()
     offset = 0
     trailer = None
 

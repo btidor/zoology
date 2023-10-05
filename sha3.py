@@ -142,7 +142,7 @@ class SHA3:
     def printable(self, solver: Solver) -> Iterable[str]:
         """Yield a human-readable evaluation using the given model."""
         line = "SHA3"
-        seen: set[str] = set()
+        seen = set[str]()
         for _, key, val in self.items():
             k = "0x" + solver.evaluate(key).to_bytes(key.width // 8).hex()
             if k in seen:

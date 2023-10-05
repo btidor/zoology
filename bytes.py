@@ -20,7 +20,7 @@ class Bytes(abc.ABC):
         """Create a new Bytes. For internal use."""
         self.length = length
         self.array = array
-        self.writes: list[BytesWrite] = []  # writes to apply *on top of* array
+        self.writes = list[BytesWrite]()  # writes to apply *on top of* array
 
     @classmethod
     def concrete(cls: Type[T], data: bytes | list[Uint8] = b"") -> T:
