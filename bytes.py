@@ -6,7 +6,7 @@ import abc
 import copy
 from typing import Any, Type, TypeGuard, TypeVar
 
-from smt import Array, Constraint, Solver, Uint, Uint8, Uint256, concat_bytes
+from smt import Constraint, Solver, Uint, Uint8, Uint256, concat_bytes, zArray
 
 T = TypeVar("T", bound="Bytes")
 
@@ -21,7 +21,7 @@ def present(values: list[int | None]) -> TypeGuard[list[int]]:
 class Bytes(abc.ABC):
     """A symbolic-length sequence of symbolic bytes."""
 
-    def __init__(self, length: Uint256, array: Array[Uint256, Uint8]) -> None:
+    def __init__(self, length: Uint256, array: zArray[Uint256, Uint8]) -> None:
         """Create a new Bytes. For internal use."""
         self.length = length
         self.array = array
@@ -31,7 +31,7 @@ class Bytes(abc.ABC):
     def concrete(cls: Type[T], data: bytes | list[Uint8] = b"") -> T:
         """Create a new Bytes from a concrete list of bytes."""
         length = Uint256(len(data))
-        array = Array[Uint256, Uint8](Uint8(0))
+        array = zArray[Uint256, Uint8](Uint8(0))
         for i, b in enumerate(data):
             if isinstance(b, Uint):
                 array[Uint256(i)] = b
@@ -45,7 +45,7 @@ class Bytes(abc.ABC):
         """Create a new, fully-symbolic Bytes."""
         return cls(
             Uint256(length if length is not None else f"{name}.length"),
-            Array[Uint256, Uint8](name),
+            zArray[Uint256, Uint8](name),
         )
 
     @classmethod
@@ -57,7 +57,7 @@ class Bytes(abc.ABC):
         """
         return cls(
             constraint.ite(Uint256(0), Uint256(f"{name}-LEN")),
-            Array[Uint256, Uint8](name),
+            zArray[Uint256, Uint8](name),
         )
 
     @abc.abstractmethod
