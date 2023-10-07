@@ -190,7 +190,19 @@ class State:
         return r
 
     def require(self, bytes: Bytes, msg: str) -> bytes:
-        """Forcibly unwrap a Bytes instance to bytes."""
+        """
+        Forcibly unwrap a Bytes instance to bytes.
+
+        Invokes the solver with this state's constraints if necessary.
+        """
+        if (r := bytes.reveal()) is not None:
+            return r
+
+        solver = Solver()
+        self.constrain(solver)
+        assert solver.check()
+        self.constraint &= bytes.compact(solver, Constraint(True))
+
         if (r := bytes.reveal()) is not None:
             return r
         raise ValueError(msg)

@@ -481,7 +481,7 @@ def CREATE(s: State, value: Uint256, offset: Uint256, size: Uint256) -> ControlF
     nonce = s.contract.nonce.reveal()
     assert nonce is not None, "CREATE require concrete nonce"
     if nonce >= 0x80:
-        raise NotImplementedError("simplified RLP encoder insufficent")
+        raise NotImplementedError # TODO: implement a full RLP encoder
 
     # https://ethereum.stackexchange.com/a/761
     seed = FrozenBytes.concrete(

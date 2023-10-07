@@ -6,7 +6,17 @@ import abc
 import copy
 from typing import Any, Type, TypeVar
 
-from smt import Constraint, Solver, Uint, Uint8, Uint256, concat_bytes, zArray
+from smt import (
+    Constraint,
+    Solver,
+    Uint,
+    Uint8,
+    Uint256,
+    compact_helper,
+    compact_zarray,
+    concat_bytes,
+    zArray,
+)
 
 T = TypeVar("T", bound="Bytes")
 
@@ -107,6 +117,10 @@ class Bytes(abc.ABC):
             result += solver.evaluate(self[Uint256(i)]).to_bytes(1)
         return result
 
+    def compact(self, solver: Solver, constraint: Constraint) -> Constraint:
+        """Simplify bytes using the given solver's contraints."""
+        return compact_zarray(solver, constraint, self.array)
+
 
 class FrozenBytes(Bytes):
     """A symbolic-length sequence of symbolic bytes. Immutable."""
@@ -127,6 +141,19 @@ class ByteSlice(FrozenBytes):
     def __getitem__(self, i: Uint256) -> Uint8:
         item = self.inner[self.offset + i]
         return (i < self.length).ite(item, Uint8(0))
+
+    def compact(self, solver: Solver, constraint: Constraint) -> Constraint:
+        """Simplify length and offset using the given solver's contraints."""
+        length_, offset_ = solver.evaluate(self.length), solver.evaluate(self.offset)
+
+        constraint = self.inner.compact(solver, constraint)
+        constraint, self.length = compact_helper(
+            solver, constraint, self.length, Uint256(length_)
+        )
+        constraint, self.offset = compact_helper(
+            solver, constraint, self.offset, Uint256(offset_)
+        )
+        return constraint
 
 
 class MutableBytes(Bytes):
@@ -175,3 +202,29 @@ class MutableBytes(Bytes):
                 self[at + Uint256(i)] = slice[Uint256(i)]
         else:
             self.writes.append((at, slice))
+
+    def compact(self, solver: Solver, constraint: Constraint) -> Constraint:
+        """Simplify array keys using the given solver's contraints."""
+        length_ = Uint256(solver.evaluate(self.length))
+        for k, v in self.writes:
+            if isinstance(v, ByteSlice):
+                constraint &= v.compact(solver, constraint)
+        constraint, self.length = compact_helper(
+            solver, constraint, self.length, length_
+        )
+
+        # Try passing through writes to the underlying array again, now that
+        # we've simplified the slice lengths:
+        while self.writes:
+            k, v = self.writes[0]
+            if isinstance(v, ByteSlice):
+                if (n := v.length.reveal()) is None:
+                    break
+                for i in range(n):
+                    self.array[k + Uint256(i)] = v[Uint256(i)]
+            else:
+                self.array[k] = v
+            self.writes.pop(0)
+
+        assert solver.check()
+        return super().compact(solver, constraint)

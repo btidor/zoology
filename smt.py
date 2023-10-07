@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+from itertools import batched
 from typing import Any, Iterable, Literal, Self, TypeAlias, TypeVar, Union, overload
 
 from Crypto.Hash import keccak
@@ -14,8 +15,9 @@ Uint8 = Uint[Literal[8]]
 Uint160 = Uint[Literal[160]]
 Uint256 = Uint[Literal[256]]
 
-Expression: TypeAlias = "Symbolic | Array[Any, Any]"
+Expression: TypeAlias = "Symbolic | zArray[Any, Any]"
 
+N = TypeVar("N", bound=int)
 S = TypeVar("S", bound=Expression)
 
 K = TypeVar("K", bound=Union[Uint[Any], Int[Any]])
@@ -77,6 +79,47 @@ def substitute(s: S, replacements: dict[BitwuzlaTerm, Expression]) -> S:
         s.__class__,
         BZLA.substitute(_term(s), dict((k, _term(v)) for k, v in replacements.items())),
     )
+
+
+def compact_zarray(
+    solver: Solver, constraint: Constraint, array: zArray[Uint256, Uint8]
+) -> Constraint:
+    """Simplify array keys using the given solver's contraints."""
+    assert solver.check()
+    term = _term(array)
+    ksort = term.get_sort().array_get_index()
+
+    writes = list[tuple[BitwuzlaTerm, BitwuzlaTerm, BitwuzlaTerm]]()
+    while term.get_kind() == Kind.ARRAY_STORE:
+        term, key, value = term.get_children()
+        key_ = BZLA.mk_bv_value(ksort, int(BZLA.get_value_str(key), 2))
+        writes.append((key, value, key_))
+    writes.reverse()
+
+    for batch in batched(writes, 256):
+        for key, _, key_ in batch:
+            constraint &= _make_symbolic(
+                Constraint, BZLA.mk_term(Kind.EQUAL, (key, key_))
+            )
+        if solver.check(~constraint):
+            raise NotImplementedError  # TODO: check writes one by one
+        else:
+            for _, value, key_ in batch:
+                term = BZLA.mk_term(Kind.ARRAY_STORE, (term, key_, value))
+
+    array._term = term  # type: ignore
+    return constraint
+
+
+def compact_helper(
+    solver: Solver, constraint: Constraint, term: Uint[N], concrete: Uint[N]
+) -> tuple[Constraint, Uint[N]]:
+    """Select between original and concretized versions of a term."""
+    extended = constraint & (term == concrete)
+    if solver.check(~extended):
+        return constraint, term
+    else:
+        return extended, concrete
 
 
 @overload
