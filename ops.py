@@ -3,10 +3,20 @@
 import copy
 from typing import Literal
 
-from bytes import FrozenBytes
+from bytes import Bytes
 from disassembler import Instruction, disassemble
 from environment import Contract, Transaction
-from smt import Array, Constraint, Int, Uint, Uint8, Uint160, Uint256, concat_bytes
+from smt import (
+    Array,
+    Constraint,
+    Int,
+    Uint,
+    Uint8,
+    Uint160,
+    Uint256,
+    concat_bytes,
+    zArray,
+)
 from state import ControlFlow, DelegateCall, Descend, Jump, Log, State, Termination
 
 Int256 = Int[Literal[256]]
@@ -16,7 +26,7 @@ Uint512 = Uint[Literal[512]]
 
 def STOP(s: State) -> None:
     """00 - Halts execution."""
-    s.pc = Termination(True, FrozenBytes.concrete())
+    s.pc = Termination(True, Bytes())
 
 
 def ADD(a: Uint256, b: Uint256) -> Uint256:
@@ -248,7 +258,7 @@ def EXTCODECOPY(
     assert address is not None, "EXTCODECOPY requires concrete address"
 
     contract = s.universe.contracts.get(address, None)
-    code = contract.program.code if contract else FrozenBytes.concrete()
+    code = contract.program.code if contract else Bytes()
     s.memory.graft(code.slice(offset, size), destOffset)
 
 
@@ -481,18 +491,14 @@ def CREATE(s: State, value: Uint256, offset: Uint256, size: Uint256) -> ControlF
     nonce = s.contract.nonce.reveal()
     assert nonce is not None, "CREATE require concrete nonce"
     if nonce >= 0x80:
-        raise NotImplementedError # TODO: implement a full RLP encoder
+        raise NotImplementedError  # TODO: implement a full RLP encoder
 
     # https://ethereum.stackexchange.com/a/761
-    seed = FrozenBytes.concrete(
-        b"\xd6\x94" + sender_address.to_bytes(20) + nonce.to_bytes(1)
-    )
+    seed = Bytes(b"\xd6\x94" + sender_address.to_bytes(20) + nonce.to_bytes(1))
     return _CREATE(s, value, initcode, seed)
 
 
-def _CREATE(
-    s: State, value: Uint256, initcode: bytes, seed: FrozenBytes
-) -> ControlFlow:
+def _CREATE(s: State, value: Uint256, initcode: bytes, seed: Bytes) -> ControlFlow:
     address = s.sha3[seed].into(Uint160)
     if address.reveal() in s.universe.contracts:
         assert (a := address.reveal()) is not None
@@ -552,7 +558,7 @@ def CALL(
         # zero address, unfortunately. It has no code and no one controls its
         # keypair.)
         s.transfer(s.contract.address, _address.into(Uint160), value)
-        s.latest_return = FrozenBytes.concrete()
+        s.latest_return = Bytes()
         s.memory.graft(s.latest_return.slice(Uint256(0), retSize), retOffset)
         s.stack.append(Uint256(1))
         return None
@@ -581,9 +587,11 @@ def CALL(
         return Descend.new(s, contract, transaction, callback)
     else:
         # Call to a symbolic address: return a fully-symbolic response.
-        s.latest_return = FrozenBytes.conditional(
-            f"RETURNDATA{s.call_count}{s.suffix}",
-            s.universe.codesizes[_address.into(Uint160)] == Uint256(0),
+        s.latest_return = Bytes.custom(
+            (s.universe.codesizes[_address.into(Uint160)] == Uint256(0)).ite(
+                Uint256(0), Uint256(f"RETURNDATA{s.call_count}{s.suffix}-LEN")
+            ),
+            zArray[Uint256, Uint8](f"RETURNDATA{s.call_count}{s.suffix}"),
         )
         s.memory.graft(s.latest_return.slice(Uint256(0), retSize), retOffset)
         success = (
@@ -663,7 +671,7 @@ def DELEGATECALL(
         n = len(s.delegates)
         dc = DelegateCall(
             Constraint(f"DCOK{n}{s.suffix}"),
-            FrozenBytes.symbolic(f"DCRETURN{n}{s.suffix}"),
+            Bytes.symbolic(f"DCRETURN{n}{s.suffix}"),
             s.contract.storage,
             Array[Uint256, Uint256](f"DCSTORAGE{n}{s.suffix}"),
         )
@@ -712,8 +720,8 @@ def CREATE2(
     assert sender_address is not None, "CREATE2 requires concrete sender address"
 
     # https://ethereum.stackexchange.com/a/761
-    assert (h := s.sha3[FrozenBytes.concrete(initcode)].reveal()) is not None
-    seed = FrozenBytes.concrete(
+    assert (h := s.sha3[Bytes(initcode)].reveal()) is not None
+    seed = Bytes(
         b"\xff" + sender_address.to_bytes(20) + salt.to_bytes(32) + h.to_bytes(32)
     )
     return _CREATE(s, value, initcode, seed)
@@ -744,7 +752,7 @@ def REVERT(s: State, offset: Uint256, size: Uint256) -> None:
 
 def INVALID(s: State) -> None:
     """FE - Designated invalid instruction."""
-    s.pc = Termination(False, FrozenBytes.concrete())
+    s.pc = Termination(False, Bytes())
 
 
 def SELFDESTRUCT() -> None:

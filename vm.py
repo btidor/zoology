@@ -5,7 +5,7 @@ import inspect
 from typing import Generator
 
 import ops
-from bytes import FrozenBytes
+from bytes import Bytes
 from disassembler import Instruction, Program, abiencode
 from environment import Contract, Transaction, Universe
 from smt import Uint, Uint160, Uint256
@@ -100,7 +100,7 @@ def printable_execution(state: State) -> Generator[str, None, State]:
 def concrete_start(program: Contract | Program, value: Uint256, data: bytes) -> State:
     """Return a concrete start state with realistic values."""
     contract = program if isinstance(program, Contract) else Contract(program=program)
-    transaction = Transaction(callvalue=value, calldata=FrozenBytes.concrete(data))
+    transaction = Transaction(callvalue=value, calldata=Bytes(data))
     universe = Universe()
     universe.add_contract(contract)
     universe.codesizes[Uint160(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0)] = Uint256(0)

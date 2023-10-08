@@ -2,7 +2,7 @@
 
 import pytest
 
-from bytes import FrozenBytes, MutableBytes
+from bytes import Bytes, Memory
 from disassembler import Instruction, disassemble
 from environment import Block
 from ops import *
@@ -11,7 +11,7 @@ from state import Termination
 
 
 def test_STOP() -> None:
-    s = State(latest_return=FrozenBytes.concrete(b"\x12\x34"))
+    s = State(latest_return=Bytes(b"\x12\x34"))
     STOP(s)
     assert isinstance(s.pc, Termination)
     assert s.pc.success is True
@@ -235,7 +235,7 @@ def test_SAR() -> None:
 
 
 def test_KECCAK256() -> None:
-    s = State(memory=MutableBytes.concrete(b"\xff\xff\xff\xff"))
+    s = State(memory=Memory(b"\xff\xff\xff\xff"))
     digest = KECCAK256(s, Uint256(0), Uint256(4))
 
     solver = Solver()
@@ -288,7 +288,7 @@ def test_CALLVALUE() -> None:
 
 def test_CALLDATALOAD() -> None:
     transaction = Transaction(
-        calldata=FrozenBytes.concrete(
+        calldata=Bytes(
             b"\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff"
         )
     )
@@ -305,14 +305,14 @@ def test_CALLDATALOAD() -> None:
 
 
 def test_CALLDATASIZE() -> None:
-    transaction = Transaction(calldata=FrozenBytes.concrete(b"\xff"))
+    transaction = Transaction(calldata=Bytes(b"\xff"))
     s = State(transaction=transaction)
     assert CALLDATASIZE(s).reveal() == 1
 
 
 def test_CALLDATACOPY() -> None:
     transaction = Transaction(
-        calldata=FrozenBytes.concrete(
+        calldata=Bytes(
             b"\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff"
         )
     )
@@ -389,13 +389,13 @@ def test_EXTCODECOPY() -> None:
 
 
 def test_RETURNDATASIZE() -> None:
-    s = State(latest_return=FrozenBytes.concrete(b"abcdefghijklmnopqrstuvwxyz"))
+    s = State(latest_return=Bytes(b"abcdefghijklmnopqrstuvwxyz"))
     assert RETURNDATASIZE(s).reveal() == 26
 
 
 def test_RETURNDATACOPY() -> None:
     s = State(
-        latest_return=FrozenBytes.concrete(
+        latest_return=Bytes(
             b"\x7d\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\x7f"
         )
     )
@@ -486,7 +486,7 @@ def test_BASEFEE() -> None:
 
 def test_MLOAD() -> None:
     s = State(
-        memory=MutableBytes.concrete(
+        memory=Memory(
             bytes.fromhex(
                 "00000000000000000000000000000000000000000000000000000000000000FF"
             )
@@ -553,7 +553,7 @@ def test_PC() -> None:
 
 
 def test_MSIZE() -> None:
-    s = State(memory=MutableBytes.concrete(b"\x00" * 123 + b"\x01"))
+    s = State(memory=Memory(b"\x00" * 123 + b"\x01"))
     assert MSIZE(s).reveal() == 124
 
 
@@ -593,7 +593,7 @@ def test_SWAP() -> None:
 def test_LOG() -> None:
     s = State(
         stack=[Uint256(0xABCD)],
-        memory=MutableBytes.concrete(b"\x12\x34"),
+        memory=Memory(b"\x12\x34"),
     )
     ins = Instruction(0x0, 1, "LOG", 1)
     LOG(ins, s, Uint256(1), Uint256(1))
@@ -608,7 +608,7 @@ def test_CREATE() -> None:
         address=Uint160(0x6AC7EA33F8831EA9DCC53393AAA88B25A785DBF0),
     )
     s = State(
-        memory=MutableBytes.concrete(
+        memory=Memory(
             b"\xFE\x63\xFF\xFF\xFF\xFF\x60\x00\x52\x60\x04\x60\x1C\xF3"
         ),
         contract=contract,
@@ -624,8 +624,8 @@ def test_CREATE() -> None:
 
 def test_RETURN() -> None:
     s = State(
-        latest_return=FrozenBytes.concrete(b"\x12\x34"),
-        memory=MutableBytes.concrete(b"\xff\x01"),
+        latest_return=Bytes(b"\x12\x34"),
+        memory=Memory(b"\xff\x01"),
     )
     RETURN(s, Uint256(0), Uint256(2))
     assert isinstance(s.pc, Termination)
@@ -647,8 +647,8 @@ def test_CREATE2() -> None:
 
 def test_REVERT() -> None:
     s = State(
-        latest_return=FrozenBytes.concrete(b"\x12\x34"),
-        memory=MutableBytes.concrete(b"\xff\x01"),
+        latest_return=Bytes(b"\x12\x34"),
+        memory=Memory(b"\xff\x01"),
     )
     REVERT(s, Uint256(0), Uint256(2))
     assert isinstance(s.pc, Termination)
@@ -657,7 +657,7 @@ def test_REVERT() -> None:
 
 
 def test_INVALID() -> None:
-    s = State(latest_return=FrozenBytes.concrete(b"\x12\x34"))
+    s = State(latest_return=Bytes(b"\x12\x34"))
     INVALID(s)
     assert isinstance(s.pc, Termination)
     assert s.pc.success is False

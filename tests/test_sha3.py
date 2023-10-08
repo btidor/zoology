@@ -2,14 +2,14 @@
 
 import pytest
 
-from bytes import FrozenBytes
+from bytes import Bytes
 from sha3 import SHA3
 from smt import NarrowingError, Solver, Uint256
 
 
 def test_concrete() -> None:
     sha3 = SHA3()
-    input = FrozenBytes.concrete(b"testing")
+    input = Bytes(b"testing")
     assert (
         sha3[input].reveal()
         == 0x5F16F4C7F149AC4F9510D9CF8CF384038AD348B3BCDC01915F95DE12DF9D1B02
@@ -18,12 +18,12 @@ def test_concrete() -> None:
 
 def test_symbolic() -> None:
     sha3 = SHA3()
-    input = FrozenBytes.symbolic("INPUT", 7)
+    input = Bytes.symbolic("INPUT", 7)
     assert sha3[input].reveal() is None
 
     solver = Solver()
     sha3.constrain(solver)
-    solver.add(input.bigvector(7) == FrozenBytes.concrete(b"testing").bigvector(7))
+    solver.add(input.bigvector(7) == Bytes(b"testing").bigvector(7))
     assert solver.check()
 
     assert input.describe(solver) == b"testing".hex()
@@ -36,12 +36,12 @@ def test_symbolic() -> None:
 
 def test_fully_symbolic() -> None:
     sha3 = SHA3()
-    input = FrozenBytes.symbolic("INPUT")
+    input = Bytes.symbolic("INPUT")
     assert sha3[input].reveal() is None
 
     solver = Solver()
     sha3.constrain(solver)
-    solver.add(input.bigvector(7) == FrozenBytes.concrete(b"testing").bigvector(7))
+    solver.add(input.bigvector(7) == Bytes(b"testing").bigvector(7))
     solver.add(input.length == Uint256(7))
     assert solver.check()
 
@@ -56,23 +56,23 @@ def test_fully_symbolic() -> None:
 def test_zero() -> None:
     sha3 = SHA3()
     assert (
-        sha3[FrozenBytes.symbolic("INPUT", 0)].reveal()
+        sha3[Bytes.symbolic("INPUT", 0)].reveal()
         == 0xC5D2460186F7233C927E7DB2DCC703C0E500B653CA82273B7BFAD8045D85A470
     )
     assert (
-        sha3[FrozenBytes.concrete()].reveal()
+        sha3[Bytes()].reveal()
         == 0xC5D2460186F7233C927E7DB2DCC703C0E500B653CA82273B7BFAD8045D85A470
     )
 
 
 def test_impossible_concrete() -> None:
     sha3 = SHA3()
-    input = FrozenBytes.symbolic("INPUT", 7)
+    input = Bytes.symbolic("INPUT", 7)
     digest = sha3[input]
 
     solver = Solver()
     sha3.constrain(solver)
-    solver.add(input.bigvector(7) == FrozenBytes.concrete(b"testing").bigvector(7))
+    solver.add(input.bigvector(7) == Bytes(b"testing").bigvector(7))
     solver.add(
         digest
         == Uint256(0x0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF)
@@ -88,7 +88,7 @@ def test_impossible_concrete() -> None:
 
 def test_impossible_symbolic() -> None:
     sha3 = SHA3()
-    digest = sha3[FrozenBytes.concrete(b"testing")]
+    digest = sha3[Bytes(b"testing")]
 
     solver = Solver()
     sha3.constrain(solver)
@@ -101,8 +101,8 @@ def test_impossible_symbolic() -> None:
 
 def test_items() -> None:
     sha3 = SHA3()
-    sha3[FrozenBytes.concrete(b"hello")]
-    sha3[FrozenBytes.concrete(b"testing")]
+    sha3[Bytes(b"hello")]
+    sha3[Bytes(b"testing")]
 
     items = sha3.items()
     n, k, _ = next(items)
@@ -117,7 +117,7 @@ def test_items() -> None:
 
 def test_printable() -> None:
     sha3 = SHA3()
-    sha3[FrozenBytes.concrete(b"testing")]
+    sha3[Bytes(b"testing")]
 
     solver = Solver()
     sha3.constrain(solver)

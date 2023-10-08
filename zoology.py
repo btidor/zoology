@@ -8,7 +8,7 @@ import copy
 from functools import reduce
 from itertools import chain
 
-from bytes import FrozenBytes
+from bytes import Bytes
 from disassembler import abiencode
 from environment import Block, Contract, Transaction, Universe
 from history import History, Validator
@@ -56,7 +56,7 @@ def createInstance(
         transaction=Transaction(
             origin=SETUP,
             caller=SETUP,
-            calldata=FrozenBytes.concrete(calldata),
+            calldata=Bytes(calldata),
             callvalue=Uint256(10**15),
         ),
         universe=universe,
@@ -112,7 +112,7 @@ def validateInstance(
         transaction=Transaction(
             origin=SETUP,
             caller=SETUP,
-            calldata=FrozenBytes.concrete(calldata),
+            calldata=Bytes(calldata),
         ),
         universe=universe,
         sha3=sha3,
@@ -184,7 +184,7 @@ def constrainWithValidator(
         transaction=Transaction(
             origin=SETUP,
             caller=SETUP,
-            calldata=FrozenBytes.concrete(calldata),
+            calldata=Bytes(calldata),
         ),
         universe=universe,
         sha3=sha3,

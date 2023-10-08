@@ -1,6 +1,6 @@
 #!/usr/bin/env pytest
 
-from bytes import FrozenBytes
+from bytes import Bytes
 from disassembler import abiencode, disassemble
 from environment import Contract, Transaction
 from smt import Uint160, Uint256
@@ -131,7 +131,7 @@ def test_basic_solidity() -> None:
     state = State(
         contract=Contract(program=program),
         transaction=Transaction(
-            calldata=FrozenBytes.concrete(abiencode("owner()")),
+            calldata=Bytes(abiencode("owner()")),
         ),
     )
     state = execute(state)
@@ -142,7 +142,7 @@ def test_basic_solidity() -> None:
     state = State(
         contract=state.contract,  # carries forward storage
         transaction=Transaction(
-            calldata=FrozenBytes.concrete(abiencode("withdraw()")),
+            calldata=Bytes(abiencode("withdraw()")),
         ),
         universe=state.universe,
     )
@@ -156,7 +156,7 @@ def test_basic_solidity() -> None:
         contract=state.contract,
         transaction=Transaction(
             callvalue=Uint256(123456),
-            calldata=FrozenBytes.concrete(abiencode("contribute()")),
+            calldata=Bytes(abiencode("contribute()")),
         ),
         universe=state.universe,
     )
@@ -168,7 +168,7 @@ def test_basic_solidity() -> None:
     state = State(
         contract=state.contract,
         transaction=Transaction(
-            calldata=FrozenBytes.concrete(abiencode("owner()")),
+            calldata=Bytes(abiencode("owner()")),
         ),
         universe=state.universe,
     )
@@ -227,7 +227,7 @@ def test_fallback() -> None:
     state = State(
         contract=Contract(program=program),
         transaction=Transaction(
-            calldata=FrozenBytes.concrete(abiencode("owner()")),
+            calldata=Bytes(abiencode("owner()")),
         ),
     )
 
@@ -243,7 +243,7 @@ def test_fallout() -> None:
     state = State(
         contract=Contract(program=program),
         transaction=Transaction(
-            calldata=FrozenBytes.concrete(abiencode("Fal1out()")),
+            calldata=Bytes(abiencode("Fal1out()")),
         ),
     )
 
@@ -262,7 +262,7 @@ def test_coinflip() -> None:
     state = State(
         contract=Contract(program=program),
         transaction=Transaction(
-            calldata=FrozenBytes.concrete(abiencode("flip(bool)") + (0).to_bytes(32)),
+            calldata=Bytes(abiencode("flip(bool)") + (0).to_bytes(32)),
         ),
     )
     state.contract.storage[Uint256(1)] = Uint256(0xFEDC)
@@ -286,7 +286,7 @@ def test_telephone() -> None:
         contract=Contract(program=program),
         transaction=Transaction(
             caller=Uint160(0xB1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1),
-            calldata=FrozenBytes.concrete(
+            calldata=Bytes(
                 abiencode("changeOwner(address)")
                 + (0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF).to_bytes(32)
             ),
@@ -305,7 +305,7 @@ def test_token() -> None:
     state = State(
         contract=Contract(program=program),
         transaction=Transaction(
-            calldata=FrozenBytes.concrete(
+            calldata=Bytes(
                 abiencode("transfer(address,uint256)")
                 + (0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF).to_bytes(32)
                 + (0xEEEE).to_bytes(32)
@@ -327,7 +327,7 @@ def test_delegation() -> None:
     state = State(
         contract=Contract(program=programs["Delegation"]),
         transaction=Transaction(
-            calldata=FrozenBytes.concrete(abiencode("pwn()")),
+            calldata=Bytes(abiencode("pwn()")),
         ),
     )
     state.universe.add_contract(other)
@@ -359,9 +359,7 @@ def test_vault() -> None:
     state = State(
         contract=Contract(program=program),
         transaction=Transaction(
-            calldata=FrozenBytes.concrete(
-                abiencode("unlock(bytes32)") + (0).to_bytes(32)
-            ),
+            calldata=Bytes(abiencode("unlock(bytes32)") + (0).to_bytes(32)),
         ),
     )
 
@@ -392,9 +390,7 @@ def test_reentrancy() -> None:
         contract=Contract(program=program),
         transaction=Transaction(
             callvalue=Uint256(0x1234),
-            calldata=FrozenBytes.concrete(
-                abiencode("donate(address)") + (1).to_bytes(32)
-            ),
+            calldata=Bytes(abiencode("donate(address)") + (1).to_bytes(32)),
         ),
     )
 
@@ -412,9 +408,7 @@ def test_elevator() -> None:
         contract=Contract(program=programs["Elevator"]),
         transaction=Transaction(
             caller=Uint160(0x76543210),
-            calldata=FrozenBytes.concrete(
-                abiencode("goTo(uint256)") + (1).to_bytes(32)
-            ),
+            calldata=Bytes(abiencode("goTo(uint256)") + (1).to_bytes(32)),
         ),
     )
     state.universe.add_contract(
@@ -433,9 +427,7 @@ def test_privacy() -> None:
     state = State(
         contract=Contract(program=program),
         transaction=Transaction(
-            calldata=FrozenBytes.concrete(
-                abiencode("unlock(bytes16)") + (0x4321 << 128).to_bytes(32)
-            ),
+            calldata=Bytes(abiencode("unlock(bytes16)") + (0x4321 << 128).to_bytes(32)),
         ),
     )
     state.contract.storage.poke(Uint256(5), Uint256(0x4321 << 128))
@@ -458,7 +450,7 @@ def test_gatekeeper_two() -> None:
     state = State(
         contract=Contract(program=program),
         transaction=Transaction(
-            calldata=FrozenBytes.concrete(
+            calldata=Bytes(
                 abiencode("enter(bytes8)")
                 + bytes.fromhex(
                     "65d5bd2c953ab27b000000000000000000000000000000000000000000000000"
@@ -485,9 +477,7 @@ def test_preservation() -> None:
     state = State(
         contract=preservation,
         transaction=Transaction(
-            calldata=FrozenBytes.concrete(
-                abiencode("setFirstTime(uint256)") + (0x5050).to_bytes(32)
-            ),
+            calldata=Bytes(abiencode("setFirstTime(uint256)") + (0x5050).to_bytes(32)),
         ),
     )
     state.universe.add_contract(library)

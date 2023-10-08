@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import abc
 import copy
-from typing import Any, Type, TypeVar
+from typing import Any, Self, TypeVar
 
 from smt import (
     Constraint,
@@ -22,48 +22,40 @@ T = TypeVar("T", bound="Bytes")
 
 BytesWrite = tuple[Uint256, "Uint8 | ByteSlice"]
 
+DESCRIBE_LIMIT = 256
 
-class Bytes(abc.ABC):
-    """A symbolic-length sequence of symbolic bytes."""
 
-    def __init__(self, length: Uint256, array: zArray[Uint256, Uint8]) -> None:
-        """Create a new Bytes. For internal use."""
-        self.length = length
-        self.array = array
-        self.writes = list[BytesWrite]()  # writes to apply *on top of* array
+class Bytes:
+    """An immutable, symbolic-length sequence of symbolic bytes."""
 
-    @classmethod
-    def concrete(cls: Type[T], data: bytes | list[Uint8] = b"") -> T:
-        """Create a new Bytes from a concrete list of bytes."""
-        length = Uint256(len(data))
-        array = zArray[Uint256, Uint8](Uint8(0))
+    def __init__(self, data: bytes | list[Uint8] = b"") -> None:
+        """Create a new Bytes from concrete data."""
+        self.length = Uint256(len(data))
+        self.array = zArray[Uint256, Uint8](Uint8(0))
         for i, b in enumerate(data):
             if isinstance(b, Uint):
-                array[Uint256(i)] = b
+                self.array[Uint256(i)] = b
             else:
                 assert isinstance(b, int)
-                array[Uint256(i)] = Uint8(b)
-        return cls(length, array)
+                self.array[Uint256(i)] = Uint8(b)
 
     @classmethod
-    def symbolic(cls: Type[T], name: str, length: int | None = None) -> T:
+    def symbolic(cls, name: str, length: int | None = None) -> Bytes:
         """Create a new, fully-symbolic Bytes."""
-        return cls(
+        return cls.custom(
             Uint256(length if length is not None else f"{name}.length"),
             zArray[Uint256, Uint8](name),
         )
 
     @classmethod
-    def conditional(cls: Type[T], name: str, constraint: Constraint) -> T:
-        """
-        Create a new, fully-symbolic Bytes.
+    def custom(cls, length: Uint256, array: zArray[Uint256, Uint8]) -> Bytes:
+        """Create a new Bytes with custom properties."""
+        result = cls.__new__(cls)
+        result.length, result.array = length, array
+        return result
 
-        If the constraint is True, the Bytes is empty.
-        """
-        return cls(
-            constraint.ite(Uint256(0), Uint256(f"{name}-LEN")),
-            zArray[Uint256, Uint8](name),
-        )
+    def __deepcopy__(self, memo: Any) -> Self:
+        return self
 
     @abc.abstractmethod
     def __getitem__(self, i: Uint256) -> Uint8:
@@ -72,7 +64,7 @@ class Bytes(abc.ABC):
 
         Reads past the end of the bytestring return zero.
         """
-        ...
+        return (i < self.length).ite(self.array[i], Uint8(0))
 
     def slice(self, offset: Uint256, size: Uint256) -> ByteSlice:
         """Return a symbolic slice of this instance."""
@@ -84,55 +76,36 @@ class Bytes(abc.ABC):
             assert expected_length == v
         return concat_bytes(*(self[Uint256(i)] for i in range(expected_length)))
 
-    def reveal(self) -> bytes | None:
-        """Unwrap this instance to bytes."""
-        if (length := self.length.reveal()) is None:
-            return None
-        data = list[int]()
-        for i in range(length):
-            if (v := self[Uint256(i)].reveal()) is None:
-                return None
-            data.append(v)
-        return bytes(data)
+    def compact(self, solver: Solver, constraint: Constraint) -> Constraint:
+        """Simplify using the given solver's contraints (a no-op)."""
+        return constraint
 
     def describe(self, solver: Solver) -> str:
         """Use a model to evaluate this instance as a hexadecimal string."""
-        length = solver.evaluate(self.length)
-        result = ""
-        for i in range(length):
-            if i > 256:
-                result += "..."
-                break
-            b = solver.evaluate(self[Uint256(i)])
-            result += b.to_bytes(1).hex()
-        return result
+        try:
+            return self.evaluate(solver).hex()
+        except ValueError:
+            return self.slice(Uint256(0), Uint256(DESCRIBE_LIMIT)).describe(solver) + "..."
 
     def evaluate(self, solver: Solver) -> bytes:
         """Use a model to evaluate this instance as bytes."""
         length = solver.evaluate(self.length)
-        if length > 256:
+        if length > DESCRIBE_LIMIT:
             raise ValueError("length too long to evaluate!")
         result = b""
         for i in range(length):
             result += solver.evaluate(self[Uint256(i)]).to_bytes(1)
         return result
 
-    def compact(self, solver: Solver, constraint: Constraint) -> Constraint:
-        """Simplify bytes using the given solver's contraints."""
-        return compact_zarray(solver, constraint, self.array)
+    def reveal(self) -> bytes | None:
+        """Unwrap this instance to bytes."""
+        return _reveal(self)
 
 
-class FrozenBytes(Bytes):
-    """A symbolic-length sequence of symbolic bytes. Immutable."""
+class ByteSlice(Bytes):
+    """Represents an immutable slice of Bytes or Memory."""
 
-    def __getitem__(self, i: Uint256) -> Uint8:
-        return (i < self.length).ite(self.array[i], Uint8(0))
-
-
-class ByteSlice(FrozenBytes):
-    """A symbolic-length slice of symbolic bytes. Immutable."""
-
-    def __init__(self, inner: Bytes, offset: Uint256, size: Uint256) -> None:
+    def __init__(self, inner: Bytes | Memory, offset: Uint256, size: Uint256) -> None:
         """Create a new ByteSlice."""
         self.inner = copy.deepcopy(inner)
         self.offset = offset
@@ -156,10 +129,18 @@ class ByteSlice(FrozenBytes):
         return constraint
 
 
-class MutableBytes(Bytes):
-    """A symbolic-length sequence of symbolic bytes. Mutable."""
+class Memory:
+    """A mutable, symbolic-length sequence of symbolic bytes."""
 
     __hash__ = None  # type: ignore
+
+    def __init__(self, data: bytes = b"") -> None:
+        """Create a new, empty Memory."""
+        self.length = Uint256(0)
+        self.array = zArray[Uint256, Uint8](Uint8(0))
+        self.writes = list[BytesWrite]()  # writes to apply *on top of* array
+        for i, b in enumerate(data):
+            self[Uint256(i)] = Uint8(b)
 
     def __getitem__(self, i: Uint256) -> Uint8:
         item = self.array[i]
@@ -184,8 +165,12 @@ class MutableBytes(Bytes):
         else:
             self.writes.append((i, v))
 
+    def slice(self, offset: Uint256, size: Uint256) -> ByteSlice:
+        """Return a symbolic slice of this instance."""
+        return ByteSlice(self, offset, size)
+
     def graft(self, slice: ByteSlice, at: Uint256) -> None:
-        """Graft another Bytes into this one at the given offset."""
+        """Graft in a Bytes at the given offset."""
         if slice.length.reveal() == 0:
             # Short circuit e.g. in DELEGATECALL when retSize is zero.
             return
@@ -227,4 +212,19 @@ class MutableBytes(Bytes):
             self.writes.pop(0)
 
         assert solver.check()
-        return super().compact(solver, constraint)
+        return compact_zarray(solver, constraint, self.array)
+
+    def reveal(self) -> bytes | None:
+        """Unwrap this instance to bytes."""
+        return _reveal(self)
+
+
+def _reveal(instance: Bytes | Memory) -> bytes | None:
+    if (length := instance.length.reveal()) is None:
+        return None
+    data = list[int]()
+    for i in range(length):
+        if (v := instance[Uint256(i)].reveal()) is None:
+            return None
+        data.append(v)
+    return bytes(data)

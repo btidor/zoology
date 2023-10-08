@@ -7,7 +7,7 @@ from collections import OrderedDict, defaultdict
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
-from bytes import Bytes, FrozenBytes, MutableBytes
+from bytes import Bytes, Memory
 from environment import Block, Contract, Transaction, Universe
 from sha3 import SHA3
 from smt import (
@@ -35,7 +35,7 @@ class State:
 
     pc: int | Termination = 0
     stack: list[Uint256] = field(default_factory=list)
-    memory: MutableBytes = field(default_factory=MutableBytes.concrete)
+    memory: Memory = field(default_factory=Memory)
 
     # Tracks the number of times we've spawned a subcontext, so that symbolic
     # variables can be given a unique name.
@@ -43,7 +43,7 @@ class State:
 
     # The return data of the most recent subcontext, for the RETURNDATASIZE and
     # RETURNDATACOPY instructions.
-    latest_return: FrozenBytes = FrozenBytes.concrete()
+    latest_return: Bytes = Bytes()
 
     logs: list[Log] = field(default_factory=list)
 
@@ -213,14 +213,14 @@ class Termination:
     """The result of running a contract to completion."""
 
     success: bool
-    returndata: FrozenBytes
+    returndata: Bytes
 
 
 @dataclass(frozen=True)
 class Log:
     """A log entry emitted by the LOG* instruction."""
 
-    data: FrozenBytes
+    data: Bytes
     topics: tuple[Uint256, ...]
 
 
@@ -229,7 +229,7 @@ class DelegateCall:
     """Information about a symbolic DELEGATECALL instruction."""
 
     ok: Constraint
-    returndata: FrozenBytes
+    returndata: Bytes
     previous_storage: Array[Uint256, Uint256]
     next_storage: Array[Uint256, Uint256]
 

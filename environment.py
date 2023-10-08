@@ -6,7 +6,7 @@ from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Any
 
-from bytes import FrozenBytes
+from bytes import Bytes
 from disassembler import Program, disassemble
 from sha3 import concrete_hash
 from smt import Array, Int, Solver, Uint, Uint8, Uint160, Uint256
@@ -96,7 +96,7 @@ class Transaction:
     origin: Uint160 = Uint160(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0)
     caller: Uint160 = Uint160(0xCACACACACACACACACACACACACACACACACACACACA)
     callvalue: Uint256 = Uint256(0)
-    calldata: FrozenBytes = FrozenBytes.concrete()
+    calldata: Bytes = Bytes()
     gasprice: Uint256 = Uint256(0x12)
 
     @classmethod
@@ -108,7 +108,7 @@ class Transaction:
             origin=Uint160(f"ORIGIN{suffix}") if origin is None else origin,
             caller=Uint160(f"CALLER{suffix}") if caller is None else caller,
             callvalue=Uint256(f"CALLVALUE{suffix}"),
-            calldata=FrozenBytes.symbolic(f"CALLDATA{suffix}"),
+            calldata=Bytes.symbolic(f"CALLDATA{suffix}"),
             gasprice=Uint256(f"GASPRICE{suffix}"),
         )
 

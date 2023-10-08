@@ -8,7 +8,7 @@ from typing import Any, Iterable
 
 from Crypto.Hash import keccak
 
-from bytes import FrozenBytes
+from bytes import Bytes
 from opcodes import REFERENCE, UNIMPLEMENTED
 from smt import Uint256
 
@@ -17,7 +17,7 @@ from smt import Uint256
 class Program:
     """The disassembled code of an EVM contract."""
 
-    code: FrozenBytes
+    code: Bytes
     instructions: tuple[Instruction, ...]
 
     # Maps byte offsets in the contract, as used by JUMP/JUMPI, to an index into
@@ -92,7 +92,7 @@ def disassemble(code: bytes) -> Program:
             trailer = len(instructions)
 
     return Program(
-        code=FrozenBytes.concrete(code),
+        code=Bytes(code),
         instructions=tuple(instructions),
         jumps=jumps,
     )
