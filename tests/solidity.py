@@ -6,6 +6,7 @@ import subprocess
 from enum import Enum
 from pathlib import Path
 
+from bytes import Bytes
 from disassembler import Program, disassemble
 
 
@@ -46,11 +47,11 @@ def load_binary(path: str) -> Program:
     """Load a file containing binary EVM contract code."""
     assert path.endswith(".bin")
     with open(_ROOT / path, "rb") as f:
-        code = f.read()
+        code = Bytes(f.read())
     return disassemble(code)
 
 
-def compile_solidity(source: str) -> dict[str, bytes]:
+def compile_solidity(source: str) -> dict[str, Bytes]:
     """Return the binary contract code for each contract in the source file."""
     version = _detect_version(source)
 
@@ -61,12 +62,12 @@ def compile_solidity(source: str) -> dict[str, bytes]:
     ).splitlines()
 
     current = "<unknown>"
-    matches = dict[str, bytes]()
+    matches = dict[str, Bytes]()
     for i in range(len(output)):
         if output[i].startswith(b"======="):
             current = output[i].split(b" ")[1][8:].decode()
         if output[i] == b"Binary of the runtime part:":
-            matches[current] = bytes.fromhex(output[i + 1].decode())
+            matches[current] = Bytes.fromhex(output[i + 1].decode())
     return matches
 
 

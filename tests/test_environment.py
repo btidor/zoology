@@ -2,6 +2,7 @@
 
 import copy
 
+from bytes import Bytes
 from disassembler import disassemble
 from sha3 import SHA3
 from smt import Solver, Uint160, Uint256
@@ -23,7 +24,7 @@ def test_transaction_evaluate() -> None:
 
 
 def test_transfer() -> None:
-    start = symbolic_start(disassemble(b""), SHA3(), "")
+    start = symbolic_start(disassemble(Bytes()), SHA3(), "")
     end = copy.deepcopy(start)
     src, dst = Uint160(0x1234), Uint160(0x5678)
 
@@ -40,7 +41,7 @@ def test_transfer() -> None:
 
 
 def test_impossible_transfer() -> None:
-    start = symbolic_start(disassemble(b""), SHA3(), "")
+    start = symbolic_start(disassemble(Bytes()), SHA3(), "")
     end = copy.deepcopy(start)
     src, dst = Uint160(0x1234), Uint160(0x5678)
 

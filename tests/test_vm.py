@@ -25,7 +25,7 @@ def execute(state: State) -> State:
 
 
 def test_basic() -> None:
-    code = bytes.fromhex("60AA605601600957005B60006000FD")
+    code = Bytes.fromhex("60AA605601600957005B60006000FD")
     program = disassemble(code)
     state = State(
         contract=Contract(program=program),
@@ -180,7 +180,7 @@ def test_basic_solidity() -> None:
 
 
 def test_basic_printable() -> None:
-    code = bytes.fromhex("60AA605601600957005B60006000FD")
+    code = Bytes.fromhex("60AA605601600957005B60006000FD")
     program = disassemble(code)
     state = State(
         contract=Contract(program=program),

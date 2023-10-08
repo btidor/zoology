@@ -82,7 +82,7 @@ class Contract:
     """A deployed contract account with code and symbolic storage."""
 
     address: Uint160 = Uint160(0xADADADADADADADADADADADADADADADADADADADAD)
-    program: Program = disassemble(b"")
+    program: Program = disassemble(Bytes())
     storage: Array[Uint256, Uint256] = field(
         default_factory=lambda: Array[Uint256, Uint256](Uint256(0)),
     )

@@ -5,6 +5,7 @@ from typing import Any
 
 import pytest
 
+from bytes import Bytes
 from disassembler import Program, abiencode, disassemble
 from sha3 import SHA3
 from smt import Solver, Uint160, Uint256
@@ -62,7 +63,7 @@ def check_transitions(start: Program | State, branches: tuple[Any, ...]) -> None
 
 
 def test_basic() -> None:
-    code = bytes.fromhex("60FF60EE5560AA60AA03600E57005B60006000FD")
+    code = Bytes.fromhex("60FF60EE5560AA60AA03600E57005B60006000FD")
     program = disassemble(code)
 
     start = symbolic_start(program, SHA3(), "")

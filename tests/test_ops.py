@@ -332,7 +332,7 @@ def test_CALLDATACOPY() -> None:
 def test_CODESIZE() -> None:
     s = State(
         contract=Contract(
-            program=disassemble(bytes.fromhex("66000000000000005B")),
+            program=disassemble(Bytes.fromhex("66000000000000005B")),
         )
     )
     assert CODESIZE(s).reveal() == 9
@@ -341,7 +341,7 @@ def test_CODESIZE() -> None:
 def test_CODECOPY() -> None:
     s = State(
         contract=Contract(
-            program=disassemble(bytes.fromhex("66000000000000005B")),
+            program=disassemble(Bytes.fromhex("66000000000000005B")),
         )
     )
 
@@ -364,7 +364,7 @@ def test_EXTCODESIZE() -> None:
     address = 0xABCDABCDABCDABCDABCDABCDABCDABCDABCDABCD
     contract = Contract(
         address=Uint160(address),
-        program=disassemble(bytes.fromhex("66000000000000005B")),
+        program=disassemble(Bytes.fromhex("66000000000000005B")),
     )
     s = State()
     s.universe.add_contract(contract)
@@ -376,7 +376,7 @@ def test_EXTCODECOPY() -> None:
     address = 0xABCDABCDABCDABCDABCDABCDABCDABCDABCDABCD
     contract = Contract(
         address=Uint160(address),
-        program=disassemble(bytes.fromhex("66000000000000005B")),
+        program=disassemble(Bytes.fromhex("66000000000000005B")),
     )
     s = State()
     s.universe.add_contract(contract)
@@ -415,7 +415,7 @@ def test_EXTCODEHASH() -> None:
     address = 0xABCDABCDABCDABCDABCDABCDABCDABCDABCDABCD
     contract = Contract(
         address=Uint160(address),
-        program=disassemble(bytes.fromhex("66000000000000005B")),
+        program=disassemble(Bytes.fromhex("66000000000000005B")),
     )
     s = State()
     s.universe.add_contract(contract)
@@ -538,7 +538,7 @@ def test_SSTORE() -> None:
 
 def test_JUMP() -> None:
     contract = Contract(
-        program=disassemble(bytes.fromhex("66000000000000005B")),
+        program=disassemble(Bytes.fromhex("66000000000000005B")),
     )
     s = State(contract=contract)
     JUMP(s, Uint256(8))

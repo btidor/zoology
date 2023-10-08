@@ -2,11 +2,12 @@
 
 import pytest
 
+from bytes import Bytes
 from disassembler import disassemble, printable_disassembly
 
 
 def test_disassemble_basic() -> None:
-    code = bytes.fromhex("60AA605601600957005B60006000FD")
+    code = Bytes.fromhex("60AA605601600957005B60006000FD")
     p = disassemble(code)
 
     assert len(p.instructions) == 10
@@ -27,7 +28,7 @@ def test_disassemble_basic() -> None:
 
 
 def test_disassemble_suffix() -> None:
-    code = bytes.fromhex("63010203048F975F")
+    code = Bytes.fromhex("63010203048F975F")
     p = disassemble(code)
 
     assert len(p.instructions) == 4
@@ -54,7 +55,7 @@ def test_disassemble_suffix() -> None:
 
 
 def test_disassemble_trailer() -> None:
-    code = bytes.fromhex("60FEFE97FE0F")
+    code = Bytes.fromhex("60FEFE97FE0F")
     p = disassemble(code)
 
     assert len(p.instructions) == 4
@@ -75,11 +76,11 @@ def test_disassemble_trailer() -> None:
 
 def test_disassemble_invalid() -> None:
     with pytest.raises(ValueError):
-        disassemble(b"\x0F")
+        disassemble(Bytes(b"\x0F"))
 
 
 def test_output_basic() -> None:
-    code = bytes.fromhex("60AA605601600957005B60006000FD")
+    code = Bytes.fromhex("60AA605601600957005B60006000FD")
     raw = """
         0000  PUSH1\t0xaa
         0002  PUSH1\t0x56

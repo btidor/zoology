@@ -8,6 +8,7 @@ from typing import TypeAlias
 
 import requests
 
+from bytes import Bytes
 from disassembler import disassemble
 from environment import Contract, Universe
 from smt import Uint160, Uint256
@@ -35,7 +36,7 @@ def apply_snapshot(universe: Universe) -> None:
         snapshot: Snapshot = json.load(f)
     for addr, saved in snapshot.items():
         address = Uint160(int(addr, 16))
-        program = disassemble(bytes.fromhex(saved["code"]))
+        program = disassemble(Bytes.fromhex(saved["code"]))
         contract = Contract(address, program)
 
         for k, v in saved.items():
@@ -55,8 +56,8 @@ def apply_snapshot(universe: Universe) -> None:
 def get_code(address: Uint160) -> Contract:
     """Load the Contract at a given address."""
     assert (a := address.reveal()) is not None
-    code = _api_request("eth_getCode", address=a.to_bytes(20).hex(), tag=TAG)
-    program = disassemble(code)
+    data = _api_request("eth_getCode", address=a.to_bytes(20).hex(), tag=TAG)
+    program = disassemble(Bytes(data))
     return Contract(address, program)
 
 

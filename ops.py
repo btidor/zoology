@@ -479,9 +479,7 @@ def LOG(ins: Instruction, s: State, offset: Uint256, size: Uint256) -> None:
 
 def CREATE(s: State, value: Uint256, offset: Uint256, size: Uint256) -> ControlFlow:
     """F0 - Create a new account with associated code."""
-    initcode = s.require(
-        s.memory.slice(offset, size), "CREATE requires concrete program data"
-    )
+    initcode = s.compact_bytes(s.memory.slice(offset, size))
     sender_address = s.contract.address.reveal()
     assert sender_address is not None, "CREATE requires concrete sender address"
 
@@ -498,7 +496,7 @@ def CREATE(s: State, value: Uint256, offset: Uint256, size: Uint256) -> ControlF
     return _CREATE(s, value, initcode, seed)
 
 
-def _CREATE(s: State, value: Uint256, initcode: bytes, seed: Bytes) -> ControlFlow:
+def _CREATE(s: State, value: Uint256, initcode: Bytes, seed: Bytes) -> ControlFlow:
     address = s.sha3[seed].into(Uint160)
     if address.reveal() in s.universe.contracts:
         assert (a := address.reveal()) is not None
@@ -527,14 +525,9 @@ def _CREATE(s: State, value: Uint256, initcode: bytes, seed: Bytes) -> ControlFl
         if substate.pc.success is False:
             state.stack.append(Uint256(0))
         else:
-            code = substate.require(
-                substate.pc.returndata, "constructor must produce concrete code"
-            )
-            program = disassemble(code)
-
+            program = disassemble(substate.pc.returndata)
             contract = Contract(address, program, substate.contract.storage)
             state.universe.add_contract(contract)
-
             state.stack.append(address.into(Uint256))
         return state
 
@@ -711,16 +704,16 @@ def CREATE2(
     s: State, value: Uint256, offset: Uint256, size: Uint256, _salt: Uint256
 ) -> ControlFlow:
     """F5 - Create a new account with associated code at a predictable address."""
-    initcode = s.require(
-        s.memory.slice(offset, size), "CREATE2 requires concrete program data"
-    )
+    initcode = s.compact_bytes(s.memory.slice(offset, size))
+    assert initcode.reveal() is not None, "CREATE2 requires concrete program data"
+    # ...because the code is hashed and used in the address, which must be concrete
     salt = _salt.reveal()
     assert salt is not None, "CREATE2 requires concrete salt"
     sender_address = s.contract.address.reveal()
     assert sender_address is not None, "CREATE2 requires concrete sender address"
 
     # https://ethereum.stackexchange.com/a/761
-    assert (h := s.sha3[Bytes(initcode)].reveal()) is not None
+    assert (h := s.sha3[initcode].reveal()) is not None
     seed = Bytes(
         b"\xff" + sender_address.to_bytes(20) + salt.to_bytes(32) + h.to_bytes(32)
     )
