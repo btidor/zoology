@@ -60,17 +60,28 @@ class Instruction:
         return msg
 
 
+class DisassemblyError(Exception):
+    """Disassembly failed because the code was malformed."""
+
+    pass
+
+
 def disassemble(code: Bytes) -> Program:
     """Parse and validate an EVM contract's code."""
     instructions = list[Instruction]()
     jumps = dict[int, int]()
     offset = 0
     trailer = None
-    assert (data := code.reveal()) is not None
+    data = code.reveal() or code
+    n = code.length.reveal()
+    assert n is not None, "disassemble requires concrete-length code"
 
-    while offset < len(data):
-        instruction = _decode_instruction(data, offset, trailer is None)
-        if instruction is None:
+    while offset < n:
+        try:
+            instruction = _decode_instruction(data, offset)
+        except DisassemblyError:
+            if trailer is None:
+                raise
             instructions = instructions[:trailer]
             break
 
@@ -108,7 +119,7 @@ def printable_disassembly(code: Bytes) -> Iterable[str]:
     assert (data := code.reveal()) is not None
     offset = 0
     while offset < len(data):
-        ins = _decode_instruction(data, offset, True)
+        ins = _decode_instruction(data, offset)
         assert ins is not None
         yield str(ins)
 
@@ -118,28 +129,37 @@ def printable_disassembly(code: Bytes) -> Iterable[str]:
             break
 
 
-def _decode_instruction(code: bytes, offset: int, strict: bool) -> Instruction | None:
+def _decode_instruction(code: bytes | Bytes, offset: int) -> Instruction:
     """Decode a single instruction from the given offset within `code`."""
-    opcode = code[offset]
+    if isinstance(code, bytes):
+        opcode = code[offset]
+    else:
+        opcode = code[Uint256(offset)].reveal()
+        if opcode is None:
+            raise DisassemblyError(f"unexpected symbolic opcode at offset {offset}")
+
     opref = REFERENCE.get(opcode)
+    if opref is None:
+        raise DisassemblyError(f"unknown opcode: 0x{opcode:02x}")
     size = 1
     suffix = None
     operand = None
-
-    if opref is None:
-        if strict:
-            raise ValueError(f"unknown opcode: 0x{opcode:02x}")
-        return None
 
     name = opref.name
     if name == "PUSH" or name == "PUSH0":
         name = "PUSH"
         # PUSH is the only opcode that takes an operand
         suffix = opref.code - 0x5F
-        buf = 0
-        for i in range(suffix):
-            buf = (buf << 8) | code[offset + i + 1]
-        operand = Uint256(buf)
+        if isinstance(code, bytes):
+            buf = 0
+            for i in range(suffix):
+                buf = (buf << 8) | code[offset + i + 1]
+            operand = Uint256(buf)
+        else:
+            operand = Uint256(0)
+            for i in range(suffix):
+                byte = code[Uint256(offset + i + 1)].into(Uint256)
+                operand = (operand << Uint256(8)) | byte
         size = suffix + 1
     elif name == "DUP":
         suffix = opref.code - 0x7F

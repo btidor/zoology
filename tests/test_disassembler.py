@@ -3,7 +3,8 @@
 import pytest
 
 from bytes import Bytes
-from disassembler import disassemble, printable_disassembly
+from disassembler import DisassemblyError, disassemble, printable_disassembly
+from smt import Array, Uint8, Uint256
 
 
 def test_disassemble_basic() -> None:
@@ -75,8 +76,29 @@ def test_disassemble_trailer() -> None:
 
 
 def test_disassemble_invalid() -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(DisassemblyError):
         disassemble(Bytes(b"\x0F"))
+
+
+def test_disassemble_symbolic() -> None:
+    with pytest.raises(DisassemblyError):
+        disassemble(Bytes.symbolic("TESTDISCODE", 10))
+
+    array = Array[Uint256, Uint8](Uint8(0))
+    array[Uint256(0)] = Uint8(0x60)
+    array[Uint256(1)] = Uint8(0xFE)
+    array[Uint256(2)] = Uint8(0xFE)
+    array[Uint256(3)] = Uint8("TESTDISBYTE")
+    code = Bytes.custom(Uint256(4), array)
+    p = disassemble(code)
+
+    assert len(p.instructions) == 2
+
+    assert p.instructions[0].name == "PUSH"
+    assert p.instructions[0].operand is not None
+    assert p.instructions[0].operand.reveal() == 0xFE
+
+    assert p.instructions[1].name == "INVALID"
 
 
 def test_output_basic() -> None:
