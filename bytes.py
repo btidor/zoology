@@ -24,20 +24,31 @@ BytesWrite = tuple[Uint256, "Uint8 | ByteSlice"]
 
 DESCRIBE_LIMIT = 256
 
+BYTES = [Uint8(i) for i in range(256)]
+INTEGERS = list[Uint256]()
+
 
 class Bytes:
     """An immutable, symbolic-length sequence of symbolic bytes."""
 
     def __init__(self, data: bytes | list[Uint8] = b"") -> None:
         """Create a new Bytes from concrete data."""
+        self.data = data if isinstance(data, bytes) else None
         self.length = Uint256(len(data))
         self.array = zArray[Uint256, Uint8](Uint8(0))
-        for i, b in enumerate(data):
-            if isinstance(b, Uint):
+        if isinstance(data, bytes):
+            for i in range(len(INTEGERS), len(data)):
+                INTEGERS.append(Uint256(i))
+            for i, b in enumerate(data):
+                self.array[INTEGERS[i]] = BYTES[b]
+        else:
+            for i, b in enumerate(data):
                 self.array[Uint256(i)] = b
-            else:
-                assert isinstance(b, int)
-                self.array[Uint256(i)] = Uint8(b)
+
+    @classmethod
+    def fromhex(cls, str: str) -> Bytes:
+        """Create a new Bytes from a concrete hexadecimal string."""
+        return cls(bytes.fromhex(str))
 
     @classmethod
     def symbolic(cls, name: str, length: int | None = None) -> Bytes:
@@ -51,7 +62,7 @@ class Bytes:
     def custom(cls, length: Uint256, array: zArray[Uint256, Uint8]) -> Bytes:
         """Create a new Bytes with custom properties."""
         result = cls.__new__(cls)
-        result.length, result.array = length, array
+        result.data, result.length, result.array = None, length, array
         return result
 
     def __deepcopy__(self, memo: Any) -> Self:
@@ -85,7 +96,9 @@ class Bytes:
         try:
             return self.evaluate(solver).hex()
         except ValueError:
-            return self.slice(Uint256(0), Uint256(DESCRIBE_LIMIT)).describe(solver) + "..."
+            return (
+                self.slice(Uint256(0), Uint256(DESCRIBE_LIMIT)).describe(solver) + "..."
+            )
 
     def evaluate(self, solver: Solver) -> bytes:
         """Use a model to evaluate this instance as bytes."""
@@ -99,6 +112,8 @@ class Bytes:
 
     def reveal(self) -> bytes | None:
         """Unwrap this instance to bytes."""
+        if self.data is not None:
+            return self.data
         return _reveal(self)
 
 
@@ -110,6 +125,7 @@ class ByteSlice(Bytes):
         self.inner = copy.deepcopy(inner)
         self.offset = offset
         self.length = size
+        self.data = None
 
     def __getitem__(self, i: Uint256) -> Uint8:
         item = self.inner[self.offset + i]
