@@ -74,7 +74,7 @@ def compile_solidity(source: str) -> dict[str, Bytes]:
 def _detect_version(source: str) -> Solidity:
     match = re.search("^\\s*pragma solidity (.*);$", source, re.M)
     if match is None:
-        raise ValueError(f"could not extract compiler version")
+        raise ValueError("could not extract compiler version")
 
     version = match.group(1)
     if version.startswith("^0.8."):

@@ -135,14 +135,15 @@ def evaluate(solver: Solver, s: Array[K, V]) -> dict[int, int]:
 def evaluate(solver: Solver, s: Constraint | Array[K, V]) -> bool | dict[int, int]:
     """Backdoor method for evaluating non-bitvectors."""
     if not solver._current or _bitwuzla.last_check is not solver:  # type: ignore
-        raise ValueError(f"solver is not ready for model evaluation.")
+        raise ValueError("solver is not ready for model evaluation.")
 
     match s:
         case Constraint():
             return s._evaluate()  # type: ignore
         case Array():
             return dict(
-                (int(k, 2), int(v, 2)) for k, v in BZLA.get_value_str(s._term).items()  # type: ignore
+                (int(k, 2), int(v, 2))
+                for k, v in BZLA.get_value_str(s._term).items()  # type: ignore
             )
 
 

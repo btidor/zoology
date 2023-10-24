@@ -1,4 +1,5 @@
 #!/usr/bin/env pytest
+# ruff: noqa: F403 F405
 
 import pytest
 
@@ -608,9 +609,7 @@ def test_CREATE() -> None:
         address=Uint160(0x6AC7EA33F8831EA9DCC53393AAA88B25A785DBF0),
     )
     s = State(
-        memory=Memory(
-            b"\xFE\x63\xFF\xFF\xFF\xFF\x60\x00\x52\x60\x04\x60\x1C\xF3"
-        ),
+        memory=Memory(b"\xFE\x63\xFF\xFF\xFF\xFF\x60\x00\x52\x60\x04\x60\x1C\xF3"),
         contract=contract,
     )
     flow = CREATE(s, Uint256(999), Uint256(2), Uint256(100))

@@ -3,6 +3,7 @@
         "source.fixAll": true,
         "source.organizeImports": true
     },
+    "editor.defaultFormatter": "charliermarsh.ruff",
     "editor.formatOnSave": true,
     "files.exclude": {
         "\"stdout\"": true,
@@ -11,24 +12,13 @@
         "**/*.py[cod]": true,
         "**/.pytest_cache": true
     },
-    "isort.args": [
-        "--profile",
-        "black"
-    ],
+    "python.analysis.autoImportCompletions": true,
     "python.analysis.diagnosticMode": "workspace",
-    "python.analysis.fixAll": [
-        "source.unusedImports"
-    ],
     "python.analysis.typeCheckingMode": "strict",
-    "python.formatting.provider": "black",
-    "python.linting.pydocstyleArgs": [
-        "--match=^((?!test).)*\\.py$",
-        "--add-ignore=D105"
-    ],
-    "python.linting.pydocstyleEnabled": true,
     "python.testing.pytestArgs": [
         "."
     ],
     "python.testing.pytestEnabled": true,
     "python.testing.unittestEnabled": false,
+    "ruff.enableExperimentalFormatter": true,
 }

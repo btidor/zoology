@@ -41,7 +41,7 @@ class Block:
             timestamp=Uint256(f"TIMESTAMP{suffix}"),
             prevrandao=Uint256(f"PREVRANDAO{suffix}"),
             gaslimit=Uint256(f"GASLIMIT{suffix}"),
-            chainid=Uint256(f"CHAINID"),
+            chainid=Uint256("CHAINID"),
             basefee=Uint256(f"BASEFEE{suffix}"),
             hashes=Array[Uint8, Uint256](f"BLOCKHASH{suffix}"),
         )
@@ -127,7 +127,7 @@ class Transaction:
 
         s: OrderedDict[str, str] = OrderedDict()
         for k in list(r.keys()):
-            match (v := r[k]):
+            match v := r[k]:
                 case None:
                     pass
                 case Uint() | Int():

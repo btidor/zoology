@@ -1,10 +1,12 @@
+# ruff: noqa: E402
+
 # Provide smart debug info for assertions that appear in these non-test modules.
 # Must appear *before* the module is imported. See:
 # https://docs.pytest.org/en/latest/how-to/assert.html#assert-introspection
 
 import pytest
 
-pytest.register_assert_rewrite("helpers")
+pytest.register_assert_rewrite("helpers", "solidity")
 
 ### ### ### ### ###
 
@@ -75,7 +77,7 @@ def pyinstrument_combined(pytestconfig: pytest.Config) -> Iterator[None]:
     yield  # run test suite
 
     if combined is not None:
-        filename = PROFILE_ROOT / f"combined.json"
+        filename = PROFILE_ROOT / "combined.json"
         renderer = SpeedscopeRenderer(**RENDER_OPTS)
         with open(filename, "w", encoding="utf-8") as f:
             f.write(renderer.render(combined))
@@ -85,9 +87,8 @@ def pyinstrument_combined(pytestconfig: pytest.Config) -> Iterator[None]:
 
 import gc
 
-from zbitvector._bitwuzla import BZLA, CACHE
+from zbitvector._bitwuzla import BZLA, CACHE, Constraint, Int, Option, Symbolic, Uint
 from zbitvector._bitwuzla import Array as zArray
-from zbitvector._bitwuzla import Constraint, Int, Option, Symbolic, Uint
 
 from smt import Array
 

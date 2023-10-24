@@ -77,7 +77,7 @@ def test_basic() -> None:
 
     end = next(universal)
     assert isinstance(end.pc, Termination)
-    assert end.pc.success == True
+    assert end.pc.success is True
 
     # These extra constraints makes the test deterministic
     end.constraint &= start.universe.balances[
@@ -122,7 +122,7 @@ def test_sudoku() -> None:
 
     end = next(universal)
     assert isinstance(end.pc, Termination)
-    assert end.pc.success == True
+    assert end.pc.success is True
 
     solver = Solver()
     end.constrain(solver)

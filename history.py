@@ -99,7 +99,7 @@ class History:
             caller = solver.evaluate(state.transaction.caller)
             player = solver.evaluate(self.player)
             if caller != player:
-                suffixes.append(f"via proxy")
+                suffixes.append("via proxy")
             if len(suffixes) > 0:
                 line += f"\t({', '.join(suffixes)})"
 
