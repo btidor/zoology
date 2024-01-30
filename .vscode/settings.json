@@ -1,12 +1,11 @@
 {
     "editor.codeActionsOnSave": {
-        "source.fixAll": true,
-        "source.organizeImports": true
+        "source.fixAll": "explicit",
+        "source.organizeImports": "explicit"
     },
     "editor.defaultFormatter": "charliermarsh.ruff",
     "editor.formatOnSave": true,
     "files.exclude": {
-        "\"stdout\"": true,
         "**/.profiles": true,
         "**/__pycache__": true,
         "**/*.py[cod]": true,
@@ -20,5 +19,4 @@
     ],
     "python.testing.pytestEnabled": true,
     "python.testing.unittestEnabled": false,
-    "ruff.enableExperimentalFormatter": true,
 }

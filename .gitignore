@@ -8,6 +8,5 @@ __pycache__/
 # Node.js
 node_modules/
 
-# CVC5
-"stdout"
+# zoology
 .key

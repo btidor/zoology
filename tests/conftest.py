@@ -108,12 +108,17 @@ def reset_bitwuzla() -> Iterator[None]:
 
     bsort: list[tuple[type[Symbolic], int]] = []
     asort: list[tuple[type[zArray[Any, Any]], int, int]] = []
-    for cls in Uint.__subclasses__() + Int.__subclasses__():
+
+    for cls in cast(
+        "list[type[Symbolic]]", Uint.__subclasses__() + Int.__subclasses__()
+    ):
         bsort.append((cls, cls._sort.bv_get_size()))
-    for cls in zArray.__subclasses__() + Array.__subclasses__():
+
+    for cls in cast(
+        "list[type[zArray[Any, Any]]]", zArray.__subclasses__() + Array.__subclasses__()
+    ):
         if not hasattr(cls, "_sort"):
             continue
-        cls = cast(type["zArray[Any, Any]"], cls)
         k: int = cls._sort.array_get_index().bv_get_size()
         v: int = cls._sort.array_get_element().bv_get_size()
         asort.append((cls, k, v))
