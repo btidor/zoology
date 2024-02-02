@@ -534,6 +534,21 @@ def _CREATE(s: State, value: Uint256, initcode: Bytes, seed: Bytes) -> ControlFl
     return Descend.new(s, contract, transaction, callback)
 
 
+def _callback(
+    state: State, substate: State, gas: Uint256, retSize: Uint256, retOffset: Uint256
+) -> State:
+    assert isinstance(substate.pc, Termination)
+    gasok = substate.gas_hogged <= gas
+    state.latest_return = state.latest_return.slice(
+        Uint256(0), gasok.ite(state.latest_return.length, Uint256(0))
+    )
+    state.memory.graft(state.latest_return.slice(Uint256(0), retSize), retOffset)
+    state.stack.append(
+        (gasok & Constraint(substate.pc.success)).ite(Uint256(1), Uint256(0))
+    )
+    return state
+
+
 def CALL(
     s: State,
     gas: Uint256,
@@ -574,15 +589,15 @@ def CALL(
             raise ValueError(f"CALL to unknown contract: {hex(address)}")
 
         def callback(state: State, substate: State) -> State:
-            assert isinstance(substate.pc, Termination)
-            state.memory.graft(
-                substate.pc.returndata.slice(Uint256(0), retSize), retOffset
-            )
-            state.stack.append(Uint256(1) if substate.pc.success else Uint256(0))
-            return state
+            return _callback(state, substate, gas, retSize, retOffset)
 
         return Descend.new(s, contract, transaction, callback)
     else:
+        hog = (_address.into(Uint160) > Uint160(0)) & (
+            _address.into(Uint160) == s.universe.gashog
+        )
+        s.gas_hogged += hog.ite(gas, Uint256(0))
+
         # Call to a symbolic address: return a fully-symbolic response.
         s.latest_return = Bytes.custom(
             (s.universe.codesizes[_address.into(Uint160)] == Uint256(0)).ite(
@@ -596,6 +611,9 @@ def CALL(
             (s.universe.codesizes[_address.into(Uint160)] == Uint256(0))
             # Create a variable for if the call succeeded.
             | Constraint(f"RETURNOK{s.call_count}{s.suffix}")
+            # Okay, the thing is: calls (here and elsewhere to non-EOAs) can not
+            # only revert themselves, they can cause *this* contract to revert
+            # by using up its gas!
         )
         s.transfer(s.contract.address, _address.into(Uint160), value)
         s.call_count += 1
@@ -633,9 +651,7 @@ def CALLCODE(
     def callback(state: State, substate: State) -> State:
         assert isinstance(substate.pc, Termination)
         state.contract.storage = substate.contract.storage
-        state.memory.graft(substate.pc.returndata.slice(Uint256(0), retSize), retOffset)
-        state.stack.append(Uint256(1) if substate.pc.success else Uint256(0))
-        return state
+        return _callback(state, substate, gas, retSize, retOffset)
 
     return Descend.new(s, contract, transaction, callback)
 
@@ -672,6 +688,7 @@ def DELEGATECALL(
             s.contract.storage,
             Array[Uint256, Uint256](f"DCSTORAGE{n}{s.suffix}"),
         )
+        # TODO: can we factor out this magic address?
         s.narrower &= _address == Uint256(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0)
         s.contract.storage = copy.deepcopy(dc.next_storage)
         s.latest_return = dc.returndata
@@ -697,9 +714,7 @@ def DELEGATECALL(
     def callback(state: State, substate: State) -> State:
         assert isinstance(substate.pc, Termination)
         state.contract.storage = substate.contract.storage
-        state.memory.graft(substate.pc.returndata.slice(Uint256(0), retSize), retOffset)
-        state.stack.append(Uint256(1) if substate.pc.success else Uint256(0))
-        return state
+        return _callback(state, substate, gas, retSize, retOffset)
 
     return Descend.new(s, contract, transaction, callback)
 

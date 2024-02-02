@@ -17,10 +17,10 @@ def check_level(i: int, fixture: list[str]) -> None:
     instance, beginning = createInstance(universe, factory)
     validator = validateInstance(factory, instance, beginning)
     solver = constrainWithValidator(factory, instance, beginning, validator)
-    assert not solver.check()
+    assert not solver.check(), "validation passed initially"
 
-    result = search(factory, instance, beginning, validator, 10)
-    assert result is not None
+    result = search(factory, instance, beginning, validator, depth=10)
+    assert result is not None, "search failed"
 
     solution, solver = result
     for actual, expected in zip(solution.describe(solver), fixture, strict=True):
@@ -185,9 +185,12 @@ def test_alien_codex() -> None:
     check_level(19, fixture)
 
 
-# def test_denial() -> None:
-#     # CALL to unknown contract: 0xa9e
-#     check_level(20, [])
+def test_denial() -> None:
+    fixture = [
+        "PxAF\t4e1c5914 000000000000000000000000c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0",
+        "\tProxy CONSUME ALL GAS",
+    ]
+    check_level(20, fixture)
 
 
 def test_shop() -> None:

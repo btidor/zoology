@@ -38,6 +38,7 @@ def starting_universe() -> Universe:
     universe.codesizes.poke(SETUP, Uint256(0))
     universe.codesizes.poke(PLAYER, Uint256(0))
     universe.codesizes.poke(Uint160(0xA9E), Uint256(0))  # burn address in lvl 20
+    universe.gashog = Constraint("GASHOG").ite(PROXY, Uint160(0))
     apply_snapshot(universe)
     return universe
 

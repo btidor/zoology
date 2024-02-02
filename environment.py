@@ -156,6 +156,15 @@ class Universe:
         default_factory=lambda: Array[Uint160, Uint256](Uint256(0))
     )
 
+    # HACK: when a CALL to a player-controlled occurs, it can (a) RETURN, (b)
+    # REVERT, or (c) consume all available gas. Depending on how gas limits are
+    # set, case (c) may cause the *calling* contract to revert.
+    #
+    # To model this case, we track the address of a "hog" contract which
+    # consumes all available gas when called. If zero, this case is ignored.
+    #
+    gashog: Uint160 = Uint160(0)
+
     @classmethod
     def symbolic(cls, suffix: str) -> Universe:
         """Create a fully-symbolic Universe."""
