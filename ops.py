@@ -567,6 +567,10 @@ def CALL(
 
         contract = s.universe.contracts.get(address, None)
         if not contract:
+            # In theory, calling a nonexistent contract causes it to be created.
+            # In practice, this is probably a bug, so we crash the analysis.
+            # This means burn addresses need to be explicitly registered, e.g.
+            # by setting the codesize to zero.
             raise ValueError(f"CALL to unknown contract: {hex(address)}")
 
         def callback(state: State, substate: State) -> State:

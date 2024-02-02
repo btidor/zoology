@@ -37,6 +37,7 @@ def starting_universe() -> Universe:
     universe = Universe.symbolic("")
     universe.codesizes.poke(SETUP, Uint256(0))
     universe.codesizes.poke(PLAYER, Uint256(0))
+    universe.codesizes.poke(Uint160(0xA9E), Uint256(0))  # burn address in lvl 20
     apply_snapshot(universe)
     return universe
 
@@ -99,11 +100,10 @@ def validateInstance(
         + arg1.to_bytes(32)
     )
 
-    universe_, _, block = history.subsequent()
+    universe, _, block = history.subsequent()
+    universe.balances = Array[Uint160, Uint256]("BALANCE")
     for _ in range(16):
         block = block.successor()
-    universe = Universe.symbolic("")
-    universe.contracts = universe_.contracts
     sha3 = SHA3()  # validatior optimization assumes no SHA3
     start = State(
         suffix="-V",
@@ -129,6 +129,7 @@ def validateInstance(
                 nonce=reference.nonce,
             )
         )
+    universe.codesizes.written = []
 
     predicates = list[Constraint]()
     for end in universal_transaction(start, check=False, prints=prints):
@@ -138,6 +139,11 @@ def validateInstance(
         # about narrowing because SHA3 is not invoked (see check below).
         b: Uint256 = end.pc.returndata.bigvector(32)
         predicates.append(end.constraint & (b != Uint256(0)))
+
+        if end.universe.codesizes.written:
+            # We can't handle validators that create contracts, though that
+            # would be pretty strange.
+            return None
 
     assert predicates
     if sha3.constraints:
