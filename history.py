@@ -52,7 +52,7 @@ class History:
             universe = self.states[-1].universe
             sha3 = self.states[-1].sha3
             block = self.states[-1].block.successor()
-        return copy.deepcopy(universe), copy.deepcopy(sha3), block
+        return universe.clone_and_reset(), copy.deepcopy(sha3), block
 
     def extend(self, state: State) -> History:
         """Add a new transaction to the History."""

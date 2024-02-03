@@ -212,6 +212,13 @@ class Array(zArray[K, V]):
         result.written = copy.copy(self.written)
         return result
 
+    def clone_and_reset(self) -> Self:
+        """Clone this Array and reset access tracking."""
+        result = super().__deepcopy__(None)
+        result.accessed = []
+        result.written = []
+        return result
+
     def __getitem__(self, key: K) -> V:
         """Look up the given symbolic key."""
         self.accessed.append(key)

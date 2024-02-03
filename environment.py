@@ -88,6 +88,15 @@ class Contract:
     )
     nonce: Uint256 = Uint256(1)  # starts at 1, see EIP-161
 
+    def clone_and_reset(self) -> Contract:
+        """Clone this Contract and reset array access tracking."""
+        return Contract(
+            address=self.address,
+            program=self.program,
+            storage=self.storage.clone_and_reset(),
+            nonce=self.nonce,
+        )
+
 
 @dataclass(frozen=True)
 class Transaction:
@@ -184,3 +193,13 @@ class Universe:
         assert (address := contract.address.reveal()) is not None
         self.contracts[address] = contract
         self.codesizes[contract.address] = contract.program.code.length
+
+    def clone_and_reset(self) -> Universe:
+        """Clone this Universe and reset array access tracking."""
+        return Universe(
+            suffix=self.suffix,
+            balances=self.balances.clone_and_reset(),
+            contracts={k: v.clone_and_reset() for (k, v) in self.contracts.items()},
+            codesizes=self.codesizes.clone_and_reset(),
+            gashog=self.gashog,
+        )

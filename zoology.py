@@ -286,10 +286,11 @@ def search(
                         print("  [found solution!]")
                     return candidate, solver
 
-                if len(end.contract.storage.written) == 0:
-                    # TODO: check if *any* contract's storage was written; also
-                    # note that this ignores transactions that only change
-                    # contract balances, which can also be material
+                if all(
+                    len(c.storage.written) == 0 for c in end.universe.contracts.values()
+                ):
+                    # TODO: this ignores transactions that only change contract
+                    # balances, which can also be material
                     if verbose > 1:
                         print("  [read-only]")
                     continue
