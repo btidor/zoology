@@ -11,8 +11,8 @@ from zoology import (
 
 
 def check_level(i: int, fixture: list[str]) -> None:
-    universe = starting_universe()
     factory = LEVEL_FACTORIES[i]
+    universe = starting_universe(factory)
 
     instance, beginning = createInstance(universe, factory)
     validator = validateInstance(factory, instance, beginning)
@@ -25,12 +25,6 @@ def check_level(i: int, fixture: list[str]) -> None:
     solution, solver = result
     for actual, expected in zip(solution.describe(solver), fixture, strict=True):
         assert actual == expected
-
-
-def test_starting_universe() -> None:
-    # benchmark for profiling
-    starting_universe()
-    starting_universe()
 
 
 # def test_hello() -> None:

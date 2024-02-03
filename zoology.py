@@ -32,14 +32,14 @@ PLAYER = Uint160(0xCACACACACACACACACACACACACACACACACACACACA)
 PROXY = Uint160(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0)
 
 
-def starting_universe() -> Universe:
+def starting_universe(factory: Uint160) -> Universe:
     """Set up a symbolic universe with factory levels loaded."""
     universe = Universe.symbolic("")
     universe.codesizes.poke(SETUP, Uint256(0))
     universe.codesizes.poke(PLAYER, Uint256(0))
     universe.codesizes.poke(Uint160(0xA9E), Uint256(0))  # burn address in lvl 20
     universe.gashog = Constraint("GASHOG").ite(PROXY, Uint160(0))
-    apply_snapshot(universe)
+    apply_snapshot(universe, factory)
     return universe
 
 
@@ -327,14 +327,13 @@ if __name__ == "__main__":
         if i < 0 or i >= len(LEVEL_FACTORIES):
             raise ValueError(f"invalid level: {i}")
 
-    universe = starting_universe()
-
     for i in args.level:
         factory = LEVEL_FACTORIES[i]
         print(f"{i:04}", end="")
         try:
+            universe = starting_universe(factory)
             instance, beginning = createInstance(
-                copy.deepcopy(universe), factory, prints=(args.verbose > 2)
+                universe, factory, prints=(args.verbose > 2)
             )
             validator = validateInstance(
                 factory, instance, beginning, prints=(args.verbose > 2)

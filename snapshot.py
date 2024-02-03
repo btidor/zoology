@@ -29,28 +29,37 @@ with open(_ROOT / "ethernaut.json") as f:
         Uint160(int.from_bytes(bytes.fromhex(_eth[str(i)][2:]))) for i in range(29)
     ]
 
+cache: Snapshot | None = None
 
-def apply_snapshot(universe: Universe) -> None:
+
+def apply_snapshot(universe: Universe, address: Uint160) -> None:
     """Load a snapshot and add the contracts to the given universe."""
-    with open(_ROOT / "snapshot.json") as f:
-        snapshot: Snapshot = json.load(f)
-    for addr, saved in snapshot.items():
-        address = Uint160(int(addr, 16))
-        program = disassemble(Bytes.fromhex(saved["code"]))
-        contract = Contract(address, program)
+    global cache
+    if cache is None:
+        with open(_ROOT / "snapshot.json") as f:
+            cache = json.load(f)
+        assert cache is not None
 
-        for k, v in saved.items():
-            if k == "code":
-                continue
-            contract.storage.poke(Uint256(int(k)), Uint256(int(v, 16)))
+    assert (a := address.reveal()) is not None
+    saved = cache[a.to_bytes(20).hex()]
+    address = Uint160(a)
+    program = disassemble(Bytes.fromhex(saved["code"]))
+    contract = Contract(address, program)
 
-        # Some level factories create other contracts in their constructor. To
-        # avoid address collisions between these fixed contracts and created
-        # level contracts, bump up the nonce.
-        contract.nonce = Uint256(16)
+    for k, v in saved.items():
+        if k == "code":
+            continue
+        contract.storage.poke(Uint256(int(k)), Uint256(int(v, 16)))
+        if is_sibling_contract(int(k), int(v, 16)):
+            apply_snapshot(universe, Uint160(int(v, 16)))
 
-        universe.add_contract(contract)
-        universe.balances[contract.address] = Uint256(0)
+    # Some level factories create other contracts in their constructor. To
+    # avoid address collisions between these fixed contracts and created
+    # level contracts, bump up the nonce.
+    contract.nonce = Uint256(16)
+
+    universe.add_contract(contract)
+    universe.balances[contract.address] = Uint256(0)
 
 
 def get_code(address: Uint160) -> Contract:
@@ -124,6 +133,14 @@ def download_contract(snapshot: Snapshot, address: Uint160) -> None:
         if j > 0 and v > 2**156 and v < 2**160:
             # The Level interface puts the owner in Slot 0; skip it.
             download_contract(snapshot, Uint160(v))
+        if is_sibling_contract(j, v):
+            download_contract(snapshot, Uint160(v))
+
+
+def is_sibling_contract(slot: int, value: int) -> bool:
+    """Check if a given storage slot refers to a related contract."""
+    # The Level interface puts the owner in Slot 0; skip it.
+    return slot > 0 and value > 2**156 and value < 2**160
 
 
 if __name__ == "__main__":
