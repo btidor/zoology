@@ -14,7 +14,7 @@ from environment import Contract, Universe
 from smt import Uint160, Uint256
 
 # For consistency, make requests at a fixed block offset
-TAG = "0x86a800"
+TAG = "0x9fd700"
 
 _ROOT = Path(__file__).resolve().parent
 
@@ -26,7 +26,7 @@ Snapshot: TypeAlias = dict[str, dict[str, str]]
 with open(_ROOT / "ethernaut.json") as f:
     _eth = json.load(f)
     LEVEL_FACTORIES = [
-        Uint160(int.from_bytes(bytes.fromhex(_eth[str(i)][2:]))) for i in range(29)
+        Uint160(int.from_bytes(bytes.fromhex(_eth[str(i)][2:]))) for i in range(30)
     ]
 
 cache: Snapshot | None = None

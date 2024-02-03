@@ -172,8 +172,8 @@ def test_magic_number() -> None:
 
 def test_alien_codex() -> None:
     fixture = [
-        "Px69\t58699c55",
-        "PxD7\t47f57b32",
+        "Px6D\t328b52cb",
+        "Px1A7\t47f57b32",
         "Px1BF\t0339f300 4ef1d2ad89edf8c4d91132028e8195cdf30bb4b5053d4f8cd260341d4805f30a000000000000000000000001cacacacacacacacacacacacacacacacacacacaca",
     ]
     check_level(19, fixture)
@@ -224,5 +224,4 @@ def test_shop() -> None:
 #     check_level(28, [])
 
 # def test_switch() -> None:
-#     # need to import level factory
 #     check_level(29, [])
