@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import abc
 import copy
 from typing import Any, Self, TypeVar
 
@@ -68,7 +67,6 @@ class Bytes:
     def __deepcopy__(self, memo: Any) -> Self:
         return self
 
-    @abc.abstractmethod
     def __getitem__(self, i: Uint256) -> Uint8:
         """
         Return the byte at the given symbolic index.
