@@ -34,7 +34,7 @@ class Bytes:
         """Create a new Bytes from concrete data."""
         self.data = data if isinstance(data, bytes) else None
         self.length = Uint256(len(data))
-        self.array = zArray[Uint256, Uint8](Uint8(0))
+        self.array = zArray[Uint256, Uint8](BYTES[0])
         if isinstance(data, bytes):
             for i in range(len(INTEGERS), len(data)):
                 INTEGERS.append(Uint256(i))
@@ -73,7 +73,7 @@ class Bytes:
 
         Reads past the end of the bytestring return zero.
         """
-        return (i < self.length).ite(self.array[i], Uint8(0))
+        return (i < self.length).ite(self.array[i], BYTES[0])
 
     def slice(self, offset: Uint256, size: Uint256) -> ByteSlice:
         """Return a symbolic slice of this instance."""
@@ -127,7 +127,7 @@ class ByteSlice(Bytes):
 
     def __getitem__(self, i: Uint256) -> Uint8:
         item = self.inner[self.offset + i]
-        return (i < self.length).ite(item, Uint8(0))
+        return (i < self.length).ite(item, BYTES[0])
 
     def compact(self, solver: Solver, constraint: Constraint) -> Constraint:
         """Simplify length and offset using the given solver's contraints."""
@@ -151,10 +151,10 @@ class Memory:
     def __init__(self, data: bytes = b"") -> None:
         """Create a new, empty Memory."""
         self.length = Uint256(0)
-        self.array = zArray[Uint256, Uint8](Uint8(0))
+        self.array = zArray[Uint256, Uint8](BYTES[0])
         self.writes = list[BytesWrite]()  # writes to apply *on top of* array
         for i, b in enumerate(data):
-            self[Uint256(i)] = Uint8(b)
+            self[Uint256(i)] = BYTES[b]
 
     def __getitem__(self, i: Uint256) -> Uint8:
         item = self.array[i]
@@ -167,7 +167,7 @@ class Memory:
                 )
             else:
                 item = (i == k).ite(v, item)
-        return (i < self.length).ite(item, Uint8(0))
+        return (i < self.length).ite(item, BYTES[0])
 
     def __setitem__(self, i: Uint256, v: Uint8) -> None:
         self.length = (i < self.length).ite(self.length, i + Uint256(1))
