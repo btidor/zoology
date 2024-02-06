@@ -34,6 +34,7 @@ class Bytes:
         """Create a new Bytes from concrete data."""
         self.data = data if isinstance(data, bytes) else None
         self.length = Uint256(len(data))
+        self.check_length = False
         self.array = zArray[Uint256, Uint8](BYTES[0])
         if isinstance(data, bytes):
             for i in range(len(INTEGERS), len(data)):
@@ -62,6 +63,7 @@ class Bytes:
         """Create a new Bytes with custom properties."""
         result = cls.__new__(cls)
         result.data, result.length, result.array = None, length, array
+        result.check_length = True
         return result
 
     def __deepcopy__(self, memo: Any) -> Self:
@@ -73,7 +75,9 @@ class Bytes:
 
         Reads past the end of the bytestring return zero.
         """
-        return (i < self.length).ite(self.array[i], BYTES[0])
+        if self.check_length:
+            return (i < self.length).ite(self.array[i], BYTES[0])
+        return self.array[i]
 
     def slice(self, offset: Uint256, size: Uint256) -> ByteSlice:
         """Return a symbolic slice of this instance."""
@@ -157,6 +161,8 @@ class Memory:
             self[Uint256(i)] = BYTES[b]
 
     def __getitem__(self, i: Uint256) -> Uint8:
+        if (i < self.length).reveal() is False:
+            return BYTES[0]
         item = self.array[i]
         for k, v in self.writes:
             if isinstance(v, ByteSlice):
@@ -167,7 +173,7 @@ class Memory:
                 )
             else:
                 item = (i == k).ite(v, item)
-        return (i < self.length).ite(item, BYTES[0])
+        return item
 
     def __setitem__(self, i: Uint256, v: Uint8) -> None:
         self.length = (i < self.length).ite(self.length, i + Uint256(1))

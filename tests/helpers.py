@@ -50,7 +50,6 @@ Token = (
 Delegation = (
     ("Px191", "VIEW", "$any4"),  # *
     ("Px193", "SAVE", "pwn()"),
-    ("Px67", "VIEW", "$any4"),  # *
     ("PxD", "VIEW", "owner()"),
     ("Px3F", "VIEW", None),  # *
     # * if Delegate reverts, Delegation will still return successfully
