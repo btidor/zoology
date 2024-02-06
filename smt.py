@@ -45,7 +45,46 @@ def make_uint(n: int) -> type[Uint[Any]]:
 
 def concat_bytes(*args: Uint8) -> Uint[Any]:
     """Concatenate a series of Uint8s into a longer UintN."""
-    return _from_expr(make_uint(len(args) * 8), Kind.BV_CONCAT, *args)
+    uint = make_uint(len(args) * 8)
+    pending = list[
+        BitwuzlaTerm | tuple[BitwuzlaTerm, list[BitwuzlaTerm], list[BitwuzlaTerm]]
+    ]()
+    for arg in args:
+        if _term(arg).get_kind() != Kind.ITE:
+            pending.append(_term(arg))
+            continue
+        cond, term1, term2 = _term(arg).get_children()
+        if len(pending) == 0 or isinstance(pending[-1], BitwuzlaTerm):
+            pending.append((cond, [term1], [term2]))
+            continue
+        prev, prev1, prev2 = pending[-1]
+        eq = BZLA.mk_term(Kind.EQUAL, (prev, cond))
+        if eq.is_bv_value() and eq.dump("smt2") == "true":
+            prev1.append(term1)
+            prev2.append(term2)
+        else:
+            pending.append((cond, [term1], [term2]))
+
+    converted = list[BitwuzlaTerm]()
+    for arg in pending:
+        if isinstance(arg, BitwuzlaTerm):
+            converted.append(arg)
+        else:
+            cond, list1, list2 = arg
+            term = BZLA.mk_term(
+                Kind.ITE,
+                (
+                    cond,
+                    BZLA.mk_term(Kind.BV_CONCAT, list1) if len(list1) > 1 else list1[0],
+                    BZLA.mk_term(Kind.BV_CONCAT, list2) if len(list2) > 1 else list2[0],
+                ),
+            )
+            converted.append(term)
+    if len(converted) == 1:
+        term = converted[0]
+    else:
+        term = BZLA.mk_term(Kind.BV_CONCAT, converted)
+    return _make_symbolic(uint, term)
 
 
 def overflow_safe(a: Uint256, b: Uint256) -> Constraint:
