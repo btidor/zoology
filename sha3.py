@@ -72,7 +72,8 @@ class SHA3:
         if size not in self.hashes:
             self.hashes[size] = Array[make_uint(size * 8), Uint256](f"SHA3-{size}")
 
-        free = self.hashes[size][key.bigvector(size)]
+        keyvector = key.bigvector(size)
+        free = self.hashes[size][keyvector]
         if (data := key.reveal()) is not None:
             digest = keccak.new(data=data, digest_bits=256).digest()
             hash = Uint256(int.from_bytes(digest))
@@ -88,7 +89,7 @@ class SHA3:
             # ASSUMPTION: every hash digest is distinct, there are no collisions
             # ever.
             if n == size:
-                self.constraints.append((hash != oval) | (key.bigvector(n) == okey))
+                self.constraints.append((hash != oval) | (keyvector == okey))
             else:
                 self.constraints.append(hash != oval)
 
