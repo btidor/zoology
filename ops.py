@@ -15,7 +15,6 @@ from smt import (
     Uint160,
     Uint256,
     concat_bytes,
-    explode_bytes,
     zArray,
 )
 from state import ControlFlow, DelegateCall, Descend, Jump, Log, State, Termination
@@ -350,8 +349,7 @@ def MLOAD(s: State, offset: Uint256) -> Uint256:
 
 def MSTORE(s: State, offset: Uint256, value: Uint256) -> None:
     """52 - Save word to memory."""
-    for i, byte in enumerate(reversed(explode_bytes(value))):
-        s.memory[offset + Uint256(i)] = byte
+    s.memory.setword(offset, value)
 
 
 def MSTORE8(s: State, offset: Uint256, value: Uint256) -> None:

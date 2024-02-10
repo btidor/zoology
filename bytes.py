@@ -14,6 +14,7 @@ from smt import (
     compact_helper,
     compact_zarray,
     concat_bytes,
+    explode_bytes,
     zArray,
 )
 
@@ -189,6 +190,18 @@ class Memory:
             self.array[i] = v
         else:
             self.writes.append((i, v))
+
+    def setword(self, i: Uint256, v: Uint256) -> None:
+        """Write an entire Uint256 to memory starting at the given index."""
+        self.length = (i + Uint256(0x20) <= self.length).ite(
+            self.length, i + Uint256(0x20)
+        )
+        for k, byte in enumerate(reversed(explode_bytes(v))):
+            n = i + Uint256(k)
+            if len(self.writes) == 0:
+                self.array[n] = byte
+            else:
+                self.writes.append((n, byte))
 
     def slice(self, offset: Uint256, size: Uint256) -> ByteSlice:
         """Return a symbolic slice of this instance."""
