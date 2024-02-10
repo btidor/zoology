@@ -111,6 +111,13 @@ def concat_bytes(*args: Uint8) -> Uint[Any]:
     return _make_symbolic(uint, term)
 
 
+def concat_words(*args: Uint256) -> Uint[Any]:
+    """Concatenate a series of Uint256s into a longer UintN."""
+    uint = make_uint(len(args) * 256)
+    term = BZLA.mk_term(Kind.BV_CONCAT, tuple(_term(a) for a in args))
+    return _make_symbolic(uint, term)
+
+
 def overflow_safe(a: Uint256, b: Uint256) -> Constraint:
     """Return a constraint asserting that a + b does not overflow."""
     return ~_from_expr(Constraint, Kind.BV_UADD_OVERFLOW, a, b)

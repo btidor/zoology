@@ -14,6 +14,7 @@ from smt import (
     compact_helper,
     compact_zarray,
     concat_bytes,
+    concat_words,
     explode_bytes,
     zArray,
 )
@@ -139,6 +140,25 @@ class ByteSlice(Bytes):
         item = self.inner[self.offset + i]
         return (i < self.length).ite(item, BYTES[0])
 
+    def bigvector(self, expected_length: int) -> Uint[Any]:
+        """Return a single, large bitvector of this instance's bytes."""
+        if (
+            isinstance(self.inner, Memory)
+            and (start := self.offset.reveal()) is not None
+            and (size := self.length.reveal() is not None)
+            and start % 0x20 == 0
+            and size % 0x20 == 0
+        ):
+            assert size == expected_length
+            words = list[Uint256]()
+            for i in range(start, start + size, 0x20):
+                if i in self.inner.wordcache:
+                    words.append(self.inner.wordcache[i])
+                else:
+                    return super().bigvector(expected_length)
+            return concat_words(*words)
+        return super().bigvector(expected_length)
+
     def compact(self, solver: Solver, constraint: Constraint) -> Constraint:
         """Simplify length and offset using the given solver's contraints."""
         length_, offset_ = solver.evaluate(self.length), solver.evaluate(self.offset)
@@ -166,6 +186,12 @@ class Memory:
         for i, b in enumerate(data):
             self[Uint256(i)] = BYTES[b]
 
+        # When hashing mapping keys, Solidity programs put the values to be
+        # hashed in the reserved range [0x0, 0x40). Splitting up the key into
+        # bytes and reassembling it is slow, so we optimistically cache MSTOREd
+        # words here.
+        self.wordcache = dict[int, Uint256]()
+
     def __getitem__(self, i: Uint256) -> Uint8:
         if (i < self.length).reveal() is False:
             return BYTES[0]
@@ -183,6 +209,7 @@ class Memory:
 
     def __setitem__(self, i: Uint256, v: Uint8) -> None:
         self.length = (i < self.length).ite(self.length, i + Uint256(1))
+        self.wordcache.clear()
         if len(self.writes) == 0:
             # Warning: passing writes through to the underlying array when there
             # are no custom writes is a good optimization (~12% speedup), but it
@@ -196,6 +223,10 @@ class Memory:
         self.length = (i + Uint256(0x20) <= self.length).ite(
             self.length, i + Uint256(0x20)
         )
+        if (i_ := i.reveal()) is not None and i_ % 0x20 == 0:
+            self.wordcache[i_] = v
+        else:
+            self.wordcache.clear()
         for k, byte in enumerate(reversed(explode_bytes(v))):
             n = i + Uint256(k)
             if len(self.writes) == 0:
@@ -217,6 +248,7 @@ class Memory:
             self.length,
             at + slice.length,
         )
+        self.wordcache.clear()
 
         if len(self.writes) == 0 and (length := slice.length.reveal()) is not None:
             # Avoid creating custom writes when possible because of the
