@@ -183,14 +183,13 @@ class Memory:
         self.length = Uint256(0)
         self.array = zArray[Uint256, Uint8](BYTES[0])
         self.writes = list[BytesWrite]()  # writes to apply *on top of* array
-        for i, b in enumerate(data):
-            self[Uint256(i)] = BYTES[b]
-
         # When hashing mapping keys, Solidity programs put the values to be
         # hashed in the reserved range [0x0, 0x40). Splitting up the key into
         # bytes and reassembling it is slow, so we optimistically cache MSTOREd
         # words here.
         self.wordcache = dict[int, Uint256]()
+        for i, b in enumerate(data):
+            self[Uint256(i)] = BYTES[b]
 
     def __getitem__(self, i: Uint256) -> Uint8:
         if (i < self.length).reveal() is False:

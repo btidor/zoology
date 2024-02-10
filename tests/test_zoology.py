@@ -113,7 +113,7 @@ def test_king() -> None:
 
 def test_elevator() -> None:
     fixture = [
-        "Px19F7\ted9a7134 00000000000000000000000000000000000000000000000000000001ffffffff\t(via proxy)",
+        "Px19F7\ted9a7134 00000000000000000000000000000000000000000000000000000001000000ff\t(via proxy)",
     ]
     check_level(11, fixture)
 
@@ -165,7 +165,7 @@ def test_preservation() -> None:
 
 def test_magic_number() -> None:
     fixture = [
-        "Px37\t1f879433 000000000000000000000000ffffffffffffffffffffffffffffffffffffffff",
+        "Px37\t1f879433 0000000000000000000000000000000000000000000000000000000000000000",
     ]
     check_level(18, fixture)
 
