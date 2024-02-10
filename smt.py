@@ -53,6 +53,15 @@ def make_uint(n: int) -> type[Uint[Any]]:
     return Uint[Literal[n]]  # type: ignore
 
 
+def explode_bytes(word: Uint256) -> list[Uint8]:
+    """Explode a Uint256 into a list of Uint8s."""
+    result = list[Uint8]()
+    for i in range(0, 256, 8):
+        term = BZLA.mk_term(Kind.BV_EXTRACT, (_term(word),), (i + 7, i))
+        result.append(_make_symbolic(Uint8, term))
+    return result
+
+
 def concat_bytes(*args: Uint8) -> Uint[Any]:
     """Concatenate a series of Uint8s into a longer UintN."""
     uint = make_uint(len(args) * 8)
