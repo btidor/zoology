@@ -1,5 +1,7 @@
 """A library of augmentations for zbitvector."""
 
+# pyright: reportPrivateUsage=false
+
 from __future__ import annotations
 
 import copy
@@ -9,7 +11,7 @@ from typing import Any, Iterable, Literal, Self, TypeAlias, TypeVar, Union, over
 from Crypto.Hash import keccak
 from zbitvector import Array as zArray
 from zbitvector import Constraint, Int, Solver, Symbolic, Uint, _bitwuzla
-from zbitvector._bitwuzla import BZLA, BitwuzlaTerm, Kind
+from zbitvector._bitwuzla import BZLA, OPTIMIZE, BitwuzlaTerm, Kind, _reset_solver
 
 Uint8 = Uint[Literal[8]]
 Uint160 = Uint[Literal[160]]
@@ -34,6 +36,14 @@ def _from_expr(cls: type[S], kind: Kind, *args: Expression) -> S:
     return cls._from_expr(kind, *args)  # type: ignore
 
 
+def _reveal(term: BitwuzlaTerm) -> int | None:
+    if term.is_bv_value():
+        _reset_solver()
+        return int(BZLA.get_value_str(term), 2)
+    else:
+        return None
+
+
 def _term(expr: Expression) -> BitwuzlaTerm:
     return expr._term  # type: ignore
 
@@ -46,6 +56,10 @@ def make_uint(n: int) -> type[Uint[Any]]:
 def concat_bytes(*args: Uint8) -> Uint[Any]:
     """Concatenate a series of Uint8s into a longer UintN."""
     uint = make_uint(len(args) * 8)
+    if not OPTIMIZE:
+        term = BZLA.mk_term(Kind.BV_CONCAT, tuple(_term(a) for a in args))
+        return _make_symbolic(uint, term)
+
     pending = list[
         BitwuzlaTerm | tuple[BitwuzlaTerm, list[BitwuzlaTerm], list[BitwuzlaTerm]]
     ]()
@@ -59,7 +73,8 @@ def concat_bytes(*args: Uint8) -> Uint[Any]:
             continue
         prev, prev1, prev2 = pending[-1]
         eq = BZLA.mk_term(Kind.EQUAL, (prev, cond))
-        if eq.is_bv_value() and eq.dump("smt2") == "true":
+
+        if _reveal(eq) == 1:
             prev1.append(term1)
             prev2.append(term2)
         else:
