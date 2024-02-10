@@ -3,7 +3,7 @@
 import copy
 from typing import Literal
 
-from bytes import Bytes
+from bytes import Bytes, Uint64
 from disassembler import Instruction, disassemble
 from environment import Contract, Transaction
 from smt import (
@@ -601,7 +601,8 @@ def CALL(
         # Call to a symbolic address: return a fully-symbolic response.
         s.latest_return = Bytes.custom(
             (s.universe.codesizes[_address.into(Uint160)] == Uint256(0)).ite(
-                Uint256(0), Uint256(f"RETURNDATA{s.call_count}{s.suffix}-LEN")
+                Uint256(0),
+                Uint64(f"RETURNDATA{s.call_count}{s.suffix}-LEN").into(Uint256),
             ),
             zArray[Uint256, Uint8](f"RETURNDATA{s.call_count}{s.suffix}"),
         )

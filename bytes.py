@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import copy
-from typing import Any, Self, TypeVar
+from typing import Any, Literal, Self, TypeVar
 
 from smt import (
     Constraint,
@@ -25,6 +25,8 @@ DESCRIBE_LIMIT = 256
 
 BYTES = [Uint8(i) for i in range(256)]
 INTEGERS = list[Uint256]()
+
+Uint64 = Uint[Literal[64]]
 
 
 class Bytes:
@@ -53,8 +55,11 @@ class Bytes:
     @classmethod
     def symbolic(cls, name: str, length: int | None = None) -> Bytes:
         """Create a new, fully-symbolic Bytes."""
+        # ASSUMPTION: call data and return data are no longer than 2^64 bytes.
+        # CALL, RETURN, etc. trigger gas costs for memory expansion, and this
+        # should be a safe upper limit.
         return cls.custom(
-            Uint256(length if length is not None else f"{name}.length"),
+            Uint64(length if length is not None else f"{name}.length").into(Uint256),
             zArray[Uint256, Uint8](name),
         )
 
