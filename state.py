@@ -97,8 +97,7 @@ class State:
         """Return a human-readable version of the path."""
         return "Px" + hex(self.path)[2:].upper()
 
-    def __post__init__(self) -> None:
-        """Initialize starting constraints."""
+    def __post_init__(self) -> None:
         # ASSUMPTION: the current block number is at least 256. This prevents
         # the BLOCKHASH instruction from overflowing.
         self.constraint &= self.block.number >= Uint256(256)
