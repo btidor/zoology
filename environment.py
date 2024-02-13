@@ -192,7 +192,6 @@ class Universe:
         return Universe(
             suffix=suffix,
             balances=Array[Uint160, Uint256](f"BALANCE{suffix}"),
-            contracts={},
             codesizes=Array[Uint160, Uint256](f"CODESIZE{suffix}"),
         )
 

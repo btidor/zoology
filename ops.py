@@ -183,7 +183,7 @@ def KECCAK256(s: State, offset: Uint256, size: Uint256) -> Uint256:
 
 def ADDRESS(s: State) -> Uint256:
     """30 - Get address of currently executing account."""
-    return s.contract.address.into(Uint256)
+    return s.transaction.address.into(Uint256)
 
 
 def BALANCE(s: State, address: Uint256) -> Uint256:
@@ -329,7 +329,7 @@ def CHAINID(s: State) -> Uint256:
 
 def SELFBALANCE(s: State) -> Uint256:
     """47 - Get balance of currently executing account."""
-    return s.universe.balances[s.contract.address]
+    return s.universe.balances[s.transaction.address]
 
 
 def BASEFEE(s: State) -> Uint256:
@@ -478,7 +478,7 @@ def LOG(ins: Instruction, s: State, offset: Uint256, size: Uint256) -> None:
 def CREATE(s: State, value: Uint256, offset: Uint256, size: Uint256) -> ControlFlow:
     """F0 - Create a new account with associated code."""
     initcode = s.compact_bytes(s.memory.slice(offset, size))
-    sender_address = s.contract.address.reveal()
+    sender_address = s.transaction.address.reveal()
     assert sender_address is not None, "CREATE requires concrete sender address"
 
     # HACK: the destination address depends on the value of this contract's
@@ -513,7 +513,7 @@ def _CREATE(s: State, value: Uint256, initcode: Bytes, seed: Bytes) -> ControlFl
 
     transaction = Transaction(
         origin=s.transaction.origin,
-        caller=s.contract.address,
+        caller=s.transaction.address,
         address=address,
         callvalue=value,
         gasprice=s.transaction.gasprice,
@@ -564,7 +564,7 @@ def CALL(
         # Simple transfer to an EOA: always succeeds. (We're special-casing the
         # zero address, unfortunately. It has no code and no one controls its
         # keypair.)
-        s.transfer(s.contract.address, _address.into(Uint160), value)
+        s.transfer(s.transaction.address, _address.into(Uint160), value)
         s.latest_return = Bytes()
         s.memory.graft(s.latest_return.slice(Uint256(0), retSize), retOffset)
         s.stack.append(Uint256(1))
@@ -573,7 +573,7 @@ def CALL(
         # Call to a concrete address: simulate the full execution.
         transaction = Transaction(
             origin=s.transaction.origin,
-            caller=s.contract.address,
+            caller=s.transaction.address,
             address=_address.into(Uint160),
             callvalue=value,
             calldata=s.memory.slice(argsOffset, argsSize),
@@ -616,7 +616,7 @@ def CALL(
             # only revert themselves, they can cause *this* contract to revert
             # by using up its gas!
         )
-        s.transfer(s.contract.address, _address.into(Uint160), value)
+        s.transfer(s.transaction.address, _address.into(Uint160), value)
         s.call_count += 1
         s.stack.append(success.ite(Uint256(1), Uint256(0)))
         return None
@@ -638,7 +638,7 @@ def CALLCODE(
 
     transaction = Transaction(
         origin=s.transaction.origin,
-        caller=s.contract.address,
+        caller=s.transaction.address,
         address=_address.into(Uint160),
         callvalue=value,
         calldata=s.memory.slice(argsOffset, argsSize),
@@ -731,7 +731,7 @@ def CREATE2(
     # ...because the code is hashed and used in the address, which must be concrete
     salt = _salt.reveal()
     assert salt is not None, "CREATE2 requires concrete salt"
-    sender_address = s.contract.address.reveal()
+    sender_address = s.transaction.address.reveal()
     assert sender_address is not None, "CREATE2 requires concrete sender address"
 
     # https://ethereum.stackexchange.com/a/761

@@ -104,6 +104,8 @@ class State:
         assert (addr0 := self.transaction.address.reveal()) is not None
         assert (addr1 := self.contract.address.reveal()) is not None
         assert addr0 == addr1, "mismatched contract addresses"
+        if addr0 not in self.universe.contracts:
+            self.universe.add_contract(self.contract)
 
     def __lt__(self, other: Any) -> bool:
         if not isinstance(other, State):
@@ -172,7 +174,7 @@ class State:
         self.constrain(solver)
         for addr in self.universe.balances.written:
             if solver.check(
-                addr != self.contract.address,
+                addr != self.transaction.address,
                 self.universe.balances.peek(addr) > since.universe.balances.peek(addr),
             ):
                 return True
@@ -187,9 +189,6 @@ class State:
         """
         assert isinstance(self.pc, Termination)
         r: OrderedDict[str, str] = OrderedDict()
-        a = solver.evaluate(self.contract.address)
-        if a > 0:
-            r["Address"] = "0x" + a.to_bytes(20).hex()
         returndata = self.pc.returndata.describe(solver)
         if returndata:
             r["Return"] = "0x" + returndata

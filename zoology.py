@@ -64,7 +64,7 @@ def createInstance(
         universe=universe,
     )
     start.transfer(
-        start.transaction.caller, start.contract.address, start.transaction.callvalue
+        start.transaction.caller, start.transaction.address, start.transaction.callvalue
     )
 
     generator = printable_execution(start)
@@ -253,7 +253,7 @@ def search(
             )
             start.transfer(
                 start.transaction.origin,
-                start.contract.address,
+                start.transaction.address,
                 start.transaction.callvalue,
             )
             start.contract.storage.written = []

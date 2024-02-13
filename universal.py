@@ -164,7 +164,7 @@ if __name__ == "__main__":
     init = copy.deepcopy(start)
     init.transfer(
         init.transaction.caller,
-        init.contract.address,
+        init.transaction.address,
         init.transaction.callvalue,
     )
     for end in universal_transaction(init):

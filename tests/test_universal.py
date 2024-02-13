@@ -70,7 +70,7 @@ def test_basic() -> None:
     init = copy.deepcopy(start)
     init.transfer(
         init.transaction.caller,
-        init.contract.address,
+        init.transaction.address,
         init.transaction.callvalue,
     )
     universal = universal_transaction(init)
@@ -95,8 +95,6 @@ def test_basic() -> None:
         ---  📒 SAVE\tRETURN\tPx2\t---------------------------------------------------------
 
         Caller\t0xcacacacacacacacacacacacacacacacacacacaca
-
-        Address\t0xadadadadadadadadadadadadadadadadadadadad
 
         Balance\tR: 0xadadadadadadadadadadadadadadadadadadadad
         \t-> 0x8000000000001
