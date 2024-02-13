@@ -514,6 +514,7 @@ def _CREATE(s: State, value: Uint256, initcode: Bytes, seed: Bytes) -> ControlFl
     transaction = Transaction(
         origin=s.transaction.origin,
         caller=s.contract.address,
+        address=address,
         callvalue=value,
         gasprice=s.transaction.gasprice,
     )
@@ -573,6 +574,7 @@ def CALL(
         transaction = Transaction(
             origin=s.transaction.origin,
             caller=s.contract.address,
+            address=_address.into(Uint160),
             callvalue=value,
             calldata=s.memory.slice(argsOffset, argsSize),
             gasprice=s.transaction.gasprice,
@@ -637,6 +639,7 @@ def CALLCODE(
     transaction = Transaction(
         origin=s.transaction.origin,
         caller=s.contract.address,
+        address=_address.into(Uint160),
         callvalue=value,
         calldata=s.memory.slice(argsOffset, argsSize),
         gasprice=s.transaction.gasprice,
@@ -700,6 +703,7 @@ def DELEGATECALL(
     transaction = Transaction(
         origin=s.transaction.origin,
         caller=s.transaction.caller,
+        address=s.transaction.address,
         callvalue=s.transaction.callvalue,
         calldata=s.memory.slice(argsOffset, argsSize),
         gasprice=s.transaction.gasprice,

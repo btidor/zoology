@@ -101,6 +101,9 @@ class State:
         # ASSUMPTION: the current block number is at least 256. This prevents
         # the BLOCKHASH instruction from overflowing.
         self.constraint &= self.block.number >= Uint256(256)
+        assert (addr0 := self.transaction.address.reveal()) is not None
+        assert (addr1 := self.contract.address.reveal()) is not None
+        assert addr0 == addr1, "mismatched contract addresses"
 
     def __lt__(self, other: Any) -> bool:
         if not isinstance(other, State):

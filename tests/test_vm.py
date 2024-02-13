@@ -29,7 +29,6 @@ def test_basic() -> None:
     program = disassemble(code)
     state = State(
         contract=Contract(program=program),
-        transaction=Transaction(),
     )
 
     action = step(state)
@@ -184,7 +183,6 @@ def test_basic_printable() -> None:
     program = disassemble(code)
     state = State(
         contract=Contract(program=program),
-        transaction=Transaction(),
     )
 
     raw = """

@@ -250,7 +250,10 @@ def test_KECCAK256() -> None:
 
 def test_ADDRESS() -> None:
     contract = Contract(address=Uint160(0x9BBFED6889322E016E0A02EE459D306FC19545D8))
-    s = State(contract=contract)
+    s = State(
+        contract=contract,
+        transaction=Transaction(address=contract.address),
+    )
     assert ADDRESS(s).reveal() == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
 
 
@@ -611,6 +614,7 @@ def test_CREATE() -> None:
     s = State(
         memory=Memory(b"\xFE\x63\xFF\xFF\xFF\xFF\x60\x00\x52\x60\x04\x60\x1C\xF3"),
         contract=contract,
+        transaction=Transaction(address=contract.address),
     )
     flow = CREATE(s, Uint256(999), Uint256(2), Uint256(100))
     assert isinstance(flow, Descend)
@@ -634,7 +638,10 @@ def test_RETURN() -> None:
 
 def test_CREATE2() -> None:
     contract = Contract(address=Uint160(0x0))
-    s = State(contract=contract)
+    s = State(
+        contract=contract,
+        transaction=Transaction(address=contract.address),
+    )
     flow = CREATE2(s, Uint256(999), Uint256(0), Uint256(0), Uint256(0x0))
     assert isinstance(flow, Descend)
     assert (

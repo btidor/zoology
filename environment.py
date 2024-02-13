@@ -97,6 +97,9 @@ class Contract:
             nonce=self.nonce,
         )
 
+    def __post_init__(self) -> None:
+        assert self.address.reveal() is not None, "Contract requires concrete address"
+
 
 @dataclass(frozen=True)
 class Transaction:
@@ -104,16 +107,25 @@ class Transaction:
 
     origin: Uint160 = Uint160(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0)
     caller: Uint160 = Uint160(0xCACACACACACACACACACACACACACACACACACACACA)
+    address: Uint160 = Uint160(0xADADADADADADADADADADADADADADADADADADADAD)
     callvalue: Uint256 = Uint256(0)
     calldata: Bytes = Bytes()
     gasprice: Uint256 = Uint256(0x12)
 
+    def __post_init__(self) -> None:
+        assert self.address.reveal() is not None, "Contract requires concrete address"
+
     @classmethod
     def symbolic(
-        cls, suffix: str, origin: Uint160 | None = None, caller: Uint160 | None = None
+        cls,
+        suffix: str,
+        address: Uint160,
+        origin: Uint160 | None = None,
+        caller: Uint160 | None = None,
     ) -> Transaction:
         """Create a fully-symbolic Transaction."""
         return Transaction(
+            address=address,
             origin=Uint160(f"ORIGIN{suffix}") if origin is None else origin,
             caller=Uint160(f"CALLER{suffix}") if caller is None else caller,
             callvalue=Uint256(f"CALLVALUE{suffix}"),

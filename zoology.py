@@ -10,7 +10,7 @@ from itertools import chain
 
 from bytes import Bytes
 from disassembler import abiencode
-from environment import Block, Contract, Transaction, Universe
+from environment import Contract, Transaction, Universe
 from history import History, Validator
 from sha3 import SHA3
 from smt import (
@@ -53,11 +53,11 @@ def createInstance(
     calldata = abiencode("createInstance(address)") + p.to_bytes(32)
     assert (a := address.reveal()) is not None
     start = State(
-        block=Block(),
         contract=universe.contracts[a],
         transaction=Transaction(
             origin=SETUP,
             caller=SETUP,
+            address=address,
             calldata=Bytes(calldata),
             callvalue=Uint256(10**15),
         ),
@@ -113,6 +113,7 @@ def validateInstance(
         transaction=Transaction(
             origin=SETUP,
             caller=SETUP,
+            address=_factory,
             calldata=Bytes(calldata),
         ),
         universe=universe,
@@ -191,6 +192,7 @@ def constrainWithValidator(
         transaction=Transaction(
             origin=SETUP,
             caller=SETUP,
+            address=Uint160(factory),
             calldata=Bytes(calldata),
         ),
         universe=universe,
@@ -245,6 +247,7 @@ def search(
             # (or may not!) be bounced through a "proxy" contract
             start.transaction = Transaction.symbolic(
                 suffix=suffix,
+                address=Uint160(instance),
                 origin=PLAYER,
                 caller=Constraint(f"CALLERAB{suffix}").ite(PLAYER, PROXY),
             )
