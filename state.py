@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from bytes import Bytes, Memory
+from disassembler import Program
 from environment import Block, Contract, Transaction, Universe
 from sha3 import SHA3
 from smt import (
@@ -28,7 +29,6 @@ class State:
     suffix: str = ""
 
     block: Block = field(default_factory=Block)
-    contract: Contract = field(default_factory=Contract)
     transaction: Transaction = field(default_factory=Transaction)
     universe: Universe = field(default_factory=Universe)
     sha3: SHA3 = field(default_factory=SHA3)
@@ -36,6 +36,10 @@ class State:
     pc: int | Termination = 0
     stack: list[Uint256] = field(default_factory=list)
     memory: Memory = field(default_factory=Memory)
+
+    # During instructions like CREATE and DELEGATECALL, the contract runs with
+    # code not associated with its address (e.g. initcode).
+    program_override: Program | None = None
 
     # Tracks the number of times we've spawned a subcontext, so that symbolic
     # variables can be given a unique name.
@@ -101,11 +105,27 @@ class State:
         # ASSUMPTION: the current block number is at least 256. This prevents
         # the BLOCKHASH instruction from overflowing.
         self.constraint &= self.block.number >= Uint256(256)
-        assert (addr0 := self.transaction.address.reveal()) is not None
-        assert (addr1 := self.contract.address.reveal()) is not None
-        assert addr0 == addr1, "mismatched contract addresses"
-        if addr0 not in self.universe.contracts:
-            self.universe.add_contract(self.contract)
+
+    @property
+    def program(self) -> Program:
+        """TODO."""
+        if self.program_override is not None:
+            return self.program_override
+        assert (address := self.transaction.address.reveal()) is not None
+        return self.universe.contracts[address].program
+
+    @property
+    def storage(self) -> Array[Uint256, Uint256]:
+        """TODO."""
+        assert (address := self.transaction.address.reveal()) is not None
+        return self.universe.contracts[address].storage
+
+    def with_contract(self, contract: Contract | Program) -> State:
+        """TODO."""
+        if isinstance(contract, Program):
+            contract = Contract(program=contract)
+        self.universe = self.universe.with_contract(contract)
+        return self
 
     def __lt__(self, other: Any) -> bool:
         if not isinstance(other, State):
@@ -134,16 +154,9 @@ class State:
 
     def narrow(self, solver: Solver) -> None:
         """Apply soft constraints to a given model instance."""
-        constraint = self.contract.address == Uint160(
-            0xADADADADADADADADADADADADADADADADADADADAD
-        )
-        if solver.check(constraint):
-            solver.add(constraint)
-
         constraint = self.transaction.caller == Uint160(
             0xCACACACACACACACACACACACACACACACACACACACA
         )
-
         if solver.check(constraint):
             solver.add(constraint)
 
@@ -166,7 +179,7 @@ class State:
 
     def is_changed(self, since: State) -> bool:
         """Check if any permanent state changes have been made."""
-        if len(self.contract.storage.written) > 0:
+        if len(self.storage.written) > 0:
             return True
 
         # Check if any address other than the contract itself has increased
@@ -194,7 +207,7 @@ class State:
             r["Return"] = "0x" + returndata
         return r
 
-    def compact_bytes(self, bytes: Bytes) -> Bytes:  # TODO
+    def compact_bytes(self, bytes: Bytes) -> Bytes:
         """Simplify the given bytes using the current constraints."""
         if bytes.reveal() is not None:
             return bytes
@@ -255,18 +268,18 @@ class Descend(ControlFlow):
     def new(
         cls,
         state: State,
-        contract: Contract,
         transaction: Transaction,
+        program_override: Program | None,
         callback: Callable[[State, State], State],
     ) -> Descend:
         """Descend into a subcontext."""
         substate = State(
             suffix=f"{state.suffix}-{state.children}",
             block=state.block,
-            contract=contract,
             transaction=transaction,
             universe=state.universe,
             sha3=state.sha3,
+            program_override=program_override,
             logs=state.logs,
             gas_count=state.gas_count,
             call_count=state.call_count,
@@ -276,7 +289,9 @@ class Descend(ControlFlow):
             path=state.path,
             cost=state.cost,
         )
-        substate.transfer(transaction.caller, contract.address, transaction.callvalue)
+        substate.transfer(
+            transaction.caller, transaction.address, transaction.callvalue
+        )
         state.children += 1
 
         def metacallback(substate: State) -> State:
@@ -284,6 +299,8 @@ class Descend(ControlFlow):
             # including on self-calls)
             assert isinstance(substate.pc, Termination)
             next = copy.deepcopy(state)
+            next.universe = substate.universe
+            next.sha3 = substate.sha3
             next.logs = substate.logs
             next.latest_return = substate.pc.returndata
             next.gas_count = substate.gas_count

@@ -33,7 +33,7 @@ def universal_transaction(
         state = heappop(queue)
         while isinstance(state.pc, int):
             if prints:
-                print(state.contract.program.instructions[state.pc])
+                print(state.program.instructions[state.pc])
             match step(state):
                 case None:
                     if prints:
@@ -83,13 +83,11 @@ def symbolic_start(program: Contract | Program, sha3: SHA3, suffix: str) -> Stat
     # TODO: the balances of other accounts can change between transactions
     # (and the balance of this contract account too, via SELFDESTRUCT). How
     # do we model this?
-    universe = Universe.symbolic(suffix)
-    universe.codesizes[contract.address] = contract.program.code.length
+    universe = Universe.symbolic(suffix).with_contract(contract)
     universe.codesizes[transaction.origin] = Uint256(0)
     return State(
         suffix=suffix,
         block=Block.symbolic(suffix),
-        contract=contract,
         transaction=transaction,
         universe=universe,
         sha3=sha3,
@@ -145,9 +143,7 @@ def _printable_transition(
     ):
         yield line
 
-    for line in end.contract.storage.printable_diff(
-        "Storage", solver, start.contract.storage
-    ):
+    for line in end.storage.printable_diff("Storage", solver, start.storage):
         yield line
 
     for line in end.sha3.printable(solver):

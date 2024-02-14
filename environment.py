@@ -195,15 +195,18 @@ class Universe:
             codesizes=Array[Uint160, Uint256](f"CODESIZE{suffix}"),
         )
 
-    def add_contract(self, contract: Contract) -> None:
+    def with_contract(self, contract: Contract | Program) -> Universe:
         """
         Add a contract to the contract registry.
 
         The contract must have a concrete address.
         """
+        if isinstance(contract, Program):
+            contract = Contract(program=contract)
         assert (address := contract.address.reveal()) is not None
         self.contracts[address] = contract
         self.codesizes[contract.address] = contract.program.code.length
+        return self
 
     def clone_and_reset(self) -> Universe:
         """Clone this Universe and reset array access tracking."""

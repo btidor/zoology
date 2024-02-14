@@ -228,12 +228,12 @@ def CALLDATACOPY(s: State, destOffset: Uint256, offset: Uint256, size: Uint256) 
 
 def CODESIZE(s: State) -> Uint256:
     """38 - Get size of code running in current environment."""
-    return s.contract.program.code.length
+    return s.program.code.length
 
 
 def CODECOPY(s: State, destOffset: Uint256, offset: Uint256, size: Uint256) -> None:
     """39 - Copy code running in current environment to memory."""
-    s.memory.graft(s.contract.program.code.slice(offset, size), destOffset)
+    s.memory.graft(s.program.code.slice(offset, size), destOffset)
 
 
 def GASPRICE(s: State) -> Uint256:
@@ -285,7 +285,8 @@ def EXTCODEHASH(s: State, _address: Uint256) -> Uint256:
 
     contract = s.universe.contracts.get(address, None)
     if contract is None:
-        # TODO: for EOAs we should actually return the empty hash
+        # TODO: we should return zero if the address has not been created and
+        # the empty hash otherwise.
         return Uint256(0)
 
     return s.sha3[contract.program.code]
@@ -359,12 +360,12 @@ def MSTORE8(s: State, offset: Uint256, value: Uint256) -> None:
 
 def SLOAD(s: State, key: Uint256) -> Uint256:
     """54 - Load word from storage."""
-    return s.contract.storage[key]
+    return s.storage[key]
 
 
 def SSTORE(s: State, key: Uint256, value: Uint256) -> None:
     """55 - Save word to storage."""
-    s.contract.storage[key] = value
+    s.storage[key] = value
 
 
 def JUMP(s: State, _counter: Uint256) -> None:
@@ -376,7 +377,7 @@ def JUMP(s: State, _counter: Uint256) -> None:
     # Instead, raise an error and fail the whole analysis. This lets us prove
     # that all jump targets are valid and within the body of the code, which is
     # why it's safe to strip the metadata trailer.
-    s.pc = s.contract.program.jumps[counter]
+    s.pc = s.program.jumps[counter]
 
 
 def JUMPI(
@@ -395,14 +396,14 @@ def JUMPI(
             s0, s1 = copy.deepcopy(s), s
             s0.constraint &= c
 
-            s1.pc = s.contract.program.jumps[counter]
+            s1.pc = s.program.jumps[counter]
             s1.path |= 1
             s1.constraint &= ~c
             return Jump(targets=(s0, s1))
         case True:  # branch never taken, fall through
             return None
         case False:  # branch always taken
-            s.pc = s.contract.program.jumps[counter]
+            s.pc = s.program.jumps[counter]
             s.path |= 1
             return None
 
@@ -484,7 +485,7 @@ def CREATE(s: State, value: Uint256, offset: Uint256, size: Uint256) -> ControlF
     # HACK: the destination address depends on the value of this contract's
     # nonce. But we need the destination address to be concrete! So we can only
     # handle CREATE with a concrete state, not a symbolic one. Sorry :(
-    nonce = s.contract.nonce.reveal()
+    nonce = s.universe.contracts[sender_address].nonce.reveal()
     assert nonce is not None, "CREATE require concrete nonce"
     if nonce >= 0x80:
         raise NotImplementedError  # TODO: implement a full RLP encoder
@@ -496,18 +497,23 @@ def CREATE(s: State, value: Uint256, offset: Uint256, size: Uint256) -> ControlF
 
 def _CREATE(s: State, value: Uint256, initcode: Bytes, seed: Bytes) -> ControlFlow:
     address = s.sha3[seed].into(Uint160)
-    if address.reveal() in s.universe.contracts:
-        assert (a := address.reveal()) is not None
-        raise ValueError(f"CREATE destination exists: 0x{a.to_bytes(20).hex()}")
+    destination = address.reveal()
+    assert destination is not None
+    if destination in s.universe.contracts:
+        raise ValueError(
+            f"CREATE destination exists: 0x{destination.to_bytes(20).hex()}"
+        )
 
-    s.contract.nonce += Uint256(1)
+    sender = s.transaction.address.reveal()
+    assert sender is not None, "CREATE requires concrete sender address"
+    s.universe.contracts[sender].nonce += Uint256(1)
 
-    program = disassemble(initcode)
-    contract = Contract(address, program)
+    constructor = disassemble(initcode)
 
     # ASSUMPTION: it's possible for a contract to have a non-zero balance upon
     # creation if funds were sent to the address before it was created. Let's
     # ignore this case for now.
+    s = s.with_contract(Contract(address=address))
     s.universe.balances[address] = Uint256(0)
     s.universe.codesizes[address] = Uint256(0)
 
@@ -525,12 +531,11 @@ def _CREATE(s: State, value: Uint256, initcode: Bytes, seed: Bytes) -> ControlFl
             state.stack.append(Uint256(0))
         else:
             program = disassemble(substate.pc.returndata)
-            contract = Contract(address, program, substate.contract.storage)
-            state.universe.add_contract(contract)
+            state.universe.contracts[destination].program = program
             state.stack.append(address.into(Uint256))
         return state
 
-    return Descend.new(s, contract, transaction, callback)
+    return Descend.new(s, transaction, constructor, callback)
 
 
 def _callback(
@@ -580,8 +585,7 @@ def CALL(
             gasprice=s.transaction.gasprice,
         )
 
-        contract = s.universe.contracts.get(address, None)
-        if not contract:
+        if address not in s.universe.contracts:
             # In theory, calling a nonexistent contract causes it to be created.
             # In practice, this is probably a bug, so we crash the analysis.
             # This means burn addresses need to be explicitly registered, e.g.
@@ -591,7 +595,7 @@ def CALL(
         def callback(state: State, substate: State) -> State:
             return _callback(state, substate, gas, retSize, retOffset)
 
-        return Descend.new(s, contract, transaction, callback)
+        return Descend.new(s, transaction, None, callback)
     else:
         hog = (_address.into(Uint160) > Uint160(0)) & (
             _address.into(Uint160) == s.universe.gashog
@@ -639,23 +643,20 @@ def CALLCODE(
     transaction = Transaction(
         origin=s.transaction.origin,
         caller=s.transaction.address,
-        address=_address.into(Uint160),
+        address=s.transaction.address,
         callvalue=value,
         calldata=s.memory.slice(argsOffset, argsSize),
         gasprice=s.transaction.gasprice,
     )
     destination = s.universe.contracts.get(address, None)
-    if not destination:
+    if destination is None:
         raise ValueError("CALLCODE to unknown contract: " + hex(address))
-    contract = copy.deepcopy(s.contract)
-    contract.program = destination.program
 
     def callback(state: State, substate: State) -> State:
         assert isinstance(substate.pc, Termination)
-        state.contract.storage = substate.contract.storage
         return _callback(state, substate, gas, retSize, retOffset)
 
-    return Descend.new(s, contract, transaction, callback)
+    return Descend.new(s, transaction, destination.program, callback)
 
 
 def RETURN(s: State, offset: Uint256, size: Uint256) -> None:
@@ -678,8 +679,8 @@ def DELEGATECALL(
     Message-call into this account with an alternative account's code, but
     persisting the current values for sender and value.
     """
-    address = _address.reveal()
-    if address is None:
+    destination = _address.reveal()
+    if destination is None:
         # A DELEGATECALL to an arbitrary contract can overwrite any storage
         # addresses. (Assume we can control the address completely; if not,
         # narrowing will fail.)
@@ -687,12 +688,13 @@ def DELEGATECALL(
         dc = DelegateCall(
             Constraint(f"DCOK{n}{s.suffix}"),
             Bytes.symbolic(f"DCRETURN{n}{s.suffix}"),
-            s.contract.storage,
+            s.storage,
             Array[Uint256, Uint256](f"DCSTORAGE{n}{s.suffix}"),
         )
         # TODO: can we factor out this magic address?
         s.narrower &= _address == Uint256(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0)
-        s.contract.storage = copy.deepcopy(dc.next_storage)
+        assert (sender := s.transaction.address.reveal()) is not None
+        s.universe.contracts[sender].storage = copy.deepcopy(dc.next_storage)
         s.latest_return = dc.returndata
         s.memory.graft(s.latest_return.slice(Uint256(0), retSize), retOffset)
         s.constraint &= dc.ok | Array.equals(dc.previous_storage, dc.next_storage)
@@ -708,18 +710,15 @@ def DELEGATECALL(
         calldata=s.memory.slice(argsOffset, argsSize),
         gasprice=s.transaction.gasprice,
     )
-    destination = s.universe.contracts.get(address, None)
-    if not destination:
-        raise ValueError("DELEGATECALL to unknown contract: " + hex(address))
-    contract = copy.copy(s.contract)
-    contract.program = destination.program
+    if destination not in s.universe.contracts:
+        raise ValueError("DELEGATECALL to unknown contract: " + hex(destination))
+    program = s.universe.contracts[destination].program
 
     def callback(state: State, substate: State) -> State:
         assert isinstance(substate.pc, Termination)
-        state.contract.storage = substate.contract.storage
         return _callback(state, substate, gas, retSize, retOffset)
 
-    return Descend.new(s, contract, transaction, callback)
+    return Descend.new(s, transaction, program, callback)
 
 
 def CREATE2(

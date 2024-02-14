@@ -6,10 +6,11 @@ from typing import Generator
 
 import ops
 from bytes import Bytes
-from disassembler import Instruction, Program, abiencode
-from environment import Contract, Transaction, Universe
+from disassembler import Instruction, abiencode
+from environment import Transaction
 from smt import Uint, Uint160, Uint256
 from state import ControlFlow, Descend, Jump, State, Termination
+from tests.solidity import universe_single
 
 
 def step(state: State) -> ControlFlow | None:
@@ -22,7 +23,7 @@ def step(state: State) -> ControlFlow | None:
     """
     assert isinstance(state.pc, int), "program has terminated"
 
-    program = state.contract.program
+    program = state.program
     ins = program.instructions[state.pc]
 
     if not hasattr(ops, ins.name):
@@ -66,7 +67,7 @@ def printable_execution(state: State) -> Generator[str, None, State]:
 
     Yields a human-readable string at each step of the program.
     """
-    program = state.contract.program
+    program = state.program
     while isinstance(state.pc, int):
         # Print next instruction
         ins = program.instructions[state.pc]
@@ -97,27 +98,16 @@ def printable_execution(state: State) -> Generator[str, None, State]:
     return state
 
 
-def concrete_start(program: Contract | Program, value: Uint256, data: bytes) -> State:
-    """Return a concrete start state with realistic values."""
-    contract = program if isinstance(program, Contract) else Contract(program=program)
-    transaction = Transaction(
-        address=contract.address, callvalue=value, calldata=Bytes(data)
-    )
-    universe = Universe()
-    universe.add_contract(contract)
+if __name__ == "__main__":
+    universe = universe_single("fixtures/02_Fallout.sol")
     universe.codesizes[Uint160(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0)] = Uint256(0)
-    return State(
-        contract=contract,
-        transaction=transaction,
+    start = State(
+        transaction=Transaction(
+            callvalue=Uint256(0),
+            calldata=Bytes(abiencode("collectAllocations()")),
+        ),
         universe=universe,
     )
-
-
-if __name__ == "__main__":
-    from tests.solidity import load_solidity
-
-    program = load_solidity("fixtures/02_Fallout.sol")
-    start = concrete_start(program, Uint256(0), abiencode("collectAllocations()"))
 
     for line in printable_execution(start):
         print(line)

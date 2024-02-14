@@ -251,9 +251,8 @@ def test_KECCAK256() -> None:
 def test_ADDRESS() -> None:
     contract = Contract(address=Uint160(0x9BBFED6889322E016E0A02EE459D306FC19545D8))
     s = State(
-        contract=contract,
         transaction=Transaction(address=contract.address),
-    )
+    ).with_contract(contract)
     assert ADDRESS(s).reveal() == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
 
 
@@ -334,8 +333,8 @@ def test_CALLDATACOPY() -> None:
 
 
 def test_CODESIZE() -> None:
-    s = State(
-        contract=Contract(
+    s = State().with_contract(
+        Contract(
             program=disassemble(Bytes.fromhex("66000000000000005B")),
         )
     )
@@ -343,8 +342,8 @@ def test_CODESIZE() -> None:
 
 
 def test_CODECOPY() -> None:
-    s = State(
-        contract=Contract(
+    s = State().with_contract(
+        Contract(
             program=disassemble(Bytes.fromhex("66000000000000005B")),
         )
     )
@@ -366,24 +365,24 @@ def test_GASPRICE() -> None:
 
 def test_EXTCODESIZE() -> None:
     address = 0xABCDABCDABCDABCDABCDABCDABCDABCDABCDABCD
-    contract = Contract(
-        address=Uint160(address),
-        program=disassemble(Bytes.fromhex("66000000000000005B")),
+    s = State().with_contract(
+        Contract(
+            address=Uint160(address),
+            program=disassemble(Bytes.fromhex("66000000000000005B")),
+        )
     )
-    s = State()
-    s.universe.add_contract(contract)
     assert EXTCODESIZE(s, Uint256(address)).reveal() == 9
     assert EXTCODESIZE(s, Uint256(0x1234)).reveal() == 0
 
 
 def test_EXTCODECOPY() -> None:
     address = 0xABCDABCDABCDABCDABCDABCDABCDABCDABCDABCD
-    contract = Contract(
-        address=Uint160(address),
-        program=disassemble(Bytes.fromhex("66000000000000005B")),
+    s = State().with_contract(
+        Contract(
+            address=Uint160(address),
+            program=disassemble(Bytes.fromhex("66000000000000005B")),
+        )
     )
-    s = State()
-    s.universe.add_contract(contract)
 
     EXTCODECOPY(s, Uint256(address), Uint256(3), Uint256(5), Uint256(7))
     assert s.memory.reveal() == bytes.fromhex("0000000000005b000000")
@@ -417,12 +416,12 @@ def test_RETURNDATACOPY() -> None:
 
 def test_EXTCODEHASH() -> None:
     address = 0xABCDABCDABCDABCDABCDABCDABCDABCDABCDABCD
-    contract = Contract(
-        address=Uint160(address),
-        program=disassemble(Bytes.fromhex("66000000000000005B")),
+    s = State().with_contract(
+        Contract(
+            address=Uint160(address),
+            program=disassemble(Bytes.fromhex("66000000000000005B")),
+        )
     )
-    s = State()
-    s.universe.add_contract(contract)
 
     assert (
         EXTCODEHASH(s, Uint256(address)).reveal()
@@ -522,29 +521,29 @@ def test_MSTORE8() -> None:
 
 
 def test_SLOAD() -> None:
-    s = State()
-    s.contract.storage[Uint256(0)] = Uint256(46)
+    s = State().with_contract(Contract())
+    s.storage[Uint256(0)] = Uint256(46)
     assert SLOAD(s, Uint256(0)).reveal() == 46
-    assert len(s.contract.storage.accessed) == 1
-    assert s.contract.storage.accessed[0].reveal() == 0
+    assert len(s.storage.accessed) == 1
+    assert s.storage.accessed[0].reveal() == 0
 
 
 def test_SSTORE() -> None:
-    s = State()
+    s = State().with_contract(Contract())
 
     SSTORE(s, Uint256(0), Uint256(0xFFFF))
-    assert s.contract.storage[Uint256(0)].reveal() == 0xFFFF
+    assert s.storage[Uint256(0)].reveal() == 0xFFFF
 
     SSTORE(s, Uint256(8965), Uint256(0xFF))
-    assert s.contract.storage[Uint256(0)].reveal() == 0xFFFF
-    assert s.contract.storage[Uint256(8965)].reveal() == 0xFF
+    assert s.storage[Uint256(0)].reveal() == 0xFFFF
+    assert s.storage[Uint256(8965)].reveal() == 0xFF
 
 
 def test_JUMP() -> None:
     contract = Contract(
         program=disassemble(Bytes.fromhex("66000000000000005B")),
     )
-    s = State(contract=contract)
+    s = State().with_contract(contract)
     JUMP(s, Uint256(8))
     assert s.pc == 1
     with pytest.raises(KeyError):
@@ -613,9 +612,8 @@ def test_CREATE() -> None:
     )
     s = State(
         memory=Memory(b"\xFE\x63\xFF\xFF\xFF\xFF\x60\x00\x52\x60\x04\x60\x1C\xF3"),
-        contract=contract,
         transaction=Transaction(address=contract.address),
-    )
+    ).with_contract(contract)
     flow = CREATE(s, Uint256(999), Uint256(2), Uint256(100))
     assert isinstance(flow, Descend)
     assert (
@@ -639,9 +637,8 @@ def test_RETURN() -> None:
 def test_CREATE2() -> None:
     contract = Contract(address=Uint160(0x0))
     s = State(
-        contract=contract,
         transaction=Transaction(address=contract.address),
-    )
+    ).with_contract(contract)
     flow = CREATE2(s, Uint256(999), Uint256(0), Uint256(0), Uint256(0x0))
     assert isinstance(flow, Descend)
     assert (

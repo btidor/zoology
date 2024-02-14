@@ -58,7 +58,7 @@ def apply_snapshot(universe: Universe, address: Uint160) -> None:
     # level contracts, bump up the nonce.
     contract.nonce = Uint256(16)
 
-    universe.add_contract(contract)
+    universe = universe.with_contract(contract)
     universe.balances[contract.address] = Uint256(0)
 
 

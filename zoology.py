@@ -51,9 +51,7 @@ def createInstance(
     # on. Inaccuracies in the environment may result in an inaccurate analysis.
     assert (p := PLAYER.reveal()) is not None
     calldata = abiencode("createInstance(address)") + p.to_bytes(32)
-    assert (a := address.reveal()) is not None
     start = State(
-        contract=universe.contracts[a],
         transaction=Transaction(
             origin=SETUP,
             caller=SETUP,
@@ -81,9 +79,6 @@ def createInstance(
     assert (data := end.pc.returndata.reveal()) is not None
     error = data[68:].strip().decode()
     assert end.pc.success, f"createInstance() failed{': ' + error if error else ''}"
-
-    end.universe.add_contract(end.contract)
-    assert (data := end.pc.returndata.reveal()) is not None
     return Uint160(int.from_bytes(data)), History(end.universe, end.sha3, PLAYER)
 
 
@@ -91,8 +86,6 @@ def validateInstance(
     _factory: Uint160, instance: Uint160, history: History, prints: bool = False
 ) -> Validator | None:
     """Symbolically interpret validateInstance as a function, if possible."""
-    assert (factory := _factory.reveal()) is not None
-
     assert (arg0 := instance.reveal()) is not None
     assert (arg1 := PLAYER.reveal()) is not None
     calldata = (
@@ -109,7 +102,6 @@ def validateInstance(
     start = State(
         suffix="-V",
         block=block,
-        contract=universe.contracts[factory],
         transaction=Transaction(
             origin=SETUP,
             caller=SETUP,
@@ -123,7 +115,7 @@ def validateInstance(
 
     for reference in universe.contracts.values():
         assert (a := reference.address.reveal()) is not None
-        start.universe.add_contract(
+        start = start.with_contract(
             Contract(
                 address=reference.address,
                 program=reference.program,
@@ -184,11 +176,9 @@ def constrainWithValidator(
     )
 
     universe, sha3, block = history.subsequent()
-    contract = universe.contracts[factory]
     start = State(
         suffix="-V",
         block=block,
-        contract=contract,
         transaction=Transaction(
             origin=SETUP,
             caller=SETUP,
@@ -256,7 +246,7 @@ def search(
                 start.transaction.address,
                 start.transaction.callvalue,
             )
-            start.contract.storage.written = []
+            start.storage.written = []
 
             selfdestruct = copy.deepcopy(start)
             universal = universal_transaction(start, check=False, prints=(verbose > 2))
