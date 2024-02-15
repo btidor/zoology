@@ -195,7 +195,9 @@ class Universe:
             codesizes=Array[Uint160, Uint256](f"CODESIZE{suffix}"),
         )
 
-    def with_contract(self, contract: Contract | Program) -> Universe:
+    def with_contract(
+        self, contract: Contract | Program, overwrite: bool = False
+    ) -> Universe:
         """
         Add a contract to the contract registry.
 
@@ -204,6 +206,8 @@ class Universe:
         if isinstance(contract, Program):
             contract = Contract(program=contract)
         assert (address := contract.address.reveal()) is not None
+        if address in self.contracts and not overwrite:
+            raise KeyError(f"Contract 0x{address.to_bytes(20).hex()} already exists")
         self.contracts[address] = contract
         self.codesizes[contract.address] = contract.program.code.length
         return self

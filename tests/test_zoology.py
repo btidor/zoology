@@ -113,7 +113,7 @@ def test_king() -> None:
 
 def test_elevator() -> None:
     fixture = [
-        "Px19F7\ted9a7134 00000000000000000000000000000000000000000000000000000001000000ff\t(via proxy)",
+        "Px19F7\ted9a7134 ffffffffffffffffffffffffffffffffffffffffffffffffffffffff000000ff\t(via proxy)",
     ]
     check_level(11, fixture)
 
@@ -141,8 +141,8 @@ def test_gatekeeper_two() -> None:
 
 def test_naughtcoin() -> None:
     fixture = [
-        "Px6DF\t095ea7b3 000000000000000000000000cacacacacacacacacacacacacacacacacacacacaffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-        "Px35FF\t23b872dd 000000000000000000000000cacacacacacacacacacacacacacacacacacacaca000000000000000000000000cacacacacacacacacacacacacacacacacacacacb00000000000000000000000000000000000000000000d3c21bcecceda1000000",
+        "Px6DF\t095ea7b3 000000000000000000000000c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "Px35FF\t23b872dd 000000000000000000000000cacacacacacacacacacacacacacacacacacacaca000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000d3c21bcecceda1000000\t(via proxy)",
     ]
     check_level(15, fixture)
 
@@ -165,7 +165,7 @@ def test_preservation() -> None:
 
 def test_magic_number() -> None:
     fixture = [
-        "Px37\t1f879433 0000000000000000000000000000000000000000000000000000000000000000",
+        "Px37\t1f879433 000000000000000000000000ffffffffffffffffffffffffffffffffffffffff",
     ]
     check_level(18, fixture)
 

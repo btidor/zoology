@@ -120,11 +120,13 @@ class State:
         assert (address := self.transaction.address.reveal()) is not None
         return self.universe.contracts[address].storage
 
-    def with_contract(self, contract: Contract | Program) -> State:
+    def with_contract(
+        self, contract: Contract | Program, overwrite: bool = False
+    ) -> State:
         """TODO."""
         if isinstance(contract, Program):
             contract = Contract(program=contract)
-        self.universe = self.universe.with_contract(contract)
+        self.universe = self.universe.with_contract(contract, overwrite)
         return self
 
     def __lt__(self, other: Any) -> bool:

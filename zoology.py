@@ -121,7 +121,8 @@ def validateInstance(
                 program=reference.program,
                 storage=Array[Uint256, Uint256](f"STORAGE@{a.to_bytes(20).hex()}"),
                 nonce=reference.nonce,
-            )
+            ),
+            True,
         )
     universe.codesizes.written = []
 

@@ -497,12 +497,7 @@ def CREATE(s: State, value: Uint256, offset: Uint256, size: Uint256) -> ControlF
 
 def _CREATE(s: State, value: Uint256, initcode: Bytes, seed: Bytes) -> ControlFlow:
     address = s.sha3[seed].into(Uint160)
-    destination = address.reveal()
-    assert destination is not None
-    if destination in s.universe.contracts:
-        raise ValueError(
-            f"CREATE destination exists: 0x{destination.to_bytes(20).hex()}"
-        )
+    assert (destination := address.reveal()) is not None
 
     sender = s.transaction.address.reveal()
     assert sender is not None, "CREATE requires concrete sender address"
@@ -528,10 +523,12 @@ def _CREATE(s: State, value: Uint256, initcode: Bytes, seed: Bytes) -> ControlFl
     def callback(state: State, substate: State) -> State:
         assert isinstance(substate.pc, Termination)
         if substate.pc.success is False:
+            del state.universe.contracts[destination]
             state.stack.append(Uint256(0))
         else:
-            program = disassemble(substate.pc.returndata)
-            state.universe.contracts[destination].program = program
+            contract = state.universe.contracts[destination]
+            contract.program = disassemble(substate.pc.returndata)
+            state = state.with_contract(contract, True)
             state.stack.append(address.into(Uint256))
         return state
 
