@@ -108,7 +108,7 @@ class State:
 
     @property
     def program(self) -> Program:
-        """TODO."""
+        """Return the currently-executing program."""
         if self.program_override is not None:
             return self.program_override
         assert (address := self.transaction.address.reveal()) is not None
@@ -116,14 +116,14 @@ class State:
 
     @property
     def storage(self) -> Array[Uint256, Uint256]:
-        """TODO."""
+        """Return the current contract's storage."""
         assert (address := self.transaction.address.reveal()) is not None
         return self.universe.contracts[address].storage
 
     def with_contract(
         self, contract: Contract | Program, overwrite: bool = False
     ) -> State:
-        """TODO."""
+        """Add a contract to the universe."""
         if isinstance(contract, Program):
             contract = Contract(program=contract)
         self.universe = self.universe.with_contract(contract, overwrite)

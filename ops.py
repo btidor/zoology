@@ -488,7 +488,7 @@ def CREATE(s: State, value: Uint256, offset: Uint256, size: Uint256) -> ControlF
     nonce = s.universe.contracts[sender_address].nonce.reveal()
     assert nonce is not None, "CREATE require concrete nonce"
     if nonce >= 0x80:
-        raise NotImplementedError  # TODO: implement a full RLP encoder
+        raise NotImplementedError  # implement a full RLP encoder
 
     # https://ethereum.stackexchange.com/a/761
     seed = Bytes(b"\xd6\x94" + sender_address.to_bytes(20) + nonce.to_bytes(1))

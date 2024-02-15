@@ -182,7 +182,7 @@ def compact_zarray(
                 Constraint, BZLA.mk_term(Kind.EQUAL, (key, key_))
             )
         if solver.check(~constraint):
-            raise NotImplementedError  # TODO: check writes one by one
+            raise NotImplementedError  # check writes one by one
         else:
             for _, value, key_ in batch:
                 term = BZLA.mk_term(Kind.ARRAY_STORE, (term, key_, value))
