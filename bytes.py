@@ -90,11 +90,11 @@ class Bytes:
         """Return a symbolic slice of this instance."""
         return ByteSlice(self, offset, size)
 
-    def bigvector(self, expected_length: int) -> Uint[Any]:
+    def bigvector(self) -> Uint[Any]:
         """Return a single, large bitvector of this instance's bytes."""
-        if (v := self.length.reveal()) is not None:
-            assert expected_length == v
-        return concat_bytes(*(self[Uint256(i)] for i in range(expected_length)))
+        if (n := self.length.reveal()) is None:
+            raise ValueError("bigvector requires concrete length")
+        return concat_bytes(*(self[Uint256(i)] for i in range(n)))
 
     def compact(self, solver: Solver, constraint: Constraint) -> Constraint:
         """Simplify using the given solver's contraints (a no-op)."""
@@ -140,7 +140,7 @@ class ByteSlice(Bytes):
         item = self.inner[self.offset + i]
         return (i < self.length).ite(item, BYTES[0])
 
-    def bigvector(self, expected_length: int) -> Uint[Any]:
+    def bigvector(self) -> Uint[Any]:
         """Return a single, large bitvector of this instance's bytes."""
         if (
             isinstance(self.inner, Memory)
@@ -149,15 +149,14 @@ class ByteSlice(Bytes):
             and start % 0x20 == 0
             and size % 0x20 == 0
         ):
-            assert size == expected_length
             words = list[Uint256]()
             for i in range(start, start + size, 0x20):
                 if i in self.inner.wordcache:
                     words.append(self.inner.wordcache[i])
                 else:
-                    return super().bigvector(expected_length)
+                    return super().bigvector()
             return concat_words(*words)
-        return super().bigvector(expected_length)
+        return super().bigvector()
 
     def compact(self, solver: Solver, constraint: Constraint) -> Constraint:
         """Simplify length and offset using the given solver's contraints."""

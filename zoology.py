@@ -132,7 +132,7 @@ def validateInstance(
 
         # This logic needs to match State.constrain(). We don't need to worry
         # about narrowing because SHA3 is not invoked (see check below).
-        b: Uint256 = end.pc.returndata.bigvector(32)
+        b: Uint256 = end.pc.returndata.slice(Uint256(0), Uint256(32)).bigvector()
         predicates.append(end.constraint & (b != Uint256(0)))
 
         if end.universe.codesizes.written:
@@ -196,7 +196,7 @@ def constrainWithValidator(
         solver = Solver()
         candidate = history.extend(end)
         candidate.constrain(solver, check=False)
-        ok = end.pc.returndata.bigvector(32) != Uint256(0)
+        ok = end.pc.returndata.slice(Uint256(0), Uint256(32)).bigvector() != Uint256(0)
         solver.add(ok)
         if solver.check():
             end.sha3.narrow(solver)
