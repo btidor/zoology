@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Any
@@ -90,12 +91,9 @@ class Contract:
 
     def clone_and_reset(self) -> Contract:
         """Clone this Contract and reset array access tracking."""
-        return Contract(
-            address=self.address,
-            program=self.program,
-            storage=self.storage.clone_and_reset(),
-            nonce=self.nonce,
-        )
+        result = copy.copy(self)
+        result.storage = result.storage.clone_and_reset()
+        return result
 
     def __post_init__(self) -> None:
         assert self.address.reveal() is not None, "Contract requires concrete address"

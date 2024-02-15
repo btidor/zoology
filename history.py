@@ -24,18 +24,22 @@ from state import State
 class History:
     """Encapsulates a linear sequence of transactions."""
 
-    def __init__(
-        self, starting_universe: Universe, starting_sha3: SHA3, player: Uint160
-    ) -> None:
+    def __init__(self, universe: Universe, sha3: SHA3, player: Uint160) -> None:
         """Create a new History."""
-        self.starting_universe = starting_universe
-        self.starting_sha3 = starting_sha3
+        block = Block()
         self.player = player
+        self.start = (universe, sha3, block)
         self.states = list[State]()
+        # The ith transaction in `state` runs in the ith block. Validation
+        # always runs against the last block.
+        self.blocks = list[Block]()
+        for _ in range(16):
+            block = block.successor()
+            self.blocks.append(block)
 
     def __deepcopy__(self, memo: Any) -> History:
-        result = History(self.starting_universe, self.starting_sha3, self.player)
-        result.states = copy.copy(self.states)
+        result = copy.copy(self)
+        result.states = copy.copy(result.states)
         return result
 
     def pxs(self) -> str:
@@ -45,20 +49,24 @@ class History:
     def subsequent(self) -> tuple[Universe, SHA3, Block]:
         """Set up the execution of a new transaction."""
         if len(self.states) == 0:
-            universe = self.starting_universe
-            sha3 = self.starting_sha3
-            block = Block()
+            universe, sha3, block = self.start
         else:
-            universe = self.states[-1].universe
-            sha3 = self.states[-1].sha3
-            block = self.states[-1].block.successor()
+            i = len(self.states) - 1
+            universe, sha3 = self.states[i].universe, self.states[i].sha3
+            block = self.blocks[i]
         return universe.clone_and_reset(), copy.deepcopy(sha3), block
+
+    def validation_block(self) -> Block:
+        """Return the block in which validateInstance should run."""
+        return self.blocks[-1]
 
     def extend(self, state: State) -> History:
         """Add a new transaction to the History."""
-        other = copy.deepcopy(self)
-        other.states.append(state)
-        return other
+        next = copy.deepcopy(self)
+        next.states.append(state)
+        if len(next.states) > 15:
+            raise OverflowError("History is limited to 15 states")
+        return next
 
     def constrain(self, solver: Solver, check: bool = True) -> None:
         """Apply hard constraints to the given solver instance."""
@@ -72,7 +80,7 @@ class History:
         if len(self.states) > 0:
             self.states[-1].sha3.narrow(solver)
         else:
-            self.starting_sha3.narrow(solver)
+            self.start[1].narrow(solver)
 
         for state in self.states:
             state.narrow(solver)
@@ -144,7 +152,7 @@ class Validator:
     def translate(self, history: History) -> Constraint:
         """Translate the validation constraint onto the given History."""
         if len(history.states) == 0:
-            universe = history.starting_universe
+            universe = history.start[0]
             number = Uint256(0)
         else:
             universe = history.states[-1].universe

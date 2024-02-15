@@ -94,14 +94,12 @@ def validateInstance(
         + arg1.to_bytes(32)
     )
 
-    universe, _, block = history.subsequent()
+    universe, _, _ = history.subsequent()
     universe.balances = Array[Uint160, Uint256]("BALANCE")
-    for _ in range(16):
-        block = block.successor()
     sha3 = SHA3()  # validatior optimization assumes no SHA3
     start = State(
         suffix="-V",
-        block=block,
+        block=history.validation_block(),
         transaction=Transaction(
             origin=SETUP,
             caller=SETUP,
@@ -176,10 +174,10 @@ def constrainWithValidator(
         + arg1.to_bytes(32)
     )
 
-    universe, sha3, block = history.subsequent()
+    universe, sha3, _ = history.subsequent()
     start = State(
         suffix="-V",
-        block=block,
+        block=history.validation_block(),
         transaction=Transaction(
             origin=SETUP,
             caller=SETUP,
