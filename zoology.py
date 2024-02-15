@@ -24,7 +24,7 @@ from smt import (
 )
 from snapshot import LEVEL_FACTORIES, apply_snapshot
 from state import State, Termination
-from universal import symbolic_start, universal_transaction
+from universal import universal_transaction
 from vm import printable_execution
 
 SETUP = Uint160(0x5757575757575757575757575757575757575757)
@@ -220,36 +220,39 @@ def search(
 
     histories = [beginning]
     for i in range(depth):
-        suffix = f"-{i+1}"
+        suffix = f"@{i+1}"
         if verbose > 1:
             print(f"\tTxn {i+1}:")
         subsequent = list[History]()
         for history in histories:
             universe, sha3, block = history.subsequent()
-            contract = universe.contracts[instance]
-            start = symbolic_start(contract, sha3, suffix)
-            start.universe = universe
-
-            # ASSUMPTION: each call to the level takes place in a different
-            # block, and the blocks are consecutive.
-            start.block = block
-
-            # ASSUMPTION: all transactions are originated by the player, but may
-            # (or may not!) be bounced through a "proxy" contract
-            start.transaction = Transaction.symbolic(
+            start = State(
                 suffix=suffix,
-                address=Uint160(instance),
-                origin=PLAYER,
-                caller=Constraint(f"CALLERAB{suffix}").ite(PLAYER, PROXY),
+                # ASSUMPTION: each call to the level takes place in a different
+                # block, and the blocks are consecutive.
+                block=block,
+                transaction=Transaction.symbolic(
+                    suffix=suffix,
+                    address=Uint160(instance),
+                    origin=PLAYER,
+                    # ASSUMPTION: all transactions are originated by the player,
+                    # but may (or may not!) be bounced through a "proxy"
+                    # contract.
+                    caller=Constraint(f"CALLERAB{suffix}").ite(PLAYER, PROXY),
+                ),
+                universe=universe,
+                sha3=sha3,
+                gas_count=0,
             )
             start.transfer(
                 start.transaction.origin,
                 start.transaction.address,
                 start.transaction.callvalue,
             )
-            start.storage.written = []
 
+            # TODO: also consider SELFDESTRUCTing to other addresses
             selfdestruct = copy.deepcopy(start)
+
             universal = universal_transaction(start, check=False, prints=(verbose > 2))
             for end in chain(universal, [selfdestruct]):
                 candidate = history.extend(end)
