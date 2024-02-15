@@ -2,7 +2,7 @@
 
 import pytest
 
-from bytes import Bytes
+from bytes import BYTES, Bytes
 from sha3 import SHA3
 from smt import NarrowingError, Solver, Uint256
 
@@ -42,12 +42,16 @@ def test_fully_symbolic() -> None:
     solver = Solver()
     sha3.constrain(solver)
     solver.add(input.length == Uint256(7))
+    for i, b in enumerate(b"testing"):
+        solver.add(input[Uint256(i)] == BYTES[b])
+
+    result = sha3[input]
     assert solver.check()
 
     assert input.describe(solver) == b"testing".hex()
     sha3.narrow(solver)
     assert (
-        solver.evaluate(sha3[input])
+        solver.evaluate(result)
         == 0x5F16F4C7F149AC4F9510D9CF8CF384038AD348B3BCDC01915F95DE12DF9D1B02
     )
 
@@ -96,22 +100,6 @@ def test_impossible_symbolic() -> None:
         == Uint256(0x0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF)
     )
     assert not solver.check()
-
-
-def test_items() -> None:
-    sha3 = SHA3()
-    sha3[Bytes(b"hello")]
-    sha3[Bytes(b"testing")]
-
-    items = sha3.items()
-    n, k, _ = next(items)
-    assert (n, k.reveal()) == (5, int.from_bytes(b"hello"))
-
-    n, k, _ = next(items)
-    assert (n, k.reveal()) == (7, int.from_bytes(b"testing"))
-
-    with pytest.raises(StopIteration):
-        next(items)
 
 
 def test_printable() -> None:

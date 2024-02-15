@@ -128,6 +128,16 @@ def underflow_safe(a: Uint256, b: Uint256) -> Constraint:
     return ~_from_expr(Constraint, Kind.BV_USUB_OVERFLOW, a, b)
 
 
+def implies(a: Constraint, b: Constraint) -> Constraint:
+    """Return a constraint asserting that a implies b."""
+    return _from_expr(Constraint, Kind.IMPLIES, a, b)
+
+
+def prequal(a: Symbolic, b: Symbolic) -> bool:
+    """Check if a == b after preprocessing without calling the solver."""
+    return (a == b).reveal() or False
+
+
 def get_constants(s: Symbolic) -> dict[str, BitwuzlaTerm]:
     """Recursively search the term for constants."""
     constants = dict[str, BitwuzlaTerm]()

@@ -4,24 +4,34 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass, field
-from typing import Any, Iterable, Iterator, Literal, TypeAlias
+from typing import Any, Iterable, Literal, TypeAlias
 
 from Crypto.Hash import keccak
 
-from bytes import Bytes
+from bytes import BYTES, Bytes
 from smt import (
-    Array,
-    Constraint,
     NarrowingError,
     Solver,
     Uint,
     Uint8,
     Uint256,
+    concat_bytes,
     describe,
-    make_uint,
+    implies,
+    prequal,
 )
 
 Uint128: TypeAlias = Uint[Literal[128]]
+
+
+def concrete_hash(data: bytes | str) -> Uint256:
+    """Hash a concrete input and return the digest as a Uint256."""
+    encoded = data if isinstance(data, bytes) else data.encode()
+    digest = keccak.new(data=encoded, digest_bits=256).digest()
+    return Uint256(int.from_bytes(digest))
+
+
+EMPTY_DIGEST = concrete_hash(b"")
 
 
 @dataclass
@@ -33,126 +43,144 @@ class SHA3:
     there are no hash *collisions* (other preimage attacks are legal).
     """
 
-    # We model the SHA-3 function as a symbolic uninterpreted function from
-    # n-byte inputs to 32-byte outputs. Z3 requires n to be constant for any
-    # given function, so we store a mapping from `n -> func_n(x)`.
-    hashes: dict[int, Array[Uint[Any], Uint256]] = field(default_factory=dict)
-
-    # If the input has a symbolic length, we don't really know what it's going
-    # to hash to. In this case, mint a new variable for the return value.
-    free_digests: list[tuple[Bytes, Uint256]] = field(default_factory=list)
-
-    constraints: list[Constraint] = field(default_factory=list)
+    free: list[tuple[Bytes, Uint256]] = field(default_factory=list)
+    symbolic: list[tuple[Uint[Any], Uint256]] = field(default_factory=list)
+    concrete: dict[bytes, tuple[Uint[Any], Uint256]] = field(default_factory=dict)
 
     def __deepcopy__(self, memo: Any) -> SHA3:
         return SHA3(
-            hashes=copy.copy(self.hashes),
-            free_digests=copy.copy(self.free_digests),
-            constraints=copy.copy(self.constraints),
+            free=copy.copy(self.free),
+            symbolic=copy.copy(self.symbolic),
+            concrete=copy.copy(self.concrete),
         )
 
     def __getitem__(self, key: Bytes) -> Uint256:
-        """Compute the SHA3 hash of a given key."""
-        size = key.length.reveal()
+        """
+        Compute the SHA3 hash of a given key.
 
-        if size is None:
-            result = Uint256(f"DIGEST{len(self.free_digests)}")
-            self.free_digests.append((key, result))
-            for key2, val2 in reversed(self.free_digests[:-1]):
-                # HACK: to avoid introducing quantifiers, if this instance has a
-                # symbolic length, we return a fixed 1024-byte vector. This is
-                # an unsound assumption!
-                result = (key.bigvector(1024) == key2.bigvector(1024)).ite(val2, result)
-            return result
-
-        if size == 0:
-            digest = keccak.new(data=b"", digest_bits=256).digest()
-            return Uint256(int.from_bytes(digest))
-
-        if size not in self.hashes:
-            self.hashes[size] = Array[make_uint(size * 8), Uint256](f"SHA3-{size}")
-
-        keyvector = key.bigvector(size)
-        free = self.hashes[size][keyvector]
-        if (data := key.reveal()) is not None:
-            digest = keccak.new(data=data, digest_bits=256).digest()
-            hash = Uint256(int.from_bytes(digest))
-            self.constraints.append(free == hash)
+        This method should only be called before constraining and narrowing!
+        """
+        if (size := key.length.reveal()) is None:
+            # Case I: Free Digest (symbolic length, symbolic data).
+            digest = Uint256(f"DIGEST:F{len(self.free)}")
+            self.free.append((key, digest))
+            return digest
+        elif size == 0:
+            # Case II: Empty Digest (zero length).
+            return EMPTY_DIGEST
+        elif (data := key.reveal()) is None:
+            # Case III: Symbolic Digest (concrete length, symbolic data).
+            vector = key.bigvector()
+            for other, digest in self.symbolic:
+                if prequal(vector, other):
+                    return digest
+            digest = Uint256(f"DIGEST:S{len(self.symbolic)}")
+            self.symbolic.append((vector, digest))
+            return digest
         else:
-            # ASSUMPTION: no hash may have more than 128 leading zero bits. This
-            # avoids hash collisions between maps/arrays and ordinary storage
-            # slots.
-            self.constraints.append((free >> Uint256(128)).into(Uint128) != Uint128(0))
-            hash = free
-
-        for n, okey, oval in self.items():
-            # ASSUMPTION: every hash digest is distinct, there are no collisions
-            # ever.
-            if n == size:
-                self.constraints.append((hash != oval) | (keyvector == okey))
-            else:
-                self.constraints.append(hash != oval)
-
-        return hash
-
-    def items(self) -> Iterator[tuple[int, Uint[Any], Uint256]]:
-        """
-        Iterate over (n, key, value) tuples.
-
-        Note: does not include free digests, which must be handled manually.
-        """
-        for n, array in self.hashes.items():
-            for key in array.accessed:
-                result = array.peek(key)
-                yield (n, key, result)
+            # Case IV: Concrete Digest (concrete length, concrete data).
+            if data not in self.concrete:
+                self.concrete[data] = (key.bigvector(), concrete_hash(data))
+            return self.concrete[data][1]
 
     def constrain(self, solver: Solver) -> None:
         """Apply computed SHA3 constraints to the given solver instance."""
-        # TODO: extend assumptions above to also constrain free digests
-        for constraint in self.constraints:
+        for i, (vector, digest) in enumerate(self.symbolic):
+            # ASSUMPTION: no hash may have more than 128 leading zero bits. This
+            # avoids hash collisions between maps/arrays and ordinary storage
+            # slots.
+            constraint = (digest >> Uint256(128)).into(Uint128) != Uint128(0)
+
+            # ASSUMPTION: every hash digest is distinct, there are no collisions
+            # ever.
+            for data, (vector2, digest2) in self.concrete.items():
+                if vector.width // 8 == len(data):
+                    constraint &= implies(vector == vector2, digest == digest2)
+                    constraint &= implies(vector != vector2, digest != digest2)
+                else:
+                    constraint &= digest != digest2
+            for vector2, digest2 in self.symbolic[i:]:
+                if vector.width == vector2.width:
+                    constraint &= implies(vector == vector2, digest == digest2)
+                    constraint &= implies(vector != vector2, digest != digest2)
+                else:
+                    constraint &= digest != digest2
+            constraint &= digest != EMPTY_DIGEST
+
             solver.add(constraint)
 
-    def narrow(self, solver: Solver) -> None:
+        for key, digest in self.free:
+            constraint = (digest >> Uint256(128)).into(Uint128) != Uint128(0)
+            for data, (_, digest2) in self.concrete.items():
+                constraint &= implies(
+                    key.length != Uint256(len(data)), digest != digest2
+                )
+            for vector2, digest2 in self.symbolic:
+                constraint &= implies(
+                    key.length != Uint256(vector2.width // 8), digest != digest2
+                )
+
+            solver.add(constraint)
+
+    def narrow(self, solver: Solver) -> list[tuple[Uint[Any], Uint256]]:
         """
         Apply concrete SHA3 constraints to a given model instance.
 
-        Narrowing is *unsound* because we concretize the key. Narrowing errors
-        should always bubble up as a hard failure of the analysis.
+        Narrowing is *unsound* because we concretize the hash inputs and
+        outputs. Narrowing errors should always bubble up as a hard failure of
+        the analysis.
         """
-        for n, key, val in self.items():
-            data = solver.evaluate(key).to_bytes(key.width // 8)
-            hash = keccak.new(data=data, digest_bits=256)
-            assert len(data) == n
-            solver.add(key == key.__class__(int.from_bytes(data)))
-            solver.add(val == Uint256(int.from_bytes(hash.digest())))
+        concretized = list[tuple[Uint[Any], Uint256]]()
+        for vector, digest in self.symbolic:
+            evaluation = solver.evaluate(vector)
+            data = evaluation.to_bytes(vector.width // 8)
+            vector1 = vector.__class__(evaluation)
+            digest1 = concrete_hash(data)
+
+            solver.add((vector == vector1) & (digest == digest1))
             if not solver.check():
                 raise NarrowingError(data)
+            concretized.append((vector1, digest1))
 
-        for key, val in self.free_digests:
+        for i, (key, digest) in enumerate(self.free):
             data = key.evaluate(solver)
-            hash = keccak.new(data=data, digest_bits=256)
-            solver.add(key.length == Uint256(len(data)))
+            vector1 = concat_bytes(*(BYTES[b] for b in data))
+            digest1 = concrete_hash(data)
+
+            constraint = key.length == Uint256(len(data))
             for i, b in enumerate(data):
-                solver.add(key[Uint256(i)] == Uint8(b))
-            solver.add(val == Uint256(int.from_bytes(hash.digest())))
+                constraint &= key[Uint256(i)] == Uint8(b)
+            constraint &= digest == digest1
+
+            for vector2, digest2 in concretized:
+                if vector1.width == vector2.width:
+                    constraint &= implies(vector1 == vector2, digest1 == digest2)
+                    constraint &= implies(vector1 != vector2, digest1 != digest2)
+                else:
+                    constraint &= digest1 != digest2
+
+            solver.add(constraint)
             if not solver.check():
                 raise NarrowingError(data)
+            concretized.append((vector1, digest1))
 
-        assert solver.check()
+        return concretized
 
     def printable(self, solver: Solver) -> Iterable[str]:
         """Yield a human-readable evaluation using the given model."""
         line = "SHA3"
         seen = set[str]()
-        for _, key, val in self.items():
-            k = "0x" + solver.evaluate(key).to_bytes(key.width // 8).hex()
+        hashes = list(self.concrete.values()) + self.narrow(solver)
+        for vector, digest in hashes:
+            assert (scalar := vector.reveal()) is not None
+            k = "0x" + scalar.to_bytes(vector.width // 8).hex()
             if k in seen:
                 continue
             line += f"\t{k} "
             if len(k) > 34:
                 yield line
                 line = "\t"
-            v = describe(Uint256(solver.evaluate(val)))
+            v = describe(digest)
             line += f"-> {v}"
             yield line
             line = ""
@@ -160,10 +188,3 @@ class SHA3:
 
         if line == "":
             yield ""
-
-
-def concrete_hash(data: bytes | str) -> Uint256:
-    """Hash a concrete input and return the digest as a Uint256."""
-    encoded = data if isinstance(data, bytes) else data.encode()
-    digest = keccak.new(data=encoded, digest_bits=256).digest()
-    return Uint256(int.from_bytes(digest))

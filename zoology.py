@@ -141,7 +141,7 @@ def validateInstance(
             return None
 
     assert predicates
-    if sha3.constraints:
+    if sha3.free or sha3.symbolic:
         # We can't currently handle feeding the global SHA3 instance into the
         # validator. Fall back to running validateInstance with concrete inputs
         # at every step.
@@ -315,7 +315,7 @@ if __name__ == "__main__":
         "-l", "--level", help="select which level(s) to run", action="append", type=int
     )
     parser.add_argument(
-        "-d", "--depth", help="maximum number of transactions", type=int, default=4
+        "-d", "--depth", help="maximum number of transactions", type=int, default=10
     )
     parser.add_argument("-v", "--verbose", action="count", default=0)
     args = parser.parse_args()

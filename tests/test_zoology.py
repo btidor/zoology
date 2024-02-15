@@ -34,7 +34,7 @@ def check_level(i: int, fixture: list[str]) -> None:
 
 def test_fallback() -> None:
     fixture = [
-        "Px8F\td7bb99ba 000000000000000000000000cacacacacacacacacacacacacacacacacacacaca\t(value: 1)",
+        "Px8F\td7bb99ba\t(value: 1)",
         "Px19\t(empty) \t(value: 1)",
         "Px5F\t3ccfd60b",
     ]
@@ -73,7 +73,7 @@ def test_telephone() -> None:
 
 def test_token() -> None:
     fixture = [
-        "Px63\ta9059cbb ffffffffffffffffffffffffcacacacacacacacacacacacacacacacacacacacb4000000000000000000000000000000000000000000000000000000000000014",
+        "Px63\ta9059cbb ffffffffffffffffffffffffcacacacacacacacacacacacacacacacacacacaca0000000000000000000000000000000000000000000000000000000000000001\t(via proxy)",
     ]
     check_level(5, fixture)
 
