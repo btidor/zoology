@@ -229,14 +229,16 @@ def search(
                 # ASSUMPTION: each call to the level takes place in a different
                 # block, and the blocks are consecutive.
                 block=block,
-                transaction=Transaction.symbolic(
-                    suffix=suffix,
+                transaction=Transaction(
                     address=Uint160(instance),
                     origin=PLAYER,
                     # ASSUMPTION: all transactions are originated by the player,
                     # but may (or may not!) be bounced through a "proxy"
                     # contract.
                     caller=Constraint(f"CALLERAB{suffix}").ite(PLAYER, PROXY),
+                    callvalue=Uint256(f"CALLVALUE{suffix}"),
+                    calldata=Bytes.symbolic(f"CALLDATA{suffix}"),
+                    gasprice=Uint256(f"GASPRICE{suffix}"),
                 ),
                 universe=universe,
                 sha3=sha3,

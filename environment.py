@@ -113,24 +113,6 @@ class Transaction:
     def __post_init__(self) -> None:
         assert self.address.reveal() is not None, "Contract requires concrete address"
 
-    @classmethod
-    def symbolic(
-        cls,
-        suffix: str,
-        address: Uint160,
-        origin: Uint160 | None = None,
-        caller: Uint160 | None = None,
-    ) -> Transaction:
-        """Create a fully-symbolic Transaction."""
-        return Transaction(
-            address=address,
-            origin=Uint160(f"ORIGIN{suffix}") if origin is None else origin,
-            caller=Uint160(f"CALLER{suffix}") if caller is None else caller,
-            callvalue=Uint256(f"CALLVALUE{suffix}"),
-            calldata=Bytes.symbolic(f"CALLDATA{suffix}"),
-            gasprice=Uint256(f"GASPRICE{suffix}"),
-        )
-
     def describe(self, solver: Solver) -> OrderedDict[str, str]:
         """
         Use a model to evaluate this instance as a dictionary of attributes.

@@ -9,7 +9,7 @@ from bytes import Bytes
 from disassembler import Program, disassemble
 from environment import Block, Contract, Transaction, Universe
 from sha3 import SHA3
-from smt import Array, Solver, Uint256, describe
+from smt import Array, Solver, Uint160, Uint256, describe
 from state import Descend, Jump, State, Termination
 from vm import step
 
@@ -77,9 +77,16 @@ def symbolic_start(program: Contract | Program, sha3: SHA3, suffix: str) -> Stat
             storage=Array[Uint256, Uint256](f"STORAGE{suffix}"),
             nonce=Uint256(f"NONCE{suffix}"),
         )
-    # TODO: properly constrain ORIGIN to be an EOA and CALLER to either be equal
-    # to ORIGIN or else be a non-EOA
-    transaction = Transaction.symbolic(suffix, contract.address)
+    transaction = Transaction(
+        address=contract.address,
+        # TODO: properly constrain ORIGIN to be an EOA and CALLER to either be
+        # equal to ORIGIN or else be a non-EOA.
+        origin=Uint160(f"ORIGIN{suffix}"),
+        caller=Uint160(f"CALLER{suffix}"),
+        callvalue=Uint256(f"CALLVALUE{suffix}"),
+        calldata=Bytes.symbolic(f"CALLDATA{suffix}"),
+        gasprice=Uint256(f"GASPRICE{suffix}"),
+    )
     # TODO: the balances of other accounts can change between transactions
     # (and the balance of this contract account too, via SELFDESTRUCT). How
     # do we model this?
