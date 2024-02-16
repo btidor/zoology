@@ -257,20 +257,18 @@ def search(
             for end in chain(universal, [selfdestruct]):
                 candidate = history.extend(end)
                 if verbose > 1:
+                    print(f"- {candidate.pxs()}")
                     try:
                         solver = Solver()
                         candidate.constrain(solver)
                         candidate.narrow(solver)
-                        sp = "-"
-                        output = ""
                         for line in candidate.describe(solver):
-                            output += f"{sp} {line}\n"
-                            sp = " "
-                        print(output, end="")
+                            print(f"  : {line}")
                     except ConstrainingError:
+                        print("  ! constraining error")
                         continue
                     except NarrowingError:
-                        print(f"- [{candidate.pxs()}] unprintable: narrowing error")
+                        print("  ! narrowing error")
                         continue
 
                 solver = constrainWithValidator(
@@ -280,7 +278,7 @@ def search(
                 if solver.check():
                     candidate.narrow(solver)
                     if verbose > 1:
-                        print("  [found solution!]")
+                        print("  > found solution!")
                     return candidate, solver
 
                 if all(
@@ -289,7 +287,7 @@ def search(
                     # TODO: this ignores transactions that only change contract
                     # balances, which can also be material
                     if verbose > 1:
-                        print("  [read-only]")
+                        print("  > read-only")
                     continue
 
                 try:
@@ -297,11 +295,11 @@ def search(
                     candidate.constrain(solver)
                 except ConstrainingError:
                     if verbose > 1:
-                        print("  [constraining error]")
+                        print("  ! constraining error")
                     continue
 
                 if verbose > 1:
-                    print("  [candidate]")
+                    print("  > candidate")
                 subsequent.append(candidate)
 
         histories = subsequent

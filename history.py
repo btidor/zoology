@@ -103,7 +103,7 @@ class History:
                 data = "(empty) "
             elif len(data) > 8:
                 data = data[:8] + " " + data[8:]
-            line = f"{state.px()}\t{data}"
+            line = f"{data}"
 
             suffixes = list[str]()
             value = solver.evaluate(state.transaction.callvalue)
