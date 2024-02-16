@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import copy
-from typing import Any, Literal, Self, TypeVar
+from typing import Any, Self, TypeVar
 
 from smt import (
     Constraint,
     Solver,
     Uint,
     Uint8,
+    Uint64,
     Uint256,
     compact_helper,
     compact_zarray,
@@ -27,8 +28,6 @@ DESCRIBE_LIMIT = 256
 
 BYTES = [Uint8(i) for i in range(256)]
 INTEGERS = list[Uint256]()
-
-Uint64 = Uint[Literal[64]]
 
 
 class Bytes:

@@ -3,7 +3,7 @@
 import copy
 from typing import Literal
 
-from bytes import Bytes, Uint64
+from bytes import Bytes
 from disassembler import Instruction, disassemble
 from environment import Contract, Transaction
 from smt import (
@@ -12,6 +12,7 @@ from smt import (
     Int,
     Uint,
     Uint8,
+    Uint64,
     Uint160,
     Uint256,
     concat_bytes,

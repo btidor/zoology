@@ -19,6 +19,7 @@ from smt import (
     Constraint,
     NarrowingError,
     Solver,
+    Uint64,
     Uint160,
     Uint256,
 )
@@ -236,7 +237,8 @@ def search(
                     # but may (or may not!) be bounced through a "proxy"
                     # contract.
                     caller=Constraint(f"CALLERAB{suffix}").ite(PLAYER, PROXY),
-                    callvalue=Uint256(f"CALLVALUE{suffix}"),
+                    # ASSUMPTION: each transaction sends less than ~18 ETH.
+                    callvalue=Uint64(f"CALLVALUE{suffix}").into(Uint256),
                     calldata=Bytes.symbolic(f"CALLDATA{suffix}"),
                     gasprice=Uint256(f"GASPRICE{suffix}"),
                 ),
