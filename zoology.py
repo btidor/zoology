@@ -292,13 +292,14 @@ def search(
                         print("  > read-only")
                     continue
 
-                try:
-                    solver = Solver()
-                    candidate.constrain(solver)
-                except ConstrainingError:
-                    if verbose > 1:
-                        print("  ! constraining error")
-                    continue
+                if not verbose > 1:
+                    try:
+                        solver = Solver()
+                        candidate.constrain(solver)
+                    except ConstrainingError:
+                        if verbose > 1:
+                            print("  ! constraining error")
+                        continue
 
                 if verbose > 1:
                     print("  > candidate")
