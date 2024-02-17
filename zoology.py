@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import sys
 from functools import reduce
 from itertools import chain
 
@@ -221,7 +222,7 @@ def search(
     for i in range(depth):
         suffix = f"@{i+1}"
         if verbose > 1:
-            print(f"\tTxn {i+1}:")
+            print(f"Trans {i+1:02}")
         subsequent = list[History]()
         for history in histories:
             universe, sha3, block = history.subsequent()
@@ -264,8 +265,15 @@ def search(
                         solver = Solver()
                         candidate.constrain(solver)
                         candidate.narrow(solver)
-                        for line in candidate.describe(solver):
-                            print(f"  : {line}")
+                        newline = True
+                        for part in candidate.describe(solver):
+                            if newline:
+                                print("  : ", end="")
+                                newline = False
+                            print(part, end="")
+                            if part.endswith("\n"):
+                                newline = True
+                            sys.stdout.flush()
                     except ConstrainingError:
                         print("  ! constraining error")
                         continue
@@ -310,6 +318,13 @@ def search(
     return None
 
 
+def vprint(part: str) -> None:
+    """Print a partial line, if verbose mode is enabled."""
+    if args.verbose > 1:
+        print(part, end="")
+        sys.stdout.flush()
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -328,17 +343,22 @@ if __name__ == "__main__":
 
     for i in args.level:
         factory = LEVEL_FACTORIES[i]
-        print(f"{i:04}", end="")
+        vprint(f"Level {i:02}  [U")
         try:
             universe = starting_universe(factory)
+            vprint("R")
             instance, beginning = createInstance(
                 universe, factory, prints=(args.verbose > 2)
             )
+            vprint("V")
             validator = validateInstance(
                 factory, instance, beginning, prints=(args.verbose > 2)
             )
+            vprint("S")
             solver = constrainWithValidator(factory, instance, beginning, validator)
+            vprint("C")
             assert not solver.check()
+            vprint("]\n")
 
             result = search(
                 factory,
@@ -353,8 +373,14 @@ if __name__ == "__main__":
                 continue
 
             solution, solver = result
-            for line in solution.describe(solver):
-                print("\t" + line)
+            newline = True
+            for part in solution.describe(solver):
+                if newline:
+                    print("\t", end="")
+                    newline = False
+                print(part, end="")
+                if part.endswith("\n"):
+                    newline = True
 
         except Exception as e:
             suffix = ""

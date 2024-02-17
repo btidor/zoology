@@ -120,7 +120,7 @@ class Transaction:
         Only attributes present in the model will be included.
         """
         r: OrderedDict[str, Uint[Any] | Int[Any] | str | None] = OrderedDict()
-        calldata = self.calldata.describe(solver)
+        calldata = self.calldata.evaluate(solver).hex()
         r["Data"] = f"0x{calldata[:8]} {calldata[8:]}".strip() if calldata else None
         r["Value"] = self.callvalue
         r["Caller"] = self.caller

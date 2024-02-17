@@ -95,40 +95,35 @@ class History:
         for state in self.states:
             if isinstance(state.pc, int):  # SELFDESTRUCT balance transfer
                 value = solver.evaluate(state.transaction.callvalue)
-                yield f"SELFDESTRUCT\t(value: {value})"
+                yield f"SELFDESTRUCT\tvalue: {value}\n"
                 continue
 
-            data = state.transaction.calldata.describe(solver)
-            if len(data) == 0:
-                data = "(empty) "
-            elif len(data) > 8:
-                data = data[:8] + " " + data[8:]
-            line = f"{data}"
+            yield from state.transaction.calldata.describe(solver)
 
             suffixes = list[str]()
             value = solver.evaluate(state.transaction.callvalue)
             if value > 0:
-                suffixes.append(f"value: {value}")
+                yield f"\tvalue: {value}"
             caller = solver.evaluate(state.transaction.caller)
             player = solver.evaluate(self.player)
             if caller != player:
+                yield "\tvia proxy"
                 suffixes.append("via proxy")
-            if len(suffixes) > 0:
-                line += f"\t({', '.join(suffixes)})"
-
-            yield line
+            yield "\n"
 
             for dc in state.delegates:
                 ok = evaluate(solver, dc.ok)
-                yield f"\tProxy {'RETURN' if ok else 'REVERT'} {dc.returndata.describe(solver)}"
+                yield f"\tProxy {'RETURN' if ok else 'REVERT'} "
+                yield from dc.returndata.describe(solver)
+                yield "\n"
                 if ok:
                     prev = evaluate(solver, dc.previous_storage)
                     for k, v in evaluate(solver, dc.next_storage).items():
                         if prev[k] != v:
-                            yield f"\tSet {hex(k)} to {hex(v)}"
+                            yield f"\tSet {hex(k)} to {hex(v)}\n"
 
             if evaluate(solver, Constraint("GASHOG")):
-                yield "\tProxy CONSUME ALL GAS"
+                yield "\tProxy CONSUME ALL GAS\n"
 
 
 class Validator:

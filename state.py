@@ -204,9 +204,9 @@ class State:
         """
         assert isinstance(self.pc, Termination)
         r: OrderedDict[str, str] = OrderedDict()
-        returndata = self.pc.returndata.describe(solver)
+        returndata = self.pc.returndata.evaluate(solver)
         if returndata:
-            r["Return"] = "0x" + returndata
+            r["Return"] = "0x" + returndata.hex()
         return r
 
     def compact_bytes(self, bytes: Bytes) -> Bytes:

@@ -23,8 +23,7 @@ def check_level(i: int, fixture: list[str]) -> None:
     assert result is not None, "search failed"
 
     solution, solver = result
-    for actual, expected in zip(solution.describe(solver), fixture, strict=True):
-        assert actual == expected
+    assert "".join(solution.describe(solver)).strip() == "\n".join(fixture)
 
 
 # def test_hello() -> None:
@@ -34,8 +33,8 @@ def check_level(i: int, fixture: list[str]) -> None:
 
 def test_fallback() -> None:
     fixture = [
-        "d7bb99ba\t(value: 1)",
-        "(empty) \t(value: 1)",
+        "d7bb99ba\tvalue: 1",
+        "-       \tvalue: 1",
         "3ccfd60b",
     ]
     check_level(1, fixture)
@@ -66,14 +65,14 @@ def test_coinflip() -> None:
 
 def test_telephone() -> None:
     fixture = [
-        "a6f9dae1 000000000000000000000000cacacacacacacacacacacacacacacacacacacaca\t(via proxy)",
+        "a6f9dae1 000000000000000000000000cacacacacacacacacacacacacacacacacacacaca\tvia proxy",
     ]
     check_level(4, fixture)
 
 
 def test_token() -> None:
     fixture = [
-        "a9059cbb ffffffffffffffffffffffffcacacacacacacacacacacacacacacacacacacaca0000000000000000000000000000000000000000000000000000000000000001\t(via proxy)",
+        "a9059cbb ffffffffffffffffffffffffcacacacacacacacacacacacacacacacacacacaca0000000000000000000000000000000000000000000000000000000000000001\tvia proxy",
     ]
     check_level(5, fixture)
 
@@ -87,7 +86,7 @@ def test_delegation() -> None:
 
 def test_force() -> None:
     fixture = [
-        "SELFDESTRUCT\t(value: 1)",
+        "SELFDESTRUCT\tvalue: 1",
     ]
     check_level(7, fixture)
 
@@ -101,7 +100,7 @@ def test_vault() -> None:
 
 def test_king() -> None:
     fixture = [
-        "(empty) \t(value: 1125899906842623, via proxy)",
+        "-       \tvalue: 1125899906842623\tvia proxy",
     ]
     check_level(9, fixture)
 
@@ -113,7 +112,7 @@ def test_king() -> None:
 
 def test_elevator() -> None:
     fixture = [
-        "ed9a7134 00000000000000000000000000000000000000000000000000000001000000ff\t(via proxy)",
+        "ed9a7134 00000000000000000000000000000000000000000000000000000001000000ff\tvia proxy",
     ]
     check_level(11, fixture)
 
@@ -127,14 +126,14 @@ def test_privacy() -> None:
 
 def test_gatekeeper_one() -> None:
     fixture = [
-        "3370204e 000000010000caca000000000000000000000000000000000000000000000000\t(via proxy)",
+        "3370204e 000000010000caca000000000000000000000000000000000000000000000000\tvia proxy",
     ]
     check_level(13, fixture)
 
 
 def test_gatekeeper_two() -> None:
     fixture = [
-        "3370204e 2433b6aeb6cc3764000000000000000000000000000000000000000000000000\t(via proxy)",
+        "3370204e 2433b6aeb6cc3764000000000000000000000000000000000000000000000000\tvia proxy",
     ]
     check_level(14, fixture)
 
@@ -190,7 +189,7 @@ def test_denial() -> None:
 def test_shop() -> None:
     # TODO: illustrate proxy calls
     fixture = [
-        "a6f2ae3a\t(via proxy)",
+        "a6f2ae3a\tvia proxy",
     ]
     check_level(21, fixture)
 

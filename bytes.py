@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import copy
-from typing import Any, Self, TypeVar
+from typing import Any, Iterable, Self, TypeVar
 
 from smt import (
     Constraint,
@@ -99,14 +99,19 @@ class Bytes:
         """Simplify using the given solver's contraints (a no-op)."""
         return constraint
 
-    def describe(self, solver: Solver) -> str:
+    def describe(self, solver: Solver) -> Iterable[str]:
         """Use a model to evaluate this instance as a hexadecimal string."""
-        try:
-            return self.evaluate(solver).hex()
-        except ValueError:
-            return (
-                self.slice(Uint256(0), Uint256(DESCRIBE_LIMIT)).describe(solver) + "..."
-            )
+        length = solver.evaluate(self.length)
+        if length > DESCRIBE_LIMIT:
+            yield from self.slice(Uint256(0), Uint256(DESCRIBE_LIMIT)).describe(solver)
+            yield "..."
+        elif length == 0:
+            yield "-       "
+        else:
+            for i in range(length):
+                if i == 4:
+                    yield " "
+                yield solver.evaluate(self[Uint256(i)]).to_bytes(1).hex()
 
     def evaluate(self, solver: Solver) -> bytes:
         """Use a model to evaluate this instance as bytes."""
