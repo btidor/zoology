@@ -259,7 +259,7 @@ def search(
             for end in chain(universal, [selfdestruct]):
                 candidate = history.extend(end)
                 if verbose > 1:
-                    print(f"- {candidate.pxs()}")
+                    print(f"- {candidate.pz()}")
                     try:
                         solver = Solver()
                         candidate.constrain(solver)

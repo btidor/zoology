@@ -42,9 +42,9 @@ class History:
         result.states = copy.copy(result.states)
         return result
 
-    def pxs(self) -> str:
+    def pz(self) -> str:
         """Return a human-readable version of the sequence of paths."""
-        return ":".join(map(lambda s: s.px(), self.states))
+        return "Pz" + ":".join(map(lambda s: s.px()[2:], self.states))
 
     def subsequent(self) -> tuple[Universe, SHA3, Block]:
         """Set up the execution of a new transaction."""
