@@ -85,7 +85,7 @@ def createInstance(
 
 
 def validateInstance(
-    _factory: Uint160, instance: Uint160, history: History, prints: bool = False
+    factory: Uint160, instance: Uint160, history: History, prints: bool = False
 ) -> Validator | None:
     """Symbolically interpret validateInstance as a function, if possible."""
     assert (arg0 := instance.reveal()) is not None
@@ -105,7 +105,7 @@ def validateInstance(
         transaction=Transaction(
             origin=SETUP,
             caller=SETUP,
-            address=_factory,
+            address=factory,
             calldata=Bytes(calldata),
         ),
         universe=universe,
@@ -155,7 +155,7 @@ def validateInstance(
 
 
 def constrainWithValidator(
-    _factory: Uint160,
+    factory: Uint160,
     instance: Uint160,
     history: History,
     validator: Validator | None,
@@ -165,8 +165,6 @@ def constrainWithValidator(
         solver = Solver()
         solver.add(validator.translate(history))
         return solver
-
-    assert (factory := _factory.reveal()) is not None
 
     assert (arg0 := instance.reveal()) is not None
     assert (arg1 := PLAYER.reveal()) is not None
@@ -183,7 +181,7 @@ def constrainWithValidator(
         transaction=Transaction(
             origin=SETUP,
             caller=SETUP,
-            address=Uint160(factory),
+            address=factory,
             calldata=Bytes(calldata),
         ),
         universe=universe,
@@ -209,15 +207,13 @@ def constrainWithValidator(
 
 def search(
     factory: Uint160,
-    _instance: Uint160,
+    instance: Uint160,
     beginning: History,
     validator: Validator | None,
     depth: int,
     verbose: int = 0,
 ) -> tuple[History, Solver] | None:
     """Symbolically execute the given level until a solution is found."""
-    assert (instance := _instance.reveal()) is not None
-
     histories = [beginning]
     for i in range(depth):
         suffix = f"@{i+1}"
@@ -232,7 +228,7 @@ def search(
                 # block, and the blocks are consecutive.
                 block=block,
                 transaction=Transaction(
-                    address=Uint160(instance),
+                    address=instance,
                     origin=PLAYER,
                     # ASSUMPTION: all transactions are originated by the player,
                     # but may (or may not!) be bounced through a "proxy"
@@ -281,9 +277,7 @@ def search(
                         print("  ! narrowing error")
                         continue
 
-                solver = constrainWithValidator(
-                    factory, _instance, candidate, validator
-                )
+                solver = constrainWithValidator(factory, instance, candidate, validator)
                 candidate.constrain(solver, check=False)
                 if solver.check():
                     candidate.narrow(solver)

@@ -600,6 +600,20 @@ def CALL(
         )
         s.gas_hogged += hog.ite(gas, Uint256(0))
 
+        # TODO: this model is insufficient! We model balances and the return
+        # value, but *not* storage changes in the called contract.
+        #
+        # We should emit cases for all possible targets:
+        # - each contract in the universe, including self
+        # - proxy that implements $API
+        # - proxy that reverts with $MESSAGE
+        # - proxy that consumes all gas
+        # - player EOA
+        # - other, unknown EOA
+        # - other, unknown non-EOA (?)
+        # - (later: proxy calls a contract in the universe, including self)
+        #
+
         # Call to a symbolic address: return a fully-symbolic response.
         s.latest_return = Bytes.custom(
             (s.universe.codesizes[_address.into(Uint160)] == Uint256(0)).ite(
