@@ -32,12 +32,12 @@ def test_transfer() -> None:
 
     solver = Solver()
     end.constrain(solver)
-    solver.add(start.universe.balances[src] == Uint256(0xAAA))
-    solver.add(start.universe.balances[dst] == Uint256(0x0))
+    solver.add(start.balances[src] == Uint256(0xAAA))
+    solver.add(start.balances[dst] == Uint256(0x0))
     assert solver.check()
 
-    assert solver.evaluate(end.universe.balances[src]) == 0x9AA
-    assert solver.evaluate(end.universe.balances[dst]) == 0x100
+    assert solver.evaluate(end.balances[src]) == 0x9AA
+    assert solver.evaluate(end.balances[dst]) == 0x100
 
 
 def test_impossible_transfer() -> None:
@@ -49,5 +49,5 @@ def test_impossible_transfer() -> None:
 
     solver = Solver()
     end.constrain(solver)
-    solver.add(start.universe.balances[src] <= Uint256(0xF))
+    solver.add(start.balances[src] <= Uint256(0xF))
     assert not solver.check()

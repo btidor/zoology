@@ -258,9 +258,7 @@ def test_ADDRESS() -> None:
 
 def test_BALANCE() -> None:
     s = State()
-    s.universe.balances[Uint160(0x9BBFED6889322E016E0A02EE459D306FC19545D8)] = Uint256(
-        125985
-    )
+    s.balances[Uint160(0x9BBFED6889322E016E0A02EE459D306FC19545D8)] = Uint256(125985)
     assert (
         BALANCE(s, Uint256(0x9BBFED6889322E016E0A02EE459D306FC19545D8)).reveal()
         == 125985

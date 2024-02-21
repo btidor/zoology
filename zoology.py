@@ -11,7 +11,7 @@ from itertools import chain
 
 from bytes import Bytes
 from disassembler import abiencode
-from environment import Contract, Transaction, Universe
+from environment import Contract, Transaction
 from history import History, Validator
 from sha3 import SHA3
 from smt import (
@@ -24,7 +24,7 @@ from smt import (
     Uint160,
     Uint256,
 )
-from snapshot import LEVEL_FACTORIES, apply_snapshot
+from snapshot import LEVEL_FACTORIES, snapshot_contracts
 from state import State, Termination
 from universal import universal_transaction
 from vm import printable_execution
@@ -34,15 +34,8 @@ PLAYER = Uint160(0xCACACACACACACACACACACACACACACACACACACACA)
 PROXY = Uint160(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0)
 
 
-def starting_universe(factory: Uint160) -> Universe:
-    """Set up a symbolic universe with factory levels loaded."""
-    universe = Universe.symbolic("")
-    apply_snapshot(universe, factory)
-    return universe
-
-
 def createInstance(
-    universe: Universe, address: Uint160, prints: bool = False
+    contracts: dict[int, Contract], address: Uint160, prints: bool = False
 ) -> tuple[Uint160, History]:
     """Call createInstance to set up the level."""
     # Warning: this symbolic universe will be used in symbolic execution later
@@ -57,7 +50,7 @@ def createInstance(
             calldata=Bytes(calldata),
             callvalue=Uint256(10**15),
         ),
-        universe=universe,
+        contracts=contracts,
     )
     start.transfer(
         start.transaction.caller, start.transaction.address, start.transaction.callvalue
@@ -77,7 +70,9 @@ def createInstance(
     assert (data := end.pc.returndata.reveal()) is not None
     error = data[68:].strip().decode()
     assert end.pc.success, f"createInstance() failed{': ' + error if error else ''}"
-    return Uint160(int.from_bytes(data)), History(end.universe, end.sha3, PLAYER)
+    return Uint160(int.from_bytes(data)), History(
+        end.contracts, end.balances, end.sha3, PLAYER
+    )
 
 
 def validateInstance(
@@ -92,8 +87,8 @@ def validateInstance(
         + arg1.to_bytes(32)
     )
 
-    universe, _, _ = history.subsequent()
-    universe.balances = Array[Uint160, Uint256]("BALANCE")
+    contracts, _, _, _ = history.subsequent()
+    balances = Array[Uint160, Uint256]("BALANCE")
     sha3 = SHA3()  # validatior optimization assumes no SHA3
     start = State(
         suffix="-V",
@@ -104,12 +99,13 @@ def validateInstance(
             address=factory,
             calldata=Bytes(calldata),
         ),
-        universe=universe,
         sha3=sha3,
+        contracts=contracts,
+        balances=balances,
         gas_count=0,
     )
 
-    for reference in universe.contracts.values():
+    for reference in contracts.values():
         assert (a := reference.address.reveal()) is not None
         start = start.with_contract(
             Contract(
@@ -130,7 +126,7 @@ def validateInstance(
         b: Uint256 = end.pc.returndata.slice(Uint256(0), Uint256(32)).bigvector()
         predicates.append(end.constraint & (b != Uint256(0)))
 
-        if len(end.universe.contracts) > len(universe.contracts):
+        if len(end.contracts) > len(contracts):
             # We can't handle validators that create contracts, though that
             # would be pretty strange.
             return None
@@ -169,7 +165,7 @@ def constrainWithValidator(
         + arg1.to_bytes(32)
     )
 
-    universe, sha3, _ = history.subsequent()
+    contracts, balances, sha3, _ = history.subsequent()
     start = State(
         suffix="-V",
         block=history.validation_block(),
@@ -179,8 +175,9 @@ def constrainWithValidator(
             address=factory,
             calldata=Bytes(calldata),
         ),
-        universe=universe,
         sha3=sha3,
+        contracts=contracts,
+        balances=balances,
         gas_count=0,
     )
 
@@ -216,7 +213,7 @@ def search(
             print(f"Trans {i+1:02}")
         subsequent = list[History]()
         for history in histories:
-            universe, sha3, block = history.subsequent()
+            contracts, balances, sha3, block = history.subsequent()
             start = State(
                 suffix=suffix,
                 # ASSUMPTION: each call to the level takes place in a different
@@ -234,7 +231,8 @@ def search(
                     calldata=Bytes.symbolic(f"CALLDATA{suffix}"),
                     gasprice=Uint256(f"GASPRICE{suffix}"),
                 ),
-                universe=universe,
+                contracts=contracts,
+                balances=balances,
                 sha3=sha3,
                 gas_count=0,
             )
@@ -280,9 +278,7 @@ def search(
                         print("  > found solution!")
                     return candidate, solver
 
-                if all(
-                    len(c.storage.written) == 0 for c in end.universe.contracts.values()
-                ):
+                if all(len(c.storage.written) == 0 for c in end.contracts.values()):
                     # TODO: this ignores transactions that only change contract
                     # balances, which can also be material
                     if verbose > 1:
@@ -334,10 +330,10 @@ if __name__ == "__main__":
         factory = LEVEL_FACTORIES[i]
         vprint(f"Level {i:02}  [U")
         try:
-            universe = starting_universe(factory)
+            contracts = snapshot_contracts(factory)
             vprint("R")
             instance, beginning = createInstance(
-                universe, factory, prints=(args.verbose > 2)
+                contracts, factory, prints=(args.verbose > 2)
             )
             vprint("V")
             validator = validateInstance(

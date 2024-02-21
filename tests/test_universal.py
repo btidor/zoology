@@ -80,10 +80,10 @@ def test_basic() -> None:
     assert end.pc.success is True
 
     # These extra constraints makes the test deterministic
-    end.constraint &= start.universe.balances[
+    end.constraint &= start.balances[
         Uint160(0xADADADADADADADADADADADADADADADADADADADAD)
     ] == Uint256(0x8000000000001)
-    end.constraint &= start.universe.balances[
+    end.constraint &= start.balances[
         Uint160(0xCACACACACACACACACACACACACACACACACACACACA)
     ] == Uint256(0xAAAAAAAAAAAAA)
 

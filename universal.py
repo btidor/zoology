@@ -7,7 +7,7 @@ from typing import Iterable, Iterator
 
 from bytes import Bytes
 from disassembler import Program, disassemble
-from environment import Block, Contract, Transaction, Universe
+from environment import Block, Contract, Transaction
 from sha3 import SHA3
 from smt import Array, Solver, Uint160, Uint256, describe
 from state import Descend, Jump, State, Termination
@@ -90,15 +90,14 @@ def symbolic_start(program: Contract | Program, sha3: SHA3, suffix: str) -> Stat
     # TODO: the balances of other accounts can change between transactions
     # (and the balance of this contract account too, via SELFDESTRUCT). How
     # do we model this?
-    universe = Universe.symbolic(suffix).with_contract(contract)
     return State(
         suffix=suffix,
         block=Block.symbolic(suffix),
         transaction=transaction,
-        universe=universe,
+        balances=Array[Uint160, Uint256](f"BALANCE{suffix}"),
         sha3=sha3,
         gas_count=0,
-    )
+    ).with_contract(contract)
 
 
 def printable_transition(start: State, end: State) -> Iterable[str]:
@@ -144,9 +143,7 @@ def _printable_transition(
     if len(values) > 0:
         yield ""
 
-    for line in end.universe.balances.printable_diff(
-        "Balance", solver, start.universe.balances
-    ):
+    for line in end.balances.printable_diff("Balance", solver, start.balances):
         yield line
 
     for line in end.storage.printable_diff("Storage", solver, start.storage):

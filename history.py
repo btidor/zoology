@@ -5,9 +5,10 @@ from __future__ import annotations
 import copy
 from typing import Any, Iterable
 
-from environment import Block, Universe
+from environment import Block, Contract
 from sha3 import SHA3
 from smt import (
+    Array,
     ConstrainingError,
     Constraint,
     Expression,
@@ -24,11 +25,17 @@ from state import State
 class History:
     """Encapsulates a linear sequence of transactions."""
 
-    def __init__(self, universe: Universe, sha3: SHA3, player: Uint160) -> None:
+    def __init__(
+        self,
+        contracts: dict[int, Contract],
+        balances: Array[Uint160, Uint256],
+        sha3: SHA3,
+        player: Uint160,
+    ) -> None:
         """Create a new History."""
         block = Block()
         self.player = player
-        self.start = (universe, sha3, block)
+        self.start = (contracts, balances, sha3, block)
         self.states = list[State]()
         # The ith transaction in `state` runs in the ith block. Validation
         # always runs against the last block.
@@ -46,15 +53,24 @@ class History:
         """Return a human-readable version of the sequence of paths."""
         return "Pz" + ":".join(map(lambda s: s.px()[2:], self.states))
 
-    def subsequent(self) -> tuple[Universe, SHA3, Block]:
+    def subsequent(
+        self,
+    ) -> tuple[dict[int, Contract], Array[Uint160, Uint256], SHA3, Block]:
         """Set up the execution of a new transaction."""
         if len(self.states) == 0:
-            universe, sha3, block = self.start
+            contracts, balances, sha3, block = self.start
         else:
             i = len(self.states) - 1
-            universe, sha3 = self.states[i].universe, self.states[i].sha3
+            contracts = self.states[i].contracts
+            balances = self.states[i].balances
+            sha3 = self.states[i].sha3
             block = self.blocks[i]
-        return universe.clone_and_reset(), copy.deepcopy(sha3), block
+        return (
+            {k: v.clone_and_reset() for (k, v) in contracts.items()},
+            balances.clone_and_reset(),
+            copy.deepcopy(sha3),
+            block,
+        )
 
     def validation_block(self) -> Block:
         """Return the block in which validateInstance should run."""
@@ -80,7 +96,7 @@ class History:
         if len(self.states) > 0:
             self.states[-1].sha3.narrow(solver)
         else:
-            self.start[1].narrow(solver)
+            self.start[2].narrow(solver)
 
         for state in self.states:
             state.narrow(solver)
@@ -141,19 +157,20 @@ class Validator:
     def translate(self, history: History) -> Constraint:
         """Translate the validation constraint onto the given History."""
         if len(history.states) == 0:
-            universe = history.start[0]
+            contracts, balances = history.start[0], history.start[1]
             number = Uint256(0)
         else:
-            universe = history.states[-1].universe
+            contracts = history.states[-1].contracts
+            balances = history.states[-1].balances
             number = history.states[-1].block.number + Uint256(1)
 
         substitutions = dict[Any, Expression]()
         for name, term in self._constants.items():
             if name.startswith("STORAGE@"):
                 addr = int(name[8:], 16)
-                substitutions[term] = universe.contracts[addr].storage
+                substitutions[term] = contracts[addr].storage
             elif name == "BALANCE":
-                substitutions[term] = universe.balances
+                substitutions[term] = balances
             elif name == "CODESIZE":
                 pass
             elif name == "NUMBER":

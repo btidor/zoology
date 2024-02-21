@@ -10,7 +10,7 @@ import requests
 
 from bytes import Bytes
 from disassembler import disassemble
-from environment import Contract, Universe
+from environment import Contract
 from smt import Uint160, Uint256
 
 # For consistency, make requests at a fixed block offset
@@ -32,7 +32,7 @@ with open(_ROOT / "ethernaut.json") as f:
 cache: Snapshot | None = None
 
 
-def apply_snapshot(universe: Universe, address: Uint160) -> None:
+def snapshot_contracts(address: Uint160) -> dict[int, Contract]:
     """Load a snapshot and add the contracts to the given universe."""
     global cache
     if cache is None:
@@ -45,21 +45,21 @@ def apply_snapshot(universe: Universe, address: Uint160) -> None:
     address = Uint160(a)
     program = disassemble(Bytes.fromhex(saved["code"]))
     contract = Contract(address, program)
+    contracts = dict[int, Contract]()
 
     for k, v in saved.items():
         if k == "code":
             continue
         contract.storage.poke(Uint256(int(k)), Uint256(int(v, 16)))
         if is_sibling_contract(int(k), int(v, 16)):
-            apply_snapshot(universe, Uint160(int(v, 16)))
+            contracts.update(snapshot_contracts(Uint160(int(v, 16))))
 
     # Some level factories create other contracts in their constructor. To
     # avoid address collisions between these fixed contracts and created
     # level contracts, bump up the nonce.
     contract.nonce = Uint256(16)
-
-    universe = universe.with_contract(contract)
-    universe.balances[contract.address] = Uint256(0)
+    contracts[a] = contract
+    return contracts
 
 
 def get_code(address: Uint160) -> Contract:

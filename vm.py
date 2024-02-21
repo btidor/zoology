@@ -10,7 +10,7 @@ from disassembler import Instruction, abiencode
 from environment import Transaction
 from smt import Uint, Uint256
 from state import ControlFlow, Descend, Jump, State, Termination
-from tests.solidity import universe_single
+from tests.solidity import load_solidity
 
 
 def step(state: State) -> ControlFlow | None:
@@ -99,14 +99,12 @@ def printable_execution(state: State) -> Generator[str, None, State]:
 
 
 if __name__ == "__main__":
-    universe = universe_single("fixtures/02_Fallout.sol")
     start = State(
         transaction=Transaction(
             callvalue=Uint256(0),
             calldata=Bytes(abiencode("collectAllocations()")),
         ),
-        universe=universe,
-    )
+    ).with_contract(load_solidity("fixtures/02_Fallout.sol"))
 
     for line in printable_execution(start):
         print(line)

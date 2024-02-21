@@ -187,7 +187,7 @@ def ADDRESS(s: State) -> Uint256:
 
 def BALANCE(s: State, address: Uint256) -> Uint256:
     """31 - Get balance of the given account."""
-    return s.universe.balances[address.into(Uint160)]
+    return s.balances[address.into(Uint160)]
 
 
 def ORIGIN(s: State) -> Uint256:
@@ -245,7 +245,7 @@ def EXTCODESIZE(s: State, _address: Uint256) -> Uint256:
     address = _address.reveal()
     assert address is not None, "EXTCODESIZE requires concrete address"
 
-    contract = s.universe.contracts.get(address, None)
+    contract = s.contracts.get(address, None)
     return contract.program.code.length if contract else Uint256(0)
 
 
@@ -260,7 +260,7 @@ def EXTCODECOPY(
     address = _address.reveal()
     assert address is not None, "EXTCODECOPY requires concrete address"
 
-    contract = s.universe.contracts.get(address, None)
+    contract = s.contracts.get(address, None)
     code = contract.program.code if contract else Bytes()
     s.memory.graft(code.slice(offset, size), destOffset)
 
@@ -286,7 +286,7 @@ def EXTCODEHASH(s: State, _address: Uint256) -> Uint256:
     address = _address.reveal()
     assert address is not None, "EXTCODEHASH requires concrete address"
 
-    contract = s.universe.contracts.get(address, None)
+    contract = s.contracts.get(address, None)
     if contract is None:
         # TODO: we should return zero if the address has not been created and
         # the empty hash otherwise.
@@ -333,7 +333,7 @@ def CHAINID(s: State) -> Uint256:
 
 def SELFBALANCE(s: State) -> Uint256:
     """47 - Get balance of currently executing account."""
-    return s.universe.balances[s.transaction.address]
+    return s.balances[s.transaction.address]
 
 
 def BASEFEE(s: State) -> Uint256:
@@ -488,7 +488,7 @@ def CREATE(s: State, value: Uint256, offset: Uint256, size: Uint256) -> ControlF
     # HACK: the destination address depends on the value of this contract's
     # nonce. But we need the destination address to be concrete! So we can only
     # handle CREATE with a concrete state, not a symbolic one. Sorry :(
-    nonce = s.universe.contracts[sender_address].nonce.reveal()
+    nonce = s.contracts[sender_address].nonce.reveal()
     assert nonce is not None, "CREATE require concrete nonce"
     if nonce >= 0x80:
         raise NotImplementedError  # implement a full RLP encoder
@@ -504,7 +504,7 @@ def _CREATE(s: State, value: Uint256, initcode: Bytes, seed: Bytes) -> ControlFl
 
     sender = s.transaction.address.reveal()
     assert sender is not None, "CREATE requires concrete sender address"
-    s.universe.contracts[sender].nonce += Uint256(1)
+    s.contracts[sender].nonce += Uint256(1)
 
     constructor = disassemble(initcode)
 
@@ -512,7 +512,7 @@ def _CREATE(s: State, value: Uint256, initcode: Bytes, seed: Bytes) -> ControlFl
     # creation if funds were sent to the address before it was created. Let's
     # ignore this case for now.
     s = s.with_contract(Contract(address=address))
-    s.universe.balances[address] = Uint256(0)
+    s.balances[address] = Uint256(0)
 
     transaction = Transaction(
         origin=s.transaction.origin,
@@ -525,10 +525,10 @@ def _CREATE(s: State, value: Uint256, initcode: Bytes, seed: Bytes) -> ControlFl
     def callback(state: State, substate: State) -> State:
         assert isinstance(substate.pc, Termination)
         if substate.pc.success is False:
-            del state.universe.contracts[destination]
+            del state.contracts[destination]
             state.stack.append(Uint256(0))
         else:
-            contract = state.universe.contracts[destination]
+            contract = state.contracts[destination]
             contract.program = disassemble(substate.pc.returndata)
             state = state.with_contract(contract, True)
             state.stack.append(address.into(Uint256))
@@ -558,7 +558,7 @@ def CALL(
 ) -> ControlFlow | None:
     """F1 - Message-call into an account."""
     assert (address := _address.reveal()) is not None, "CALL requires concrete address"
-    if address in s.universe.contracts:
+    if address in s.contracts:
         # Call to a contract address: simulate the full execution.
         transaction = Transaction(
             origin=s.transaction.origin,
@@ -569,7 +569,7 @@ def CALL(
             gasprice=s.transaction.gasprice,
         )
 
-        if address not in s.universe.contracts:
+        if address not in s.contracts:
             # In theory, calling a nonexistent contract causes it to be created.
             # In practice, this is probably a bug, so we crash the analysis.
             # This means burn addresses need to be explicitly registered, e.g.
@@ -625,7 +625,7 @@ def CALLCODE(
         calldata=s.memory.slice(argsOffset, argsSize),
         gasprice=s.transaction.gasprice,
     )
-    destination = s.universe.contracts.get(address, None)
+    destination = s.contracts.get(address, None)
     if destination is None:
         raise ValueError("CALLCODE to unknown contract: " + hex(address))
 
@@ -671,7 +671,7 @@ def DELEGATECALL(
         # TODO: can we factor out this magic address?
         s.narrower &= _address == Uint256(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0)
         assert (sender := s.transaction.address.reveal()) is not None
-        s.universe.contracts[sender].storage = copy.deepcopy(dc.next_storage)
+        s.contracts[sender].storage = copy.deepcopy(dc.next_storage)
         s.latest_return = dc.returndata
         s.memory.graft(s.latest_return.slice(Uint256(0), retSize), retOffset)
         s.constraint &= dc.ok | Array.equals(dc.previous_storage, dc.next_storage)
@@ -687,9 +687,9 @@ def DELEGATECALL(
         calldata=s.memory.slice(argsOffset, argsSize),
         gasprice=s.transaction.gasprice,
     )
-    if destination not in s.universe.contracts:
+    if destination not in s.contracts:
         raise ValueError("DELEGATECALL to unknown contract: " + hex(destination))
-    program = s.universe.contracts[destination].program
+    program = s.contracts[destination].program
 
     def callback(state: State, substate: State) -> State:
         assert isinstance(substate.pc, Termination)

@@ -9,7 +9,7 @@ from typing import Any, Callable
 
 from bytes import Bytes, Memory
 from disassembler import Program
-from environment import Block, Contract, Transaction, Universe
+from environment import Block, Contract, Transaction
 from sha3 import SHA3
 from smt import (
     Array,
@@ -30,8 +30,15 @@ class State:
 
     block: Block = field(default_factory=Block)
     transaction: Transaction = field(default_factory=Transaction)
-    universe: Universe = field(default_factory=Universe)
     sha3: SHA3 = field(default_factory=SHA3)
+
+    # ASSUMPTION: all contract accounts are listed here. All other addresses are
+    # either EOAs or are uncreated.
+    contracts: dict[int, Contract] = field(default_factory=dict)  # address -> Contract
+    balances: Array[Uint160, Uint256] = field(
+        # address -> balance in wei
+        default_factory=lambda: Array[Uint160, Uint256](Uint256(0))
+    )
 
     pc: int | Termination = 0
     stack: list[Uint256] = field(default_factory=list)
@@ -108,13 +115,13 @@ class State:
         if self.program_override is not None:
             return self.program_override
         assert (address := self.transaction.address.reveal()) is not None
-        return self.universe.contracts[address].program
+        return self.contracts[address].program
 
     @property
     def storage(self) -> Array[Uint256, Uint256]:
         """Return the current contract's storage."""
         assert (address := self.transaction.address.reveal()) is not None
-        return self.universe.contracts[address].storage
+        return self.contracts[address].storage
 
     def with_contract(
         self, contract: Contract | Program, overwrite: bool = False
@@ -122,7 +129,10 @@ class State:
         """Add a contract to the universe."""
         if isinstance(contract, Program):
             contract = Contract(program=contract)
-        self.universe = self.universe.with_contract(contract, overwrite)
+        assert (address := contract.address.reveal()) is not None
+        if address in self.contracts and not overwrite:
+            raise KeyError(f"Contract 0x{address.to_bytes(20).hex()} already exists")
+        self.contracts[address] = contract
         return self
 
     def __lt__(self, other: Any) -> bool:
@@ -137,13 +147,13 @@ class State:
 
         # ASSUMPTION: If `balances[src]` drops below zero, execution will
         # revert. Therefore, `balances[src] >= val`.
-        self.constraint &= underflow_safe(self.universe.balances[src], val)
+        self.constraint &= underflow_safe(self.balances[src], val)
         # ASSUMPTION: There isn't enough ETH in existence to overflow an
         # account's balance; all balances are less than 2^255 wei.
-        self.constraint &= overflow_safe(self.universe.balances[dst], val)
+        self.constraint &= overflow_safe(self.balances[dst], val)
 
-        self.universe.balances[src] -= val
-        self.universe.balances[dst] += val
+        self.balances[src] -= val
+        self.balances[dst] += val
 
     def constrain(self, solver: Solver) -> None:
         """Apply accumulated constraints to the given solver instance."""
@@ -183,10 +193,10 @@ class State:
         # Check if any address other than the contract itself has increased
         solver = Solver()
         self.constrain(solver)
-        for addr in self.universe.balances.written:
+        for addr in self.balances.written:
             if solver.check(
                 addr != self.transaction.address,
-                self.universe.balances.peek(addr) > since.universe.balances.peek(addr),
+                self.balances.peek(addr) > since.balances.peek(addr),
             ):
                 return True
 
@@ -275,8 +285,9 @@ class Descend(ControlFlow):
             suffix=f"{state.suffix}-{state.children}",
             block=state.block,
             transaction=transaction,
-            universe=state.universe,
             sha3=state.sha3,
+            contracts=state.contracts,
+            balances=state.balances,
             program_override=program_override,
             logs=state.logs,
             gas_count=state.gas_count,
@@ -297,8 +308,9 @@ class Descend(ControlFlow):
             # including on self-calls)
             assert isinstance(substate.pc, Termination)
             next = copy.deepcopy(state)
-            next.universe = substate.universe
             next.sha3 = substate.sha3
+            next.contracts = substate.contracts
+            next.balances = substate.balances
             next.logs = substate.logs
             next.latest_return = substate.pc.returndata
             next.gas_count = substate.gas_count

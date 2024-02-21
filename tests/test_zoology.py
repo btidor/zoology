@@ -1,20 +1,19 @@
 #!/usr/bin/env pytest
 
-from snapshot import LEVEL_FACTORIES
+from snapshot import LEVEL_FACTORIES, snapshot_contracts
 from zoology import (
     constrainWithValidator,
     createInstance,
     search,
-    starting_universe,
     validateInstance,
 )
 
 
 def check_level(i: int, fixture: list[str]) -> None:
     factory = LEVEL_FACTORIES[i]
-    universe = starting_universe(factory)
+    contracts = snapshot_contracts(factory)
 
-    instance, beginning = createInstance(universe, factory)
+    instance, beginning = createInstance(contracts, factory)
     validator = validateInstance(factory, instance, beginning)
     solver = constrainWithValidator(factory, instance, beginning, validator)
     assert not solver.check(), "validation passed initially"
