@@ -79,10 +79,12 @@ def printable_execution(state: State) -> Generator[str, None, State]:
                 pass
             case Jump(_):
                 raise ValueError("control flow branches on symbolic condition")
-            case Descend(substate):
-                substate = yield from printable_execution(substate)
-                assert substate.recursion is not None
-                state = substate.recursion(substate)
+            case Descend(substates):
+                if len(substates) > 1:
+                    raise ValueError("control flow branches on symbolic condition")
+                substate = yield from printable_execution(substates[0])
+                if substate.recursion is not None:
+                    state = substate.recursion(substate)
             case unknown:
                 raise ValueError(f"unknown action: {unknown}")
 

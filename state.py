@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import copy
 from collections import OrderedDict, defaultdict
 from dataclasses import dataclass, field
 from typing import Any, Callable
@@ -126,7 +125,7 @@ class State:
     def with_contract(
         self, contract: Contract | Program, overwrite: bool = False
     ) -> State:
-        """Add a contract to the universe."""
+        """Add a contract to the state."""
         if isinstance(contract, Program):
             contract = Contract(program=contract)
         assert (address := contract.address.reveal()) is not None
@@ -145,10 +144,10 @@ class State:
         if val.reveal() == 0:
             return
 
-        # ASSUMPTION: If `balances[src]` drops below zero, execution will
+        # ASSUMPTION: if `balances[src]` drops below zero, execution will
         # revert. Therefore, `balances[src] >= val`.
         self.constraint &= underflow_safe(self.balances[src], val)
-        # ASSUMPTION: There isn't enough ETH in existence to overflow an
+        # ASSUMPTION: there isn't enough ETH in existence to overflow an
         # account's balance; all balances are less than 2^255 wei.
         self.constraint &= overflow_safe(self.balances[dst], val)
 
@@ -270,57 +269,4 @@ class Jump(ControlFlow):
 class Descend(ControlFlow):
     """A CALL, DELEGATECALL, etc. instruction."""
 
-    state: State
-
-    @classmethod
-    def new(
-        cls,
-        state: State,
-        transaction: Transaction,
-        program_override: Program | None,
-        callback: Callable[[State, State], State],
-    ) -> Descend:
-        """Descend into a subcontext."""
-        substate = State(
-            suffix=f"{state.suffix}-{state.children}",
-            block=state.block,
-            transaction=transaction,
-            sha3=state.sha3,
-            contracts=state.contracts,
-            balances=state.balances,
-            program_override=program_override,
-            logs=state.logs,
-            gas_count=state.gas_count,
-            call_count=state.call_count,
-            delegates=state.delegates,
-            constraint=state.constraint,
-            narrower=state.narrower,
-            path=state.path,
-            cost=state.cost,
-        )
-        substate.transfer(
-            transaction.caller, transaction.address, transaction.callvalue
-        )
-        state.children += 1
-
-        def metacallback(substate: State) -> State:
-            # TODO: support reentrancy (apply storage changes to contract,
-            # including on self-calls)
-            assert isinstance(substate.pc, Termination)
-            next = copy.deepcopy(state)
-            next.sha3 = substate.sha3
-            next.contracts = substate.contracts
-            next.balances = substate.balances
-            next.logs = substate.logs
-            next.latest_return = substate.pc.returndata
-            next.gas_count = substate.gas_count
-            next.call_count = substate.call_count
-            next.delegates = substate.delegates
-            next.constraint = substate.constraint
-            next.narrower = substate.narrower
-            next.path = substate.path
-            next.cost = substate.cost
-            return callback(next, substate)
-
-        substate.recursion = metacallback
-        return Descend(substate)
+    states: tuple[State, ...]

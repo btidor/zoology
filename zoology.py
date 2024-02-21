@@ -29,7 +29,6 @@ from state import State, Termination
 from universal import universal_transaction
 from vm import printable_execution
 
-SETUP = Uint160(0x5757575757575757575757575757575757575757)
 PLAYER = Uint160(0xCACACACACACACACACACACACACACACACACACACACA)
 PROXY = Uint160(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0)
 
@@ -38,20 +37,32 @@ def createInstance(
     contracts: dict[int, Contract], address: Uint160, prints: bool = False
 ) -> tuple[Uint160, History]:
     """Call createInstance to set up the level."""
-    # Warning: this symbolic universe will be used in symbolic execution later
-    # on. Inaccuracies in the environment may result in an inaccurate analysis.
     assert (p := PLAYER.reveal()) is not None
     calldata = abiencode("createInstance(address)") + p.to_bytes(32)
+    # ASSUMPTION: the only contracts in existence are the ones related to the
+    # level factory.
+    #
+    # TODO: emit cases for all possible targets:
+    # - every contract, including self
+    # - proxy that implements $API
+    # - proxy that reverts with $MESSAGE
+    # - proxy that consumes all gas
+    # - player EOA
+    # - other, unknown EOA
+    # - other, unknown non-EOA (?)
+    # - (later: proxy calls every contract, including self)
     start = State(
         transaction=Transaction(
-            origin=SETUP,
-            caller=SETUP,
+            origin=PLAYER,
+            caller=PLAYER,
             address=address,
             calldata=Bytes(calldata),
             callvalue=Uint256(10**15),
         ),
         contracts=contracts,
     )
+    # ASSUMPTION: the only account with a nonzero balance belongs to the player.
+    start.balances[PLAYER] = Uint256(10**18)
     start.transfer(
         start.transaction.caller, start.transaction.address, start.transaction.callvalue
     )
@@ -94,8 +105,8 @@ def validateInstance(
         suffix="-V",
         block=history.validation_block(),
         transaction=Transaction(
-            origin=SETUP,
-            caller=SETUP,
+            origin=PLAYER,
+            caller=PLAYER,
             address=factory,
             calldata=Bytes(calldata),
         ),
@@ -170,8 +181,8 @@ def constrainWithValidator(
         suffix="-V",
         block=history.validation_block(),
         transaction=Transaction(
-            origin=SETUP,
-            caller=SETUP,
+            origin=PLAYER,
+            caller=PLAYER,
             address=factory,
             calldata=Bytes(calldata),
         ),

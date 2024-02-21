@@ -614,8 +614,9 @@ def test_CREATE() -> None:
     ).with_contract(contract)
     flow = CREATE(s, Uint256(999), Uint256(2), Uint256(100))
     assert isinstance(flow, Descend)
+    assert len(flow.states) == 1
     assert (
-        flow.state.transaction.address.reveal()
+        flow.states[0].transaction.address.reveal()
         == 0x343C43A37D37DFF08AE8C4A11544C718ABB4FCF8
     )
     assert contract.nonce.reveal() == 2
@@ -639,8 +640,9 @@ def test_CREATE2() -> None:
     ).with_contract(contract)
     flow = CREATE2(s, Uint256(999), Uint256(0), Uint256(0), Uint256(0x0))
     assert isinstance(flow, Descend)
+    assert len(flow.states) == 1
     assert (
-        flow.state.transaction.address.reveal()
+        flow.states[0].transaction.address.reveal()
         == 0xE33C0C7F7DF4809055C3EBA6C09CFE4BAF1BD9E0  # from EIP-1014
     )
     assert contract.nonce.reveal() == 2

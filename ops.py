@@ -1,10 +1,10 @@
 """A library of EVM instruction implementations."""
 
 import copy
-from typing import Literal
+from typing import Callable, Literal
 
 from bytes import Bytes
-from disassembler import Instruction, disassemble
+from disassembler import Instruction, Program, disassemble
 from environment import Contract, Transaction
 from smt import (
     Array,
@@ -534,16 +534,7 @@ def _CREATE(s: State, value: Uint256, initcode: Bytes, seed: Bytes) -> ControlFl
             state.stack.append(address.into(Uint256))
         return state
 
-    return Descend.new(s, transaction, constructor, callback)
-
-
-def _callback(
-    state: State, substate: State, gas: Uint256, retSize: Uint256, retOffset: Uint256
-) -> State:
-    assert isinstance(substate.pc, Termination)
-    state.memory.graft(state.latest_return.slice(Uint256(0), retSize), retOffset)
-    state.stack.append(Constraint(substate.pc.success).ite(Uint256(1), Uint256(0)))
-    return state
+    return Descend((_descend_substate(s, transaction, constructor, callback),))
 
 
 def CALL(
@@ -555,52 +546,45 @@ def CALL(
     argsSize: Uint256,
     retOffset: Uint256,
     retSize: Uint256,
-) -> ControlFlow | None:
+) -> ControlFlow:
     """F1 - Message-call into an account."""
-    assert (address := _address.reveal()) is not None, "CALL requires concrete address"
-    if address in s.contracts:
-        # Call to a contract address: simulate the full execution.
+    address = _address.into(Uint160)
+    substates = list[State]()
+    eoa = Constraint(True)
+    s.children += len(s.contracts)
+    for i, contract in enumerate(s.contracts.values()):
+        # ASSUMPTION: to avoid infinite loops (including in the validator
+        # function), we assume a contract never calls itself.
+        if contract.address.reveal() == s.transaction.address.reveal():
+            continue
+
+        cond = address == contract.address
+        eoa &= ~cond
+        if cond.reveal() is False:
+            continue
+
+        state = copy.deepcopy(s)
+        state.constraint &= cond
         transaction = Transaction(
-            origin=s.transaction.origin,
-            caller=s.transaction.address,
-            address=_address.into(Uint160),
+            origin=state.transaction.origin,
+            caller=state.transaction.address,
+            address=contract.address,
             callvalue=value,
-            calldata=s.memory.slice(argsOffset, argsSize),
-            gasprice=s.transaction.gasprice,
+            calldata=state.memory.slice(argsOffset, argsSize),
+            gasprice=state.transaction.gasprice,
+        )
+        substates.append(
+            _descend_substate(state, transaction, None, (retOffset, retSize), i)
         )
 
-        if address not in s.contracts:
-            # In theory, calling a nonexistent contract causes it to be created.
-            # In practice, this is probably a bug, so we crash the analysis.
-            # This means burn addresses need to be explicitly registered, e.g.
-            # by setting the codesize to zero.
-            raise ValueError(f"CALL to unknown contract: {hex(address)}")
-
-        def callback(state: State, substate: State) -> State:
-            return _callback(state, substate, gas, retSize, retOffset)
-
-        return Descend.new(s, transaction, None, callback)
-    else:
-        # Simple transfer to an EOA: always succeeds.
-        s.transfer(s.transaction.address, _address.into(Uint160), value)
-        s.latest_return = Bytes()
-        s.memory.graft(s.latest_return.slice(Uint256(0), retSize), retOffset)
+    if eoa.reveal() is not False:
+        s.constraint &= eoa
+        s.transfer(s.transaction.address, address, value)
+        s.memory.graft(Bytes().slice(Uint256(0), retSize), retOffset)
         s.stack.append(Uint256(1))
-        return None
+        substates.append(s)
 
-    # TODO: this model is insufficient! We model balances and the return value,
-    # but *not* storage changes in the called contract.
-    #
-    # We should emit cases for all possible targets:
-    # - each contract in the universe, including self
-    # - proxy that implements $API
-    # - proxy that reverts with $MESSAGE
-    # - proxy that consumes all gas
-    # - player EOA
-    # - other, unknown EOA
-    # - other, unknown non-EOA (?)
-    # - (later: proxy calls a contract in the universe, including self)
-    #
+    return Descend(tuple(substates))
 
 
 def CALLCODE(
@@ -629,11 +613,9 @@ def CALLCODE(
     if destination is None:
         raise ValueError("CALLCODE to unknown contract: " + hex(address))
 
-    def callback(state: State, substate: State) -> State:
-        assert isinstance(substate.pc, Termination)
-        return _callback(state, substate, gas, retSize, retOffset)
-
-    return Descend.new(s, transaction, destination.program, callback)
+    return Descend(
+        (_descend_substate(s, transaction, destination.program, (retOffset, retSize)),)
+    )
 
 
 def RETURN(s: State, offset: Uint256, size: Uint256) -> None:
@@ -691,11 +673,7 @@ def DELEGATECALL(
         raise ValueError("DELEGATECALL to unknown contract: " + hex(destination))
     program = s.contracts[destination].program
 
-    def callback(state: State, substate: State) -> State:
-        assert isinstance(substate.pc, Termination)
-        return _callback(state, substate, gas, retSize, retOffset)
-
-    return Descend.new(s, transaction, program, callback)
+    return Descend((_descend_substate(s, transaction, program, (retOffset, retSize)),))
 
 
 def CREATE2(
@@ -726,7 +704,7 @@ def STATICCALL(
     argsSize: Uint256,
     retOffset: Uint256,
     retSize: Uint256,
-) -> ControlFlow | None:
+) -> ControlFlow:
     """FA - Static message-call into an account."""
     # TODO: enforce static constraint
     return CALL(s, gas, address, Uint256(0), argsOffset, argsSize, retOffset, retSize)
@@ -749,3 +727,69 @@ def INVALID(s: State) -> None:
 def SELFDESTRUCT() -> None:
     """FF - Halt execution and register account for later deletion."""
     raise NotImplementedError("SELFDESTRUCT")
+
+
+def _descend_substate(
+    state: State,
+    transaction: Transaction,
+    program_override: Program | None,
+    callback: Callable[[State, State], State] | tuple[Uint256, Uint256],
+    i: int | None = None,
+) -> State:
+    # WARNING: when using Descend with multiple substates, `children` must be
+    # incremented by the total number of substates before cloning.
+    if i is None:
+        i = state.children
+        state.children += 1
+
+    substate = State(
+        suffix=f"{state.suffix}-{i}",
+        block=state.block,
+        transaction=transaction,
+        sha3=state.sha3,
+        contracts=state.contracts,
+        balances=state.balances,
+        program_override=program_override,
+        logs=state.logs,
+        gas_count=state.gas_count,
+        call_count=state.call_count,
+        delegates=state.delegates,
+        constraint=state.constraint,
+        narrower=state.narrower,
+        path=state.path,
+        cost=state.cost,
+    )
+    substate.transfer(transaction.caller, transaction.address, transaction.callvalue)
+
+    def metacallback(substate: State) -> State:
+        # TODO: support reentrancy (apply storage changes to contract, including
+        # on self-calls).
+        assert isinstance(substate.pc, Termination)
+        next = copy.deepcopy(state)
+        next.sha3 = substate.sha3
+        next.contracts = substate.contracts
+        next.balances = substate.balances
+        next.logs = substate.logs
+        next.latest_return = substate.pc.returndata
+        next.gas_count = substate.gas_count
+        next.call_count = substate.call_count
+        next.delegates = substate.delegates
+        next.constraint = substate.constraint
+        next.narrower = substate.narrower
+        next.path = substate.path
+        next.cost = substate.cost
+        assert isinstance(substate.pc, Termination)
+        match callback:
+            case (retOffset, retSize):
+                next.memory.graft(
+                    next.latest_return.slice(Uint256(0), retSize), retOffset
+                )
+                next.stack.append(
+                    Constraint(substate.pc.success).ite(Uint256(1), Uint256(0))
+                )
+            case _:
+                next = callback(next, substate)
+        return next
+
+    substate.recursion = metacallback
+    return substate

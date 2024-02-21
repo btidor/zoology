@@ -33,7 +33,7 @@ cache: Snapshot | None = None
 
 
 def snapshot_contracts(address: Uint160) -> dict[int, Contract]:
-    """Load a snapshot and add the contracts to the given universe."""
+    """Load the given contract from the snapshot, and any contracts it references."""
     global cache
     if cache is None:
         with open(_ROOT / "snapshot.json") as f:

@@ -118,7 +118,7 @@ def test_elevator() -> None:
 
 def test_privacy() -> None:
     fixture = [
-        "e1afb08c 8d3e0f3be93413600f15f3408ac39e7000000000000000000000000000000000",
+        "e1afb08c 9ee15dc717f734f5a16e8e0ce75e036900000000000000000000000000000000",
     ]
     check_level(12, fixture)
 
