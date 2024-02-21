@@ -91,7 +91,6 @@ def symbolic_start(program: Contract | Program, sha3: SHA3, suffix: str) -> Stat
     # (and the balance of this contract account too, via SELFDESTRUCT). How
     # do we model this?
     universe = Universe.symbolic(suffix).with_contract(contract)
-    universe.codesizes[transaction.origin] = Uint256(0)
     return State(
         suffix=suffix,
         block=Block.symbolic(suffix),

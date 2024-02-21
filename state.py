@@ -60,10 +60,6 @@ class State:
     #
     gas_count: int | None = None
 
-    # Tracks the amount of gas consumed by "hog" contracts. See
-    # `Universe.gashog` for details.
-    gas_hogged: Uint256 = Uint256(0)
-
     # Every time the CALL instruction is invoked with a symbolic address we
     # return a symbolic result, suffixed with this counter to make it unique.
     call_count: int = 0
@@ -306,7 +302,6 @@ class Descend(ControlFlow):
             next.logs = substate.logs
             next.latest_return = substate.pc.returndata
             next.gas_count = substate.gas_count
-            next.gas_hogged += substate.gas_hogged
             next.call_count = substate.call_count
             next.delegates = substate.delegates
             next.constraint = substate.constraint

@@ -151,20 +151,9 @@ class Universe:
         default_factory=lambda: Array[Uint160, Uint256](Uint256(0))
     )
 
+    # ASSUMPTION: all contract accounts are listed here. All other addresses are
+    # either EOAs or are uncreated.
     contracts: dict[int, Contract] = field(default_factory=dict)  # address -> Contract
-    codesizes: Array[Uint160, Uint256] = field(
-        # address -> code size
-        default_factory=lambda: Array[Uint160, Uint256](Uint256(0))
-    )
-
-    # HACK: when a CALL to a player-controlled occurs, it can (a) RETURN, (b)
-    # REVERT, or (c) consume all available gas. Depending on how gas limits are
-    # set, case (c) may cause the *calling* contract to revert.
-    #
-    # To model this case, we track the address of a "hog" contract which
-    # consumes all available gas when called. If zero, this case is ignored.
-    #
-    gashog: Uint160 = Uint160(0)
 
     @classmethod
     def symbolic(cls, suffix: str) -> Universe:
@@ -172,7 +161,6 @@ class Universe:
         return Universe(
             suffix=suffix,
             balances=Array[Uint160, Uint256](f"BALANCE{suffix}"),
-            codesizes=Array[Uint160, Uint256](f"CODESIZE{suffix}"),
         )
 
     def with_contract(
@@ -189,7 +177,6 @@ class Universe:
         if address in self.contracts and not overwrite:
             raise KeyError(f"Contract 0x{address.to_bytes(20).hex()} already exists")
         self.contracts[address] = contract
-        self.codesizes[contract.address] = contract.program.code.length
         return self
 
     def clone_and_reset(self) -> Universe:
@@ -198,6 +185,4 @@ class Universe:
             suffix=self.suffix,
             balances=self.balances.clone_and_reset(),
             contracts={k: v.clone_and_reset() for (k, v) in self.contracts.items()},
-            codesizes=self.codesizes.clone_and_reset(),
-            gashog=self.gashog,
         )

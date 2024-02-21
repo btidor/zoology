@@ -85,9 +85,6 @@ class History:
         for state in self.states:
             state.narrow(solver)
 
-        constraint = ~Constraint("GASHOG")
-        if solver.check(constraint):
-            solver.add(constraint)
         assert solver.check()
 
     def describe(self, solver: Solver) -> Iterable[str]:
@@ -121,9 +118,6 @@ class History:
                     for k, v in evaluate(solver, dc.next_storage).items():
                         if prev[k] != v:
                             yield f"\tSet {hex(k)} to {hex(v)}\n"
-
-            if evaluate(solver, Constraint("GASHOG")):
-                yield "\tProxy CONSUME ALL GAS\n"
 
 
 class Validator:

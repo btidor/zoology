@@ -37,10 +37,6 @@ PROXY = Uint160(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0)
 def starting_universe(factory: Uint160) -> Universe:
     """Set up a symbolic universe with factory levels loaded."""
     universe = Universe.symbolic("")
-    universe.codesizes.poke(SETUP, Uint256(0))
-    universe.codesizes.poke(PLAYER, Uint256(0))
-    universe.codesizes.poke(Uint160(0xA9E), Uint256(0))  # burn address in lvl 20
-    universe.gashog = Constraint("GASHOG").ite(PROXY, Uint160(0))
     apply_snapshot(universe, factory)
     return universe
 
@@ -124,7 +120,6 @@ def validateInstance(
             ),
             True,
         )
-    universe.codesizes.written = []
 
     predicates = list[Constraint]()
     for end in universal_transaction(start, check=False, prints=prints):
@@ -135,7 +130,7 @@ def validateInstance(
         b: Uint256 = end.pc.returndata.slice(Uint256(0), Uint256(32)).bigvector()
         predicates.append(end.constraint & (b != Uint256(0)))
 
-        if end.universe.codesizes.written:
+        if len(end.universe.contracts) > len(universe.contracts):
             # We can't handle validators that create contracts, though that
             # would be pretty strange.
             return None

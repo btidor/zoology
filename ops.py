@@ -12,11 +12,9 @@ from smt import (
     Int,
     Uint,
     Uint8,
-    Uint64,
     Uint160,
     Uint256,
     concat_bytes,
-    zArray,
 )
 from state import ControlFlow, DelegateCall, Descend, Jump, Log, State, Termination
 
@@ -242,9 +240,13 @@ def GASPRICE(s: State) -> Uint256:
     return s.transaction.gasprice
 
 
-def EXTCODESIZE(s: State, address: Uint256) -> Uint256:
+def EXTCODESIZE(s: State, _address: Uint256) -> Uint256:
     """3B - Get size of an account's code."""
-    return s.universe.codesizes[address.into(Uint160)]
+    address = _address.reveal()
+    assert address is not None, "EXTCODESIZE requires concrete address"
+
+    contract = s.universe.contracts.get(address, None)
+    return contract.program.code.length if contract else Uint256(0)
 
 
 def EXTCODECOPY(
@@ -511,7 +513,6 @@ def _CREATE(s: State, value: Uint256, initcode: Bytes, seed: Bytes) -> ControlFl
     # ignore this case for now.
     s = s.with_contract(Contract(address=address))
     s.universe.balances[address] = Uint256(0)
-    s.universe.codesizes[address] = Uint256(0)
 
     transaction = Transaction(
         origin=s.transaction.origin,
@@ -540,14 +541,8 @@ def _callback(
     state: State, substate: State, gas: Uint256, retSize: Uint256, retOffset: Uint256
 ) -> State:
     assert isinstance(substate.pc, Termination)
-    gasok = substate.gas_hogged <= gas
-    state.latest_return = state.latest_return.slice(
-        Uint256(0), gasok.ite(state.latest_return.length, Uint256(0))
-    )
     state.memory.graft(state.latest_return.slice(Uint256(0), retSize), retOffset)
-    state.stack.append(
-        (gasok & Constraint(substate.pc.success)).ite(Uint256(1), Uint256(0))
-    )
+    state.stack.append(Constraint(substate.pc.success).ite(Uint256(1), Uint256(0)))
     return state
 
 
@@ -562,18 +557,9 @@ def CALL(
     retSize: Uint256,
 ) -> ControlFlow | None:
     """F1 - Message-call into an account."""
-    codesize = s.universe.codesizes[_address.into(Uint160)]
-    if codesize.reveal() == 0 or _address.reveal() == 0:
-        # Simple transfer to an EOA: always succeeds. (We're special-casing the
-        # zero address, unfortunately. It has no code and no one controls its
-        # keypair.)
-        s.transfer(s.transaction.address, _address.into(Uint160), value)
-        s.latest_return = Bytes()
-        s.memory.graft(s.latest_return.slice(Uint256(0), retSize), retOffset)
-        s.stack.append(Uint256(1))
-        return None
-    elif (address := _address.reveal()) is not None:
-        # Call to a concrete address: simulate the full execution.
+    assert (address := _address.reveal()) is not None, "CALL requires concrete address"
+    if address in s.universe.contracts:
+        # Call to a contract address: simulate the full execution.
         transaction = Transaction(
             origin=s.transaction.origin,
             caller=s.transaction.address,
@@ -595,47 +581,26 @@ def CALL(
 
         return Descend.new(s, transaction, None, callback)
     else:
-        hog = (_address.into(Uint160) > Uint160(0)) & (
-            _address.into(Uint160) == s.universe.gashog
-        )
-        s.gas_hogged += hog.ite(gas, Uint256(0))
-
-        # TODO: this model is insufficient! We model balances and the return
-        # value, but *not* storage changes in the called contract.
-        #
-        # We should emit cases for all possible targets:
-        # - each contract in the universe, including self
-        # - proxy that implements $API
-        # - proxy that reverts with $MESSAGE
-        # - proxy that consumes all gas
-        # - player EOA
-        # - other, unknown EOA
-        # - other, unknown non-EOA (?)
-        # - (later: proxy calls a contract in the universe, including self)
-        #
-
-        # Call to a symbolic address: return a fully-symbolic response.
-        s.latest_return = Bytes.custom(
-            (s.universe.codesizes[_address.into(Uint160)] == Uint256(0)).ite(
-                Uint256(0),
-                Uint64(f"RETURNDATA{s.call_count}{s.suffix}-LEN").into(Uint256),
-            ),
-            zArray[Uint256, Uint8](f"RETURNDATA{s.call_count}{s.suffix}"),
-        )
-        s.memory.graft(s.latest_return.slice(Uint256(0), retSize), retOffset)
-        success = (
-            # Calls (transfers) to an EOA always succeed.
-            (s.universe.codesizes[_address.into(Uint160)] == Uint256(0))
-            # Create a variable for if the call succeeded.
-            | Constraint(f"RETURNOK{s.call_count}{s.suffix}")
-            # Okay, the thing is: calls (here and elsewhere to non-EOAs) can not
-            # only revert themselves, they can cause *this* contract to revert
-            # by using up its gas!
-        )
+        # Simple transfer to an EOA: always succeeds.
         s.transfer(s.transaction.address, _address.into(Uint160), value)
-        s.call_count += 1
-        s.stack.append(success.ite(Uint256(1), Uint256(0)))
+        s.latest_return = Bytes()
+        s.memory.graft(s.latest_return.slice(Uint256(0), retSize), retOffset)
+        s.stack.append(Uint256(1))
         return None
+
+    # TODO: this model is insufficient! We model balances and the return value,
+    # but *not* storage changes in the called contract.
+    #
+    # We should emit cases for all possible targets:
+    # - each contract in the universe, including self
+    # - proxy that implements $API
+    # - proxy that reverts with $MESSAGE
+    # - proxy that consumes all gas
+    # - player EOA
+    # - other, unknown EOA
+    # - other, unknown non-EOA (?)
+    # - (later: proxy calls a contract in the universe, including self)
+    #
 
 
 def CALLCODE(

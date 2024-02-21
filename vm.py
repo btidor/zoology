@@ -8,7 +8,7 @@ import ops
 from bytes import Bytes
 from disassembler import Instruction, abiencode
 from environment import Transaction
-from smt import Uint, Uint160, Uint256
+from smt import Uint, Uint256
 from state import ControlFlow, Descend, Jump, State, Termination
 from tests.solidity import universe_single
 
@@ -100,7 +100,6 @@ def printable_execution(state: State) -> Generator[str, None, State]:
 
 if __name__ == "__main__":
     universe = universe_single("fixtures/02_Fallout.sol")
-    universe.codesizes[Uint160(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0)] = Uint256(0)
     start = State(
         transaction=Transaction(
             callvalue=Uint256(0),
