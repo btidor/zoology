@@ -242,11 +242,11 @@ def GASPRICE(s: State) -> Uint256:
 
 def EXTCODESIZE(s: State, _address: Uint256) -> Uint256:
     """3B - Get size of an account's code."""
-    address = _address.reveal()
-    assert address is not None, "EXTCODESIZE requires concrete address"
-
-    contract = s.contracts.get(address, None)
-    return contract.program.code.length if contract else Uint256(0)
+    address = _address.into(Uint160)
+    result = Uint256(0)
+    for contract in s.contracts.values():
+        result = (address == contract.address).ite(contract.program.code.length, result)
+    return result
 
 
 def EXTCODECOPY(
