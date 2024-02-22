@@ -1,11 +1,13 @@
 """A library of EVM instruction implementations."""
 
 import copy
-from typing import Callable, Literal
+from inspect import Signature, signature
+from typing import Any, Callable, Literal
 
 from bytes import Bytes
 from disassembler import Instruction, Program, disassemble
 from environment import ConcreteContract, Transaction
+from opcodes import REFERENCE, SPECIAL, UNIMPLEMENTED
 from smt import (
     Array,
     Constraint,
@@ -839,3 +841,20 @@ def _descend_substate(
 
     substate.recursion = metacallback
     return substate
+
+
+def _load_ops() -> dict[str, tuple[Any, Signature]]:
+    opcodes = SPECIAL.union([c.name for c in REFERENCE.values()])
+    ops = dict[str, tuple[Any, Signature]]()
+    for name in opcodes:
+        if name in UNIMPLEMENTED:
+            continue
+        assert name in globals(), f"unimplemented opcode: {name}"
+
+        fn = globals()[name]
+        sig = signature(fn)
+        ops[name] = (fn, sig)
+    return ops
+
+
+OPS = _load_ops()

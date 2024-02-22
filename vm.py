@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """An implementation of the Ethereum virtual machine."""
 
-import inspect
 from typing import Generator
 
-import ops
 from bytes import Bytes
 from disassembler import Instruction, abiencode
 from environment import Transaction
+from ops import OPS
 from smt import Uint, Uint256
 from state import ControlFlow, Descend, Jump, State, Termination
 from tests.solidity import load_solidity
@@ -25,12 +24,10 @@ def step(state: State) -> ControlFlow | None:
 
     program = state.program
     ins = program.instructions[state.pc]
-
-    if not hasattr(ops, ins.name):
+    if ins.name not in OPS:
         raise ValueError(f"unimplemented opcode: {ins.name}")
-    fn = getattr(ops, ins.name)
 
-    sig = inspect.signature(fn)
+    fn, sig = OPS[ins.name]
     args = list[object]()
     for name in sig.parameters:
         kls = sig.parameters[name].annotation

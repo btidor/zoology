@@ -142,13 +142,17 @@ def prequal(a: Symbolic, b: Symbolic) -> bool:
 def get_constants(s: Symbolic) -> dict[str, BitwuzlaTerm]:
     """Recursively search the term for constants."""
     constants = dict[str, BitwuzlaTerm]()
+    visited = set[BitwuzlaTerm]()
     queue = set([_term(s)])
     while queue:
         item = queue.pop()
+        if item in visited:
+            continue
         queue.update(item.get_children())
         if item.is_const():
             assert (sym := item.get_symbol()) is not None
             constants[sym] = item
+        visited.add(item)
     return constants
 
 

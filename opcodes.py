@@ -37,13 +37,6 @@ def _load_opcodes() -> dict[int, Opcode]:
 
 REFERENCE = _load_opcodes()
 
-UNIMPLEMENTED = set(
-    [
-        # Handled specially
-        "PUSH",
-        "PUSH0",
-        "DUP",
-        "SWAP",
-        "LOG",
-    ]
-)
+SPECIAL = set(["PUSH", "DUP", "SWAP", "LOG"])
+
+UNIMPLEMENTED = set(["PUSH0"])
