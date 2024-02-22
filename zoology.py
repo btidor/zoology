@@ -40,7 +40,7 @@ def createInstance(
     assert (p := PLAYER.reveal()) is not None
     calldata = abiencode("createInstance(address)") + p.to_bytes(32)
     # ASSUMPTION: the only contracts in existence are the ones related to the
-    # level factory.
+    # level factory. This means precompiled contracts are not available!
     start = State(
         transaction=Transaction(
             origin=PLAYER,
@@ -154,12 +154,12 @@ def constrainWithValidator(
     instance: Uint160,
     history: History,
     validator: Validator | None,
-) -> Solver:
+) -> tuple[State | None, Solver]:
     """Simulate the execution of validateInstance on the given history."""
     if validator is not None:
         solver = Solver()
         solver.add(validator.translate(history))
-        return solver
+        return None, solver
 
     assert (arg0 := instance.reveal()) is not None
     assert (arg1 := PLAYER.reveal()) is not None
@@ -195,11 +195,11 @@ def constrainWithValidator(
         solver.add(ok)
         if solver.check():
             end.sha3.narrow(solver)
-            return solver
+            return end, solver
 
     solver = Solver()
     solver.add(Constraint(False))
-    return solver
+    return None, solver
 
 
 def search(
@@ -276,13 +276,15 @@ def search(
                         print("  ! narrowing error")
                         continue
 
-                solver = constrainWithValidator(factory, instance, candidate, validator)
+                final, solver = constrainWithValidator(
+                    factory, instance, candidate, validator
+                )
                 candidate.constrain(solver, check=False)
                 if solver.check():
                     candidate.narrow(solver)
                     if verbose > 1:
                         print("  > found solution!")
-                    return candidate, solver
+                    return candidate.with_final(final), solver
 
                 if all(len(c.storage.written) == 0 for c in end.contracts.values()):
                     # TODO: this ignores transactions that only change contract
@@ -346,7 +348,7 @@ if __name__ == "__main__":
                 factory, instance, beginning, prints=(args.verbose > 2)
             )
             vprint("S")
-            solver = constrainWithValidator(factory, instance, beginning, validator)
+            _, solver = constrainWithValidator(factory, instance, beginning, validator)
             vprint("C")
             assert not solver.check()
             vprint("]\n")

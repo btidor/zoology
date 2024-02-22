@@ -19,7 +19,7 @@ from smt import (
     get_constants,
     substitute,
 )
-from state import DelegateCall, State
+from state import Call, DelegateCall, GasHogCall, State
 
 
 class History:
@@ -37,6 +37,7 @@ class History:
         self.player = player
         self.start = (contracts, balances, sha3, block)
         self.states = list[State]()
+        self.final: State | None = None
         # The ith transaction in `state` runs in the ith block. Validation
         # always runs against the last block.
         self.blocks = list[Block]()
@@ -84,6 +85,13 @@ class History:
             raise OverflowError("History is limited to 15 states")
         return next
 
+    def with_final(self, final: State | None) -> History:
+        """Add the final validateInstance transaction to the History."""
+        assert self.final is None
+        next = copy.deepcopy(self)
+        next.final = final
+        return next
+
     def constrain(self, solver: Solver, check: bool = True) -> None:
         """Apply hard constraints to the given solver instance."""
         for state in self.states:
@@ -124,18 +132,32 @@ class History:
                 suffixes.append("via proxy")
             yield "\n"
 
-            for dc in state.calls:
-                if not isinstance(dc, DelegateCall):
-                    continue
-                ok = evaluate(solver, dc.ok)
-                yield f"\tProxy {'RETURN' if ok else 'REVERT'} "
-                yield from dc.returndata.describe(solver)
-                yield "\n"
-                if ok:
-                    prev = evaluate(solver, dc.previous_storage)
-                    for k, v in evaluate(solver, dc.next_storage).items():
-                        if prev[k] != v:
-                            yield f"\tSet {hex(k)} to {hex(v)}\n"
+            for call in state.calls:
+                match call:
+                    case GasHogCall():
+                        yield "\tProxy CONSUME ALL GAS\n"
+                    case DelegateCall():
+                        ok = evaluate(solver, call.ok)
+                        yield f"\tProxy {'RETURN' if ok else 'REVERT'} "
+                        yield from call.returndata.describe(solver)
+                        yield "\n"
+                        if ok:
+                            prev = evaluate(solver, call.previous_storage)
+                            for k, v in evaluate(solver, call.next_storage).items():
+                                if prev[k] != v:
+                                    yield f"\tSet {hex(k)} to {hex(v)}\n"
+                    case Call():
+                        pass
+
+        if self.final:
+            for call in self.final.calls:
+                match call:
+                    case GasHogCall():
+                        yield "Validate Proxy CONSUME ALL GAS\n"
+                    case DelegateCall():
+                        raise NotImplementedError
+                    case Call():
+                        pass
 
 
 class Validator:

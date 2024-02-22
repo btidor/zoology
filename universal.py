@@ -10,7 +10,7 @@ from disassembler import Program
 from environment import Block, ConcreteContract, Contract, Transaction
 from sha3 import SHA3
 from smt import Array, Solver, Uint160, Uint256, describe
-from state import Descend, Jump, State, Termination
+from state import Descend, GasHogCall, Jump, State, Termination
 from tests.solidity import load_solidity
 from vm import step
 
@@ -155,7 +155,14 @@ def _printable_transition(
     for call in end.calls:
         a = solver.evaluate(call.address)
         k = solver.evaluate(call.ok.ite(Uint256(1), Uint256(0)))
-        yield f"Call\t0x{a.to_bytes(20).hex()}\t{"RETURN" if k else "REVERT"}"
+        kind = (
+            "CONSUME ALL GAS"
+            if isinstance(call, GasHogCall)
+            else "RETURN"
+            if k
+            else "REVERT"
+        )
+        yield f"Call\t0x{a.to_bytes(20).hex()}\t{kind}"
     if len(end.calls) > 0:
         yield ""
 

@@ -69,6 +69,7 @@ class State:
     # constraints whatsoever on the gas variables.
     #
     gas_count: int | None = None
+    gas_hogged: Uint256 = Uint256(0)
 
     # Symbolic constraint that must be satisfied in order for the program to
     # reach this state. Largely based on the JUMPI instructions (if statements)
@@ -262,6 +263,13 @@ class DelegateCall(Call):
 
     previous_storage: Array[Uint256, Uint256]
     next_storage: Array[Uint256, Uint256]
+
+
+@dataclass(frozen=True)
+class GasHogCall(Call):
+    """Represents a CALL to a proxy that consumes all available gas."""
+
+    gas: Uint256
 
 
 class ControlFlow:

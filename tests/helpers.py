@@ -9,7 +9,7 @@ from universal import symbolic_start
 
 Fallback = (
     ("Px19", "SAVE", None, 1),
-    ("Px5D", "SAVE", "withdraw()"),
+    ("PxB9", "SAVE", "withdraw()"),
     ("Px23", "VIEW", "owner()"),
     ("Px5F", "SAVE", "withdraw()"),
     ("Px4F", "VIEW", "contributions(address)"),
@@ -21,10 +21,10 @@ Fallback = (
 Fallout = (
     ("Px5", "SAVE", "Fal1out()"),
     ("Px23", "VIEW", "owner()"),
-    ("Px9D", "SAVE", "collectAllocations()"),
+    ("Px139", "SAVE", "collectAllocations()"),
     ("Px9F", "SAVE", "collectAllocations()"),
     ("Px83", "SAVE", "allocate()"),
-    ("Px87D", "SAVE", "sendAllocation(address)"),
+    ("Px10F9", "SAVE", "sendAllocation(address)"),
     ("Px87F", "SAVE", "sendAllocation(address)"),
     ("Px40F", "VIEW", "allocatorBalance(address)"),
 )
@@ -69,8 +69,8 @@ Vault = (
 King = (
     ("PxB", "VIEW", "_king()"),
     ("Px13", "VIEW", "owner()"),
-    ("Px65", "SAVE", None, None),
-    ("Px6D", "SAVE", None, None),
+    ("PxC9", "SAVE", None, None),
+    ("PxD9", "SAVE", None, None),
     ("Px23", "VIEW", "prize()"),
     ("Px6F", "SAVE", None, None),
     ("Px67", "SAVE", None, None),
@@ -84,7 +84,8 @@ Reentrancy = (
     ("Px10F", "VIEW", "balanceOf(address)"),
     ("Px8F5", "SAVE", "withdraw(uint256)"),
     ("Px8F7", "SAVE", "withdraw(uint256)"),
-    ("Px8F3", "SAVE", "withdraw(uint256)"),
+    ("Px11E3", "SAVE", "withdraw(uint256)"),
+    ("Px11E7", "SAVE", "withdraw(uint256)"),
 )
 
 Elevator = (

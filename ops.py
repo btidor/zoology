@@ -21,6 +21,7 @@ from state import (
     ControlFlow,
     DelegateCall,
     Descend,
+    GasHogCall,
     Jump,
     Log,
     State,
@@ -555,8 +556,9 @@ def CALL(
         # of gas, attempting to transfer more than the available balance, and
         # other non-modeled conditions.
         substates.append(
-            _descend_substate(state, transaction, None, (retOffset, retSize))
+            _descend_substate(state, transaction, None, (retOffset, retSize), gas)
         )
+
     if s.mystery_proxy is not None:
         cond = address == s.mystery_proxy
         eoa &= ~cond
@@ -575,8 +577,17 @@ def CALL(
             _apply_call(state, call, retSize, retOffset)
             substates.append(state)
 
+            s.path <<= 1
+            state = copy.deepcopy(s)
+            state.path |= 1
+            state.cost *= 2
+            state.constraint &= cond
+            state.gas_hogged += gas
+            call = GasHogCall(s.mystery_proxy, Constraint(False), Bytes(), gas)
+            _apply_call(state, call, retSize, retOffset)
+            substates.append(state)
+
     # TODO: proxy can call other contracts
-    # TODO: proxy can consume all available gas
     # TODO: proxy can reside at a different, unknown address (?)
 
     if eoa.reveal() is not False:
@@ -659,7 +670,11 @@ def DELEGATECALL(
     ), "DELEGATECALL requires concrete contract"
 
     return Descend(
-        (_descend_substate(s, transaction, contract.program, (retOffset, retSize)),)
+        (
+            _descend_substate(
+                s, transaction, contract.program, (retOffset, retSize), gas
+            ),
+        )
     )
 
 
@@ -749,7 +764,7 @@ def _create_common(
             state.stack.append(address.into(Uint256))
         return state
 
-    return Descend((_descend_substate(s, transaction, constructor, callback),))
+    return Descend((_descend_substate(s, transaction, constructor, callback, None),))
 
 
 def _apply_call(state: State, call: Call, retSize: Uint256, retOffset: Uint256) -> None:
@@ -764,6 +779,7 @@ def _descend_substate(
     transaction: Transaction,
     program_override: Program | None,
     callback: Callable[[State, State], State] | tuple[Uint256, Uint256],
+    gas: Uint256 | None,
 ) -> State:
     substate = State(
         suffix=f"{state.suffix}-{len(state.calls)}",
@@ -789,6 +805,16 @@ def _descend_substate(
         call = Call(
             transaction.address, Constraint(substate.pc.success), substate.pc.returndata
         )
+        if gas is not None:
+            gasok = substate.gas_hogged <= gas
+            if gasok.reveal() is not True:
+                call = Call(
+                    transaction.address,
+                    gasok & call.ok,
+                    call.returndata.slice(
+                        Uint256(0), gasok.ite(call.returndata.length, Uint256(0))
+                    ),
+                )
         next = copy.deepcopy(state)
         next.sha3 = substate.sha3
         next.contracts = substate.contracts

@@ -15,7 +15,7 @@ def check_level(i: int, fixture: list[str]) -> None:
 
     instance, beginning = createInstance(contracts, factory)
     validator = validateInstance(factory, instance, beginning)
-    solver = constrainWithValidator(factory, instance, beginning, validator)
+    _, solver = constrainWithValidator(factory, instance, beginning, validator)
     assert not solver.check(), "validation passed initially"
 
     result = search(factory, instance, beginning, validator, depth=10)
@@ -181,7 +181,7 @@ def test_alien_codex() -> None:
 def test_denial() -> None:
     fixture = [
         "4e1c5914 000000000000000000000000c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0",
-        "\tProxy CONSUME ALL GAS",
+        "Validate Proxy CONSUME ALL GAS",
     ]
     check_level(20, fixture)
 
