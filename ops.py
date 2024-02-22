@@ -502,47 +502,7 @@ def CREATE(s: State, value: Uint256, offset: Uint256, size: Uint256) -> ControlF
 
     # https://ethereum.stackexchange.com/a/761
     seed = Bytes(b"\xd6\x94" + sender_address.to_bytes(20) + nonce.to_bytes(1))
-    return _CREATE(s, value, initcode, seed)
-
-
-def _CREATE(s: State, value: Uint256, initcode: Bytes, seed: Bytes) -> ControlFlow:
-    address = s.sha3[seed].into(Uint160)
-    assert (destination := address.reveal()) is not None
-
-    sender = s.transaction.address.reveal()
-    assert sender is not None, "CREATE requires concrete sender address"
-    s.contracts[sender].nonce += Uint256(1)
-
-    constructor = disassemble(initcode)
-
-    # ASSUMPTION: it's possible for a contract to have a non-zero balance upon
-    # creation if funds were sent to the address before it was created. Let's
-    # ignore this case for now.
-    s = s.with_contract(ConcreteContract(address=address))
-    s.balances[address] = Uint256(0)
-
-    transaction = Transaction(
-        origin=s.transaction.origin,
-        caller=s.transaction.address,
-        address=address,
-        callvalue=value,
-        gasprice=s.transaction.gasprice,
-    )
-
-    def callback(state: State, substate: State) -> State:
-        assert isinstance(substate.pc, Termination)
-        if substate.pc.success is False:
-            del state.contracts[destination]
-            state.stack.append(Uint256(0))
-        else:
-            contract = state.contracts[destination]
-            assert isinstance(contract, ConcreteContract)
-            contract.program = disassemble(substate.pc.returndata)
-            state = state.with_contract(contract, True)
-            state.stack.append(address.into(Uint256))
-        return state
-
-    return Descend((_descend_substate(s, transaction, constructor, callback),))
+    return _create_common(s, value, initcode, seed)
 
 
 def CALL(
@@ -581,6 +541,9 @@ def CALL(
             calldata=state.memory.slice(argsOffset, argsSize),
             gasprice=state.transaction.gasprice,
         )
+        # ASSUMPTION: we assume that the CALL does not revert due to running out
+        # of gas, attempting to transfer more than the available balance, and
+        # other non-modeled conditions.
         substates.append(
             _descend_substate(state, transaction, None, (retOffset, retSize), i)
         )
@@ -709,7 +672,7 @@ def CREATE2(
     seed = Bytes(
         b"\xff" + sender_address.to_bytes(20) + salt.to_bytes(32) + h.to_bytes(32)
     )
-    return _CREATE(s, value, initcode, seed)
+    return _create_common(s, value, initcode, seed)
 
 
 def STATICCALL(
@@ -743,6 +706,42 @@ def INVALID(s: State) -> None:
 def SELFDESTRUCT() -> None:
     """FF - Halt execution and register account for later deletion."""
     raise NotImplementedError("SELFDESTRUCT")
+
+
+def _create_common(
+    s: State, value: Uint256, initcode: Bytes, seed: Bytes
+) -> ControlFlow:
+    address = s.sha3[seed].into(Uint160)
+    assert (destination := address.reveal()) is not None
+
+    sender = s.transaction.address.reveal()
+    assert sender is not None, "CREATE requires concrete sender address"
+    s.contracts[sender].nonce += Uint256(1)
+
+    s = s.with_contract(ConcreteContract(address=address))
+    transaction = Transaction(
+        origin=s.transaction.origin,
+        caller=s.transaction.address,
+        address=address,
+        callvalue=value,
+        gasprice=s.transaction.gasprice,
+    )
+    constructor = disassemble(initcode)
+
+    def callback(state: State, substate: State) -> State:
+        assert isinstance(substate.pc, Termination)
+        if substate.pc.success is False:
+            del state.contracts[destination]
+            state.stack.append(Uint256(0))
+        else:
+            contract = state.contracts[destination]
+            assert isinstance(contract, ConcreteContract)
+            contract.program = disassemble(substate.pc.returndata)
+            state = state.with_contract(contract, True)
+            state.stack.append(address.into(Uint256))
+        return state
+
+    return Descend((_descend_substate(s, transaction, constructor, callback),))
 
 
 def _descend_substate(
