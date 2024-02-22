@@ -111,7 +111,7 @@ def test_king() -> None:
 
 def test_elevator() -> None:
     fixture = [
-        "ed9a7134 00000000000000000000000000000000000000000000000000000001000000ff\tvia proxy",
+        "ed9a7134 ffffffffffffffffffffffffffffffffffffffffffffffffffffffff000000ff\tvia proxy",
     ]
     check_level(11, fixture)
 
@@ -162,8 +162,9 @@ def test_preservation() -> None:
 
 
 def test_magic_number() -> None:
+    # TODO: illustrate proxy calls
     fixture = [
-        "1f879433 0000000000000000000000000000000000000000000000000000000000000000",
+        "1f879433 000000000000000000000000c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0",
     ]
     check_level(18, fixture)
 

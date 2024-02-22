@@ -16,7 +16,16 @@ from smt import (
     Uint256,
     concat_bytes,
 )
-from state import ControlFlow, DelegateCall, Descend, Jump, Log, State, Termination
+from state import (
+    Call,
+    ControlFlow,
+    DelegateCall,
+    Descend,
+    Jump,
+    Log,
+    State,
+    Termination,
+)
 
 Int256 = Int[Literal[256]]
 Uint257 = Uint[Literal[257]]
@@ -519,8 +528,7 @@ def CALL(
     address = _address.into(Uint160)
     substates = list[State]()
     eoa = Constraint(True)
-    s.children += len(s.contracts) + 1
-    for i, contract in enumerate(s.contracts.values()):
+    for contract in s.contracts.values():
         # ASSUMPTION: to avoid infinite loops (including in the validator
         # function), we assume a contract never calls itself.
         if contract.address.reveal() == s.transaction.address.reveal():
@@ -531,7 +539,9 @@ def CALL(
         if cond.reveal() is False:
             continue
 
+        s.path <<= 1
         state = copy.deepcopy(s)
+        state.path |= 1
         state.constraint &= cond
         transaction = Transaction(
             origin=state.transaction.origin,
@@ -545,23 +555,25 @@ def CALL(
         # of gas, attempting to transfer more than the available balance, and
         # other non-modeled conditions.
         substates.append(
-            _descend_substate(state, transaction, None, (retOffset, retSize), i)
+            _descend_substate(state, transaction, None, (retOffset, retSize))
         )
     if s.mystery_proxy is not None:
         cond = address == s.mystery_proxy
         eoa &= ~cond
         if cond.reveal() is not False:
-            suffix = f"{s.suffix}-{s.children-1}"
+            suffix = f"{s.suffix}-{len(s.calls)}"
+            s.path <<= 1
             state = copy.deepcopy(s)
+            state.path |= 1
             state.constraint &= cond
             state.transfer(s.transaction.address, s.mystery_proxy, value)
-            state.latest_return = Bytes.symbolic(f"RETURNDATA{suffix}")
-            state.memory.graft(
-                state.latest_return.slice(Uint256(0), retSize), retOffset
+            call = Call(
+                s.mystery_proxy,
+                Constraint(f"RETURNOK{suffix}"),
+                Bytes.symbolic(f"RETURNDATA{suffix}"),
             )
-            state.stack.append(
-                Constraint(f"RETURNOK{suffix}").ite(Uint256(1), Uint256(0))
-            )
+            _apply_call(state, call, retSize, retOffset)
+            substates.append(state)
 
     # TODO: proxy can call other contracts
     # TODO: proxy can consume all available gas
@@ -570,9 +582,7 @@ def CALL(
     if eoa.reveal() is not False:
         s.constraint &= eoa
         s.transfer(s.transaction.address, address, value)
-        s.latest_return = Bytes()
-        s.memory.graft(s.latest_return.slice(Uint256(0), retSize), retOffset)
-        s.stack.append(Uint256(1))
+        _apply_call(s, Call(address, Constraint(True), Bytes()), retSize, retOffset)
         substates.append(s)
 
     return Descend(tuple(substates))
@@ -612,13 +622,14 @@ def DELEGATECALL(
     Message-call into this account with an alternative account's code, but
     persisting the current values for sender and value.
     """
-    destination = _address.reveal()
-    if destination is None:
+    address = _address.reveal()
+    if address is None:
         # A DELEGATECALL to an arbitrary contract can overwrite any storage
         # addresses. (Assume we can control the address completely; if not,
         # narrowing will fail.)
-        n = len(s.delegates)
+        n = len(s.calls)
         dc = DelegateCall(
+            _address.into(Uint160),
             Constraint(f"DCOK{n}{s.suffix}"),
             Bytes.symbolic(f"DCRETURN{n}{s.suffix}"),
             s.storage,
@@ -628,11 +639,8 @@ def DELEGATECALL(
         s.narrower &= _address == Uint256(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0)
         assert (sender := s.transaction.address.reveal()) is not None
         s.contracts[sender].storage = copy.deepcopy(dc.next_storage)
-        s.latest_return = dc.returndata
-        s.memory.graft(s.latest_return.slice(Uint256(0), retSize), retOffset)
+        _apply_call(s, dc, retSize, retOffset)
         s.constraint &= dc.ok | Array.equals(dc.previous_storage, dc.next_storage)
-        s.stack.append(dc.ok.ite(Uint256(1), Uint256(0)))
-        s.delegates = (*s.delegates, dc)
         return None
 
     transaction = Transaction(
@@ -643,9 +651,9 @@ def DELEGATECALL(
         calldata=s.memory.slice(argsOffset, argsSize),
         gasprice=s.transaction.gasprice,
     )
-    if destination not in s.contracts:
-        raise ValueError("DELEGATECALL to unknown contract: " + hex(destination))
-    contract = s.contracts[destination]
+    if address not in s.contracts:
+        raise ValueError("DELEGATECALL to unknown contract: " + hex(address))
+    contract = s.contracts[address]
     assert isinstance(
         contract, ConcreteContract
     ), "DELEGATECALL requires concrete contract"
@@ -744,21 +752,21 @@ def _create_common(
     return Descend((_descend_substate(s, transaction, constructor, callback),))
 
 
+def _apply_call(state: State, call: Call, retSize: Uint256, retOffset: Uint256) -> None:
+    state.latest_return = call.returndata
+    state.memory.graft(call.returndata.slice(Uint256(0), retSize), retOffset)
+    state.stack.append(call.ok.ite(Uint256(1), Uint256(0)))
+    state.calls = (*state.calls, call)
+
+
 def _descend_substate(
     state: State,
     transaction: Transaction,
     program_override: Program | None,
     callback: Callable[[State, State], State] | tuple[Uint256, Uint256],
-    i: int | None = None,
 ) -> State:
-    # WARNING: when using Descend with multiple substates, `children` must be
-    # incremented by the total number of substates before cloning.
-    if i is None:
-        i = state.children
-        state.children += 1
-
     substate = State(
-        suffix=f"{state.suffix}-{i}",
+        suffix=f"{state.suffix}-{len(state.calls)}",
         block=state.block,
         transaction=transaction,
         sha3=state.sha3,
@@ -768,7 +776,7 @@ def _descend_substate(
         mystery_proxy=state.mystery_proxy,
         logs=state.logs,
         gas_count=state.gas_count,
-        delegates=state.delegates,
+        calls=state.calls,
         constraint=state.constraint,
         narrower=state.narrower,
         path=state.path,
@@ -778,15 +786,18 @@ def _descend_substate(
 
     def metacallback(substate: State) -> State:
         assert isinstance(substate.pc, Termination)
+        call = Call(
+            transaction.address, Constraint(substate.pc.success), substate.pc.returndata
+        )
         next = copy.deepcopy(state)
         next.sha3 = substate.sha3
         next.contracts = substate.contracts
         next.balances = substate.balances
         next.mystery_proxy = substate.mystery_proxy
         next.logs = substate.logs
-        next.latest_return = substate.pc.returndata
+        next.latest_return = call.returndata
         next.gas_count = substate.gas_count
-        next.delegates = substate.delegates
+        next.calls = (*substate.calls, call)
         next.constraint = substate.constraint
         next.narrower = substate.narrower
         next.path = substate.path
@@ -794,12 +805,8 @@ def _descend_substate(
         assert isinstance(substate.pc, Termination)
         match callback:
             case (retOffset, retSize):
-                next.memory.graft(
-                    next.latest_return.slice(Uint256(0), retSize), retOffset
-                )
-                next.stack.append(
-                    Constraint(substate.pc.success).ite(Uint256(1), Uint256(0))
-                )
+                next.memory.graft(call.returndata.slice(Uint256(0), retSize), retOffset)
+                next.stack.append(call.ok.ite(Uint256(1), Uint256(0)))
             case _:
                 next = callback(next, substate)
         return next

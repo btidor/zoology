@@ -152,6 +152,13 @@ def _printable_transition(
     for line in end.sha3.printable(solver):
         yield line
 
+    for call in end.calls:
+        a = solver.evaluate(call.address)
+        k = solver.evaluate(call.ok.ite(Uint256(1), Uint256(0)))
+        yield f"Call\t0x{a.to_bytes(20).hex()}\t{"RETURN" if k else "REVERT"}"
+    if len(end.calls) > 0:
+        yield ""
+
 
 if __name__ == "__main__":
     program = load_solidity("fixtures/01_Fallback.sol")

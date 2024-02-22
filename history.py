@@ -19,7 +19,7 @@ from smt import (
     get_constants,
     substitute,
 )
-from state import State
+from state import DelegateCall, State
 
 
 class History:
@@ -124,7 +124,9 @@ class History:
                 suffixes.append("via proxy")
             yield "\n"
 
-            for dc in state.delegates:
+            for dc in state.calls:
+                if not isinstance(dc, DelegateCall):
+                    continue
                 ok = evaluate(solver, dc.ok)
                 yield f"\tProxy {'RETURN' if ok else 'REVERT'} "
                 yield from dc.returndata.describe(solver)

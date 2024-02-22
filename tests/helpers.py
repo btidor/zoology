@@ -9,20 +9,23 @@ from universal import symbolic_start
 
 Fallback = (
     ("Px19", "SAVE", None, 1),
-    ("Px2F", "SAVE", "withdraw()"),
-    ("Px4F", "VIEW", "contributions(address)"),
+    ("Px5D", "SAVE", "withdraw()"),
     ("Px23", "VIEW", "owner()"),
-    ("Px10F", "SAVE", "contribute()"),
-    ("Px10E", "SAVE", "contribute()"),
+    ("Px5F", "SAVE", "withdraw()"),
+    ("Px4F", "VIEW", "contributions(address)"),
     ("Px83", "VIEW", "getContribution()"),
+    ("Px10E", "SAVE", "contribute()"),
+    ("Px10F", "SAVE", "contribute()"),
 )
 
 Fallout = (
     ("Px5", "SAVE", "Fal1out()"),
-    ("Px4F", "SAVE", "collectAllocations()"),
     ("Px23", "VIEW", "owner()"),
-    ("Px43F", "SAVE", "sendAllocation(address)"),
+    ("Px9D", "SAVE", "collectAllocations()"),
+    ("Px9F", "SAVE", "collectAllocations()"),
     ("Px83", "SAVE", "allocate()"),
+    ("Px87D", "SAVE", "sendAllocation(address)"),
+    ("Px87F", "SAVE", "sendAllocation(address)"),
     ("Px40F", "VIEW", "allocatorBalance(address)"),
 )
 
@@ -64,11 +67,13 @@ Vault = (
 )
 
 King = (
-    ("Px37", "SAVE", None, None),
-    ("Px33", "SAVE", None, None),
     ("PxB", "VIEW", "_king()"),
     ("Px13", "VIEW", "owner()"),
+    ("Px65", "SAVE", None, None),
+    ("Px6D", "SAVE", None, None),
     ("Px23", "VIEW", "prize()"),
+    ("Px6F", "SAVE", None, None),
+    ("Px67", "SAVE", None, None),
 )
 
 Reentrancy = (
@@ -76,16 +81,17 @@ Reentrancy = (
     ("Px2F", "SAVE", "donate(address)"),
     ("Px4F", "VIEW", "balances(address)"),
     ("Px11F", "VIEW", "withdraw(uint256)"),
-    ("Px47B", "SAVE", "withdraw(uint256)"),
-    ("Px479", "SAVE", "withdraw(uint256)"),
     ("Px10F", "VIEW", "balanceOf(address)"),
+    ("Px8F5", "SAVE", "withdraw(uint256)"),
+    ("Px8F7", "SAVE", "withdraw(uint256)"),
+    ("Px8F3", "SAVE", "withdraw(uint256)"),
 )
 
 Elevator = (
     ("PxD", "VIEW", "floor()"),
-    ("Px67F", "VIEW", "goTo(uint256)"),
-    ("Px33F7", "SAVE", "goTo(uint256)"),
     ("Px31", "VIEW", "top()"),
+    ("PxCFF", "VIEW", "goTo(uint256)"),
+    ("PxCFEF", "SAVE", "goTo(uint256)"),
 )
 
 Privacy = (

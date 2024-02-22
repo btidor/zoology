@@ -42,6 +42,15 @@ class State:
     pc: int | Termination = 0
     stack: list[Uint256] = field(default_factory=list)
     memory: Memory = field(default_factory=Memory)
+    logs: list[Log] = field(default_factory=list)
+
+    # The return data of the most recent subcontext, for the RETURNDATASIZE and
+    # RETURNDATACOPY instructions.
+    latest_return: Bytes = Bytes()
+
+    # Every(-ish) time a CALL, DELEGATECALL, etc. instruction is invoked we
+    # return a symbolic result, tracked here.
+    calls: tuple[Call, ...] = ()
 
     # During instructions like CREATE and DELEGATECALL, the contract runs with
     # code not associated with its address (e.g. initcode).
@@ -52,16 +61,6 @@ class State:
     # fully-symbolic response.
     mystery_proxy: Uint160 | None = None
 
-    # Tracks the number of times we've spawned a subcontext, so that symbolic
-    # variables can be given a unique name.
-    children: int = 0
-
-    # The return data of the most recent subcontext, for the RETURNDATASIZE and
-    # RETURNDATACOPY instructions.
-    latest_return: Bytes = Bytes()
-
-    logs: list[Log] = field(default_factory=list)
-
     # Every time the GAS instruction is invoked we return a symbolic result,
     # suffixed with this counter to make it unique. In the case of a concrete
     # execution, this value is set to None.
@@ -70,10 +69,6 @@ class State:
     # constraints whatsoever on the gas variables.
     #
     gas_count: int | None = None
-
-    # Every time the DELEGATECALL instruction is invoked with a symbolic address
-    # we return a symbolic result, suffixed with this counter to make it unique
-    delegates: tuple[DelegateCall, ...] = ()
 
     # Symbolic constraint that must be satisfied in order for the program to
     # reach this state. Largely based on the JUMPI instructions (if statements)
@@ -253,11 +248,18 @@ class Log:
 
 
 @dataclass(frozen=True)
-class DelegateCall:
-    """Information about a symbolic DELEGATECALL instruction."""
+class Call:
+    """Information about a CALL instruction."""
 
+    address: Uint160
     ok: Constraint
     returndata: Bytes
+
+
+@dataclass(frozen=True)
+class DelegateCall(Call):
+    """Information about a symbolic DELEGATECALL instruction."""
+
     previous_storage: Array[Uint256, Uint256]
     next_storage: Array[Uint256, Uint256]
 
