@@ -47,6 +47,11 @@ class State:
     # code not associated with its address (e.g. initcode).
     program_override: Program | None = None
 
+    # In addition to CALLing to a concrete, registered contract, we can
+    # optionally model a CALL to a symbolic "proxy" contract that returns a
+    # fully-symbolic response.
+    mystery_proxy: Uint160 | None = None
+
     # Tracks the number of times we've spawned a subcontext, so that symbolic
     # variables can be given a unique name.
     children: int = 0
@@ -65,10 +70,6 @@ class State:
     # constraints whatsoever on the gas variables.
     #
     gas_count: int | None = None
-
-    # Every time the CALL instruction is invoked with a symbolic address we
-    # return a symbolic result, suffixed with this counter to make it unique.
-    call_count: int = 0
 
     # Every time the DELEGATECALL instruction is invoked with a symbolic address
     # we return a symbolic result, suffixed with this counter to make it unique
@@ -107,6 +108,10 @@ class State:
         # ASSUMPTION: the current block number is at least 256. This prevents
         # the BLOCKHASH instruction from overflowing.
         self.constraint &= self.block.number >= Uint256(256)
+        if self.mystery_proxy is not None:
+            assert (
+                self.mystery_proxy.reveal() is not None
+            ), "State requires concrete mystery proxy address, if present"
 
     @property
     def program(self) -> Program:
@@ -130,6 +135,10 @@ class State:
         if isinstance(contract, Program):
             contract = ConcreteContract(program=contract)
         assert (address := contract.address.reveal()) is not None
+        if self.mystery_proxy is not None and address == self.mystery_proxy.reveal():
+            raise KeyError(
+                f"Contract 0x{address.to_bytes(20).hex()} shadows mystery proxy"
+            )
         if address in self.contracts and not overwrite:
             raise KeyError(f"Contract 0x{address.to_bytes(20).hex()} already exists")
         self.contracts[address] = contract

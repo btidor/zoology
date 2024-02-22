@@ -559,7 +559,7 @@ def CALL(
     address = _address.into(Uint160)
     substates = list[State]()
     eoa = Constraint(True)
-    s.children += len(s.contracts)
+    s.children += len(s.contracts) + 1
     for i, contract in enumerate(s.contracts.values()):
         # ASSUMPTION: to avoid infinite loops (including in the validator
         # function), we assume a contract never calls itself.
@@ -584,11 +584,31 @@ def CALL(
         substates.append(
             _descend_substate(state, transaction, None, (retOffset, retSize), i)
         )
+    if s.mystery_proxy is not None:
+        cond = address == s.mystery_proxy
+        eoa &= ~cond
+        if cond.reveal() is not False:
+            suffix = f"{s.suffix}-{s.children-1}"
+            state = copy.deepcopy(s)
+            state.constraint &= cond
+            state.transfer(s.transaction.address, s.mystery_proxy, value)
+            state.latest_return = Bytes.symbolic(f"RETURNDATA{suffix}")
+            state.memory.graft(
+                state.latest_return.slice(Uint256(0), retSize), retOffset
+            )
+            state.stack.append(
+                Constraint(f"RETURNOK{suffix}").ite(Uint256(1), Uint256(0))
+            )
+
+    # TODO: proxy can call other contracts
+    # TODO: proxy can consume all available gas
+    # TODO: proxy can reside at a different, unknown address (?)
 
     if eoa.reveal() is not False:
         s.constraint &= eoa
         s.transfer(s.transaction.address, address, value)
-        s.memory.graft(Bytes().slice(Uint256(0), retSize), retOffset)
+        s.latest_return = Bytes()
+        s.memory.graft(s.latest_return.slice(Uint256(0), retSize), retOffset)
         s.stack.append(Uint256(1))
         substates.append(s)
 
@@ -746,9 +766,9 @@ def _descend_substate(
         contracts=state.contracts,
         balances=state.balances,
         program_override=program_override,
+        mystery_proxy=state.mystery_proxy,
         logs=state.logs,
         gas_count=state.gas_count,
-        call_count=state.call_count,
         delegates=state.delegates,
         constraint=state.constraint,
         narrower=state.narrower,
@@ -763,10 +783,10 @@ def _descend_substate(
         next.sha3 = substate.sha3
         next.contracts = substate.contracts
         next.balances = substate.balances
+        next.mystery_proxy = substate.mystery_proxy
         next.logs = substate.logs
         next.latest_return = substate.pc.returndata
         next.gas_count = substate.gas_count
-        next.call_count = substate.call_count
         next.delegates = substate.delegates
         next.constraint = substate.constraint
         next.narrower = substate.narrower

@@ -95,6 +95,7 @@ def symbolic_start(program: Contract | Program, sha3: SHA3, suffix: str) -> Stat
         transaction=transaction,
         balances=Array[Uint160, Uint256](f"BALANCE{suffix}"),
         sha3=sha3,
+        mystery_proxy=Uint160(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0),
         gas_count=0,
     ).with_contract(contract)
 

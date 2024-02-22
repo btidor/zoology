@@ -41,16 +41,6 @@ def createInstance(
     calldata = abiencode("createInstance(address)") + p.to_bytes(32)
     # ASSUMPTION: the only contracts in existence are the ones related to the
     # level factory.
-    #
-    # TODO: emit cases for all possible targets:
-    # - every contract, including self
-    # - proxy that implements $API
-    # - proxy that reverts with $MESSAGE
-    # - proxy that consumes all gas
-    # - player EOA
-    # - other, unknown EOA
-    # - other, unknown non-EOA (?)
-    # - (later: proxy calls every contract, including self)
     start = State(
         transaction=Transaction(
             origin=PLAYER,
@@ -60,6 +50,7 @@ def createInstance(
             callvalue=Uint256(10**15),
         ),
         contracts=contracts,
+        mystery_proxy=PROXY,
     )
     # ASSUMPTION: the only account with a nonzero balance belongs to the player.
     start.balances[PLAYER] = Uint256(10**18)
@@ -113,6 +104,7 @@ def validateInstance(
         sha3=sha3,
         contracts=contracts,
         balances=balances,
+        mystery_proxy=PROXY,
         gas_count=0,
     )
 
@@ -190,6 +182,7 @@ def constrainWithValidator(
         sha3=sha3,
         contracts=contracts,
         balances=balances,
+        mystery_proxy=PROXY,
         gas_count=0,
     )
 
@@ -243,9 +236,10 @@ def search(
                     calldata=Bytes.symbolic(f"CALLDATA{suffix}"),
                     gasprice=Uint256(f"GASPRICE{suffix}"),
                 ),
+                sha3=sha3,
                 contracts=contracts,
                 balances=balances,
-                sha3=sha3,
+                mystery_proxy=PROXY,
                 gas_count=0,
             )
             start.transfer(
