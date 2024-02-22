@@ -8,7 +8,7 @@ from typing import Any, Callable
 
 from bytes import Bytes, Memory
 from disassembler import Program
-from environment import Block, Contract, Transaction
+from environment import Block, ConcreteContract, Contract, Transaction
 from sha3 import SHA3
 from smt import (
     Array,
@@ -114,7 +114,8 @@ class State:
         if self.program_override is not None:
             return self.program_override
         assert (address := self.transaction.address.reveal()) is not None
-        return self.contracts[address].program
+        assert isinstance((contract := self.contracts[address]), ConcreteContract)
+        return contract.program
 
     @property
     def storage(self) -> Array[Uint256, Uint256]:
@@ -127,7 +128,7 @@ class State:
     ) -> State:
         """Add a contract to the state."""
         if isinstance(contract, Program):
-            contract = Contract(program=contract)
+            contract = ConcreteContract(program=contract)
         assert (address := contract.address.reveal()) is not None
         if address in self.contracts and not overwrite:
             raise KeyError(f"Contract 0x{address.to_bytes(20).hex()} already exists")

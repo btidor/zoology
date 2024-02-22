@@ -7,7 +7,7 @@ from typing import Iterable, Iterator
 
 from bytes import Bytes
 from disassembler import Program
-from environment import Block, Contract, Transaction
+from environment import Block, ConcreteContract, Contract, Transaction
 from sha3 import SHA3
 from smt import Array, Solver, Uint160, Uint256, describe
 from state import Descend, Jump, State, Termination
@@ -74,7 +74,7 @@ def symbolic_start(program: Contract | Program, sha3: SHA3, suffix: str) -> Stat
     if isinstance(program, Contract):
         contract = program
     else:
-        contract = Contract(
+        contract = ConcreteContract(
             program=program,
             storage=Array[Uint256, Uint256](f"STORAGE{suffix}"),
             nonce=Uint256(f"NONCE{suffix}"),
@@ -89,9 +89,6 @@ def symbolic_start(program: Contract | Program, sha3: SHA3, suffix: str) -> Stat
         calldata=Bytes.symbolic(f"CALLDATA{suffix}"),
         gasprice=Uint256(f"GASPRICE{suffix}"),
     )
-    # TODO: the balances of other accounts can change between transactions
-    # (and the balance of this contract account too, via SELFDESTRUCT). How
-    # do we model this?
     return State(
         suffix=suffix,
         block=Block.symbolic(suffix),

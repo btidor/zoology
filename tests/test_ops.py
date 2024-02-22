@@ -249,7 +249,9 @@ def test_KECCAK256() -> None:
 
 
 def test_ADDRESS() -> None:
-    contract = Contract(address=Uint160(0x9BBFED6889322E016E0A02EE459D306FC19545D8))
+    contract = ConcreteContract(
+        address=Uint160(0x9BBFED6889322E016E0A02EE459D306FC19545D8)
+    )
     s = State(
         transaction=Transaction(address=contract.address),
     ).with_contract(contract)
@@ -332,7 +334,7 @@ def test_CALLDATACOPY() -> None:
 
 def test_CODESIZE() -> None:
     s = State().with_contract(
-        Contract(
+        ConcreteContract(
             program=disassemble(Bytes.fromhex("66000000000000005B")),
         )
     )
@@ -341,7 +343,7 @@ def test_CODESIZE() -> None:
 
 def test_CODECOPY() -> None:
     s = State().with_contract(
-        Contract(
+        ConcreteContract(
             program=disassemble(Bytes.fromhex("66000000000000005B")),
         )
     )
@@ -364,7 +366,7 @@ def test_GASPRICE() -> None:
 def test_EXTCODESIZE() -> None:
     address = 0xABCDABCDABCDABCDABCDABCDABCDABCDABCDABCD
     s = State().with_contract(
-        Contract(
+        ConcreteContract(
             address=Uint160(address),
             program=disassemble(Bytes.fromhex("66000000000000005B")),
         )
@@ -376,7 +378,7 @@ def test_EXTCODESIZE() -> None:
 def test_EXTCODECOPY() -> None:
     address = 0xABCDABCDABCDABCDABCDABCDABCDABCDABCDABCD
     s = State().with_contract(
-        Contract(
+        ConcreteContract(
             address=Uint160(address),
             program=disassemble(Bytes.fromhex("66000000000000005B")),
         )
@@ -415,7 +417,7 @@ def test_RETURNDATACOPY() -> None:
 def test_EXTCODEHASH() -> None:
     address = 0xABCDABCDABCDABCDABCDABCDABCDABCDABCDABCD
     s = State().with_contract(
-        Contract(
+        ConcreteContract(
             address=Uint160(address),
             program=disassemble(Bytes.fromhex("66000000000000005B")),
         )
@@ -425,7 +427,8 @@ def test_EXTCODEHASH() -> None:
         EXTCODEHASH(s, Uint256(address)).reveal()
         == 0xD579742AEE22A336CAC42EFE05B2CF1281DB892E213257B929C2338EA0675B00
     )
-    assert EXTCODEHASH(s, Uint256(0x1234)).reveal() == 0x0
+    with pytest.raises(NotImplementedError):
+        EXTCODEHASH(s, Uint256(0x1234))
 
 
 def test_BLOCKHASH() -> None:
@@ -519,7 +522,7 @@ def test_MSTORE8() -> None:
 
 
 def test_SLOAD() -> None:
-    s = State().with_contract(Contract())
+    s = State().with_contract(ConcreteContract())
     s.storage[Uint256(0)] = Uint256(46)
     assert SLOAD(s, Uint256(0)).reveal() == 46
     assert len(s.storage.accessed) == 1
@@ -527,7 +530,7 @@ def test_SLOAD() -> None:
 
 
 def test_SSTORE() -> None:
-    s = State().with_contract(Contract())
+    s = State().with_contract(ConcreteContract())
 
     SSTORE(s, Uint256(0), Uint256(0xFFFF))
     assert s.storage[Uint256(0)].reveal() == 0xFFFF
@@ -538,7 +541,7 @@ def test_SSTORE() -> None:
 
 
 def test_JUMP() -> None:
-    contract = Contract(
+    contract = ConcreteContract(
         program=disassemble(Bytes.fromhex("66000000000000005B")),
     )
     s = State().with_contract(contract)
@@ -605,7 +608,7 @@ def test_LOG() -> None:
 
 
 def test_CREATE() -> None:
-    contract = Contract(
+    contract = ConcreteContract(
         address=Uint160(0x6AC7EA33F8831EA9DCC53393AAA88B25A785DBF0),
     )
     s = State(
@@ -634,7 +637,7 @@ def test_RETURN() -> None:
 
 
 def test_CREATE2() -> None:
-    contract = Contract(address=Uint160(0x0))
+    contract = ConcreteContract(address=Uint160(0x0))
     s = State(
         transaction=Transaction(address=contract.address),
     ).with_contract(contract)

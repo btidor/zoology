@@ -5,7 +5,7 @@ from typing import Callable, Literal
 
 from bytes import Bytes
 from disassembler import Instruction, Program, disassemble
-from environment import Contract, Transaction
+from environment import ConcreteContract, Transaction
 from smt import (
     Array,
     Constraint,
@@ -245,7 +245,7 @@ def EXTCODESIZE(s: State, _address: Uint256) -> Uint256:
     address = _address.into(Uint160)
     result = Uint256(0)
     for contract in s.contracts.values():
-        result = (address == contract.address).ite(contract.program.code.length, result)
+        result = (address == contract.address).ite(contract.codesize, result)
     return result
 
 
@@ -261,6 +261,9 @@ def EXTCODECOPY(
     assert address is not None, "EXTCODECOPY requires concrete address"
 
     contract = s.contracts.get(address, None)
+    assert (
+        isinstance(contract, ConcreteContract) or contract is None
+    ), "EXTCODECOPY requires concrete contract"
     code = contract.program.code if contract else Bytes()
     s.memory.graft(code.slice(offset, size), destOffset)
 
@@ -288,9 +291,13 @@ def EXTCODEHASH(s: State, _address: Uint256) -> Uint256:
 
     contract = s.contracts.get(address, None)
     if contract is None:
-        # TODO: we should return zero if the address has not been created and
-        # the empty hash otherwise.
-        return Uint256(0)
+        # Properly, EXTCODEHASH should return zero if the address does not exist
+        # or is empty, and the empty hash otherwise. See: EIP-1052.
+        raise NotImplementedError("EXTCODEHASH of non-contract address")
+
+    assert isinstance(
+        contract, ConcreteContract
+    ), "EXTCODEHASH requires concrete contract"
 
     return s.sha3[contract.program.code]
 
@@ -511,7 +518,7 @@ def _CREATE(s: State, value: Uint256, initcode: Bytes, seed: Bytes) -> ControlFl
     # ASSUMPTION: it's possible for a contract to have a non-zero balance upon
     # creation if funds were sent to the address before it was created. Let's
     # ignore this case for now.
-    s = s.with_contract(Contract(address=address))
+    s = s.with_contract(ConcreteContract(address=address))
     s.balances[address] = Uint256(0)
 
     transaction = Transaction(
@@ -529,6 +536,7 @@ def _CREATE(s: State, value: Uint256, initcode: Bytes, seed: Bytes) -> ControlFl
             state.stack.append(Uint256(0))
         else:
             contract = state.contracts[destination]
+            assert isinstance(contract, ConcreteContract)
             contract.program = disassemble(substate.pc.returndata)
             state = state.with_contract(contract, True)
             state.stack.append(address.into(Uint256))
@@ -598,24 +606,7 @@ def CALLCODE(
     retSize: Uint256,
 ) -> ControlFlow:
     """F2 - Message-call into this account with alternative account's code."""
-    address = _address.reveal()
-    assert address is not None, "CALLCODE requires concrete address"
-
-    transaction = Transaction(
-        origin=s.transaction.origin,
-        caller=s.transaction.address,
-        address=s.transaction.address,
-        callvalue=value,
-        calldata=s.memory.slice(argsOffset, argsSize),
-        gasprice=s.transaction.gasprice,
-    )
-    destination = s.contracts.get(address, None)
-    if destination is None:
-        raise ValueError("CALLCODE to unknown contract: " + hex(address))
-
-    return Descend(
-        (_descend_substate(s, transaction, destination.program, (retOffset, retSize)),)
-    )
+    raise NotImplementedError("CALLCODE")
 
 
 def RETURN(s: State, offset: Uint256, size: Uint256) -> None:
@@ -671,9 +662,14 @@ def DELEGATECALL(
     )
     if destination not in s.contracts:
         raise ValueError("DELEGATECALL to unknown contract: " + hex(destination))
-    program = s.contracts[destination].program
+    contract = s.contracts[destination]
+    assert isinstance(
+        contract, ConcreteContract
+    ), "DELEGATECALL requires concrete contract"
 
-    return Descend((_descend_substate(s, transaction, program, (retOffset, retSize)),))
+    return Descend(
+        (_descend_substate(s, transaction, contract.program, (retOffset, retSize)),)
+    )
 
 
 def CREATE2(
@@ -762,8 +758,6 @@ def _descend_substate(
     substate.transfer(transaction.caller, transaction.address, transaction.callvalue)
 
     def metacallback(substate: State) -> State:
-        # TODO: support reentrancy (apply storage changes to contract, including
-        # on self-calls).
         assert isinstance(substate.pc, Termination)
         next = copy.deepcopy(state)
         next.sha3 = substate.sha3

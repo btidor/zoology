@@ -1,7 +1,7 @@
 """Test helpers, mostly related to fixtures."""
 
 from disassembler import Program
-from environment import Contract
+from environment import ConcreteContract
 from sha3 import SHA3
 from smt import Uint160, Uint256
 from state import State
@@ -115,7 +115,7 @@ Preservation = (
 
 def delegation_start(programs: dict[str, Program]) -> State:
     """Set up the Delegation level."""
-    other = Contract(address=Uint160(0xABCDEF), program=programs["Delegate"])
+    other = ConcreteContract(address=Uint160(0xABCDEF), program=programs["Delegate"])
     start = symbolic_start(programs["Delegation"], SHA3(), "").with_contract(other)
     start.transfer(
         start.transaction.caller, start.transaction.address, start.transaction.callvalue
@@ -126,8 +126,8 @@ def delegation_start(programs: dict[str, Program]) -> State:
 
 def preservation_start(programs: dict[str, Program]) -> State:
     """Set up the Preservation level."""
-    preservation = Contract(program=programs["Preservation"])
-    library = Contract(
+    preservation = ConcreteContract(program=programs["Preservation"])
+    library = ConcreteContract(
         address=Uint160(0x1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B),
         program=programs["LibraryContract"],
     )

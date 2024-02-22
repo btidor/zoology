@@ -11,7 +11,7 @@ from itertools import chain
 
 from bytes import Bytes
 from disassembler import abiencode
-from environment import Contract, Transaction
+from environment import ConcreteContract, Contract, Transaction
 from history import History, Validator
 from sha3 import SHA3
 from smt import (
@@ -118,8 +118,9 @@ def validateInstance(
 
     for reference in contracts.values():
         assert (a := reference.address.reveal()) is not None
+        assert isinstance(reference, ConcreteContract)
         start = start.with_contract(
-            Contract(
+            ConcreteContract(
                 address=reference.address,
                 program=reference.program,
                 storage=Array[Uint256, Uint256](f"STORAGE@{a.to_bytes(20).hex()}"),

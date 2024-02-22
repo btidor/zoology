@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import abc
 import copy
 from collections import OrderedDict
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Self, override
 
 from bytes import Bytes
 from disassembler import Program, disassemble
@@ -79,24 +80,40 @@ class Block:
 
 
 @dataclass
-class Contract:
-    """A deployed contract account with code and symbolic storage."""
+class Contract(abc.ABC):
+    """A deployed contract account."""
 
     address: Uint160 = Uint160(0xADADADADADADADADADADADADADADADADADADADAD)
-    program: Program = disassemble(Bytes())
     storage: Array[Uint256, Uint256] = field(
         default_factory=lambda: Array[Uint256, Uint256](Uint256(0)),
     )
     nonce: Uint256 = Uint256(1)  # starts at 1, see EIP-161
 
-    def clone_and_reset(self) -> Contract:
+    def clone_and_reset(self) -> Self:
         """Clone this Contract and reset array access tracking."""
         result = copy.copy(self)
         result.storage = result.storage.clone_and_reset()
         return result
 
+    @abc.abstractproperty
+    def codesize(self) -> Uint256:
+        """Return the size of the code, in bytes."""
+        raise NotImplementedError
+
     def __post_init__(self) -> None:
         assert self.address.reveal() is not None, "Contract requires concrete address"
+
+
+@dataclass
+class ConcreteContract(Contract):
+    """A deployed contract account with concrete, executable code."""
+
+    program: Program = disassemble(Bytes())
+
+    @property
+    @override
+    def codesize(self) -> Uint256:
+        return self.program.code.length
 
 
 @dataclass(frozen=True)
