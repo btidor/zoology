@@ -6,7 +6,7 @@ from collections import OrderedDict, defaultdict
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
-from bytes import Bytes, Memory
+from bytes import BYTES, Bytes, Memory
 from disassembler import Program
 from environment import Block, ConcreteContract, Contract, Transaction
 from sha3 import SHA3
@@ -14,6 +14,7 @@ from smt import (
     Array,
     Constraint,
     Solver,
+    Uint8,
     Uint160,
     Uint256,
     overflow_safe,
@@ -230,6 +231,29 @@ class State:
         assert solver.check()
         self.constraint &= bytes.compact(solver, Constraint(True))
         return bytes
+
+    def compact_calldata(self, data: Bytes) -> Bytes | None:
+        """Simplify the given bytes (optimized for calldata)."""
+        solver = Solver()
+        self.constrain(solver)
+        if not solver.check():
+            return None  # this path is unreachable
+
+        length = solver.evaluate(data.length)
+        constraint = data.length == Uint256(length)
+
+        result: list[Uint8] = []
+        for i in range(4):
+            v = data[Uint256(i)]
+            e = BYTES[solver.evaluate(v)]
+            constraint &= v == e
+            result.append(e)
+        for i in range(4, length):
+            result.append(data[Uint256(i)])
+
+        if solver.check(~constraint):
+            raise ValueError("expected concrete function signature and length")
+        return Bytes(result[:length])  # remember, length can be < 4
 
 
 @dataclass(frozen=True)

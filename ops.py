@@ -529,6 +529,11 @@ def CALL(
 ) -> ControlFlow:
     """F1 - Message-call into an account."""
     address = _address.into(Uint160)
+    calldata = s.memory.slice(argsOffset, argsSize)
+    calldata = s.compact_calldata(calldata)
+    if calldata is None:
+        return Descend(())  # this path is unreachable
+
     substates = list[State]()
     eoa = Constraint(True)
     for contract in s.contracts.values():
@@ -551,7 +556,7 @@ def CALL(
             caller=state.transaction.address,
             address=contract.address,
             callvalue=value,
-            calldata=state.memory.slice(argsOffset, argsSize),
+            calldata=calldata,
             gasprice=state.transaction.gasprice,
         )
         # ASSUMPTION: we assume that the CALL does not revert due to running out

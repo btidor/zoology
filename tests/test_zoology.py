@@ -111,7 +111,7 @@ def test_king() -> None:
 
 def test_elevator() -> None:
     fixture = [
-        "ed9a7134 ffffffffffffffffffffffffffffffffffffffffffffffffffffffff000000ff\tvia proxy",
+        "ed9a7134 ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\tvia proxy",
     ]
     check_level(11, fixture)
 
