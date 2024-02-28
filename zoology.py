@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import copy
 import sys
+import time
 from functools import reduce
 from itertools import chain
 
@@ -215,7 +216,7 @@ def search(
     for i in range(depth):
         suffix = f"@{i+1}"
         if verbose:
-            print(f"\nTrans {i+1:02}")
+            print(f"\nTrans {i+1:02} | {int(time.time())-startux:06}")
         j = 0
         subsequent = list[History]()
         for history in histories:
@@ -255,7 +256,7 @@ def search(
             universal = universal_transaction(start, check=False, prints=(verbose > 2))
             for end in chain(universal, [selfdestruct]):
                 if verbose == 1:
-                    if (j + 1) % 16 == 0:
+                    if j > 0 and j % 16 == 0:
                         print()
                     vprint(f"{j:04x} ")
                 j += 1
@@ -331,6 +332,7 @@ def vprint(part: str) -> None:
 
 
 if __name__ == "__main__":
+    startux = int(time.time())
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "-l", "--level", help="select which level(s) to run", action="append", type=int
@@ -379,7 +381,7 @@ if __name__ == "__main__":
 
             solution, solver = result
             newline = True
-            print("\nResult")
+            print(f"\nResult   | {int(time.time())-startux:06}")
             for part in solution.describe(solver):
                 if newline:
                     print("  ", end="")
