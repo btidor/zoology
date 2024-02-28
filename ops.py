@@ -537,9 +537,11 @@ def CALL(
     substates = list[State]()
     eoa = Constraint(True)
     for contract in s.contracts.values():
-        # ASSUMPTION: to avoid infinite loops (including in the validator
-        # function), we assume a contract never calls itself.
-        if contract.address.reveal() == s.transaction.address.reveal():
+        if contract.invisible:
+            continue
+        elif contract.address.reveal() == s.transaction.address.reveal():
+            # ASSUMPTION: to avoid infinite loops (including in the validator
+            # function), we assume a contract never calls itself.
             continue
 
         cond = address == contract.address

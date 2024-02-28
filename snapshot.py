@@ -44,7 +44,8 @@ def snapshot_contracts(address: Uint160) -> dict[int, Contract]:
     saved = cache[a.to_bytes(20).hex()]
     address = Uint160(a)
     program = disassemble(Bytes.fromhex(saved["code"]))
-    contract = ConcreteContract(address=address, program=program)
+    # ASSUMPTION: no solution requires interacting with the factory contract.
+    contract = ConcreteContract(address=address, program=program, invisible=True)
     contracts = dict[int, Contract]()
 
     for k, v in saved.items():

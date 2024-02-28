@@ -88,6 +88,7 @@ class Contract(abc.ABC):
         default_factory=lambda: Array[Uint256, Uint256](Uint256(0)),
     )
     nonce: Uint256 = Uint256(1)  # starts at 1, see EIP-161
+    invisible: bool = False  # can't be CALLed during analysis
 
     def clone_and_reset(self) -> Self:
         """Clone this Contract and reset array access tracking."""
