@@ -214,8 +214,9 @@ def search(
     histories = [beginning]
     for i in range(depth):
         suffix = f"@{i+1}"
-        if verbose > 1:
-            print(f"Trans {i+1:02}")
+        if verbose:
+            print(f"\nTrans {i+1:02}")
+        j = 0
         subsequent = list[History]()
         for history in histories:
             contracts, balances, sha3, block = history.subsequent()
@@ -253,6 +254,12 @@ def search(
 
             universal = universal_transaction(start, check=False, prints=(verbose > 2))
             for end in chain(universal, [selfdestruct]):
+                if verbose == 1:
+                    if (j + 1) % 16 == 0:
+                        print()
+                    vprint(f"{j:04x} ")
+                j += 1
+
                 candidate = history.extend(end)
                 if verbose > 1:
                     print(f"- {candidate.pz()}")
@@ -284,6 +291,8 @@ def search(
                     candidate.narrow(solver)
                     if verbose > 1:
                         print("  > found solution!")
+                    else:
+                        vprint("# ")
                     return candidate.with_final(final), solver
 
                 if all(len(c.storage.written) == 0 for c in end.contracts.values()):
@@ -291,6 +300,8 @@ def search(
                     # balances, which can also be material
                     if verbose > 1:
                         print("  > read-only")
+                    else:
+                        vprint(". ")
                     continue
 
                 if not verbose > 1:
@@ -298,12 +309,13 @@ def search(
                         solver = Solver()
                         candidate.constrain(solver)
                     except ConstrainingError:
-                        if verbose > 1:
-                            print("  ! constraining error")
+                        vprint("! ")
                         continue
 
                 if verbose > 1:
                     print("  > candidate")
+                else:
+                    vprint("* ")
                 subsequent.append(candidate)
 
         histories = subsequent
@@ -313,7 +325,7 @@ def search(
 
 def vprint(part: str) -> None:
     """Print a partial line, if verbose mode is enabled."""
-    if args.verbose > 1:
+    if "args" in globals() and args.verbose:
         print(part, end="")
         sys.stdout.flush()
 
@@ -351,7 +363,7 @@ if __name__ == "__main__":
             _, solver = constrainWithValidator(factory, instance, beginning, validator)
             vprint("C")
             assert not solver.check()
-            vprint("]\n")
+            vprint("]")
 
             result = search(
                 factory,
@@ -367,9 +379,10 @@ if __name__ == "__main__":
 
             solution, solver = result
             newline = True
+            print("\nResult")
             for part in solution.describe(solver):
                 if newline:
-                    print("\t", end="")
+                    print("  ", end="")
                     newline = False
                 print(part, end="")
                 if part.endswith("\n"):
@@ -380,5 +393,5 @@ if __name__ == "__main__":
             if str(e) != "":
                 suffix = f": {e}"
             print(f"\t{e.__class__.__name__}{suffix}")
-            if args.verbose > 0:
+            if args.verbose:
                 raise e
