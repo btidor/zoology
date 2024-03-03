@@ -194,7 +194,6 @@ class State:
         # Check if any address other than the contract itself has increased
         solver = Solver()
         solver.add(self.constraint)
-        self.sha3.constrain(solver)
         for addr in self.balances.written:
             if solver.check(
                 addr != self.transaction.address,
@@ -224,7 +223,6 @@ class State:
 
         solver = Solver()
         solver.add(self.constraint)
-        self.sha3.constrain(solver)
         assert solver.check()
         self.constraint &= bytes.compact(solver, Constraint(True))
         return bytes
@@ -233,7 +231,6 @@ class State:
         """Simplify the given bytes (optimized for calldata)."""
         solver = Solver()
         solver.add(self.constraint)
-        self.sha3.constrain(solver)
         if not solver.check():
             return None  # this path is unreachable
 

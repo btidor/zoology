@@ -66,7 +66,6 @@ def universal_transaction(
             if check:
                 solver = Solver()
                 solver.add(state.constraint)
-                state.sha3.constrain(solver)
                 if not solver.check():
                     continue
             yield state
@@ -107,7 +106,6 @@ def printable_transition(start: State, end: State) -> Iterable[str]:
     """Produce a human-readable description of a given state transition."""
     solver = Solver()
     solver.add(end.constraint)
-    end.sha3.constrain(solver)
     assert solver.check()
 
     if end.is_changed(start):

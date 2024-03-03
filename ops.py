@@ -190,7 +190,9 @@ def SAR(shift: Uint256, value: Uint256) -> Uint256:
 
 def KECCAK256(s: State, offset: Uint256, size: Uint256) -> Uint256:
     """20 - Compute Keccak-256 (SHA3) hash."""
-    return s.sha3[s.memory.slice(offset, size)]
+    digest, constraint = s.sha3.hash(s.memory.slice(offset, size))
+    s.constraint &= constraint
+    return digest
 
 
 def ADDRESS(s: State) -> Uint256:
@@ -312,7 +314,9 @@ def EXTCODEHASH(s: State, _address: Uint256) -> Uint256:
         contract, ConcreteContract
     ), "EXTCODEHASH requires concrete contract"
 
-    return s.sha3[contract.program.code]
+    digest, constraint = s.sha3.hash(contract.program.code)
+    s.constraint &= constraint
+    return digest
 
 
 def BLOCKHASH(s: State, blockNumber: Uint256) -> Uint256:
@@ -701,7 +705,9 @@ def CREATE2(
     assert sender_address is not None, "CREATE2 requires concrete sender address"
 
     # https://ethereum.stackexchange.com/a/761
-    assert (h := s.sha3[initcode].reveal()) is not None
+    digest, constraint = s.sha3.hash(initcode)
+    s.constraint &= constraint
+    assert (h := digest.reveal()) is not None
     seed = Bytes(
         b"\xff" + sender_address.to_bytes(20) + salt.to_bytes(32) + h.to_bytes(32)
     )
@@ -744,7 +750,9 @@ def SELFDESTRUCT() -> None:
 def _create_common(
     s: State, value: Uint256, initcode: Bytes, seed: Bytes
 ) -> ControlFlow:
-    address = s.sha3[seed].into(Uint160)
+    digest, constraint = s.sha3.hash(seed)
+    s.constraint &= constraint
+    address = digest.into(Uint160)
     assert (destination := address.reveal()) is not None
 
     sender = s.transaction.address.reveal()

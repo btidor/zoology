@@ -27,6 +27,7 @@ class History:
 
     def __init__(
         self,
+        constraint: Constraint,
         contracts: dict[int, Contract],
         balances: Array[Uint160, Uint256],
         sha3: SHA3,
@@ -35,7 +36,7 @@ class History:
         """Create a new History."""
         block = Block()
         self.player = player
-        self.start = (contracts, balances, sha3, block)
+        self.start = (constraint, contracts, balances, sha3, block)
         self.states = list[State]()
         self.final: State | None = None
         # The ith transaction in `state` runs in the ith block. Validation
@@ -66,8 +67,7 @@ class History:
             sha3 = self.states[i].sha3
             block = self.blocks[i]
         else:
-            constraint = Constraint(True)
-            contracts, balances, sha3, block = self.start
+            constraint, contracts, balances, sha3, block = self.start
         return (
             constraint,
             {k: v.clone_and_reset() for (k, v) in contracts.items()},
@@ -99,9 +99,8 @@ class History:
         """Apply hard constraints to the given solver instance."""
         if self.states:
             solver.add(self.states[-1].constraint)
-            self.states[-1].sha3.constrain(solver)
         else:
-            self.start[2].constrain(solver)
+            solver.add(self.start[0])
 
         if check and not solver.check():
             raise ConstrainingError
@@ -114,7 +113,7 @@ class History:
         if self.states:
             self.states[-1].sha3.narrow(solver)
         else:
-            self.start[2].narrow(solver)
+            self.start[3].narrow(solver)
 
         assert solver.check()
 
@@ -192,7 +191,7 @@ class Validator:
             balances = history.states[-1].balances
             number = history.states[-1].block.number + Uint256(1)
         else:
-            contracts, balances = history.start[0], history.start[1]
+            contracts, balances = history.start[1], history.start[2]
             number = Uint256(0)
 
         substitutions = dict[Any, Expression]()

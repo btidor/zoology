@@ -74,7 +74,7 @@ def createInstance(
     error = data[68:].strip().decode()
     assert end.pc.success, f"createInstance() failed{': ' + error if error else ''}"
     return Uint160(int.from_bytes(data)), History(
-        end.contracts, end.balances, end.sha3, PLAYER
+        end.constraint, end.contracts, end.balances, end.sha3, PLAYER
     )
 
 

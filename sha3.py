@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable, Literal, TypeAlias
 
 from Crypto.Hash import keccak
+from zbitvector import Constraint
 
 from bytes import BYTES, Bytes
 from smt import (
@@ -54,73 +55,74 @@ class SHA3:
             concrete=copy.copy(self.concrete),
         )
 
-    def __getitem__(self, key: Bytes) -> Uint256:
+    def hash(self, input: Bytes) -> tuple[Uint256, Constraint]:
         """
         Compute the SHA3 hash of a given key.
 
         This method should only be called before constraining and narrowing!
         """
-        if (size := key.length.reveal()) is None:
+        if (size := input.length.reveal()) is None:
             # Case I: Free Digest (symbolic length, symbolic data).
             digest = Uint256(f"DIGEST:F{len(self.free)}")
-            self.free.append((key, digest))
-            return digest
-        elif size == 0:
-            # Case II: Empty Digest (zero length).
-            return EMPTY_DIGEST
-        elif (data := key.reveal()) is None:
-            # Case III: Symbolic Digest (concrete length, symbolic data).
-            vector = key.bigvector()
-            for other, digest in self.symbolic:
-                if prequal(vector, other):
-                    return digest
-            digest = Uint256(f"DIGEST:S{len(self.symbolic)}")
-            self.symbolic.append((vector, digest))
-            return digest
-        else:
-            # Case IV: Concrete Digest (concrete length, concrete data).
-            if data not in self.concrete:
-                self.concrete[data] = (key.bigvector(), concrete_hash(data))
-            return self.concrete[data][1]
+            self.free.append((input, digest))
 
-    def constrain(self, solver: Solver) -> None:
-        """Apply computed SHA3 constraints to the given solver instance."""
-        for i, (vector, digest) in enumerate(self.symbolic):
             # ASSUMPTION: no hash may have more than 128 leading zero bits. This
             # avoids hash collisions between maps/arrays and ordinary storage
             # slots.
             constraint = (digest >> Uint256(128)).into(Uint128) != Uint128(0)
+            # ASSUMPTION: every hash digest is distinct. This is SHA-3, there
+            # are no collisions, ever. (We check free digests for collisions
+            # during narrowing, when we can concretize the length.)
+            constraint &= digest != EMPTY_DIGEST
+            for data, (_, digest2) in self.concrete.items():
+                constraint &= implies(
+                    input.length != Uint256(len(data)), digest != digest2
+                )
+            for vector2, digest2 in self.symbolic:
+                constraint &= implies(
+                    input.length != Uint256(vector2.width // 8), digest != digest2
+                )
+            return (digest, constraint)
+        elif size == 0:
+            # Case II: Empty Digest (zero length).
+            return (EMPTY_DIGEST, Constraint(True))
+        elif (data := input.reveal()) is None:
+            # Case III: Symbolic Digest (concrete length, symbolic data).
+            vector = input.bigvector()
+            for other, digest in self.symbolic:
+                if prequal(vector, other):
+                    return (digest, Constraint(True))
+            digest = Uint256(f"DIGEST:S{len(self.symbolic)}")
+            self.symbolic.append((vector, digest))
 
-            # ASSUMPTION: every hash digest is distinct, there are no collisions
-            # ever.
+            constraint = (digest >> Uint256(128)).into(Uint128) != Uint128(0)
+            constraint &= digest != EMPTY_DIGEST
             for data, (vector2, digest2) in self.concrete.items():
                 if vector.width // 8 == len(data):
                     constraint &= implies(vector == vector2, digest == digest2)
                     constraint &= implies(vector != vector2, digest != digest2)
                 else:
                     constraint &= digest != digest2
-            for vector2, digest2 in self.symbolic[i:]:
+            for vector2, digest2 in self.symbolic[:-1]:
                 if vector.width == vector2.width:
                     constraint &= implies(vector == vector2, digest == digest2)
                     constraint &= implies(vector != vector2, digest != digest2)
                 else:
                     constraint &= digest != digest2
-            constraint &= digest != EMPTY_DIGEST
-
-            solver.add(constraint)
-
-        for key, digest in self.free:
-            constraint = (digest >> Uint256(128)).into(Uint128) != Uint128(0)
-            for data, (_, digest2) in self.concrete.items():
-                constraint &= implies(
-                    key.length != Uint256(len(data)), digest != digest2
-                )
-            for vector2, digest2 in self.symbolic:
-                constraint &= implies(
-                    key.length != Uint256(vector2.width // 8), digest != digest2
-                )
-
-            solver.add(constraint)
+            return (digest, constraint)
+        else:
+            # Case IV: Concrete Digest (concrete length, concrete data).
+            constraint = Constraint(True)
+            if data not in self.concrete:
+                self.concrete[data] = (input.bigvector(), concrete_hash(data))
+                vector, digest = self.concrete[data]
+                for vector2, digest2 in self.symbolic:
+                    if vector.width == vector2.width:
+                        constraint &= implies(vector == vector2, digest == digest2)
+                        constraint &= implies(vector != vector2, digest != digest2)
+                    else:
+                        constraint &= digest != digest2
+            return (self.concrete[data][1], constraint)
 
     def narrow(self, solver: Solver) -> list[tuple[Uint[Any], Uint256]]:
         """

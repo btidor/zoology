@@ -240,7 +240,7 @@ def test_KECCAK256() -> None:
     digest = KECCAK256(s, Uint256(0), Uint256(4))
 
     solver = Solver()
-    s.sha3.constrain(solver)
+    solver.add(s.constraint)
     assert solver.check()
     assert (
         solver.evaluate(digest)

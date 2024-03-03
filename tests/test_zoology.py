@@ -140,7 +140,7 @@ def test_gatekeeper_two() -> None:
 def test_naughtcoin() -> None:
     fixture = [
         "095ea7b3 000000000000000000000000cacacacacacacacacacacacacacacacacacacacaffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-        "23b872dd 000000000000000000000000cacacacacacacacacacacacacacacacacacacaca000000000000000000000000cacacacacacacacacacacacacacacacacacacacb00000000000000000000000000000000000000000000d3c21bcecceda1000000",
+        "23b872dd 000000000000000000000000cacacacacacacacacacacacacacacacacacacaca000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000d3c21bcecceda1000000",
     ]
     check_level(15, fixture)
 

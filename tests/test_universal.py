@@ -30,7 +30,6 @@ def check_transitions(start: Program | State, branches: tuple[Any, ...]) -> None
 
         solver = Solver()
         solver.add(end.constraint)
-        end.sha3.constrain(solver)
         assert end.is_changed(start) == (kind == "SAVE")
 
         assert solver.check()
@@ -87,7 +86,6 @@ def test_basic() -> None:
 
     solver = Solver()
     solver.add(end.constraint)
-    end.sha3.constrain(solver)
     assert solver.check()
 
     raw = """
@@ -123,7 +121,6 @@ def test_sudoku() -> None:
 
     solver = Solver()
     solver.add(end.constraint)
-    end.sha3.constrain(solver)
     assert solver.check()
 
     calldata = end.transaction.calldata

@@ -10,8 +10,9 @@ from smt import NarrowingError, Solver, Uint256
 def test_concrete() -> None:
     sha3 = SHA3()
     input = Bytes(b"testing")
+    digest, _ = sha3.hash(input)
     assert (
-        sha3[input].reveal()
+        digest.reveal()
         == 0x5F16F4C7F149AC4F9510D9CF8CF384038AD348B3BCDC01915F95DE12DF9D1B02
     )
 
@@ -19,17 +20,19 @@ def test_concrete() -> None:
 def test_symbolic() -> None:
     sha3 = SHA3()
     input = Bytes.symbolic("INPUT", 7)
-    assert sha3[input].reveal() is None
+    digest, constraint = sha3.hash(input)
+    assert digest.reveal() is None
 
     solver = Solver()
-    sha3.constrain(solver)
+    solver.add(constraint)
     solver.add(input.bigvector() == Bytes(b"testing").bigvector())
     assert solver.check()
 
     assert input.evaluate(solver) == b"testing"
     sha3.narrow(solver)
+    digest, constraint = sha3.hash(input)
     assert (
-        solver.evaluate(sha3[input])
+        solver.evaluate(digest)
         == 0x5F16F4C7F149AC4F9510D9CF8CF384038AD348B3BCDC01915F95DE12DF9D1B02
     )
 
@@ -37,33 +40,37 @@ def test_symbolic() -> None:
 def test_fully_symbolic() -> None:
     sha3 = SHA3()
     input = Bytes.symbolic("INPUT")
-    assert sha3[input].reveal() is None
+    digest, constraint = sha3.hash(input)
+    assert digest.reveal() is None
 
     solver = Solver()
-    sha3.constrain(solver)
+    solver.add(constraint)
     solver.add(input.length == Uint256(7))
     for i, b in enumerate(b"testing"):
         solver.add(input[Uint256(i)] == BYTES[b])
 
-    result = sha3[input]
+    digest, constraint = sha3.hash(input)
+    solver.add(constraint)
     assert solver.check()
 
     assert input.evaluate(solver) == b"testing"
     sha3.narrow(solver)
     assert (
-        solver.evaluate(result)
+        solver.evaluate(digest)
         == 0x5F16F4C7F149AC4F9510D9CF8CF384038AD348B3BCDC01915F95DE12DF9D1B02
     )
 
 
 def test_zero() -> None:
     sha3 = SHA3()
+    digest, _ = sha3.hash(Bytes.symbolic("INPUT", 0))
     assert (
-        sha3[Bytes.symbolic("INPUT", 0)].reveal()
+        digest.reveal()
         == 0xC5D2460186F7233C927E7DB2DCC703C0E500B653CA82273B7BFAD8045D85A470
     )
+    digest, _ = sha3.hash(Bytes())
     assert (
-        sha3[Bytes()].reveal()
+        digest.reveal()
         == 0xC5D2460186F7233C927E7DB2DCC703C0E500B653CA82273B7BFAD8045D85A470
     )
 
@@ -71,10 +78,10 @@ def test_zero() -> None:
 def test_impossible_concrete() -> None:
     sha3 = SHA3()
     input = Bytes.symbolic("INPUT", 7)
-    digest = sha3[input]
+    digest, constraint = sha3.hash(input)
 
     solver = Solver()
-    sha3.constrain(solver)
+    solver.add(constraint)
     solver.add(input.bigvector() == Bytes(b"testing").bigvector())
     solver.add(
         digest
@@ -91,10 +98,10 @@ def test_impossible_concrete() -> None:
 
 def test_impossible_symbolic() -> None:
     sha3 = SHA3()
-    digest = sha3[Bytes(b"testing")]
+    digest, constraint = sha3.hash(Bytes(b"testing"))
 
     solver = Solver()
-    sha3.constrain(solver)
+    solver.add(constraint)
     solver.add(
         digest
         == Uint256(0x0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF)
@@ -104,10 +111,10 @@ def test_impossible_symbolic() -> None:
 
 def test_printable() -> None:
     sha3 = SHA3()
-    sha3[Bytes(b"testing")]
+    _, constraint = sha3.hash(Bytes(b"testing"))
 
     solver = Solver()
-    sha3.constrain(solver)
+    solver.add(constraint)
     assert solver.check()
     sha3.narrow(solver)
 
