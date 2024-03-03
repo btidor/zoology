@@ -216,7 +216,7 @@ def search(
     for i in range(depth):
         suffix = f"@{i+1}"
         if verbose:
-            print(f"\nTrans {i+1:02} | {int(time.time())-startux:06}")
+            print(f"\nTrans {i+1:03} | {int(time.time())-startux:06}")
         j = 0
         subsequent = list[History]()
         for history in histories:
@@ -258,7 +258,7 @@ def search(
                 if verbose == 1:
                     if j > 0 and j % 16 == 0:
                         print()
-                    vprint(f"{j:04x} ")
+                    vprint(f"{j:03x} ")
                 j += 1
 
                 candidate = history.extend(end)
@@ -350,10 +350,10 @@ if __name__ == "__main__":
 
     for i in args.level:
         factory = LEVEL_FACTORIES[i]
-        vprint(f"Level {i:02}  [U")
+        vprint(f"Level {i:03} | L")
         try:
             contracts = snapshot_contracts(factory)
-            vprint("R")
+            vprint("C")
             instance, beginning = createInstance(
                 contracts, factory, prints=(args.verbose > 2)
             )
@@ -361,11 +361,11 @@ if __name__ == "__main__":
             validator = validateInstance(
                 factory, instance, beginning, prints=(args.verbose > 2)
             )
-            vprint("S")
+            vprint("A")
             _, solver = constrainWithValidator(factory, instance, beginning, validator)
-            vprint("C")
+            vprint("Z")
             assert not solver.check()
-            vprint("]")
+            vprint("*")
 
             result = search(
                 factory,
