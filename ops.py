@@ -28,6 +28,7 @@ from state import (
     Log,
     State,
     Termination,
+    Unreachable,
 )
 
 Int256 = Int[Literal[256]]
@@ -532,7 +533,7 @@ def CALL(
     calldata = s.memory.slice(argsOffset, argsSize)
     calldata = s.compact_calldata(calldata)
     if calldata is None:
-        return Descend(())  # this path is unreachable
+        return Unreachable()
 
     substates = list[State]()
     eoa = Constraint(True)

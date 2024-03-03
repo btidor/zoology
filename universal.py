@@ -10,7 +10,7 @@ from disassembler import Program
 from environment import Block, ConcreteContract, Contract, Transaction
 from sha3 import SHA3
 from smt import Array, Solver, Uint160, Uint256, describe
-from state import Descend, GasHogCall, Jump, State, Termination
+from state import Descend, GasHogCall, Jump, State, Termination, Unreachable
 from tests.solidity import load_solidity
 from vm import step
 
@@ -48,6 +48,8 @@ def universal_transaction(
                 case Descend(substates):
                     for substate in substates:
                         heappush(queue, substate)
+                    break
+                case Unreachable():
                     break
                 case unknown:
                     raise ValueError(f"unknown action: {unknown}")

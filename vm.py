@@ -8,7 +8,7 @@ from disassembler import Instruction, abiencode
 from environment import Transaction
 from ops import OPS
 from smt import Uint, Uint256
-from state import ControlFlow, Descend, Jump, State, Termination
+from state import ControlFlow, Descend, Jump, State, Termination, Unreachable
 from tests.solidity import load_solidity
 
 
@@ -82,6 +82,8 @@ def printable_execution(state: State) -> Generator[str, None, State]:
                 substate = yield from printable_execution(substates[0])
                 if substate.recursion is not None:
                     state = substate.recursion(substate)
+            case Unreachable():
+                raise ValueError("control flow reached invalid state")
             case unknown:
                 raise ValueError(f"unknown action: {unknown}")
 

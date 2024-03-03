@@ -314,3 +314,10 @@ class Descend(ControlFlow):
     """A CALL, DELEGATECALL, etc. instruction."""
 
     states: tuple[State, ...]
+
+
+@dataclass(frozen=True)
+class Unreachable(ControlFlow):
+    """Represents a state that is discovered to be unreachable."""
+
+    pass
