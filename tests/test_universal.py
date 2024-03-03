@@ -29,13 +29,11 @@ def check_transitions(start: Program | State, branches: tuple[Any, ...]) -> None
         kind, method, value = (expected[end.px()] + (None,))[:3]
 
         solver = Solver()
-        end.constrain(solver)
+        solver.add(end.constraint)
+        end.sha3.constrain(solver)
         assert end.is_changed(start) == (kind == "SAVE")
 
-        solver = Solver()
-        end.constrain(solver)
         assert solver.check()
-
         end.narrow(solver)
         transaction = end.transaction.describe(solver)
 
@@ -88,7 +86,8 @@ def test_basic() -> None:
     ] == Uint256(0xAAAAAAAAAAAAA)
 
     solver = Solver()
-    end.constrain(solver)
+    solver.add(end.constraint)
+    end.sha3.constrain(solver)
     assert solver.check()
 
     raw = """
@@ -123,7 +122,8 @@ def test_sudoku() -> None:
     assert end.pc.success is True
 
     solver = Solver()
-    end.constrain(solver)
+    solver.add(end.constraint)
+    end.sha3.constrain(solver)
     assert solver.check()
 
     calldata = end.transaction.calldata

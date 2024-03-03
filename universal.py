@@ -65,7 +65,8 @@ def universal_transaction(
                 continue
             if check:
                 solver = Solver()
-                state.constrain(solver)
+                solver.add(state.constraint)
+                state.sha3.constrain(solver)
                 if not solver.check():
                     continue
             yield state
@@ -105,7 +106,8 @@ def symbolic_start(program: Contract | Program, sha3: SHA3, suffix: str) -> Stat
 def printable_transition(start: State, end: State) -> Iterable[str]:
     """Produce a human-readable description of a given state transition."""
     solver = Solver()
-    end.constrain(solver)
+    solver.add(end.constraint)
+    end.sha3.constrain(solver)
     assert solver.check()
 
     if end.is_changed(start):
@@ -114,8 +116,6 @@ def printable_transition(start: State, end: State) -> Iterable[str]:
         kind = "  VIEW"
 
     # Reset so we can extract the model
-    solver = Solver()
-    end.constrain(solver)
     assert solver.check()
 
     for line in _printable_transition(solver, start, end, kind):

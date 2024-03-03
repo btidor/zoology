@@ -161,11 +161,6 @@ class State:
         self.balances[src] -= val
         self.balances[dst] += val
 
-    def constrain(self, solver: Solver) -> None:
-        """Apply accumulated constraints to the given solver instance."""
-        solver.add(self.constraint)
-        self.sha3.constrain(solver)
-
     def narrow(self, solver: Solver) -> None:
         """Apply soft constraints to a given model instance."""
         constraint = self.transaction.caller == Uint160(
@@ -198,7 +193,8 @@ class State:
 
         # Check if any address other than the contract itself has increased
         solver = Solver()
-        self.constrain(solver)
+        solver.add(self.constraint)
+        self.sha3.constrain(solver)
         for addr in self.balances.written:
             if solver.check(
                 addr != self.transaction.address,
@@ -227,7 +223,8 @@ class State:
             return bytes
 
         solver = Solver()
-        self.constrain(solver)
+        solver.add(self.constraint)
+        self.sha3.constrain(solver)
         assert solver.check()
         self.constraint &= bytes.compact(solver, Constraint(True))
         return bytes
@@ -235,7 +232,8 @@ class State:
     def compact_calldata(self, data: Bytes) -> Bytes | None:
         """Simplify the given bytes (optimized for calldata)."""
         solver = Solver()
-        self.constrain(solver)
+        solver.add(self.constraint)
+        self.sha3.constrain(solver)
         if not solver.check():
             return None  # this path is unreachable
 

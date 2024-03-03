@@ -95,7 +95,8 @@ class History:
     def constrain(self, solver: Solver, check: bool = True) -> None:
         """Apply hard constraints to the given solver instance."""
         for state in self.states:
-            state.constrain(solver)
+            solver.add(state.constraint)
+            state.sha3.constrain(solver)
         if check and not solver.check():
             raise ConstrainingError
 

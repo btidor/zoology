@@ -13,7 +13,8 @@ from universal import symbolic_start
 def test_transaction_evaluate() -> None:
     state = State()
     solver = Solver()
-    state.constrain(solver)
+    solver.add(state.constraint)
+    state.sha3.constrain(solver)
     assert solver.check()
 
     values = state.transaction.describe(solver)
@@ -31,7 +32,8 @@ def test_transfer() -> None:
     end.transfer(src, dst, Uint256(0x100))
 
     solver = Solver()
-    end.constrain(solver)
+    solver.add(end.constraint)
+    end.sha3.constrain(solver)
     solver.add(start.balances[src] == Uint256(0xAAA))
     solver.add(start.balances[dst] == Uint256(0x0))
     assert solver.check()
@@ -48,6 +50,7 @@ def test_impossible_transfer() -> None:
     end.transfer(src, dst, Uint256(0x100))
 
     solver = Solver()
-    end.constrain(solver)
+    solver.add(end.constraint)
+    end.sha3.constrain(solver)
     solver.add(start.balances[src] <= Uint256(0xF))
     assert not solver.check()
