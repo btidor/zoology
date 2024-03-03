@@ -392,6 +392,8 @@ def SLOAD(s: State, key: Uint256) -> Uint256:
 
 def SSTORE(s: State, key: Uint256, value: Uint256) -> None:
     """55 - Save word to storage."""
+    if s.changed is None:
+        raise ValueError("SSTORE is forbidden during a STATICCALL")
     s.storage[key] = value
     s.changed = True
 
@@ -526,92 +528,17 @@ def CREATE(s: State, value: Uint256, offset: Uint256, size: Uint256) -> ControlF
 def CALL(
     s: State,
     gas: Uint256,
-    _address: Uint256,
+    address: Uint256,
     value: Uint256,
     argsOffset: Uint256,
     argsSize: Uint256,
     retOffset: Uint256,
     retSize: Uint256,
-) -> ControlFlow:
+):
     """F1 - Message-call into an account."""
-    address = _address.into(Uint160)
-    calldata = s.memory.slice(argsOffset, argsSize)
-    calldata = s.compact_calldata(calldata)
-    if calldata is None:
-        return Unreachable()
-
-    substates = list[State]()
-    eoa = Constraint(True)
-    for contract in s.contracts.values():
-        if contract.invisible:
-            continue
-        elif contract.address.reveal() == s.transaction.address.reveal():
-            # ASSUMPTION: to avoid infinite loops (including in the validator
-            # function), we assume a contract never calls itself.
-            continue
-
-        cond = address == contract.address
-        eoa &= ~cond
-        if cond.reveal() is False:
-            continue
-
-        s.path <<= 1
-        state = copy.deepcopy(s)
-        state.path |= 1
-        state.constraint &= cond
-        transaction = Transaction(
-            origin=state.transaction.origin,
-            caller=state.transaction.address,
-            address=contract.address,
-            callvalue=value,
-            calldata=calldata,
-            gasprice=state.transaction.gasprice,
-        )
-        # ASSUMPTION: we assume that the CALL does not revert due to running out
-        # of gas, attempting to transfer more than the available balance, and
-        # other non-modeled conditions.
-        substates.append(
-            _descend_substate(state, transaction, None, (retOffset, retSize), gas)
-        )
-
-    if s.mystery_proxy is not None:
-        cond = address == s.mystery_proxy
-        eoa &= ~cond
-        if cond.reveal() is not False:
-            suffix = f"{s.suffix}-{len(s.calls)}"
-            s.path <<= 1
-            state = copy.deepcopy(s)
-            state.path |= 1
-            state.constraint &= cond
-            state.transfer(s.transaction.address, s.mystery_proxy, value)
-            call = Call(
-                s.mystery_proxy,
-                Constraint(f"RETURNOK{suffix}"),
-                Bytes.symbolic(f"RETURNDATA{suffix}"),
-            )
-            _apply_call(state, call, retSize, retOffset)
-            substates.append(state)
-
-            s.path <<= 1
-            state = copy.deepcopy(s)
-            state.path |= 1
-            state.cost *= 2
-            state.constraint &= cond
-            state.gas_hogged += gas
-            call = GasHogCall(s.mystery_proxy, Constraint(False), Bytes(), gas)
-            _apply_call(state, call, retSize, retOffset)
-            substates.append(state)
-
-    # TODO: proxy can call other contracts
-    # TODO: proxy can reside at a different, unknown address (?)
-
-    if eoa.reveal() is not False:
-        s.constraint &= eoa
-        s.transfer(s.transaction.address, address, value)
-        _apply_call(s, Call(address, Constraint(True), Bytes()), retSize, retOffset)
-        substates.append(s)
-
-    return Descend(tuple(substates))
+    return _call_common(
+        s, gas, address, value, argsOffset, argsSize, retOffset, retSize, False
+    )
 
 
 def CALLCODE(
@@ -648,6 +575,8 @@ def DELEGATECALL(
     Message-call into this account with an alternative account's code, but
     persisting the current values for sender and value.
     """
+    if s.changed is None:
+        raise ValueError("DELEGATECALL is forbidden during a STATICCALL")
     address = _address.reveal()
     if address is None:
         # A DELEGATECALL to an arbitrary contract can overwrite any storage
@@ -726,8 +655,9 @@ def STATICCALL(
     retSize: Uint256,
 ) -> ControlFlow:
     """FA - Static message-call into an account."""
-    # TODO: enforce static constraint
-    return CALL(s, gas, address, Uint256(0), argsOffset, argsSize, retOffset, retSize)
+    return _call_common(
+        s, gas, address, Uint256(0), argsOffset, argsSize, retOffset, retSize, True
+    )
 
 
 def REVERT(s: State, offset: Uint256, size: Uint256) -> None:
@@ -788,6 +718,99 @@ def _create_common(
     return Descend((_descend_substate(s, transaction, constructor, callback, None),))
 
 
+def _call_common(
+    s: State,
+    gas: Uint256,
+    _address: Uint256,
+    value: Uint256,
+    argsOffset: Uint256,
+    argsSize: Uint256,
+    retOffset: Uint256,
+    retSize: Uint256,
+    static: bool,
+) -> ControlFlow:
+    address = _address.into(Uint160)
+    calldata = s.memory.slice(argsOffset, argsSize)
+    calldata = s.compact_calldata(calldata)
+    if calldata is None:
+        return Unreachable()
+
+    substates = list[State]()
+    eoa = Constraint(True)
+    for contract in s.contracts.values():
+        if contract.invisible:
+            continue
+        elif contract.address.reveal() == s.transaction.address.reveal():
+            # ASSUMPTION: to avoid infinite loops (including in the validator
+            # function), we assume a contract never calls itself.
+            continue
+
+        cond = address == contract.address
+        eoa &= ~cond
+        if cond.reveal() is False:
+            continue
+
+        s.path <<= 1
+        state = copy.deepcopy(s)
+        state.path |= 1
+        state.constraint &= cond
+        transaction = Transaction(
+            origin=state.transaction.origin,
+            caller=state.transaction.address,
+            address=contract.address,
+            callvalue=value,
+            calldata=calldata,
+            gasprice=state.transaction.gasprice,
+        )
+        # ASSUMPTION: we assume that the CALL does not revert due to running out
+        # of gas, attempting to transfer more than the available balance, and
+        # other non-modeled conditions.
+        substates.append(
+            _descend_substate(
+                state, transaction, None, (retOffset, retSize), gas, static
+            )
+        )
+
+    if s.mystery_proxy is not None:
+        cond = address == s.mystery_proxy
+        eoa &= ~cond
+        if cond.reveal() is not False:
+            suffix = f"{s.suffix}-{len(s.calls)}"
+            s.path <<= 1
+            state = copy.deepcopy(s)
+            state.path |= 1
+            state.constraint &= cond
+            state.transfer(s.transaction.address, s.mystery_proxy, value)
+            call = Call(
+                s.mystery_proxy,
+                Constraint(f"RETURNOK{suffix}"),
+                Bytes.symbolic(f"RETURNDATA{suffix}"),
+            )
+            _apply_call(state, call, retSize, retOffset)
+            substates.append(state)
+
+            s.path <<= 1
+            state = copy.deepcopy(s)
+            state.path |= 1
+            state.cost *= 2
+            state.constraint &= cond
+            state.gas_hogged += gas
+            call = GasHogCall(s.mystery_proxy, Constraint(False), Bytes(), gas)
+            _apply_call(state, call, retSize, retOffset)
+            substates.append(state)
+
+    # TODO: proxy can call other contracts
+    # TODO: proxy can reside at a different, unknown address (?)
+
+    if eoa.reveal() is not False:
+        s.constraint &= eoa
+        s.transfer(s.transaction.address, address, value)
+        _apply_call(s, Call(address, Constraint(True), Bytes()), retSize, retOffset)
+        substates.append(s)
+
+    return Descend(tuple(substates))
+
+
 def _apply_call(state: State, call: Call, retSize: Uint256, retOffset: Uint256) -> None:
     state.latest_return = call.returndata
     state.memory.graft(call.returndata.slice(Uint256(0), retSize), retOffset)
@@ -801,6 +824,7 @@ def _descend_substate(
     program_override: Program | None,
     callback: Callable[[State, State], State] | tuple[Uint256, Uint256],
     gas: Uint256 | None,
+    static: bool = False,
 ) -> State:
     substate = State(
         suffix=f"{state.suffix}-{len(state.calls)}",
@@ -818,7 +842,7 @@ def _descend_substate(
         narrower=state.narrower,
         path=state.path,
         cost=state.cost,
-        changed=state.changed,
+        changed=state.changed if not static else None,
     )
     substate.transfer(transaction.caller, transaction.address, transaction.callvalue)
 
@@ -850,7 +874,10 @@ def _descend_substate(
         next.narrower = substate.narrower
         next.path = substate.path
         next.cost = substate.cost
-        next.changed = substate.changed
+        if static:
+            assert substate.changed is not True
+        else:
+            next.changed = substate.changed
         assert isinstance(substate.pc, Termination)
         match callback:
             case (retOffset, retSize):

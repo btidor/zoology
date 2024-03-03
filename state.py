@@ -97,7 +97,10 @@ class State:
     # parent context as it should be resumed.
     recursion: Callable[[State], State] | None = None
 
-    changed: bool = False
+    # Whether the contract has mutated the state of the blockchain so far.
+    # During a STATICCALL, this variable is set to None so that stores and
+    # transfers raise an exception.
+    changed: bool | None = False
 
     def px(self) -> str:
         """Return a human-readable version of the path."""
@@ -154,6 +157,8 @@ class State:
         """Transfer value from one account to another."""
         if val.reveal() == 0:
             return
+        elif self.changed is None:
+            raise ValueError("Nonzero transfer is forbidden during a STATICCALL")
 
         # ASSUMPTION: if `balances[src]` drops below zero, execution will
         # revert. Therefore, `balances[src] >= val`.
