@@ -251,18 +251,26 @@ def search(
                 start.transaction.origin,
                 start.transaction.address,
                 start.transaction.callvalue,
+                initial=True,
             )
 
             # TODO: also consider SELFDESTRUCTing to other addresses
             selfdestruct = copy.deepcopy(start)
 
             universal = universal_transaction(start, check=False, prints=(verbose > 2))
-            for end in chain(universal, [selfdestruct]):
+            for end in chain(universal):
                 if verbose == 1:
                     if j > 0 and j % 16 == 0:
                         print()
                     vprint(f"{j:03x} ")
                 j += 1
+
+                if not end.changed:
+                    if verbose > 1:
+                        print("  > read-only")
+                    else:
+                        vprint(". ")
+                    continue
 
                 candidate = history.extend(end)
                 if verbose > 1:
@@ -299,15 +307,6 @@ def search(
                         vprint("# ")
                     return candidate.with_final(final), solver
 
-                if all(len(c.storage.written) == 0 for c in end.contracts.values()):
-                    # TODO: this ignores transactions that only change contract
-                    # balances, which can also be material
-                    if verbose > 1:
-                        print("  > read-only")
-                    else:
-                        vprint(". ")
-                    continue
-
                 if not verbose > 1:
                     try:
                         solver = Solver()
@@ -321,6 +320,19 @@ def search(
                 else:
                     vprint("* ")
                 subsequent.append(candidate)
+
+            # HACK: to avoid blowing up the state space for Coinflip, we only
+            # allow SELFDESTRUCT to appear as the last transaction in a history.
+            candidate = history.extend(selfdestruct)
+            final, solver = constrainWithValidator(
+                factory, instance, candidate, validator
+            )
+            candidate.constrain(solver, check=False)
+            if solver.check():
+                candidate.narrow(solver)
+                if verbose > 1:
+                    print("  > found solution!")
+                return candidate.with_final(final), solver
 
         histories = subsequent
 

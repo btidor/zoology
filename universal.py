@@ -108,7 +108,7 @@ def printable_transition(start: State, end: State) -> Iterable[str]:
     solver.add(end.constraint)
     assert solver.check()
 
-    if end.is_changed(start):
+    if end.changed:
         kind = "📒 SAVE"
     else:
         kind = "  VIEW"
@@ -175,6 +175,7 @@ if __name__ == "__main__":
         init.transaction.caller,
         init.transaction.address,
         init.transaction.callvalue,
+        initial=True,
     )
     for end in universal_transaction(init):
         for line in printable_transition(start, end):

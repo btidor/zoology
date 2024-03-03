@@ -97,6 +97,8 @@ class State:
     # parent context as it should be resumed.
     recursion: Callable[[State], State] | None = None
 
+    changed: bool = False
+
     def px(self) -> str:
         """Return a human-readable version of the path."""
         return "Px" + hex(self.path)[2:].upper()
@@ -146,7 +148,9 @@ class State:
             return NotImplemented
         return self.cost < other.cost
 
-    def transfer(self, src: Uint160, dst: Uint160, val: Uint256) -> None:
+    def transfer(
+        self, src: Uint160, dst: Uint160, val: Uint256, initial: bool = False
+    ) -> None:
         """Transfer value from one account to another."""
         if val.reveal() == 0:
             return
@@ -160,6 +164,8 @@ class State:
 
         self.balances[src] -= val
         self.balances[dst] += val
+        if not initial:
+            self.changed = True
 
     def narrow(self, solver: Solver) -> None:
         """Apply soft constraints to a given model instance."""
@@ -185,23 +191,6 @@ class State:
 
         solver.add(self.narrower)
         assert solver.check()
-
-    def is_changed(self, since: State) -> bool:
-        """Check if any permanent state changes have been made."""
-        if len(self.storage.written) > 0:
-            return True
-
-        # Check if any address other than the contract itself has increased
-        solver = Solver()
-        solver.add(self.constraint)
-        for addr in self.balances.written:
-            if solver.check(
-                addr != self.transaction.address,
-                self.balances.peek(addr) > since.balances.peek(addr),
-            ):
-                return True
-
-        return False
 
     def describe(self, solver: Solver) -> OrderedDict[str, str]:
         """

@@ -393,6 +393,7 @@ def SLOAD(s: State, key: Uint256) -> Uint256:
 def SSTORE(s: State, key: Uint256, value: Uint256) -> None:
     """55 - Save word to storage."""
     s.storage[key] = value
+    s.changed = True
 
 
 def JUMP(s: State, _counter: Uint256) -> None:
@@ -666,6 +667,7 @@ def DELEGATECALL(
         s.contracts[sender].storage = copy.deepcopy(dc.next_storage)
         _apply_call(s, dc, retSize, retOffset)
         s.constraint &= dc.ok | Array.equals(dc.previous_storage, dc.next_storage)
+        s.changed = True
         return None
 
     transaction = Transaction(
@@ -735,6 +737,7 @@ def REVERT(s: State, offset: Uint256, size: Uint256) -> None:
     Halt execution reverting state changes but returning data and remaining gas.
     """
     s.pc = Termination(False, s.memory.slice(offset, size))
+    s.changed = False
 
 
 def INVALID(s: State) -> None:
@@ -815,6 +818,7 @@ def _descend_substate(
         narrower=state.narrower,
         path=state.path,
         cost=state.cost,
+        changed=state.changed,
     )
     substate.transfer(transaction.caller, transaction.address, transaction.callvalue)
 
@@ -846,6 +850,7 @@ def _descend_substate(
         next.narrower = substate.narrower
         next.path = substate.path
         next.cost = substate.cost
+        next.changed = substate.changed
         assert isinstance(substate.pc, Termination)
         match callback:
             case (retOffset, retSize):

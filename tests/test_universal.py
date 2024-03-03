@@ -30,7 +30,7 @@ def check_transitions(start: Program | State, branches: tuple[Any, ...]) -> None
 
         solver = Solver()
         solver.add(end.constraint)
-        assert end.is_changed(start) == (kind == "SAVE")
+        assert end.changed == (kind == "SAVE")
 
         assert solver.check()
         end.narrow(solver)
