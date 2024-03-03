@@ -71,7 +71,7 @@ def test_telephone() -> None:
 
 def test_token() -> None:
     fixture = [
-        "a9059cbb ffffffffffffffffffffffffcacacacacacacacacacacacacacacacacacacaca0000000000000000000000000000000000000000000000000000000000000001\tvia proxy",
+        "a9059cbb ffffffffffffffffffffffffcacacacacacacacacacacacacacacacacacacacb4000000000000000000000000000000000000000000000000000000000000014",
     ]
     check_level(5, fixture)
 

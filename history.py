@@ -56,17 +56,20 @@ class History:
 
     def subsequent(
         self,
-    ) -> tuple[dict[int, Contract], Array[Uint160, Uint256], SHA3, Block]:
+    ) -> tuple[Constraint, dict[int, Contract], Array[Uint160, Uint256], SHA3, Block]:
         """Set up the execution of a new transaction."""
-        if len(self.states) == 0:
-            contracts, balances, sha3, block = self.start
-        else:
+        if self.states:
             i = len(self.states) - 1
+            constraint = self.states[i].constraint
             contracts = self.states[i].contracts
             balances = self.states[i].balances
             sha3 = self.states[i].sha3
             block = self.blocks[i]
+        else:
+            constraint = Constraint(True)
+            contracts, balances, sha3, block = self.start
         return (
+            constraint,
             {k: v.clone_and_reset() for (k, v) in contracts.items()},
             balances.clone_and_reset(),
             copy.deepcopy(sha3),
@@ -94,21 +97,24 @@ class History:
 
     def constrain(self, solver: Solver, check: bool = True) -> None:
         """Apply hard constraints to the given solver instance."""
-        for state in self.states:
-            solver.add(state.constraint)
-            state.sha3.constrain(solver)
+        if self.states:
+            solver.add(self.states[-1].constraint)
+            self.states[-1].sha3.constrain(solver)
+        else:
+            self.start[2].constrain(solver)
+
         if check and not solver.check():
             raise ConstrainingError
 
     def narrow(self, solver: Solver) -> None:
         """Apply soft and deferred constraints to a given solver instance."""
-        if len(self.states) > 0:
+        for state in self.states:
+            state.narrow(solver)
+
+        if self.states:
             self.states[-1].sha3.narrow(solver)
         else:
             self.start[2].narrow(solver)
-
-        for state in self.states:
-            state.narrow(solver)
 
         assert solver.check()
 
@@ -181,13 +187,13 @@ class Validator:
 
     def translate(self, history: History) -> Constraint:
         """Translate the validation constraint onto the given History."""
-        if len(history.states) == 0:
-            contracts, balances = history.start[0], history.start[1]
-            number = Uint256(0)
-        else:
+        if history.states:
             contracts = history.states[-1].contracts
             balances = history.states[-1].balances
             number = history.states[-1].block.number + Uint256(1)
+        else:
+            contracts, balances = history.start[0], history.start[1]
+            number = Uint256(0)
 
         substitutions = dict[Any, Expression]()
         for name, term in self._constants.items():

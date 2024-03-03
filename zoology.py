@@ -90,7 +90,7 @@ def validateInstance(
         + arg1.to_bytes(32)
     )
 
-    contracts, _, _, _ = history.subsequent()
+    constraint, contracts, _, _, _ = history.subsequent()
     balances = Array[Uint160, Uint256]("BALANCE")
     sha3 = SHA3()  # validatior optimization assumes no SHA3
     start = State(
@@ -105,6 +105,7 @@ def validateInstance(
         sha3=sha3,
         contracts=contracts,
         balances=balances,
+        constraint=constraint,
         mystery_proxy=PROXY,
         gas_count=0,
     )
@@ -170,7 +171,7 @@ def constrainWithValidator(
         + arg1.to_bytes(32)
     )
 
-    contracts, balances, sha3, _ = history.subsequent()
+    constraint, contracts, balances, sha3, _ = history.subsequent()
     start = State(
         suffix="-V",
         block=history.validation_block(),
@@ -183,6 +184,7 @@ def constrainWithValidator(
         sha3=sha3,
         contracts=contracts,
         balances=balances,
+        constraint=constraint,
         mystery_proxy=PROXY,
         gas_count=0,
     )
@@ -220,7 +222,7 @@ def search(
         j = 0
         subsequent = list[History]()
         for history in histories:
-            contracts, balances, sha3, block = history.subsequent()
+            constraint, contracts, balances, sha3, block = history.subsequent()
             start = State(
                 suffix=suffix,
                 # ASSUMPTION: each call to the level takes place in a different
@@ -241,6 +243,7 @@ def search(
                 sha3=sha3,
                 contracts=contracts,
                 balances=balances,
+                constraint=constraint,
                 mystery_proxy=PROXY,
                 gas_count=0,
             )
