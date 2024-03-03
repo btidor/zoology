@@ -25,9 +25,11 @@ def check_level(i: int, fixture: list[str]) -> None:
     assert "".join(solution.describe(solver)).strip() == "\n".join(fixture)
 
 
-# def test_hello() -> None:
-#     # Gets stuck exploring abi.encodePacked(...) with symbolic input
-#     check_level(0, [])
+def test_hello() -> None:
+    fixture = [
+        "aa613b29 0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000a65746865726e61757430"
+    ]
+    check_level(0, fixture)
 
 
 def test_fallback() -> None:
@@ -157,7 +159,7 @@ def test_preservation() -> None:
 
 
 # def test_recovery() -> None:
-#     # CREATE requires concrete program data / interacting with wrong contract
+#     # interacting with wrong contract
 #     check_level(17, [])
 
 

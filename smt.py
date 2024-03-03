@@ -67,6 +67,8 @@ def concat_bytes(*args: Uint8) -> Uint[Any]:
     """Concatenate a series of Uint8s into a longer UintN."""
     uint = make_uint(len(args) * 8)
     if not OPTIMIZE:
+        if len(args) == 1:
+            return args[0]
         term = BZLA.mk_term(Kind.BV_CONCAT, tuple(_term(a) for a in args))
         return _make_symbolic(uint, term)
 
@@ -132,6 +134,11 @@ def underflow_safe(a: Uint256, b: Uint256) -> Constraint:
 def implies(a: Constraint, b: Constraint) -> Constraint:
     """Return a constraint asserting that a implies b."""
     return _from_expr(Constraint, Kind.IMPLIES, a, b)
+
+
+def iff(a: Constraint, b: Constraint) -> Constraint:
+    """Return a constraint asserting that a iff b."""
+    return _from_expr(Constraint, Kind.IFF, a, b)
 
 
 def prequal(a: Symbolic, b: Symbolic) -> bool:
@@ -274,12 +281,12 @@ class NarrowingError(Exception):
     practice.
     """
 
-    def __init__(self, key: bytes) -> None:
+    def __init__(self, key: bytes | None) -> None:
         """Create a new NarrowingError."""
         self.key = key
 
     def __str__(self) -> str:
-        return self.key.hex()
+        return self.key.hex() if self.key else "unknown"
 
 
 class Array(zArray[K, V]):
