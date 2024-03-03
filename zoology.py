@@ -215,10 +215,13 @@ def search(
 ) -> tuple[History, Solver] | None:
     """Symbolically execute the given level until a solution is found."""
     histories = [beginning]
+    z = ""
     for i in range(depth):
         suffix = f"@{i+1}"
         if verbose:
-            print(f"\nTrans {i+1:03} | {int(time.time())-startux:06}")
+            if z != "\n":
+                print()
+            print(f"Trans {i+1:03} | {int(time.time())-startux:06}")
         j = 0
         subsequent = list[History]()
         for history in histories:
@@ -259,22 +262,22 @@ def search(
 
             universal = universal_transaction(start, check=False, prints=(verbose > 2))
             for end in chain(universal):
-                if verbose == 1:
-                    if j > 0 and j % 16 == 0:
-                        print()
-                    vprint(f"{j:03x} ")
+                candidate = history.extend(end)
+                if verbose > 1:
+                    print(f"- {candidate.pz()}")
+                elif verbose:
+                    vprint(f"{j:03x}")
                 j += 1
+                z = " " if j % 16 else "\n"
 
                 if not end.changed:
                     if verbose > 1:
                         print("  > read-only")
                     else:
-                        vprint(". ")
+                        vprint("." + z)
                     continue
 
-                candidate = history.extend(end)
                 if verbose > 1:
-                    print(f"- {candidate.pz()}")
                     try:
                         solver = Solver()
                         candidate.constrain(solver)
@@ -304,7 +307,7 @@ def search(
                     if verbose > 1:
                         print("  > found solution!")
                     else:
-                        vprint("# ")
+                        vprint("#" + z)
                     return candidate.with_final(final), solver
 
                 if not verbose > 1:
@@ -312,13 +315,13 @@ def search(
                         solver = Solver()
                         candidate.constrain(solver)
                     except ConstrainingError:
-                        vprint("! ")
+                        vprint("!" + z)
                         continue
 
                 if verbose > 1:
                     print("  > candidate")
                 else:
-                    vprint("* ")
+                    vprint("*" + z)
                 subsequent.append(candidate)
 
             # HACK: to avoid blowing up the state space for Coinflip, we only
@@ -396,10 +399,13 @@ if __name__ == "__main__":
 
             solution, solver = result
             newline = True
-            print(f"\nResult   | {int(time.time())-startux:06}")
+            indent = 0
+            if args.verbose:
+                print(f"\nResult   | {int(time.time())-startux:06}")
+                indent = 2
             for part in solution.describe(solver):
                 if newline:
-                    print("  ", end="")
+                    print(" " * indent, end="")
                     newline = False
                 print(part, end="")
                 if part.endswith("\n"):
