@@ -19,7 +19,6 @@ from smt import (
     Array,
     ConstrainingError,
     Constraint,
-    NarrowingError,
     Solver,
     Uint64,
     Uint160,
@@ -133,9 +132,9 @@ def validateInstance(
         predicates.append(end.constraint & (b != Uint256(0)))
 
         if len(end.contracts) > len(contracts):
-            # We can't handle validators that create contracts, though that
-            # would be pretty strange.
-            return None
+            # We can't handle validators that create contracts. That would be
+            # pretty strange, though.
+            raise NotImplementedError
 
     assert predicates
     if sha3.free or sha3.symbolic:
@@ -293,9 +292,6 @@ def search(
                             sys.stdout.flush()
                     except ConstrainingError:
                         print("  ! constraining error")
-                        continue
-                    except NarrowingError:
-                        print("  ! narrowing error")
                         continue
 
                 final, solver = constrainWithValidator(
