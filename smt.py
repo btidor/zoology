@@ -141,8 +141,10 @@ def iff(a: Constraint, b: Constraint) -> Constraint:
     return _from_expr(Constraint, Kind.IFF, a, b)
 
 
-def prequal(a: Symbolic, b: Symbolic) -> bool:
+def prequal(a: Uint[Any], b: Uint[Any]) -> bool:
     """Check if a == b after preprocessing without calling the solver."""
+    if a.width != b.width:
+        return False
     return (a == b).reveal() or False
 
 
