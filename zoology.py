@@ -13,7 +13,7 @@ from itertools import chain
 from bytes import Bytes
 from disassembler import abiencode
 from environment import ConcreteContract, Contract, Transaction
-from history import History, Validator
+from sequence import Sequence, Solution, Validator
 from sha3 import SHA3
 from smt import (
     Array,
@@ -33,25 +33,48 @@ PLAYER = Uint160(0xCACACACACACACACACACACACACACACACACACACACA)
 PROXY = Uint160(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0)
 
 
-def createInstance(
-    contracts: dict[int, Contract], address: Uint160, prints: bool = False
-) -> tuple[Uint160, History]:
+def create_transaction(factory: Uint160) -> Transaction:
+    """Return a Transaction representing a call to createInstance."""
+    assert (arg0 := PLAYER.reveal()) is not None
+    calldata = abiencode("createInstance(address)") + arg0.to_bytes(32)
+    return Transaction(
+        origin=PLAYER,
+        caller=PLAYER,
+        address=factory,
+        calldata=Bytes(calldata),
+        callvalue=Uint256(10**15),
+    )
+
+
+def validate_transaction(factory: Uint160, instance: Uint160) -> Transaction:
+    """Return a Transaction representing a call to validateInstance."""
+    assert (arg0 := instance.reveal()) is not None
+    assert (arg1 := PLAYER.reveal()) is not None
+    calldata = (
+        abiencode("validateInstance(address,address)")
+        + arg0.to_bytes(32)
+        + arg1.to_bytes(32)
+    )
+    return Transaction(
+        origin=PLAYER,
+        caller=PLAYER,
+        address=factory,
+        calldata=Bytes(calldata),
+    )
+
+
+def starting_sequence(
+    contracts: dict[int, Contract], factory: Uint160, prints: bool = False
+) -> Sequence:
     """Call createInstance to set up the level."""
-    assert (p := PLAYER.reveal()) is not None
-    calldata = abiencode("createInstance(address)") + p.to_bytes(32)
     # ASSUMPTION: the only contracts in existence are the ones related to the
     # level factory. This means precompiled contracts are not available!
     start = State(
-        transaction=Transaction(
-            origin=PLAYER,
-            caller=PLAYER,
-            address=address,
-            calldata=Bytes(calldata),
-            callvalue=Uint256(10**15),
-        ),
+        transaction=create_transaction(factory),
         contracts=contracts,
         mystery_proxy=PROXY,
     )
+
     # ASSUMPTION: the only account with a nonzero balance belongs to the player.
     start.balances[PLAYER] = Uint256(10**18)
     start.transfer(
@@ -72,44 +95,28 @@ def createInstance(
     assert (data := end.pc.returndata.reveal()) is not None
     error = data[68:].strip().decode()
     assert end.pc.success, f"createInstance() failed{': ' + error if error else ''}"
-    return Uint160(int.from_bytes(data)), History(
-        end.constraint, end.contracts, end.balances, end.sha3, PLAYER
+    instance = Uint160(int.from_bytes(data))
+    return Sequence(
+        factory, instance, PLAYER, PROXY, end, validate_transaction(factory, instance)
     )
 
 
-def validateInstance(
-    factory: Uint160, instance: Uint160, history: History, prints: bool = False
-) -> Validator | None:
+def validate_universal(sequence: Sequence, prints: bool = False) -> Validator | None:
     """Symbolically interpret validateInstance as a function, if possible."""
-    assert (arg0 := instance.reveal()) is not None
-    assert (arg1 := PLAYER.reveal()) is not None
-    calldata = (
-        abiencode("validateInstance(address,address)")
-        + arg0.to_bytes(32)
-        + arg1.to_bytes(32)
-    )
-
-    constraint, contracts, _, _, _ = history.subsequent()
-    balances = Array[Uint160, Uint256]("BALANCE")
-    sha3 = SHA3()  # validatior optimization assumes no SHA3
+    carryover, block = sequence.subsequent(validation=True)
     start = State(
         suffix="-V",
-        block=history.validation_block(),
-        transaction=Transaction(
-            origin=PLAYER,
-            caller=PLAYER,
-            address=factory,
-            calldata=Bytes(calldata),
-        ),
-        sha3=sha3,
-        contracts=contracts,
-        balances=balances,
-        constraint=constraint,
+        block=block,
+        transaction=sequence.validate_transaction,
+        sha3=SHA3(),  # validator optimization requires this SHA3 go unused
+        contracts={},
+        balances=Array[Uint160, Uint256]("BALANCE"),
+        constraint=carryover.constraint,
         mystery_proxy=PROXY,
         gas_count=0,
     )
 
-    for reference in contracts.values():
+    for reference in carryover.contracts.values():
         assert (a := reference.address.reveal()) is not None
         assert isinstance(reference, ConcreteContract)
         start = start.with_contract(
@@ -131,17 +138,18 @@ def validateInstance(
         b: Uint256 = end.pc.returndata.slice(Uint256(0), Uint256(32)).bigvector()
         predicates.append(end.constraint & (b != Uint256(0)))
 
-        if len(end.contracts) > len(contracts):
+        if len(end.contracts) > len(carryover.contracts):
             # We can't handle validators that create contracts. That would be
             # pretty strange, though.
             raise NotImplementedError
 
+        if end.sha3.free or end.sha3.symbolic:
+            # We can't currently handle feeding the global SHA3 instance into
+            # the validator. Fall back to running validateInstance with concrete
+            # inputs at every step.
+            return None
+
     assert predicates
-    if sha3.free or sha3.symbolic:
-        # We can't currently handle feeding the global SHA3 instance into the
-        # validator. Fall back to running validateInstance with concrete inputs
-        # at every step.
-        return None
     try:
         # Eligible for validator optimization!
         return Validator(reduce(lambda p, q: p | q, predicates, Constraint(False)))
@@ -150,40 +158,20 @@ def validateInstance(
         return None
 
 
-def constrainWithValidator(
-    factory: Uint160,
-    instance: Uint160,
-    history: History,
-    validator: Validator | None,
-) -> tuple[State | None, Solver]:
-    """Simulate the execution of validateInstance on the given history."""
+def validate_concrete(sequence: Sequence, validator: Validator | None) -> Solution:
+    """Simulate the execution of validateInstance on the given sequence."""
     if validator is not None:
-        solver = Solver()
-        solver.add(validator.translate(history))
-        return None, solver
+        return Solution(sequence, validator.translate(sequence))
 
-    assert (arg0 := instance.reveal()) is not None
-    assert (arg1 := PLAYER.reveal()) is not None
-    calldata = (
-        abiencode("validateInstance(address,address)")
-        + arg0.to_bytes(32)
-        + arg1.to_bytes(32)
-    )
-
-    constraint, contracts, balances, sha3, _ = history.subsequent()
+    carryover, block = sequence.subsequent(validation=True)
     start = State(
         suffix="-V",
-        block=history.validation_block(),
-        transaction=Transaction(
-            origin=PLAYER,
-            caller=PLAYER,
-            address=factory,
-            calldata=Bytes(calldata),
-        ),
-        sha3=sha3,
-        contracts=contracts,
-        balances=balances,
-        constraint=constraint,
+        block=block,
+        transaction=sequence.validate_transaction,
+        sha3=carryover.sha3,
+        contracts=carryover.contracts,
+        balances=carryover.balances,
+        constraint=carryover.constraint,
         mystery_proxy=PROXY,
         gas_count=0,
     )
@@ -191,29 +179,21 @@ def constrainWithValidator(
     for end in universal_transaction(start):
         assert isinstance(end.pc, Termination)
         solver = Solver()
-        candidate = history.extend(end)
+        candidate = sequence.extend(end)
         candidate.constrain(solver, check=False)
         ok = end.pc.returndata.slice(Uint256(0), Uint256(32)).bigvector() != Uint256(0)
         solver.add(ok)
         if solver.check():
             end.sha3.narrow(solver)
-            return end, solver
-
-    solver = Solver()
-    solver.add(Constraint(False))
-    return None, solver
+            return Solution(sequence, end)
+    return Solution(sequence, None)
 
 
 def search(
-    factory: Uint160,
-    instance: Uint160,
-    beginning: History,
-    validator: Validator | None,
-    depth: int,
-    verbose: int = 0,
-) -> tuple[History, Solver] | None:
+    beginning: Sequence, validator: Validator | None, depth: int, verbose: int = 0
+) -> tuple[Solution, Solver] | None:
     """Symbolically execute the given level until a solution is found."""
-    histories = [beginning]
+    sequences = [beginning]
     z = ""
     for i in range(depth):
         suffix = f"@{i+1}"
@@ -222,16 +202,16 @@ def search(
                 print()
             print(f"Trans {i+1:03} | {int(time.time())-startux:06}")
         j = 0
-        subsequent = list[History]()
-        for history in histories:
-            constraint, contracts, balances, sha3, block = history.subsequent()
+        subsequent = list[Sequence]()
+        for sequence in sequences:
+            carryover, block = sequence.subsequent()
             start = State(
                 suffix=suffix,
                 # ASSUMPTION: each call to the level takes place in a different
                 # block, and the blocks are consecutive.
                 block=block,
                 transaction=Transaction(
-                    address=instance,
+                    address=sequence.instance,
                     origin=PLAYER,
                     # ASSUMPTION: all transactions are originated by the player,
                     # but may (or may not!) be bounced through a "proxy"
@@ -242,10 +222,10 @@ def search(
                     calldata=Bytes.symbolic(f"CALLDATA{suffix}"),
                     gasprice=Uint256(f"GASPRICE{suffix}"),
                 ),
-                sha3=sha3,
-                contracts=contracts,
-                balances=balances,
-                constraint=constraint,
+                sha3=carryover.sha3,
+                contracts=carryover.contracts,
+                balances=carryover.balances,
+                constraint=carryover.constraint,
                 mystery_proxy=PROXY,
                 gas_count=0,
             )
@@ -261,7 +241,7 @@ def search(
 
             universal = universal_transaction(start, check=False, prints=(verbose > 2))
             for end in chain(universal):
-                candidate = history.extend(end)
+                candidate = sequence.extend(end)
                 if verbose > 1:
                     print(f"- {candidate.pz()}")
                 elif verbose:
@@ -294,17 +274,16 @@ def search(
                         print("  ! constraining error")
                         continue
 
-                final, solver = constrainWithValidator(
-                    factory, instance, candidate, validator
-                )
-                candidate.constrain(solver, check=False)
+                solution = validate_concrete(candidate, validator)
+                solver = Solver()
+                solution.constrain(solver, check=False)
                 if solver.check():
                     candidate.narrow(solver)
                     if verbose > 1:
                         print("  > found solution!")
                     else:
                         vprint("#" + z)
-                    return candidate.with_final(final), solver
+                    return solution, solver
 
                 if not verbose > 1:
                     try:
@@ -321,19 +300,18 @@ def search(
                 subsequent.append(candidate)
 
             # HACK: to avoid blowing up the state space for Coinflip, we only
-            # allow SELFDESTRUCT to appear as the last transaction in a history.
-            candidate = history.extend(selfdestruct)
-            final, solver = constrainWithValidator(
-                factory, instance, candidate, validator
-            )
-            candidate.constrain(solver, check=False)
+            # allow SELFDESTRUCT to appear as the last transaction in a
+            # sequence.
+            solution = validate_concrete(sequence.extend(selfdestruct), validator)
+            solver = Solver()
+            solution.constrain(solver, check=False)
             if solver.check():
-                candidate.narrow(solver)
+                solution.narrow(solver)
                 if verbose > 1:
                     print("  > found solution!")
-                return candidate.with_final(final), solver
+                return solution, solver
 
-        histories = subsequent
+        sequences = subsequent
 
     return None
 
@@ -343,6 +321,41 @@ def vprint(part: str) -> None:
     if "args" in globals() and args.verbose:
         print(part, end="")
         sys.stdout.flush()
+
+
+def handle_level(factory: Uint160, args: argparse.Namespace) -> None:
+    """Solve an Ethernaut level (from the cli)."""
+    contracts = snapshot_contracts(factory)
+    vprint("C")
+    beginning = starting_sequence(contracts, factory, prints=(args.verbose > 2))
+    vprint("V")
+    validator = validate_universal(beginning, prints=(args.verbose > 2))
+    vprint("a" if validator is None else "A")
+    solution = validate_concrete(beginning, validator)
+    vprint("Z")
+    solver = Solver()
+    solution.constrain(solver, check=False)
+    assert not solver.check()
+    vprint("*")
+
+    result = search(beginning, validator, args.depth, verbose=args.verbose)
+    if result is None:
+        print("\tno solution")
+        return
+
+    solution, solver = result
+    newline = True
+    indent = 0
+    if args.verbose:
+        print(f"\nResult   | {int(time.time())-startux:06}")
+        indent = 2
+    for part in solution.describe(solver):
+        if newline:
+            print(" " * indent, end="")
+            newline = False
+        print(part, end="")
+        if part.endswith("\n"):
+            newline = True
 
 
 if __name__ == "__main__":
@@ -366,47 +379,7 @@ if __name__ == "__main__":
         factory = LEVEL_FACTORIES[i]
         vprint(f"Level {i:03} | L")
         try:
-            contracts = snapshot_contracts(factory)
-            vprint("C")
-            instance, beginning = createInstance(
-                contracts, factory, prints=(args.verbose > 2)
-            )
-            vprint("V")
-            validator = validateInstance(
-                factory, instance, beginning, prints=(args.verbose > 2)
-            )
-            vprint("A")
-            _, solver = constrainWithValidator(factory, instance, beginning, validator)
-            vprint("Z")
-            assert not solver.check()
-            vprint("*")
-
-            result = search(
-                factory,
-                instance,
-                beginning,
-                validator,
-                args.depth,
-                verbose=args.verbose,
-            )
-            if result is None:
-                print("\tno solution")
-                continue
-
-            solution, solver = result
-            newline = True
-            indent = 0
-            if args.verbose:
-                print(f"\nResult   | {int(time.time())-startux:06}")
-                indent = 2
-            for part in solution.describe(solver):
-                if newline:
-                    print(" " * indent, end="")
-                    newline = False
-                print(part, end="")
-                if part.endswith("\n"):
-                    newline = True
-
+            handle_level(factory, args)
         except Exception as e:
             suffix = ""
             if str(e) != "":

@@ -1,11 +1,13 @@
 #!/usr/bin/env pytest
 
+from zbitvector import Solver
+
 from snapshot import LEVEL_FACTORIES, snapshot_contracts
 from zoology import (
-    constrainWithValidator,
-    createInstance,
     search,
-    validateInstance,
+    starting_sequence,
+    validate_concrete,
+    validate_universal,
 )
 
 
@@ -13,12 +15,14 @@ def check_level(i: int, fixture: list[str]) -> None:
     factory = LEVEL_FACTORIES[i]
     contracts = snapshot_contracts(factory)
 
-    instance, beginning = createInstance(contracts, factory)
-    validator = validateInstance(factory, instance, beginning)
-    _, solver = constrainWithValidator(factory, instance, beginning, validator)
+    beginning = starting_sequence(contracts, factory)
+    validator = validate_universal(beginning)
+    solution = validate_concrete(beginning, validator)
+    solver = Solver()
+    solution.constrain(solver, check=False)
     assert not solver.check(), "validation passed initially"
 
-    result = search(factory, instance, beginning, validator, depth=10)
+    result = search(beginning, validator, depth=10)
     assert result is not None, "search failed"
 
     solution, solver = result
@@ -50,7 +54,6 @@ def test_fallout() -> None:
 
 def test_coinflip() -> None:
     fixture = [
-        "1d263f67 0000000000000000000000000000000000000000000000000000000000000000",
         "1d263f67 0000000000000000000000000000000000000000000000000000000000000001",
         "1d263f67 0000000000000000000000000000000000000000000000000000000000000001",
         "1d263f67 0000000000000000000000000000000000000000000000000000000000000000",
@@ -60,6 +63,7 @@ def test_coinflip() -> None:
         "1d263f67 0000000000000000000000000000000000000000000000000000000000000000",
         "1d263f67 0000000000000000000000000000000000000000000000000000000000000000",
         "1d263f67 0000000000000000000000000000000000000000000000000000000000000000",
+        "1d263f67 0000000000000000000000000000000000000000000000000000000000000001",
     ]
     check_level(3, fixture)
 
