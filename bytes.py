@@ -99,17 +99,19 @@ class Bytes:
         """Simplify using the given solver's contraints (a no-op)."""
         return constraint
 
-    def describe(self, solver: Solver) -> Iterable[str]:
+    def describe(self, solver: Solver, prefix: int = 4) -> Iterable[str]:
         """Use a model to evaluate this instance as a hexadecimal string."""
         length = solver.evaluate(self.length)
         if length > DESCRIBE_LIMIT:
-            yield from self.slice(Uint256(0), Uint256(DESCRIBE_LIMIT)).describe(solver)
+            yield from self.slice(Uint256(0), Uint256(DESCRIBE_LIMIT)).describe(
+                solver, prefix=prefix
+            )
             yield "..."
         elif length == 0:
             yield "-       "
         else:
             for i in range(length):
-                if i == 4:
+                if prefix and i == prefix:
                     yield " "
                 yield solver.evaluate(self[Uint256(i)]).to_bytes(1).hex()
 

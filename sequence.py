@@ -148,23 +148,8 @@ class Sequence:
             if caller != player:
                 yield "\tvia proxy"
             yield "\n"
-
-            for call in state.calls:
-                match call:
-                    case GasHogCall():
-                        yield "\tProxy CONSUME ALL GAS\n"
-                    case DelegateCall():
-                        ok = evaluate(solver, call.ok)
-                        yield f"\tProxy {'RETURN' if ok else 'REVERT'} "
-                        yield from call.returndata.describe(solver)
-                        yield "\n"
-                        if ok:
-                            prev = evaluate(solver, call.previous_storage)
-                            for k, v in evaluate(solver, call.next_storage).items():
-                                if prev[k] != v:
-                                    yield f"\tSet {hex(k)} to {hex(v)}\n"
-                    case Call():
-                        pass
+            assert state.mystery_proxy is not None
+            yield from describe_calls(solver, state.calls, state.mystery_proxy)
 
 
 class Solution:
@@ -212,14 +197,15 @@ class Solution:
         yield from self.sequence.describe(solver)
 
         if isinstance(self.validate, State):
-            for call in self.validate.calls:
-                match call:
-                    case GasHogCall():
-                        yield "Validate Proxy CONSUME ALL GAS\n"
-                    case DelegateCall():
-                        raise NotImplementedError
-                    case Call():
-                        pass
+            assert self.validate.mystery_proxy is not None
+            post = False
+            for line in describe_calls(
+                solver, self.validate.calls, self.validate.mystery_proxy
+            ):
+                if not post:
+                    yield "validateInstance(...)\n"
+                    post = True
+                yield line
 
 
 class Validator:
@@ -263,3 +249,44 @@ class Validator:
                 raise ValueError(f"unknown variable: {name}")
 
         return substitute(self.constraint, substitutions)
+
+
+def describe_calls(
+    solver: Solver, calls: tuple[Call, ...], proxy: Uint160
+) -> Iterable[str]:
+    """Yield a human-readable description of relevant contract calls."""
+    for call in calls:
+        if (call.transaction.address == proxy).reveal() is not True:
+            continue
+
+        match call:
+            case DelegateCall():
+                kind = "DELEGATECALL"
+            case GasHogCall() | Call():
+                kind = "CALL"
+
+        yield f" -> Proxy {kind} "
+        yield from call.transaction.calldata.describe(solver)
+        value = solver.evaluate(call.transaction.callvalue)
+        if value:
+            yield f"\tvalue: {value}"
+        yield "\n"
+
+        match call:
+            case GasHogCall():
+                yield "    CONSUME ALL GAS\n"
+            case DelegateCall():
+                ok = evaluate(solver, call.ok)
+                yield f"    {'RETURN' if ok else 'REVERT'} "
+                yield from call.returndata.describe(solver, prefix=0)
+                yield "\n"
+                if ok:
+                    prev = evaluate(solver, call.previous_storage)
+                    for k, v in evaluate(solver, call.next_storage).items():
+                        if prev[k] != v:
+                            yield f"      {hex(k)} -> {hex(v)}\n"
+            case Call():
+                ok = evaluate(solver, call.ok)
+                yield f"    {'RETURN' if ok else 'REVERT'} "
+                yield from call.returndata.describe(solver, prefix=0)
+                yield "\n"

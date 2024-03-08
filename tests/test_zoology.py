@@ -106,6 +106,9 @@ def test_vault() -> None:
 def test_king() -> None:
     fixture = [
         "-       \tvalue: 1125899906842623\tvia proxy",
+        "validateInstance(...)",
+        " -> Proxy CALL -       ",
+        "    REVERT -",
     ]
     check_level(9, fixture)
 
@@ -118,6 +121,10 @@ def test_king() -> None:
 def test_elevator() -> None:
     fixture = [
         "ed9a7134 ffffffffffffffffffffffffffffffffffffffffffffffffffffffff000000ff\tvia proxy",
+        " -> Proxy CALL 5f9a4bca ffffffffffffffffffffffffffffffffffffffffffffffffffffffff000000ff",
+        "    RETURN 0000000000000000000000000000000000000000000000000000000000000000",
+        " -> Proxy CALL 5f9a4bca ffffffffffffffffffffffffffffffffffffffffffffffffffffffff000000ff",
+        "    RETURN 0000000000000000000000000000000000000000000000000000000000000001",
     ]
     check_level(11, fixture)
 
@@ -155,9 +162,10 @@ def test_preservation() -> None:
     fixture = [
         "5bda8fa4 ffffffffffffffffffffffffc0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0",
         "f1e02620 0000000000000000000000000000000000000000000000000000000000000000",
-        "\tProxy RETURN 00",
-        "\tSet 0x3 to 0x1",
-        "\tSet 0x2 to 0xcacacacacacacacacacacacacacacacacacacaca",
+        " -> Proxy DELEGATECALL 3beb26c4 0000000000000000000000000000000000000000000000000000000000000000",
+        "    RETURN 00",
+        "      0x3 -> 0x1",
+        "      0x2 -> 0xcacacacacacacacacacacacacacacacacacacaca",
     ]
     check_level(16, fixture)
 
@@ -168,9 +176,11 @@ def test_preservation() -> None:
 
 
 def test_magic_number() -> None:
-    # TODO: illustrate proxy calls
     fixture = [
         "1f879433 000000000000000000000000c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0",
+        "validateInstance(...)",
+        " -> Proxy CALL 650500c1",
+        "    RETURN 000000000000000000000000000000000000000000000000000000000000002a",
     ]
     check_level(18, fixture)
 
@@ -187,15 +197,20 @@ def test_alien_codex() -> None:
 def test_denial() -> None:
     fixture = [
         "4e1c5914 000000000000000000000000c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0",
-        "Validate Proxy CONSUME ALL GAS",
+        "validateInstance(...)",
+        " -> Proxy CALL -       \tvalue: 10000000000000",
+        "    CONSUME ALL GAS",
     ]
     check_level(20, fixture)
 
 
 def test_shop() -> None:
-    # TODO: illustrate proxy calls
     fixture = [
         "a6f2ae3a\tvia proxy",
+        " -> Proxy CALL a035b1fe",
+        "    RETURN 0080000000000000000000000000000000000000000000000000000000000033",
+        " -> Proxy CALL a035b1fe",
+        "    RETURN 0000000000000000000000000000000000000000000000000000000000000000",
     ]
     check_level(21, fixture)
 
