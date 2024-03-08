@@ -583,20 +583,20 @@ def DELEGATECALL(
     if s.changed is None:
         raise ValueError("DELEGATECALL is forbidden during a STATICCALL")
 
-    transaction = Transaction(
-        origin=s.transaction.origin,
-        caller=s.transaction.caller,
-        address=s.transaction.address,
-        callvalue=s.transaction.callvalue,
-        calldata=s.memory.slice(argsOffset, argsSize),
-        gasprice=s.transaction.gasprice,
-    )
-
     if (address := _address.reveal()) is None:
         # A DELEGATECALL to an arbitrary contract can overwrite any storage
         # addresses. (Assume we can control the address completely; if not,
         # narrowing will fail.)
+        assert s.mystery_proxy is not None
         n = len(s.calls)
+        transaction = Transaction(
+            origin=s.transaction.origin,
+            caller=s.transaction.caller,
+            address=s.mystery_proxy,
+            callvalue=s.transaction.callvalue,
+            calldata=s.memory.slice(argsOffset, argsSize),
+            gasprice=s.transaction.gasprice,
+        )
         dc = DelegateCall(
             transaction,
             Constraint(f"DCOK{n}{s.suffix}"),
@@ -604,8 +604,7 @@ def DELEGATECALL(
             s.storage,
             Array[Uint256, Uint256](f"DCSTORAGE{n}{s.suffix}"),
         )
-        # TODO: can we factor out this magic address?
-        s.narrower &= _address == Uint256(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0)
+        s.narrower &= _address.into(Uint160) == s.mystery_proxy
         assert (sender := s.transaction.address.reveal()) is not None
         s.contracts[sender].storage = copy.deepcopy(dc.next_storage)
         _apply_call(s, dc, retSize, retOffset)
@@ -620,6 +619,14 @@ def DELEGATECALL(
         contract, ConcreteContract
     ), "DELEGATECALL requires concrete contract"
 
+    transaction = Transaction(
+        origin=s.transaction.origin,
+        caller=s.transaction.caller,
+        address=s.transaction.address,
+        callvalue=s.transaction.callvalue,
+        calldata=s.memory.slice(argsOffset, argsSize),
+        gasprice=s.transaction.gasprice,
+    )
     return Descend(
         (
             _descend_substate(

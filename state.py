@@ -194,6 +194,14 @@ class State:
                 solver.add(constraint)
                 break
 
+        # Minimize subcontext returndata
+        for call in self.calls:
+            for i in range(257):
+                constraint = call.returndata.length == Uint256(i)
+                if solver.check(constraint):
+                    solver.add(constraint)
+                    break
+
         solver.add(self.narrower)
         assert solver.check()
 

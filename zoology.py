@@ -278,7 +278,7 @@ def search(
                 solver = Solver()
                 solution.constrain(solver, check=False)
                 if solver.check():
-                    candidate.narrow(solver)
+                    solution.narrow(solver)
                     if verbose > 1:
                         print("  > found solution!")
                     else:

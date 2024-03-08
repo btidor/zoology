@@ -202,6 +202,8 @@ class Solution:
         """Apply soft and deferred constraints to a given solver instance."""
         for state in self.sequence.states:
             state.narrow(solver)
+        if isinstance(self.validate, State):
+            self.validate.narrow(solver)
         self.sha3.narrow(solver)
         assert solver.check()
 
