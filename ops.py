@@ -582,14 +582,23 @@ def DELEGATECALL(
     """
     if s.changed is None:
         raise ValueError("DELEGATECALL is forbidden during a STATICCALL")
-    address = _address.reveal()
-    if address is None:
+
+    transaction = Transaction(
+        origin=s.transaction.origin,
+        caller=s.transaction.caller,
+        address=s.transaction.address,
+        callvalue=s.transaction.callvalue,
+        calldata=s.memory.slice(argsOffset, argsSize),
+        gasprice=s.transaction.gasprice,
+    )
+
+    if (address := _address.reveal()) is None:
         # A DELEGATECALL to an arbitrary contract can overwrite any storage
         # addresses. (Assume we can control the address completely; if not,
         # narrowing will fail.)
         n = len(s.calls)
         dc = DelegateCall(
-            _address.into(Uint160),
+            transaction,
             Constraint(f"DCOK{n}{s.suffix}"),
             Bytes.symbolic(f"DCRETURN{n}{s.suffix}"),
             s.storage,
@@ -604,14 +613,6 @@ def DELEGATECALL(
         s.changed = True
         return None
 
-    transaction = Transaction(
-        origin=s.transaction.origin,
-        caller=s.transaction.caller,
-        address=s.transaction.address,
-        callvalue=s.transaction.callvalue,
-        calldata=s.memory.slice(argsOffset, argsSize),
-        gasprice=s.transaction.gasprice,
-    )
     if address not in s.contracts:
         raise ValueError("DELEGATECALL to unknown contract: " + hex(address))
     contract = s.contracts[address]
@@ -781,13 +782,21 @@ def _call_common(
         eoa &= ~cond
         if cond.reveal() is not False:
             suffix = f"{s.suffix}-{len(s.calls)}"
+            transaction = Transaction(
+                origin=s.transaction.origin,
+                caller=s.transaction.address,
+                address=s.mystery_proxy,
+                callvalue=value,
+                calldata=calldata,
+                gasprice=s.transaction.gasprice,
+            )
             s.path <<= 1
             state = copy.deepcopy(s)
             state.path |= 1
             state.constraint &= cond
-            state.transfer(s.transaction.address, s.mystery_proxy, value)
+            state.transfer(transaction.caller, transaction.address, value)
             call = Call(
-                s.mystery_proxy,
+                transaction,
                 Constraint(f"RETURNOK{suffix}"),
                 Bytes.symbolic(f"RETURNDATA{suffix}"),
             )
@@ -800,7 +809,7 @@ def _call_common(
             state.cost *= 2
             state.constraint &= cond
             state.gas_hogged += gas
-            call = GasHogCall(s.mystery_proxy, Constraint(False), Bytes(), gas)
+            call = GasHogCall(transaction, Constraint(False), Bytes(), gas)
             _apply_call(state, call, retSize, retOffset)
             substates.append(state)
 
@@ -809,8 +818,16 @@ def _call_common(
 
     if eoa.reveal() is not False:
         s.constraint &= eoa
-        s.transfer(s.transaction.address, address, value)
-        _apply_call(s, Call(address, Constraint(True), Bytes()), retSize, retOffset)
+        transaction = Transaction(
+            origin=s.transaction.origin,
+            caller=s.transaction.address,
+            address=address,
+            callvalue=value,
+            calldata=calldata,
+            gasprice=s.transaction.gasprice,
+        )
+        s.transfer(transaction.caller, transaction.address, value)
+        _apply_call(s, Call(transaction, Constraint(True), Bytes()), retSize, retOffset)
         substates.append(s)
 
     return Descend(tuple(substates))
@@ -854,13 +871,13 @@ def _descend_substate(
     def metacallback(substate: State) -> State:
         assert isinstance(substate.pc, Termination)
         call = Call(
-            transaction.address, Constraint(substate.pc.success), substate.pc.returndata
+            transaction, Constraint(substate.pc.success), substate.pc.returndata
         )
         if gas is not None:
             gasok = substate.gas_hogged <= gas
             if gasok.reveal() is not True:
                 call = Call(
-                    transaction.address,
+                    transaction,
                     gasok & call.ok,
                     call.returndata.slice(
                         Uint256(0), gasok.ite(call.returndata.length, Uint256(0))

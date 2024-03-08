@@ -265,7 +265,7 @@ class Log:
 class Call:
     """Information about a CALL instruction."""
 
-    address: Uint160
+    transaction: Transaction
     ok: Constraint
     returndata: Bytes
 

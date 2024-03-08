@@ -153,7 +153,7 @@ def _printable_transition(
         yield line
 
     for call in end.calls:
-        a = solver.evaluate(call.address)
+        a = solver.evaluate(call.transaction.address)
         k = solver.evaluate(call.ok.ite(Uint256(1), Uint256(0)))
         kind = (
             "CONSUME ALL GAS"

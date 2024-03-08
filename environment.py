@@ -128,9 +128,6 @@ class Transaction:
     calldata: Bytes = Bytes()
     gasprice: Uint256 = Uint256(0x12)
 
-    def __post_init__(self) -> None:
-        assert self.address.reveal() is not None, "Contract requires concrete address"
-
     def describe(self, solver: Solver) -> OrderedDict[str, str]:
         """
         Use a model to evaluate this instance as a dictionary of attributes.
