@@ -302,6 +302,13 @@ def search(
             # HACK: to avoid blowing up the state space for Coinflip, we only
             # allow SELFDESTRUCT to appear as the last transaction in a
             # sequence.
+            if verbose > 1:
+                print(f"- {sequence.pz()}:*")
+            elif verbose:
+                vprint(f"{j:03x}")
+            j += 1
+            z = " " if j % 16 else "\n"
+
             solution = validate_concrete(sequence.extend(selfdestruct), validator)
             solver = Solver()
             solution.constrain(solver, check=False)
@@ -309,7 +316,10 @@ def search(
                 solution.narrow(solver)
                 if verbose > 1:
                     print("  > found solution!")
+                elif verbose:
+                    vprint("#" + z)
                 return solution, solver
+            vprint("." + z)
 
         sequences = subsequent
 
@@ -347,7 +357,7 @@ def handle_level(factory: Uint160, args: argparse.Namespace) -> None:
     newline = True
     indent = 0
     if args.verbose:
-        print(f"\nResult   | {int(time.time())-startux:06}")
+        print(f"\nResult    | {int(time.time())-startux:06}")
         indent = 2
     for part in solution.describe(solver):
         if newline:
