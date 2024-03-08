@@ -16,6 +16,7 @@ from smt import (
     Uint8,
     Uint160,
     Uint256,
+    bvlshr_harder,
     concat_bytes,
 )
 from state import (
@@ -180,7 +181,11 @@ def SHL(shift: Uint256, value: Uint256) -> Uint256:
 
 def SHR(shift: Uint256, value: Uint256) -> Uint256:
     """1C - Logical right shift operation."""
-    return value >> shift
+    # Solidity contracts use SHR to extract the function signature from the
+    # calldata. It's really important that the result be fully simplified,
+    # otherwise we'll waste time exploring irrelevant branches. Bitwuzla doesn't
+    # simplify well through `concat`s, so we do it manually.
+    return bvlshr_harder(value, shift)
 
 
 def SAR(shift: Uint256, value: Uint256) -> Uint256:

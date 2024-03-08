@@ -73,7 +73,7 @@ def test_telephone() -> None:
 
 def test_token() -> None:
     fixture = [
-        "a9059cbb ffffffff000000ff00ffffffcacacacacacacacacacacacacacacacacacacacb4000000000000000000000000000000000000000000000000000000000000014",
+        "a9059cbb 000000000000000000000000cacacacacacacacacacacacacacacacacacacacb4000000000000000000000000000000000000000000000000000000000000014",
     ]
     check_level(5, fixture)
 
@@ -150,7 +150,7 @@ def test_naughtcoin() -> None:
 def test_preservation() -> None:
     fixture = [
         "5bda8fa4 ffffffffffffffffffffffffc0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0",
-        "f1e02620 ffffffffffffffffffffffff00000000000000ff000000ff00ffffff00000000",
+        "f1e02620 0000000000000000000000000000000000000000000000000000000000000000",
         "\tProxy RETURN 00",
         "\tSet 0x3 to 0x1",
         "\tSet 0x2 to 0xcacacacacacacacacacacacacacacacacacacaca",

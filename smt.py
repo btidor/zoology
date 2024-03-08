@@ -148,6 +148,31 @@ def prequal(a: Uint[Any], b: Uint[Any]) -> bool:
     return (a == b).reveal() or False
 
 
+def bvlshr_harder(value: Uint[N], shift: Uint[N]) -> Uint[N]:
+    """Return `(bvlshr value shift)` with better preprocessing."""
+    default = value >> shift
+    if default.reveal() is not None or (n := shift.reveal()) is None or n == 0:
+        return default
+
+    term = _term(value)
+    prefix = BZLA.mk_bv_value(BZLA.mk_bv_sort(n), 0)
+    while n > 0:
+        if term.get_kind() == Kind.BV_CONCAT:
+            term, addon = term.get_children()
+            n -= addon.get_sort().bv_get_size()
+            if n < 0:
+                return default
+        elif term.get_kind() == Kind.VAL:
+            z = term.get_sort().bv_get_size()
+            if z <= n:
+                return value.__class__(0)
+            term = BZLA.mk_term(Kind.BV_EXTRACT, (term,), (z - 1, n))
+            break
+        else:
+            return default
+    return _make_symbolic(value.__class__, BZLA.mk_term(Kind.BV_CONCAT, (prefix, term)))
+
+
 def get_constants(s: Symbolic) -> dict[str, BitwuzlaTerm]:
     """Recursively search the term for constants."""
     constants = dict[str, BitwuzlaTerm]()
