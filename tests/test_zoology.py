@@ -76,6 +76,10 @@ def test_telephone() -> None:
 
 
 def test_token() -> None:
+    # This is correct! To solve this level, the player must transfer at least 20
+    # tokens to any other address, causing an integer underflow. The recipient
+    # address is arbitrary, and our solver apparently produces it by adding 1 to
+    # the player address.
     fixture = [
         "a9059cbb 000000000000000000000000cacacacacacacacacacacacacacacacacacacacb4000000000000000000000000000000000000000000000000000000000000014",
     ]
