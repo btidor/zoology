@@ -128,6 +128,8 @@ def reset_bitwuzla() -> Iterator[None]:
     aitem: list[tuple[zArray[Any, Any], int]] = []
     for obj in gc.get_objects():
         if isinstance(obj, Symbolic):
+            if not obj._term.is_bv_value():
+                continue
             s = BZLA.get_value_str(obj._term)
             bitem.append((obj, int(s, 2)))
         elif isinstance(obj, zArray):
