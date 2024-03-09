@@ -31,11 +31,18 @@ class Next:
     contracts: dict[int, Contract]
     balances: Array[Uint160, Uint256]
     sha3: SHA3
+    mystery_size: Uint256 | None
 
     @classmethod
     def from_state(cls, state: State) -> Next:
         """Extract carryover information from a State."""
-        return Next(state.constraint, state.contracts, state.balances, state.sha3)
+        return Next(
+            state.constraint,
+            state.contracts,
+            state.balances,
+            state.sha3,
+            state.mystery_size,
+        )
 
     def clone_and_reset(self) -> Next:
         """Clone this Next and reset array access tracking."""
@@ -44,6 +51,7 @@ class Next:
             {k: v.clone_and_reset() for (k, v) in self.contracts.items()},
             self.balances.clone_and_reset(),
             copy.deepcopy(self.sha3),
+            self.mystery_size,
         )
 
 
@@ -132,6 +140,10 @@ class Sequence:
 
     def describe(self, solver: Solver) -> Iterable[str]:
         """Yield a human-readable description of the Sequence."""
+        assert (codesize := self.states[-1].mystery_size) is not None
+        if (sz := solver.evaluate(codesize)) != 0x123:
+            yield f"Proxy CODESIZE {hex(sz)}{' (via constructor)' if sz == 0 else ''}\n"
+
         for state in self.states:
             if isinstance(state.pc, int):  # SELFDESTRUCT balance transfer
                 value = solver.evaluate(state.transaction.callvalue)

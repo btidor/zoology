@@ -149,6 +149,7 @@ def test_gatekeeper_one() -> None:
 
 def test_gatekeeper_two() -> None:
     fixture = [
+        "Proxy CODESIZE 0x0 (via constructor)",
         "3370204e 2433b6aeb6cc3764000000000000000000000000000000000000000000000000\tvia proxy",
     ]
     check_level(14, fixture)
@@ -181,6 +182,7 @@ def test_preservation() -> None:
 
 def test_magic_number() -> None:
     fixture = [
+        "Proxy CODESIZE 0x9",
         "1f879433 000000000000000000000000c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0",
         "validateInstance(...)",
         " -> Proxy CALL 650500c1",
@@ -240,8 +242,15 @@ def test_shop() -> None:
 #     check_level(26, [])
 
 
-# def test_good_samaritan() -> None:
-#     check_level(27, [])
+def test_good_samaritan() -> None:
+    fixture = [
+        "25143638\tvia proxy",
+        " -> Proxy CALL 98d078b4 000000000000000000000000000000000000000000000000000000000000000a",
+        "    REVERT ad3a8b9e",
+        " -> Proxy CALL 98d078b4 00000000000000000000000000000000000000000000000000000000000f4236",
+        "    RETURN -",
+    ]
+    check_level(27, fixture)
 
 
 # def test_gatekeeper_three() -> None:

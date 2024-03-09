@@ -73,6 +73,7 @@ def starting_sequence(
         transaction=create_transaction(factory),
         contracts=contracts,
         mystery_proxy=PROXY,
+        mystery_size=Uint256("MYSTERYSIZE"),
     )
 
     # ASSUMPTION: the only account with a nonzero balance belongs to the player.
@@ -113,6 +114,7 @@ def validate_universal(sequence: Sequence, prints: bool = False) -> Validator | 
         balances=Array[Uint160, Uint256]("BALANCE"),
         constraint=carryover.constraint,
         mystery_proxy=PROXY,
+        mystery_size=carryover.mystery_size,
         gas_count=0,
     )
 
@@ -173,6 +175,7 @@ def validate_concrete(sequence: Sequence, validator: Validator | None) -> Soluti
         balances=carryover.balances,
         constraint=carryover.constraint,
         mystery_proxy=PROXY,
+        mystery_size=carryover.mystery_size,
         gas_count=0,
     )
 
@@ -227,6 +230,7 @@ def search(
                 balances=carryover.balances,
                 constraint=carryover.constraint,
                 mystery_proxy=PROXY,
+                mystery_size=carryover.mystery_size,
                 gas_count=0,
             )
             start.transfer(

@@ -266,6 +266,9 @@ def EXTCODESIZE(s: State, _address: Uint256) -> Uint256:
     result = Uint256(0)
     for contract in s.contracts.values():
         result = (address == contract.address).ite(contract.codesize, result)
+    if s.mystery_proxy is not None:
+        assert s.mystery_size is not None
+        result = (address == s.mystery_proxy).ite(s.mystery_size, result)
     return result
 
 
@@ -864,6 +867,7 @@ def _descend_substate(
         balances=state.balances,
         program_override=program_override,
         mystery_proxy=state.mystery_proxy,
+        mystery_size=state.mystery_size,
         logs=state.logs,
         gas_count=state.gas_count,
         calls=state.calls,

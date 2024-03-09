@@ -61,6 +61,7 @@ class State:
     # optionally model a CALL to a symbolic "proxy" contract that returns a
     # fully-symbolic response.
     mystery_proxy: Uint160 | None = None
+    mystery_size: Uint256 | None = None
 
     # Every time the GAS instruction is invoked we return a symbolic result,
     # suffixed with this counter to make it unique. In the case of a concrete
@@ -201,6 +202,12 @@ class State:
                 if solver.check(constraint):
                     solver.add(constraint)
                     break
+
+        for i in range(9):
+            constraint = self.mystery_size == Uint256(0x123 >> i)
+            if solver.check(constraint):
+                solver.add(constraint)
+                break
 
         solver.add(self.narrower)
         assert solver.check()
