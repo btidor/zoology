@@ -253,8 +253,18 @@ def test_good_samaritan() -> None:
     check_level(27, fixture)
 
 
-# def test_gatekeeper_three() -> None:
-#     check_level(28, [])
+def test_gatekeeper_three() -> None:
+    fixture = [
+        "b9966e56\tvia proxy",
+        "f7edf099",
+        "c960174e 00000000000000000000000000000000000000000000000000000000637e311f",
+        "SELFDESTRUCT\tvalue: 1125899906842623",
+        "e97dcb62\tvia proxy",
+        " -> Proxy CALL -       \tvalue: 1000000000000000",
+        "    REVERT -",
+    ]
+    check_level(28, fixture)
+
 
 # def test_switch() -> None:
 #     check_level(29, [])

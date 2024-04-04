@@ -303,9 +303,10 @@ def search(
                     vprint("*" + z)
                 subsequent.append(candidate)
 
-            # HACK: to avoid blowing up the state space for Coinflip, we only
-            # allow SELFDESTRUCT to appear as the last transaction in a
-            # sequence.
+            # Above, we only consider a state "changed" if a write to storage
+            # has occurred. Transactions that purely transfer value are
+            # represented here by a SELFDESTRUCT, which is more general than
+            # `receive()` because it always succeeds.
             if verbose > 1:
                 print(f"- {sequence.pz()}:*")
             elif verbose:
@@ -313,7 +314,8 @@ def search(
             j += 1
             z = " " if j % 16 else "\n"
 
-            solution = validate_concrete(sequence.extend(selfdestruct), validator)
+            candidate = sequence.extend(selfdestruct)
+            solution = validate_concrete(candidate, validator)
             solver = Solver()
             solution.constrain(solver, check=False)
             if solver.check():
@@ -324,6 +326,7 @@ def search(
                     vprint("#" + z)
                 return solution, solver
             vprint("." + z)
+            subsequent.append(candidate)
 
         sequences = subsequent
 
