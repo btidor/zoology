@@ -611,7 +611,9 @@ def DELEGATECALL(
         assert (sender := s.transaction.address.reveal()) is not None
         s.contracts[sender].storage = copy.deepcopy(dc.next_storage)
         _apply_call(s, dc, retSize, retOffset)
-        s.constraint &= dc.ok | Array.equals(dc.previous_storage, dc.next_storage)
+        s.constraint &= dc.ok | Array[Uint256, Uint256].equals(
+            dc.previous_storage, dc.next_storage
+        )
         s.changed = True
         return None
 

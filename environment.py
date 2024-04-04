@@ -96,7 +96,8 @@ class Contract(abc.ABC):
         result.storage = result.storage.clone_and_reset()
         return result
 
-    @abc.abstractproperty
+    @property
+    @abc.abstractmethod
     def codesize(self) -> Uint256:
         """Return the size of the code, in bytes."""
         raise NotImplementedError

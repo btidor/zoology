@@ -192,13 +192,11 @@ def compact_helper(
 
 
 @overload
-def evaluate(solver: Solver, s: Constraint) -> bool:
-    ...
+def evaluate(solver: Solver, s: Constraint) -> bool: ...
 
 
 @overload
-def evaluate(solver: Solver, s: Array[K, V]) -> dict[int, int]:
-    ...
+def evaluate(solver: Solver, s: Array[K, V]) -> dict[int, int]: ...
 
 
 def evaluate(solver: Solver, s: Constraint | Array[K, V]) -> bool | dict[int, int]:
