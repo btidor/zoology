@@ -11,7 +11,7 @@ from typing import Any, Iterable, Literal, Self, TypeAlias, TypeVar, Union, over
 from Crypto.Hash import keccak
 from zbitvector import Array as zArray
 from zbitvector import Constraint, Int, Solver, Symbolic, Uint, _bitwuzla
-from zbitvector._bitwuzla import BZLA, OPTIMIZE, BitwuzlaTerm, Kind, _reset_solver
+from zbitvector._bitwuzla import BZLA, BitwuzlaTerm, Kind
 
 Uint8 = Uint[Literal[8]]
 Uint64 = Uint[Literal[64]]
@@ -37,14 +37,6 @@ def _from_expr(cls: type[S], kind: Kind, *args: Expression) -> S:
     return cls._from_expr(kind, *args)  # type: ignore
 
 
-def _reveal(term: BitwuzlaTerm) -> int | None:
-    if term.is_bv_value():
-        _reset_solver()
-        return int(BZLA.get_value_str(term), 2)
-    else:
-        return None
-
-
 def _term(expr: Expression) -> BitwuzlaTerm:
     return expr._term  # type: ignore
 
@@ -65,52 +57,10 @@ def explode_bytes(word: Uint256) -> list[Uint8]:
 
 def concat_bytes(*args: Uint8) -> Uint[Any]:
     """Concatenate a series of Uint8s into a longer UintN."""
+    if len(args) == 1:
+        return args[0]
     uint = make_uint(len(args) * 8)
-    if not OPTIMIZE:
-        if len(args) == 1:
-            return args[0]
-        term = BZLA.mk_term(Kind.BV_CONCAT, tuple(_term(a) for a in args))
-        return _make_symbolic(uint, term)
-
-    pending = list[
-        BitwuzlaTerm | tuple[BitwuzlaTerm, list[BitwuzlaTerm], list[BitwuzlaTerm]]
-    ]()
-    for arg in args:
-        if _term(arg).get_kind() != Kind.ITE:
-            pending.append(_term(arg))
-            continue
-        cond, term1, term2 = _term(arg).get_children()
-        if len(pending) == 0 or isinstance(pending[-1], BitwuzlaTerm):
-            pending.append((cond, [term1], [term2]))
-            continue
-        prev, prev1, prev2 = pending[-1]
-        eq = BZLA.mk_term(Kind.EQUAL, (prev, cond))
-
-        if _reveal(eq) == 1:
-            prev1.append(term1)
-            prev2.append(term2)
-        else:
-            pending.append((cond, [term1], [term2]))
-
-    converted = list[BitwuzlaTerm]()
-    for arg in pending:
-        if isinstance(arg, BitwuzlaTerm):
-            converted.append(arg)
-        else:
-            cond, list1, list2 = arg
-            term = BZLA.mk_term(
-                Kind.ITE,
-                (
-                    cond,
-                    BZLA.mk_term(Kind.BV_CONCAT, list1) if len(list1) > 1 else list1[0],
-                    BZLA.mk_term(Kind.BV_CONCAT, list2) if len(list2) > 1 else list2[0],
-                ),
-            )
-            converted.append(term)
-    if len(converted) == 1:
-        term = converted[0]
-    else:
-        term = BZLA.mk_term(Kind.BV_CONCAT, converted)
+    term = BZLA.mk_term(Kind.BV_CONCAT, tuple(_term(a) for a in args))
     return _make_symbolic(uint, term)
 
 
