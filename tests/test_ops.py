@@ -612,7 +612,7 @@ def test_CREATE() -> None:
         address=Uint160(0x6AC7EA33F8831EA9DCC53393AAA88B25A785DBF0),
     )
     s = State(
-        memory=Memory(b"\xFE\x63\xFF\xFF\xFF\xFF\x60\x00\x52\x60\x04\x60\x1C\xF3"),
+        memory=Memory(b"\xfe\x63\xff\xff\xff\xff\x60\x00\x52\x60\x04\x60\x1c\xf3"),
         transaction=Transaction(address=contract.address),
     ).with_contract(contract)
     flow = CREATE(s, Uint256(999), Uint256(2), Uint256(100))
@@ -671,5 +671,10 @@ def test_INVALID() -> None:
 
 
 def test_SELFDESTRUCT() -> None:
-    with pytest.raises(Exception):
-        SELFDESTRUCT()
+    address = Uint160(0xADADADADADADADADADADADADADADADADADADADAD)
+    s = State().with_contract(ConcreteContract(address=address))
+    s.balances[address] = Uint256(999)
+    SELFDESTRUCT(s, Uint256(0x1234))
+    assert len(s.contracts) == 0
+    assert s.balances[address].reveal() == 0
+    assert s.balances[Uint160(0x1234)].reveal() == 999

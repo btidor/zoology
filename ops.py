@@ -693,9 +693,16 @@ def INVALID(s: State) -> None:
     s.pc = Termination(False, Bytes())
 
 
-def SELFDESTRUCT() -> None:
+def SELFDESTRUCT(s: State, address: Uint256) -> None:
     """FF - Halt execution and register account for later deletion."""
-    raise NotImplementedError("SELFDESTRUCT")
+    s.transfer(
+        s.transaction.address, address.into(Uint160), s.balances[s.transaction.address]
+    )
+    assert (addr := s.transaction.address.into(Uint160).reveal()) is not None
+    # HACK: technically this cleanup should be done at the end of the
+    # transaction.
+    del s.contracts[addr]
+    s.pc = Termination(True, Bytes())
 
 
 def _create_common(

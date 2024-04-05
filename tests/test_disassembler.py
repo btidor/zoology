@@ -77,7 +77,7 @@ def test_disassemble_trailer() -> None:
 
 def test_disassemble_invalid() -> None:
     with pytest.raises(DisassemblyError):
-        disassemble(Bytes(b"\x0F"))
+        disassemble(Bytes(b"\x0f"))
 
 
 def test_disassemble_symbolic() -> None:

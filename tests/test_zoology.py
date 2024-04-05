@@ -222,7 +222,6 @@ def test_shop() -> None:
 
 
 # def test_dex() -> None:
-#     # read-only check ignores token contract storage changes
 #     check_level(22, [])
 
 
