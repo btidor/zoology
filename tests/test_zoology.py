@@ -175,9 +175,11 @@ def test_preservation() -> None:
     check_level(16, fixture)
 
 
-# def test_recovery() -> None:
-#     # interacting with wrong contract
-#     check_level(17, [])
+def test_recovery() -> None:
+    fixture = [
+        "00f55d9d 000000000000000000000000b4b157c7c4b0921065dded675dfe10759eecaa6c"
+    ]
+    check_level(17, fixture)
 
 
 def test_magic_number() -> None:

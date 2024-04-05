@@ -214,7 +214,7 @@ def search(
         j = 0
         subsequent = list[Sequence]()
         for sequence in sequences:
-            for address in sequence.peek_contracts():
+            for address in reversed(list(sequence.peek_contracts())):
                 if address in sequence.starting_contracts:
                     continue  # skip factory contracts
                 carryover, block = sequence.subsequent()
