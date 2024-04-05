@@ -75,6 +75,7 @@ def starting_sequence(
         mystery_proxy=PROXY,
         mystery_size=Uint256("MYSTERYSIZE"),
     )
+    starting_contracts = set(contracts.keys())
 
     # ASSUMPTION: the only account with a nonzero balance belongs to the player.
     start.balances[PLAYER] = Uint256(10**18)
@@ -98,7 +99,13 @@ def starting_sequence(
     assert end.pc.success, f"createInstance() failed{': ' + error if error else ''}"
     instance = Uint160(int.from_bytes(data))
     return Sequence(
-        factory, instance, PLAYER, PROXY, end, validate_transaction(factory, instance)
+        factory,
+        instance,
+        PLAYER,
+        PROXY,
+        end,
+        validate_transaction(factory, instance),
+        starting_contracts,
     )
 
 
@@ -207,77 +214,119 @@ def search(
         j = 0
         subsequent = list[Sequence]()
         for sequence in sequences:
-            carryover, block = sequence.subsequent()
-            start = State(
-                suffix=suffix,
-                # ASSUMPTION: each call to the level takes place in a different
-                # block, and the blocks are consecutive.
-                block=block,
-                transaction=Transaction(
-                    address=sequence.instance,
-                    origin=PLAYER,
-                    # ASSUMPTION: all transactions are originated by the player,
-                    # but may (or may not!) be bounced through a "proxy"
-                    # contract.
-                    caller=Constraint(f"CALLERAB{suffix}").ite(PLAYER, PROXY),
-                    # ASSUMPTION: each transaction sends less than ~18 ETH.
-                    callvalue=Uint64(f"CALLVALUE{suffix}").into(Uint256),
-                    calldata=Bytes.symbolic(f"CALLDATA{suffix}"),
-                    gasprice=Uint256(f"GASPRICE{suffix}"),
-                ),
-                sha3=carryover.sha3,
-                contracts=carryover.contracts,
-                balances=carryover.balances,
-                constraint=carryover.constraint,
-                mystery_proxy=PROXY,
-                mystery_size=carryover.mystery_size,
-                gas_count=0,
-            )
-            start.transfer(
-                start.transaction.origin,
-                start.transaction.address,
-                start.transaction.callvalue,
-                initial=True,
-            )
+            for address in sequence.peek_contracts():
+                if address in sequence.starting_contracts:
+                    continue  # skip factory contracts
+                carryover, block = sequence.subsequent()
+                start = State(
+                    suffix=suffix,
+                    # ASSUMPTION: each call to the level takes place in a different
+                    # block, and the blocks are consecutive.
+                    block=block,
+                    transaction=Transaction(
+                        address=Uint160(address),
+                        origin=PLAYER,
+                        # ASSUMPTION: all transactions are originated by the player,
+                        # but may (or may not!) be bounced through a "proxy"
+                        # contract.
+                        caller=Constraint(f"CALLERAB{suffix}").ite(PLAYER, PROXY),
+                        # ASSUMPTION: each transaction sends less than ~18 ETH.
+                        callvalue=Uint64(f"CALLVALUE{suffix}").into(Uint256),
+                        calldata=Bytes.symbolic(f"CALLDATA{suffix}"),
+                        gasprice=Uint256(f"GASPRICE{suffix}"),
+                    ),
+                    sha3=carryover.sha3,
+                    contracts=carryover.contracts,
+                    balances=carryover.balances,
+                    constraint=carryover.constraint,
+                    mystery_proxy=PROXY,
+                    mystery_size=carryover.mystery_size,
+                    gas_count=0,
+                )
+                start.transfer(
+                    start.transaction.origin,
+                    start.transaction.address,
+                    start.transaction.callvalue,
+                    initial=True,
+                )
 
-            # TODO: also consider SELFDESTRUCTing to other addresses
-            selfdestruct = copy.deepcopy(start)
+                # TODO: also consider SELFDESTRUCTing to other addresses
+                selfdestruct = copy.deepcopy(start)
 
-            universal = universal_transaction(start, check=False, prints=(verbose > 2))
-            for end in chain(universal):
-                candidate = sequence.extend(end)
+                universal = universal_transaction(
+                    start, check=False, prints=(verbose > 2)
+                )
+                for end in chain(universal):
+                    candidate = sequence.extend(end)
+                    if verbose > 1:
+                        print(f"- {candidate.pz()}")
+                    elif verbose:
+                        vprint(f"{j:03x}")
+                    j += 1
+                    z = " " if j % 16 else "\n"
+
+                    if not end.changed:
+                        if verbose > 1:
+                            print("  > read-only")
+                        else:
+                            vprint("." + z)
+                        continue
+
+                    if verbose > 1:
+                        try:
+                            solver = Solver()
+                            candidate.constrain(solver)
+                            candidate.narrow(solver)
+                            newline = True
+                            for part in candidate.describe(solver):
+                                if newline:
+                                    print("  : ", end="")
+                                    newline = False
+                                print(part, end="")
+                                if part.endswith("\n"):
+                                    newline = True
+                                sys.stdout.flush()
+                        except ConstrainingError:
+                            print("  ! constraining error")
+                            continue
+
+                    solution = validate_concrete(candidate, validator)
+                    solver = Solver()
+                    solution.constrain(solver, check=False)
+                    if solver.check():
+                        solution.narrow(solver)
+                        if verbose > 1:
+                            print("  > found solution!")
+                        else:
+                            vprint("#" + z)
+                        return solution, solver
+
+                    if not verbose > 1:
+                        try:
+                            solver = Solver()
+                            candidate.constrain(solver)
+                        except ConstrainingError:
+                            vprint("!" + z)
+                            continue
+
+                    if verbose > 1:
+                        print("  > candidate")
+                    else:
+                        vprint("*" + z)
+                    subsequent.append(candidate)
+
+                # Above, we only consider a state "changed" if a write to storage
+                # has occurred. Transactions that purely transfer value are
+                # represented here by a SELFDESTRUCT, which is more general than
+                # `receive()` because it always succeeds.
                 if verbose > 1:
-                    print(f"- {candidate.pz()}")
+                    print(f"- {sequence.pz()}:*")
                 elif verbose:
                     vprint(f"{j:03x}")
                 j += 1
                 z = " " if j % 16 else "\n"
 
-                if not end.changed:
-                    if verbose > 1:
-                        print("  > read-only")
-                    else:
-                        vprint("." + z)
-                    continue
-
-                if verbose > 1:
-                    try:
-                        solver = Solver()
-                        candidate.constrain(solver)
-                        candidate.narrow(solver)
-                        newline = True
-                        for part in candidate.describe(solver):
-                            if newline:
-                                print("  : ", end="")
-                                newline = False
-                            print(part, end="")
-                            if part.endswith("\n"):
-                                newline = True
-                            sys.stdout.flush()
-                    except ConstrainingError:
-                        print("  ! constraining error")
-                        continue
-
+                candidate = sequence.extend(selfdestruct)
                 solution = validate_concrete(candidate, validator)
                 solver = Solver()
                 solution.constrain(solver, check=False)
@@ -285,48 +334,11 @@ def search(
                     solution.narrow(solver)
                     if verbose > 1:
                         print("  > found solution!")
-                    else:
+                    elif verbose:
                         vprint("#" + z)
                     return solution, solver
-
-                if not verbose > 1:
-                    try:
-                        solver = Solver()
-                        candidate.constrain(solver)
-                    except ConstrainingError:
-                        vprint("!" + z)
-                        continue
-
-                if verbose > 1:
-                    print("  > candidate")
-                else:
-                    vprint("*" + z)
+                vprint("." + z)
                 subsequent.append(candidate)
-
-            # Above, we only consider a state "changed" if a write to storage
-            # has occurred. Transactions that purely transfer value are
-            # represented here by a SELFDESTRUCT, which is more general than
-            # `receive()` because it always succeeds.
-            if verbose > 1:
-                print(f"- {sequence.pz()}:*")
-            elif verbose:
-                vprint(f"{j:03x}")
-            j += 1
-            z = " " if j % 16 else "\n"
-
-            candidate = sequence.extend(selfdestruct)
-            solution = validate_concrete(candidate, validator)
-            solver = Solver()
-            solution.constrain(solver, check=False)
-            if solver.check():
-                solution.narrow(solver)
-                if verbose > 1:
-                    print("  > found solution!")
-                elif verbose:
-                    vprint("#" + z)
-                return solution, solver
-            vprint("." + z)
-            subsequent.append(candidate)
 
         sequences = subsequent
 
