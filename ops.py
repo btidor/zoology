@@ -635,7 +635,7 @@ def DELEGATECALL(
     return Descend(
         (
             _descend_substate(
-                s, transaction, contract.program, (retOffset, retSize), gas
+                s, transaction, contract.program, (retOffset, retSize), gas, Uint256(0)
             ),
         )
     )
@@ -740,7 +740,13 @@ def _create_common(
             state.stack.append(address.into(Uint256))
         return state
 
-    return Descend((_descend_substate(s, transaction, constructor, callback, None),))
+    return Descend(
+        (
+            _descend_substate(
+                s, transaction, constructor, callback, None, transaction.callvalue
+            ),
+        )
+    )
 
 
 def _call_common(
@@ -792,7 +798,13 @@ def _call_common(
         # other non-modeled conditions.
         substates.append(
             _descend_substate(
-                state, transaction, None, (retOffset, retSize), gas, static
+                state,
+                transaction,
+                None,
+                (retOffset, retSize),
+                gas,
+                transaction.callvalue,
+                static,
             )
         )
 
@@ -865,6 +877,7 @@ def _descend_substate(
     program_override: Program | None,
     callback: Callable[[State, State], State] | tuple[Uint256, Uint256],
     gas: Uint256 | None,
+    transfer_value: Uint256,
     static: bool = False,
 ) -> State:
     substate = State(
@@ -886,7 +899,7 @@ def _descend_substate(
         cost=state.cost,
         changed=state.changed if not static else None,
     )
-    substate.transfer(transaction.caller, transaction.address, transaction.callvalue)
+    substate.transfer(transaction.caller, transaction.address, transfer_value)
 
     def metacallback(substate: State) -> State:
         assert isinstance(substate.pc, Termination)
