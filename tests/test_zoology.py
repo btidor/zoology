@@ -177,7 +177,8 @@ def test_preservation() -> None:
 
 def test_recovery() -> None:
     fixture = [
-        "00f55d9d 000000000000000000000000b4b157c7c4b0921065dded675dfe10759eecaa6c"
+        "To 0x64a87bbadfa695f967ce1306fb172d956140f067:",
+        "    00f55d9d 000000000000000000000000b4b157c7c4b0921065dded675dfe10759eecaa6c",
     ]
     check_level(17, fixture)
 

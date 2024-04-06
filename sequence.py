@@ -154,6 +154,10 @@ class Sequence:
             yield f"Proxy CODESIZE {hex(sz)}{' (via constructor)' if sz == 0 else ''}\n"
 
         for state in self.states:
+            if (state.transaction.address == self.instance).reveal() is not True:
+                assert (addr := state.transaction.address.reveal()) is not None
+                yield f"To 0x{addr.to_bytes(20).hex()}:\n    "
+
             if isinstance(state.pc, int):  # SELFDESTRUCT balance transfer
                 value = solver.evaluate(state.transaction.callvalue)
                 yield f"SELFDESTRUCT\tvalue: {value}\n"
