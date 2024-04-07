@@ -256,7 +256,7 @@ def search(
                 universal = universal_transaction(
                     start, check=False, prints=(verbose > 2)
                 )
-                for end in chain(universal):
+                for end in chain(universal, (selfdestruct,)):
                     candidate = sequence.extend(end)
                     if verbose > 1:
                         print(f"- {candidate.pz()}")
@@ -265,7 +265,11 @@ def search(
                     j += 1
                     z = " " if j % 16 else "\n"
 
-                    if not end.changed:
+                    # We consider a state "changed" if a write to storage has
+                    # occurred *or* if it's a pure transfer of value. The latter
+                    # are represented by a SELFDESTRUCT -- it's more general
+                    # than a `receve()` method because it always succeeds.
+                    if not end.changed and not isinstance(end.pc, int):
                         if verbose > 1:
                             print("  > read-only")
                         else:
@@ -314,31 +318,6 @@ def search(
                     else:
                         vprint("*" + z)
                     subsequent.append(candidate)
-
-                # Above, we only consider a state "changed" if a write to storage
-                # has occurred. Transactions that purely transfer value are
-                # represented here by a SELFDESTRUCT, which is more general than
-                # `receive()` because it always succeeds.
-                if verbose > 1:
-                    print(f"- {sequence.pz()}:*")
-                elif verbose:
-                    vprint(f"{j:03x}")
-                j += 1
-                z = " " if j % 16 else "\n"
-
-                candidate = sequence.extend(selfdestruct)
-                solution = validate_concrete(candidate, validator)
-                solver = Solver()
-                solution.constrain(solver, check=False)
-                if solver.check():
-                    solution.narrow(solver)
-                    if verbose > 1:
-                        print("  > found solution!")
-                    elif verbose:
-                        vprint("#" + z)
-                    return solution, solver
-                vprint("." + z)
-                subsequent.append(candidate)
 
         sequences = subsequent
 
