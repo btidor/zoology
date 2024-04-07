@@ -846,7 +846,6 @@ def _call_common(
             substates.append(state)
 
     # TODO: proxy can call other contracts
-    # TODO: proxy can reside at a different, unknown address (?)
 
     if eoa.reveal() is not False:
         s.constraint &= eoa

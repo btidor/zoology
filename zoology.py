@@ -123,6 +123,8 @@ def validate_universal(sequence: Sequence, prints: bool = False) -> Validator | 
         mystery_proxy=PROXY,
         mystery_size=carryover.mystery_size,
         gas_count=0,
+        # ASSUMPTION: when executing validateInstance(...), we only call into
+        # contracts defined at the outset, and no contract calls itself.
         skip_self_calls=True,
     )
 

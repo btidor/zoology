@@ -60,6 +60,9 @@ class State:
     # In addition to CALLing to a concrete, registered contract, we can
     # optionally model a CALL to a symbolic "proxy" contract that returns a
     # fully-symbolic response.
+    #
+    # ASSUMPTION: the mystery proxy resides at a fixed, concrete address.
+    #
     mystery_proxy: Uint160 | None = None
     mystery_size: Uint256 | None = None
 
