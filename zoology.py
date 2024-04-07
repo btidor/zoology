@@ -123,6 +123,7 @@ def validate_universal(sequence: Sequence, prints: bool = False) -> Validator | 
         mystery_proxy=PROXY,
         mystery_size=carryover.mystery_size,
         gas_count=0,
+        skip_self_calls=True,
     )
 
     for reference in carryover.contracts.values():

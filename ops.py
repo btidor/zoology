@@ -771,9 +771,10 @@ def _call_common(
     for contract in s.contracts.values():
         if contract.invisible:
             continue
-        elif contract.address.reveal() == s.transaction.address.reveal():
-            # ASSUMPTION: to avoid infinite loops (including in the validator
-            # function), we assume a contract never calls itself.
+        elif (
+            contract.address.reveal() == s.transaction.address.reveal()
+            and s.skip_self_calls
+        ):
             continue
 
         cond = address == contract.address
@@ -898,6 +899,7 @@ def _descend_substate(
         path=state.path,
         cost=state.cost,
         changed=state.changed if not static else None,
+        skip_self_calls=state.skip_self_calls,
     )
     substate.transfer(transaction.caller, transaction.address, transfer_value)
 

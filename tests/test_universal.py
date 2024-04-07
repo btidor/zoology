@@ -19,6 +19,7 @@ from .solidity import load_binary, load_solidity, loads_solidity
 def check_transitions(start: Program | State, branches: tuple[Any, ...]) -> None:
     if isinstance(start, Program):
         start = symbolic_start(start, SHA3(), "")
+    start.skip_self_calls = True
 
     expected = dict((b[0], b[1:]) for b in branches)
     for end in universal_transaction(start):

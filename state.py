@@ -103,6 +103,11 @@ class State:
     # transfers raise an exception.
     changed: bool | None = False
 
+    # We want to raise an exception if a contract tries to call itself during
+    # the validate function (i.e. with fully symbolic state), since this usually
+    # indicates that the solver is entering an infinite loop.
+    skip_self_calls: bool = False
+
     def px(self) -> str:
         """Return a human-readable version of the path."""
         return "Px" + hex(self.path)[2:].upper()

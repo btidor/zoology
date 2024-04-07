@@ -171,6 +171,7 @@ def _printable_transition(
 if __name__ == "__main__":
     program = load_solidity("fixtures/01_Fallback.sol")
     start = symbolic_start(program, SHA3(), "")
+    start.skip_self_calls = True
     init = copy.deepcopy(start)
     init.transfer(
         init.transaction.caller,
