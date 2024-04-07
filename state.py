@@ -261,7 +261,7 @@ class State:
             result.append(data[Uint256(i)])
 
         if solver.check(~constraint):
-            raise ValueError("expected concrete function signature and length")
+            return data
         return Bytes(result[:length])  # remember, length can be < 4
 
 
