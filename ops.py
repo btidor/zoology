@@ -545,7 +545,15 @@ def CALL(
 ):
     """F1 - Message-call into an account."""
     return _call_common(
-        s, gas, address, value, argsOffset, argsSize, retOffset, retSize, False
+        s,
+        gas,
+        address,
+        value,
+        argsOffset,
+        argsSize,
+        retOffset,
+        retSize,
+        s.changed is None,
     )
 
 
