@@ -612,6 +612,7 @@ def DELEGATECALL(
             transaction,
             Constraint(f"DCOK{n}{s.suffix}"),
             Bytes.symbolic(f"DCRETURN{n}{s.suffix}"),
+            (),
             s.storage,
             Array[Uint256, Uint256](f"DCSTORAGE{n}{s.suffix}"),
         )
@@ -839,6 +840,7 @@ def _call_common(
                 transaction,
                 Constraint(f"RETURNOK{suffix}"),
                 Bytes.symbolic(f"RETURNDATA{suffix}"),
+                (),
             )
             _apply_call(state, call, retSize, retOffset)
             substates.append(state)
@@ -849,7 +851,7 @@ def _call_common(
             state.cost *= 2
             state.constraint &= cond
             state.gas_hogged += gas
-            call = GasHogCall(transaction, Constraint(False), Bytes(), gas)
+            call = GasHogCall(transaction, Constraint(False), Bytes(), (), gas)
             _apply_call(state, call, retSize, retOffset)
             substates.append(state)
 
@@ -866,7 +868,9 @@ def _call_common(
             gasprice=s.transaction.gasprice,
         )
         s.transfer(transaction.caller, transaction.address, value)
-        _apply_call(s, Call(transaction, Constraint(True), Bytes()), retSize, retOffset)
+        _apply_call(
+            s, Call(transaction, Constraint(True), Bytes(), ()), retSize, retOffset
+        )
         substates.append(s)
 
     return Descend(tuple(substates))
@@ -900,7 +904,6 @@ def _descend_substate(
         mystery_size=state.mystery_size,
         logs=state.logs,
         gas_count=state.gas_count,
-        calls=state.calls,
         constraint=state.constraint,
         narrower=state.narrower,
         path=state.path,
@@ -913,7 +916,10 @@ def _descend_substate(
     def metacallback(substate: State) -> State:
         assert isinstance(substate.pc, Termination)
         call = Call(
-            transaction, Constraint(substate.pc.success), substate.pc.returndata
+            transaction,
+            Constraint(substate.pc.success),
+            substate.pc.returndata,
+            substate.calls,
         )
         if gas is not None:
             gasok = substate.gas_hogged <= gas
@@ -924,6 +930,7 @@ def _descend_substate(
                     call.returndata.slice(
                         Uint256(0), gasok.ite(call.returndata.length, Uint256(0))
                     ),
+                    substate.calls,
                 )
         next = copy.deepcopy(state)
         next.sha3 = substate.sha3
@@ -933,7 +940,7 @@ def _descend_substate(
         next.logs = substate.logs
         next.latest_return = call.returndata
         next.gas_count = substate.gas_count
-        next.calls = (*substate.calls, call)
+        next.calls = (*next.calls, call)
         next.constraint = substate.constraint
         next.narrower = substate.narrower
         next.path = substate.path

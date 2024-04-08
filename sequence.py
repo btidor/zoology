@@ -16,11 +16,10 @@ from smt import (
     Solver,
     Uint160,
     Uint256,
-    evaluate,
     get_constants,
     substitute,
 )
-from state import Call, DelegateCall, GasHogCall, State
+from state import State
 
 
 @dataclass
@@ -174,7 +173,9 @@ class Sequence:
                 yield "\tvia proxy"
             yield "\n"
             assert state.mystery_proxy is not None
-            yield from describe_calls(solver, state.calls, state.mystery_proxy)
+
+            for call in state.calls:
+                yield from call.describe(solver, state.mystery_proxy)
 
 
 class Solution:
@@ -224,13 +225,12 @@ class Solution:
         if isinstance(self.validate, State):
             assert self.validate.mystery_proxy is not None
             post = False
-            for line in describe_calls(
-                solver, self.validate.calls, self.validate.mystery_proxy
-            ):
-                if not post:
-                    yield "validateInstance(...)\n"
-                    post = True
-                yield line
+            for call in self.validate.calls:
+                for line in call.describe(solver, self.validate.mystery_proxy):
+                    if not post:
+                        yield "validateInstance(...)\n"
+                        post = True
+                    yield line
 
 
 class Validator:
@@ -274,44 +274,3 @@ class Validator:
                 raise ValueError(f"unknown variable: {name}")
 
         return substitute(self.constraint, substitutions)
-
-
-def describe_calls(
-    solver: Solver, calls: tuple[Call, ...], proxy: Uint160
-) -> Iterable[str]:
-    """Yield a human-readable description of relevant contract calls."""
-    for call in calls:
-        if (call.transaction.address == proxy).reveal() is not True:
-            continue
-
-        match call:
-            case DelegateCall():
-                kind = "DELEGATECALL"
-            case GasHogCall() | Call():
-                kind = "CALL"
-
-        yield f" -> Proxy {kind} "
-        yield from call.transaction.calldata.describe(solver)
-        value = solver.evaluate(call.transaction.callvalue)
-        if value:
-            yield f"\tvalue: {value}"
-        yield "\n"
-
-        match call:
-            case GasHogCall():
-                yield "    CONSUME ALL GAS\n"
-            case DelegateCall():
-                ok = evaluate(solver, call.ok)
-                yield f"    {'RETURN' if ok else 'REVERT'} "
-                yield from call.returndata.describe(solver, prefix=0)
-                yield "\n"
-                if ok:
-                    prev = evaluate(solver, call.previous_storage)
-                    for k, v in evaluate(solver, call.next_storage).items():
-                        if prev[k] != v:
-                            yield f"      {hex(k)} -> {hex(v)}\n"
-            case Call():
-                ok = evaluate(solver, call.ok)
-                yield f"    {'RETURN' if ok else 'REVERT'} "
-                yield from call.returndata.describe(solver, prefix=0)
-                yield "\n"

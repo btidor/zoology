@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import OrderedDict, defaultdict
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any, Callable, Iterable
 
 from bytes import BYTES, Bytes, Memory
 from disassembler import Program
@@ -17,6 +17,7 @@ from smt import (
     Uint8,
     Uint160,
     Uint256,
+    evaluate,
     overflow_safe,
     underflow_safe,
 )
@@ -203,13 +204,9 @@ class State:
                 solver.add(constraint)
                 break
 
-        # Minimize subcontext returndata
+        # Minimize subcontext returndata/calldata
         for call in self.calls:
-            for i in range(257):
-                constraint = call.returndata.length == Uint256(i)
-                if solver.check(constraint):
-                    solver.add(constraint)
-                    break
+            call.narrow(solver)
 
         for i in range(9):
             constraint = self.mystery_size == Uint256(0x123 >> i)
@@ -291,6 +288,36 @@ class Call:
     transaction: Transaction
     ok: Constraint
     returndata: Bytes
+    subcalls: tuple[Call, ...]
+
+    def narrow(self, solver: Solver) -> None:
+        """Apply soft constraints to a given solver instance."""
+        for i in range(257):
+            constraint = self.returndata.length == Uint256(i)
+            if solver.check(constraint):
+                solver.add(constraint)
+                break
+        for call in self.subcalls:
+            call.narrow(solver)
+
+    def describe(self, solver: Solver, select: Uint160) -> Iterable[str]:
+        """Yield a human-readable description of the Call."""
+        if (self.transaction.address == select).reveal() is True:
+            yield " -> Proxy CALL "
+            yield from self.transaction.calldata.describe(solver)
+            value = solver.evaluate(self.transaction.callvalue)
+            if value:
+                yield f"\tvalue: {value}"
+            yield "\n"
+
+        for call in self.subcalls:
+            yield from call.describe(solver, select)
+
+        if (self.transaction.address == select).reveal() is True:
+            ok = evaluate(solver, self.ok)
+            yield f"    {'RETURN' if ok else 'REVERT'} "
+            yield from self.returndata.describe(solver, prefix=0)
+            yield "\n"
 
 
 @dataclass(frozen=True)
@@ -300,12 +327,43 @@ class DelegateCall(Call):
     previous_storage: Array[Uint256, Uint256]
     next_storage: Array[Uint256, Uint256]
 
+    def describe(self, solver: Solver, select: Uint160) -> Iterable[str]:
+        """Yield a human-readable description of the Call."""
+        yield " -> Proxy DELEGATECALL "
+        yield from self.transaction.calldata.describe(solver)
+        value = solver.evaluate(self.transaction.callvalue)
+        if value:
+            yield f"\tvalue: {value}"
+        yield "\n"
+        assert not self.subcalls
+
+        ok = evaluate(solver, self.ok)
+        yield f"    {'RETURN' if ok else 'REVERT'} "
+        yield from self.returndata.describe(solver, prefix=0)
+        yield "\n"
+        if ok:
+            prev = evaluate(solver, self.previous_storage)
+            for k, v in evaluate(solver, self.next_storage).items():
+                if prev[k] != v:
+                    yield f"      {hex(k)} -> {hex(v)}\n"
+
 
 @dataclass(frozen=True)
 class GasHogCall(Call):
     """Represents a CALL to a proxy that consumes all available gas."""
 
     gas: Uint256
+
+    def describe(self, solver: Solver, select: Uint160) -> Iterable[str]:
+        """Yield a human-readable description of the Call."""
+        yield " -> Proxy CALL "
+        yield from self.transaction.calldata.describe(solver)
+        value = solver.evaluate(self.transaction.callvalue)
+        if value:
+            yield f"\tvalue: {value}"
+        yield "\n"
+        assert not self.subcalls
+        yield "    CONSUME ALL GAS\n"
 
 
 class ControlFlow:
