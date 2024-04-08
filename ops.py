@@ -835,13 +835,11 @@ def _call_common(
             state = copy.deepcopy(s)
             state.path |= 1
             state.constraint &= cond
-            state.transfer(transaction.caller, transaction.address, value)
-            call = Call(
-                transaction,
-                Constraint(f"RETURNOK{suffix}"),
-                Bytes.symbolic(f"RETURNDATA{suffix}"),
-                (),
+            ok = Constraint(f"RETURNOK{suffix}")
+            state.transfer(
+                transaction.caller, transaction.address, ok.ite(value, Uint256(0))
             )
+            call = Call(transaction, ok, Bytes.symbolic(f"RETURNDATA{suffix}"), ())
             _apply_call(state, call, retSize, retOffset)
             substates.append(state)
 
@@ -897,8 +895,8 @@ def _descend_substate(
         block=state.block,
         transaction=transaction,
         sha3=state.sha3,
-        contracts=state.contracts,
-        balances=state.balances,
+        contracts=copy.deepcopy(state.contracts),
+        balances=copy.deepcopy(state.balances),
         program_override=program_override,
         mystery_proxy=state.mystery_proxy,
         mystery_size=state.mystery_size,
@@ -950,6 +948,10 @@ def _descend_substate(
         else:
             next.changed = substate.changed
         assert isinstance(substate.pc, Termination)
+        if not substate.pc.success:
+            next.contracts = state.contracts
+            next.balances = state.balances
+            next.changed = state.changed
         match callback:
             case (retOffset, retSize):
                 next.memory.graft(call.returndata.slice(Uint256(0), retSize), retOffset)
