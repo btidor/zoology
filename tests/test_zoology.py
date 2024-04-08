@@ -117,9 +117,19 @@ def test_king() -> None:
     check_level(9, fixture)
 
 
-# def test_reentrance() -> None:
-#     # reentrance not supported
-#     check_level(10, [])
+def test_reentrance() -> None:
+    fixtures = [
+        "00362a95 000000000000000000000000c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0\tvalue: 1125899906842623",
+        "2e1a7d4d 0000000000000000000000000000000000000000000000000003c00000000000\tvia proxy",
+        " -> Proxy CALL -       \tvalue: 1055531162664960",
+        "     -> To 0x147f43c9dbfb7e782775060587fd9e194cbed03c:",
+        "        CALL 2e1a7d4d 0000000000000000000000000000000000000000000000000003cd7ea4c67fff",
+        "         -> Proxy CALL -       \tvalue: 1070368744177663",
+        "            RETURN 00",
+        "        RETURN -       ",
+        "    RETURN 00",
+    ]
+    check_level(10, fixtures)
 
 
 def test_elevator() -> None:

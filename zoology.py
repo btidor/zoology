@@ -223,15 +223,15 @@ def search(
                 carryover, block = sequence.subsequent()
                 start = State(
                     suffix=suffix,
-                    # ASSUMPTION: each call to the level takes place in a different
-                    # block, and the blocks are consecutive.
+                    # ASSUMPTION: each call to the level takes place in a
+                    # different block, and the blocks are consecutive.
                     block=block,
                     transaction=Transaction(
                         address=Uint160(address),
                         origin=PLAYER,
-                        # ASSUMPTION: all transactions are originated by the player,
-                        # but may (or may not!) be bounced through a "proxy"
-                        # contract.
+                        # ASSUMPTION: all transactions are originated by the
+                        # player, but may (or may not!) be bounced through a
+                        # "proxy" contract.
                         caller=Constraint(f"CALLERAB{suffix}").ite(PLAYER, PROXY),
                         # ASSUMPTION: each transaction sends less than ~18 ETH.
                         callvalue=Uint64(f"CALLVALUE{suffix}").into(Uint256),

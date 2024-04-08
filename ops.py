@@ -14,6 +14,7 @@ from smt import (
     Int,
     Uint,
     Uint8,
+    Uint64,
     Uint160,
     Uint256,
     bvlshr_harder,
@@ -822,6 +823,7 @@ def _call_common(
         cond = address == s.mystery_proxy
         eoa &= ~cond
         if cond.reveal() is not False:
+            # Case I: proxy returns or reverts without side effects.
             suffix = f"{s.suffix}-{len(s.calls)}"
             transaction = Transaction(
                 origin=s.transaction.origin,
@@ -843,6 +845,8 @@ def _call_common(
             _apply_call(state, call, retSize, retOffset)
             substates.append(state)
 
+            # Case II: proxy consumes all available gas, potentially causing the
+            # calling contract to revert.
             s.path <<= 1
             state = copy.deepcopy(s)
             state.path |= 1
@@ -853,7 +857,57 @@ def _call_common(
             _apply_call(state, call, retSize, retOffset)
             substates.append(state)
 
-    # TODO: proxy can call other contracts
+            # Case III: proxy makes a reentrant call back into the calling
+            # contract, then returns or reverts with a simple value.
+            #
+            # ASSUMPTION: to prevent infinite loops, we only allow one level of
+            # reentrant self-call (and only to the immediate caller).
+            #
+            # We ignore the possibility of reentrancy during a STATICCALL.
+            # Because no writes can occur and no value can be transferred, the
+            # proxy can effectively simulate the result of any reentrant call.
+            #
+            if not static and "R" not in s.suffix and not s.skip_self_calls:
+                transaction = Transaction(
+                    origin=s.transaction.origin,
+                    caller=s.transaction.address,
+                    address=s.mystery_proxy,
+                    callvalue=value,
+                    calldata=calldata,
+                    gasprice=s.transaction.gasprice,
+                )
+                s.path <<= 1
+                state = copy.deepcopy(s)
+                state.path |= 1
+                state.constraint &= cond
+                state.transfer(transaction.caller, transaction.address, value)
+                state.suffix += "R"
+                original, state.calls = state.calls, ()
+                reentry = Transaction(
+                    origin=s.transaction.origin,
+                    caller=s.mystery_proxy,
+                    address=s.transaction.address,
+                    callvalue=Uint64(f"REENTRYVALUE{state.suffix}").into(Uint256),
+                    calldata=Bytes.symbolic(f"REENTRYDATA{state.suffix}"),
+                    gasprice=state.transaction.gasprice,
+                )
+
+                def callback(state: State, substate: State) -> State:
+                    call = Call(
+                        transaction,
+                        Constraint(True),
+                        Bytes.symbolic(f"RETURNDATA{suffix}"),
+                        state.calls,
+                    )
+                    state.calls = original
+                    _apply_call(state, call, retSize, retOffset)
+                    return state
+
+                substates.append(
+                    _descend_substate(
+                        state, reentry, None, callback, gas, reentry.callvalue, static
+                    )
+                )
 
     if eoa.reveal() is not False:
         s.constraint &= eoa

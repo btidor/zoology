@@ -297,13 +297,29 @@ class Call:
             if solver.check(constraint):
                 solver.add(constraint)
                 break
+        if self.transaction.calldata.length.reveal() is None:
+            for i in range(257):
+                constraint = self.transaction.calldata.length == Uint256(i)
+                if solver.check(constraint):
+                    solver.add(constraint)
+                    break
         for call in self.subcalls:
             call.narrow(solver)
 
-    def describe(self, solver: Solver, select: Uint160) -> Iterable[str]:
+    def describe(
+        self, solver: Solver, select_: Uint160, prints: bool = False
+    ) -> Iterable[str]:
         """Yield a human-readable description of the Call."""
-        if (self.transaction.address == select).reveal() is True:
-            yield " -> Proxy CALL "
+        address = solver.evaluate(self.transaction.address)
+        assert (select := select_.reveal()) is not None
+        prints = prints or address == select
+
+        if prints:
+            if address == select:
+                yield " -> Proxy CALL "
+            else:
+                yield f" -> To 0x{address.to_bytes(20).hex()}:\n"
+                yield "    CALL "
             yield from self.transaction.calldata.describe(solver)
             value = solver.evaluate(self.transaction.callvalue)
             if value:
@@ -311,9 +327,21 @@ class Call:
             yield "\n"
 
         for call in self.subcalls:
-            yield from call.describe(solver, select)
+            first = True
+            for line in call.describe(solver, select_, prints):
+                if prints:
+                    if first:
+                        yield "    "
+                        first = False
+                    line = line.replace("\n", "\n    ")
+                    if line.endswith("\n    "):
+                        line = line[:-4]
+                        first = True
+                    yield line
+                else:
+                    yield line
 
-        if (self.transaction.address == select).reveal() is True:
+        if prints:
             ok = evaluate(solver, self.ok)
             yield f"    {'RETURN' if ok else 'REVERT'} "
             yield from self.returndata.describe(solver, prefix=0)
@@ -327,7 +355,9 @@ class DelegateCall(Call):
     previous_storage: Array[Uint256, Uint256]
     next_storage: Array[Uint256, Uint256]
 
-    def describe(self, solver: Solver, select: Uint160) -> Iterable[str]:
+    def describe(
+        self, solver: Solver, select_: Uint160, prints: bool = False
+    ) -> Iterable[str]:
         """Yield a human-readable description of the Call."""
         yield " -> Proxy DELEGATECALL "
         yield from self.transaction.calldata.describe(solver)
@@ -354,7 +384,9 @@ class GasHogCall(Call):
 
     gas: Uint256
 
-    def describe(self, solver: Solver, select: Uint160) -> Iterable[str]:
+    def describe(
+        self, solver: Solver, select_: Uint160, prints: bool = False
+    ) -> Iterable[str]:
         """Yield a human-readable description of the Call."""
         yield " -> Proxy CALL "
         yield from self.transaction.calldata.describe(solver)
