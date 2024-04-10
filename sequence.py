@@ -69,8 +69,6 @@ class Sequence:
     next: Next
     validate_transaction: Transaction
 
-    starting_contracts: set[int]
-
     def __init__(
         self,
         factory: Uint160,
@@ -79,7 +77,6 @@ class Sequence:
         proxy: Uint160,
         start: State,
         validate_transaction: Transaction,
-        starting_contracts: set[int],
     ) -> None:
         """Create a new Sequence."""
         self.factory = factory
@@ -100,8 +97,6 @@ class Sequence:
 
         self.next = Next.from_state(start)
         self.validate_transaction = validate_transaction
-
-        self.starting_contracts = starting_contracts
 
     def __deepcopy__(self, memo: Any) -> Sequence:
         result = copy.copy(self)

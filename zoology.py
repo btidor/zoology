@@ -77,7 +77,6 @@ def starting_sequence(
         mystery_proxy=PROXY,
         mystery_size=Uint256("MYSTERYSIZE"),
     )
-    starting_contracts = set(contracts.keys())
 
     # ASSUMPTION: the only account with a nonzero balance belongs to the player.
     start.balances[PLAYER] = Uint256(10**18)
@@ -107,7 +106,6 @@ def starting_sequence(
         PROXY,
         end,
         validate_transaction(factory, instance),
-        starting_contracts,
     )
 
 
@@ -219,9 +217,9 @@ def search(
         subsequent = list[Sequence]()
         for sequence in sequences:
             for address in reversed(list(sequence.peek_contracts())):
-                if address in sequence.starting_contracts:
-                    continue  # skip factory contracts
                 carryover, block = sequence.subsequent()
+                if carryover.contracts[address].invisible:
+                    continue  # skip factory contracts
                 start = State(
                     suffix=suffix,
                     # ASSUMPTION: each call to the level takes place in a
