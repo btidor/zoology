@@ -88,7 +88,7 @@ def starting_sequence(
 
 def search(
     beginning: Sequence, validator: Validator, depth: int, verbose: int = 0
-) -> tuple[Solution, Solver] | None:
+) -> Solution | None:
     """Symbolically execute the given level until a solution is found."""
     sequences = [beginning]
     z = ""
@@ -177,16 +177,12 @@ def search(
                             vprint("  ! constraining error\n")
                             continue
 
-                    solution = validator.check(candidate)
-                    solver = Solver()
-                    solution.constrain(solver, check=False)
-                    if solver.check():
-                        solution.narrow(solver)
+                    if solution := validator.check(candidate):
                         if verbose:
                             vprint("  > found solution!\n")
                         else:
                             vprint("#" + z)
-                        return solution, solver
+                        return solution
 
                     if not verbose:
                         try:
@@ -222,24 +218,18 @@ def handle_level(factory: Uint160, args: argparse.Namespace) -> None:
     vprint("V")
     validator = Validator(beginning, prints=(args.verbose > 1))
     vprint("a" if validator.constraint is None else "A")
-    solution = validator.check(beginning)
-    vprint("Z")
-    solver = Solver()
-    solution.constrain(solver, check=False)
-    assert not solver.check()
+    assert not validator.check(beginning)
     vprint("*")
 
-    result = search(beginning, validator, args.depth, verbose=args.verbose)
-    if result is None:
+    solution = search(beginning, validator, args.depth, verbose=args.verbose)
+    if not solution:
         vprint("\tno solution\n")
         return
-
-    solution, solver = result
     newline = True
     indent = 0
     vprint(f"\nResult    | {int(time.time())-TSTART:06}\n")
     indent = 2
-    for part in solution.describe(solver):
+    for part in solution.describe():
         if newline:
             vprint(" " * indent)
             newline = False

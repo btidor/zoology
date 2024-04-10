@@ -1,6 +1,5 @@
 #!/usr/bin/env pytest
 
-from zbitvector import Solver
 
 from snapshot import LEVEL_FACTORIES, snapshot_contracts
 from solution import Validator
@@ -13,16 +12,11 @@ def check_level(i: int, fixture: list[str]) -> None:
 
     beginning = starting_sequence(contracts, factory)
     validator = Validator(beginning)
-    solution = validator.check(beginning)
-    solver = Solver()
-    solution.constrain(solver, check=False)
-    assert not solver.check(), "validation passed initially"
+    assert not validator.check(beginning), "validation passed initially"
 
-    result = search(beginning, validator, depth=10)
-    assert result is not None, "search failed"
-
-    solution, solver = result
-    assert "".join(solution.describe(solver)).strip() == "\n".join(fixture)
+    solution = search(beginning, validator, depth=10)
+    assert solution, "search failed"
+    assert "".join(solution.describe()).strip() == "\n".join(fixture)
 
 
 def test_hello() -> None:

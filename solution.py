@@ -13,7 +13,6 @@ from sha3 import SHA3
 from smt import (
     Array,
     BitwuzlaTerm,
-    ConstrainingError,
     Constraint,
     Expression,
     Solver,
@@ -148,11 +147,17 @@ class Validator:
 
         return substitute(self.constraint, substitutions)
 
-    def check(self, sequence: Sequence) -> Solution:
+    def check(self, sequence: Sequence) -> Solution | None:
         """Simulate the execution of validateInstance on the given sequence."""
         translated = self._translate(sequence)
         if translated is not None:
-            return Solution(sequence, translated)
+            solver = Solver()
+            sequence.constrain(solver, check=False)
+            solver.add(translated)
+            if solver.check():
+                sequence.narrow(solver)
+                return Solution(sequence, solver, None)
+            return None
 
         carryover, block = sequence.subsequent(validation=True)
         start = State(
@@ -178,61 +183,38 @@ class Validator:
             ).bigvector() != Uint256(0)
             solver.add(ok)
             if solver.check():
-                end.sha3.narrow(solver)
-                return Solution(sequence, end)
-        return Solution(sequence, None)
+                candidate.narrow(solver)
+                return Solution(sequence, solver, end)
+        return None
 
 
 class Solution:
     """Represents a full solution to an Ethernaut level."""
 
     sequence: Sequence
-    validate: State | Constraint | None
-    sha3: SHA3
+    solver: Solver
+    validate: State | None
 
-    def __init__(self, sequence: Sequence, validate: State | Constraint | None) -> None:
+    def __init__(
+        self, sequence: Sequence, solver: Solver, validate: State | None
+    ) -> None:
         """Create a new Solution."""
         self.sequence = sequence
+        self.solver = solver
         self.validate = validate
-        match validate:
-            case State():
-                self.sha3 = validate.sha3
-            case Constraint() | None:
-                self.sha3 = sequence.next.sha3
 
-    def constrain(self, solver: Solver, check: bool = True) -> None:
-        """Apply hard constraints to the given solver instance."""
-        match self.validate:
-            case State():
-                solver.add(self.validate.constraint)
-            case Constraint():
-                self.sequence.constrain(solver, check=False)
-                solver.add(self.validate)
-            case None:
-                solver.add(Constraint(False))
-
-        if check and not solver.check():
-            raise ConstrainingError
-
-    def narrow(self, solver: Solver) -> None:
-        """Apply soft and deferred constraints to a given solver instance."""
-        for state in self.sequence.states:
-            state.narrow(solver)
-        if isinstance(self.validate, State):
-            self.validate.narrow(solver)
-        self.sha3.narrow(solver)
-        assert solver.check()
-
-    def describe(self, solver: Solver) -> Iterable[str]:
+    def describe(self) -> Iterable[str]:
         """Yield a human-readable description of the Solution."""
-        yield from self.sequence.describe(solver)
+        yield from self.sequence.describe(self.solver)
 
-        if isinstance(self.validate, State):
-            assert self.validate.mystery_proxy is not None
-            post = False
-            for call in self.validate.calls:
-                for line in call.describe(solver, self.validate.mystery_proxy):
-                    if not post:
-                        yield "validateInstance(...)\n"
-                        post = True
-                    yield line
+        if self.validate is None:
+            return
+        assert self.validate.mystery_proxy is not None
+
+        post = False
+        for call in self.validate.calls:
+            for line in call.describe(self.solver, self.validate.mystery_proxy):
+                if not post:
+                    yield "validateInstance(...)\n"
+                    post = True
+                yield line
