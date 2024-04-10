@@ -6,52 +6,17 @@ import copy
 from dataclasses import dataclass
 from typing import Any, Iterable
 
-from environment import Block, Contract, Transaction
+from environment import Block, Contract
 from sha3 import SHA3
 from smt import (
     Array,
     ConstrainingError,
     Constraint,
-    Expression,
     Solver,
     Uint160,
     Uint256,
-    get_constants,
-    substitute,
 )
 from state import State
-
-
-@dataclass
-class Next:
-    """Represents the information carried from one transaction to the next."""
-
-    constraint: Constraint
-    contracts: dict[int, Contract]
-    balances: Array[Uint160, Uint256]
-    sha3: SHA3
-    mystery_size: Uint256 | None
-
-    @classmethod
-    def from_state(cls, state: State) -> Next:
-        """Extract carryover information from a State."""
-        return Next(
-            state.constraint,
-            state.contracts,
-            state.balances,
-            state.sha3,
-            state.mystery_size,
-        )
-
-    def clone_and_reset(self) -> Next:
-        """Clone this Next and reset array access tracking."""
-        return Next(
-            self.constraint,
-            {k: v.clone_and_reset() for (k, v) in self.contracts.items()},
-            self.balances.clone_and_reset(),
-            copy.deepcopy(self.sha3),
-            self.mystery_size,
-        )
 
 
 class Sequence:
@@ -67,7 +32,6 @@ class Sequence:
     states: list[State]  # synthetic transactions
 
     next: Next
-    validate_transaction: Transaction
 
     def __init__(
         self,
@@ -76,7 +40,6 @@ class Sequence:
         player: Uint160,
         proxy: Uint160,
         start: State,
-        validate_transaction: Transaction,
     ) -> None:
         """Create a new Sequence."""
         self.factory = factory
@@ -96,7 +59,6 @@ class Sequence:
         self.states = list[State]()
 
         self.next = Next.from_state(start)
-        self.validate_transaction = validate_transaction
 
     def __deepcopy__(self, memo: Any) -> Sequence:
         result = copy.copy(self)
@@ -173,99 +135,33 @@ class Sequence:
                 yield from call.describe(solver, state.mystery_proxy)
 
 
-class Solution:
-    """Represents a full solution to an Ethernaut level."""
+@dataclass
+class Next:
+    """Represents the information carried from one transaction to the next."""
 
-    sequence: Sequence
-    validate: State | Constraint | None
+    constraint: Constraint
+    contracts: dict[int, Contract]
+    balances: Array[Uint160, Uint256]
     sha3: SHA3
+    mystery_size: Uint256 | None
 
-    def __init__(self, sequence: Sequence, validate: State | Constraint | None) -> None:
-        """Create a new Solution."""
-        self.sequence = sequence
-        self.validate = validate
-        match validate:
-            case State():
-                self.sha3 = validate.sha3
-            case Constraint() | None:
-                self.sha3 = sequence.next.sha3
+    @classmethod
+    def from_state(cls, state: State) -> Next:
+        """Extract carryover information from a State."""
+        return Next(
+            state.constraint,
+            state.contracts,
+            state.balances,
+            state.sha3,
+            state.mystery_size,
+        )
 
-    def constrain(self, solver: Solver, check: bool = True) -> None:
-        """Apply hard constraints to the given solver instance."""
-        match self.validate:
-            case State():
-                solver.add(self.validate.constraint)
-            case Constraint():
-                self.sequence.constrain(solver, check=False)
-                solver.add(self.validate)
-            case None:
-                solver.add(Constraint(False))
-
-        if check and not solver.check():
-            raise ConstrainingError
-
-    def narrow(self, solver: Solver) -> None:
-        """Apply soft and deferred constraints to a given solver instance."""
-        for state in self.sequence.states:
-            state.narrow(solver)
-        if isinstance(self.validate, State):
-            self.validate.narrow(solver)
-        self.sha3.narrow(solver)
-        assert solver.check()
-
-    def describe(self, solver: Solver) -> Iterable[str]:
-        """Yield a human-readable description of the Solution."""
-        yield from self.sequence.describe(solver)
-
-        if isinstance(self.validate, State):
-            assert self.validate.mystery_proxy is not None
-            post = False
-            for call in self.validate.calls:
-                for line in call.describe(solver, self.validate.mystery_proxy):
-                    if not post:
-                        yield "validateInstance(...)\n"
-                        post = True
-                    yield line
-
-
-class Validator:
-    """
-    Represents the result of running validateInstance.
-
-    A Validator captures the logic of validateInstance in a succinct symbolic
-    constraint. It's much faster to check a solution with a Validator than it is
-    to simulate a full call to validateInstance.
-    """
-
-    def __init__(self, constraint: Constraint) -> None:
-        """Create a new Validator."""
-        self.constraint = constraint
-        self._constants = get_constants(constraint)
-        for name in self._constants.keys():
-            if name.startswith("STORAGE@"):
-                continue
-            elif name == "BALANCE":
-                continue
-            elif name == "CODESIZE":
-                continue
-            elif name == "NUMBER":
-                continue
-            raise ValueError(f"validator depends on unsupported variable: {name}")
-
-    def translate(self, sequence: Sequence) -> Constraint:
-        """Translate the validation constraint onto the given Sequence."""
-        substitutions = dict[Any, Expression]()
-        for name, term in self._constants.items():
-            if name.startswith("STORAGE@"):
-                addr = int(name[8:], 16)
-                substitutions[term] = sequence.next.contracts[addr].storage
-            elif name == "BALANCE":
-                substitutions[term] = sequence.next.balances
-            elif name == "CODESIZE":
-                pass
-            elif name == "NUMBER":
-                substitutions[term] = sequence.peek_next_block().number
-            else:
-                raise ValueError(f"unknown variable: {name}")
-
-        return substitute(self.constraint, substitutions)
+    def clone_and_reset(self) -> Next:
+        """Clone this Next and reset array access tracking."""
+        return Next(
+            self.constraint,
+            {k: v.clone_and_reset() for (k, v) in self.contracts.items()},
+            self.balances.clone_and_reset(),
+            copy.deepcopy(self.sha3),
+            self.mystery_size,
+        )

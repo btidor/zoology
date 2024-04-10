@@ -7,16 +7,13 @@ import argparse
 import copy
 import sys
 import time
-from functools import reduce
 from itertools import chain
 
 from bytes import Bytes
 from disassembler import abiencode
-from environment import ConcreteContract, Contract, Transaction
-from sequence import Sequence, Solution, Validator
-from sha3 import SHA3
+from environment import Contract, Transaction
+from sequence import Sequence
 from smt import (
-    Array,
     ConstrainingError,
     Constraint,
     Solver,
@@ -24,13 +21,11 @@ from smt import (
     Uint160,
     Uint256,
 )
-from snapshot import LEVEL_FACTORIES, snapshot_contracts
+from snapshot import LEVEL_FACTORIES, PLAYER, PROXY, snapshot_contracts
+from solution import Solution, Validator
 from state import State, Termination
 from universal import universal_transaction
 from vm import printable_execution
-
-PLAYER = Uint160(0xCACACACACACACACACACACACACACACACACACACACA)
-PROXY = Uint160(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0)
 
 TSTART = int(time.time())
 
@@ -45,23 +40,6 @@ def create_transaction(factory: Uint160) -> Transaction:
         address=factory,
         calldata=Bytes(calldata),
         callvalue=Uint256(10**15),
-    )
-
-
-def validate_transaction(factory: Uint160, instance: Uint160) -> Transaction:
-    """Return a Transaction representing a call to validateInstance."""
-    assert (arg0 := instance.reveal()) is not None
-    assert (arg1 := PLAYER.reveal()) is not None
-    calldata = (
-        abiencode("validateInstance(address,address)")
-        + arg0.to_bytes(32)
-        + arg1.to_bytes(32)
-    )
-    return Transaction(
-        origin=PLAYER,
-        caller=PLAYER,
-        address=factory,
-        calldata=Bytes(calldata),
     )
 
 
@@ -105,105 +83,11 @@ def starting_sequence(
         PLAYER,
         PROXY,
         end,
-        validate_transaction(factory, instance),
     )
-
-
-def validate_universal(sequence: Sequence, prints: bool = False) -> Validator | None:
-    """Symbolically interpret validateInstance as a function, if possible."""
-    carryover, block = sequence.subsequent(validation=True)
-    start = State(
-        suffix="-V",
-        block=block,
-        transaction=sequence.validate_transaction,
-        sha3=SHA3(),  # validator optimization requires this SHA3 go unused
-        contracts={},
-        balances=Array[Uint160, Uint256]("BALANCE"),
-        constraint=carryover.constraint,
-        mystery_proxy=PROXY,
-        mystery_size=carryover.mystery_size,
-        gas_count=0,
-        # ASSUMPTION: when executing validateInstance(...), we only call into
-        # contracts defined at the outset, and no contract calls itself.
-        skip_self_calls=True,
-    )
-
-    for reference in carryover.contracts.values():
-        assert (a := reference.address.reveal()) is not None
-        assert isinstance(reference, ConcreteContract)
-        start = start.with_contract(
-            ConcreteContract(
-                address=reference.address,
-                program=reference.program,
-                storage=Array[Uint256, Uint256](f"STORAGE@{a.to_bytes(20).hex()}"),
-                nonce=reference.nonce,
-            ),
-            True,
-        )
-
-    predicates = list[Constraint]()
-    for end in universal_transaction(start, check=False, prints=prints):
-        assert isinstance(end.pc, Termination)
-
-        # This logic needs to match State.constrain(). We don't need to worry
-        # about narrowing because SHA3 is not invoked (see check below).
-        b: Uint256 = end.pc.returndata.slice(Uint256(0), Uint256(32)).bigvector()
-        predicates.append(end.constraint & (b != Uint256(0)))
-
-        if len(end.contracts) > len(carryover.contracts):
-            # We can't handle validators that create contracts. That would be
-            # pretty strange, though.
-            raise NotImplementedError
-
-        if end.sha3.free or end.sha3.symbolic:
-            # We can't currently handle feeding the global SHA3 instance into
-            # the validator. Fall back to running validateInstance with concrete
-            # inputs at every step.
-            return None
-
-    assert predicates
-    try:
-        # Eligible for validator optimization!
-        return Validator(reduce(lambda p, q: p | q, predicates, Constraint(False)))
-    except ValueError:
-        # Validator expression uses an unsupported variable; fall back.
-        return None
-
-
-def validate_concrete(sequence: Sequence, validator: Validator | None) -> Solution:
-    """Simulate the execution of validateInstance on the given sequence."""
-    if validator is not None:
-        return Solution(sequence, validator.translate(sequence))
-
-    carryover, block = sequence.subsequent(validation=True)
-    start = State(
-        suffix="-V",
-        block=block,
-        transaction=sequence.validate_transaction,
-        sha3=carryover.sha3,
-        contracts=carryover.contracts,
-        balances=carryover.balances,
-        constraint=carryover.constraint,
-        mystery_proxy=PROXY,
-        mystery_size=carryover.mystery_size,
-        gas_count=0,
-    )
-
-    for end in universal_transaction(start):
-        assert isinstance(end.pc, Termination)
-        solver = Solver()
-        candidate = sequence.extend(end)
-        candidate.constrain(solver, check=False)
-        ok = end.pc.returndata.slice(Uint256(0), Uint256(32)).bigvector() != Uint256(0)
-        solver.add(ok)
-        if solver.check():
-            end.sha3.narrow(solver)
-            return Solution(sequence, end)
-    return Solution(sequence, None)
 
 
 def search(
-    beginning: Sequence, validator: Validator | None, depth: int, verbose: int = 0
+    beginning: Sequence, validator: Validator, depth: int, verbose: int = 0
 ) -> tuple[Solution, Solver] | None:
     """Symbolically execute the given level until a solution is found."""
     sequences = [beginning]
@@ -293,7 +177,7 @@ def search(
                             vprint("  ! constraining error\n")
                             continue
 
-                    solution = validate_concrete(candidate, validator)
+                    solution = validator.check(candidate)
                     solver = Solver()
                     solution.constrain(solver, check=False)
                     if solver.check():
@@ -336,9 +220,9 @@ def handle_level(factory: Uint160, args: argparse.Namespace) -> None:
     vprint("C")
     beginning = starting_sequence(contracts, factory, prints=(args.verbose > 1))
     vprint("V")
-    validator = validate_universal(beginning, prints=(args.verbose > 1))
-    vprint("a" if validator is None else "A")
-    solution = validate_concrete(beginning, validator)
+    validator = Validator(beginning, prints=(args.verbose > 1))
+    vprint("a" if validator.constraint is None else "A")
+    solution = validator.check(beginning)
     vprint("Z")
     solver = Solver()
     solution.constrain(solver, check=False)

@@ -3,12 +3,8 @@
 from zbitvector import Solver
 
 from snapshot import LEVEL_FACTORIES, snapshot_contracts
-from zoology import (
-    search,
-    starting_sequence,
-    validate_concrete,
-    validate_universal,
-)
+from solution import Validator
+from zoology import search, starting_sequence
 
 
 def check_level(i: int, fixture: list[str]) -> None:
@@ -16,8 +12,8 @@ def check_level(i: int, fixture: list[str]) -> None:
     contracts = snapshot_contracts(factory)
 
     beginning = starting_sequence(contracts, factory)
-    validator = validate_universal(beginning)
-    solution = validate_concrete(beginning, validator)
+    validator = Validator(beginning)
+    solution = validator.check(beginning)
     solver = Solver()
     solution.constrain(solver, check=False)
     assert not solver.check(), "validation passed initially"
