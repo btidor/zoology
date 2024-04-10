@@ -83,8 +83,6 @@ def symbolic_start(program: Contract | Program, sha3: SHA3, suffix: str) -> Stat
         )
     transaction = Transaction(
         address=contract.address,
-        # TODO: properly constrain ORIGIN to be an EOA and CALLER to either be
-        # equal to ORIGIN or else be a non-EOA.
         origin=Uint160(f"ORIGIN{suffix}"),
         caller=Uint160(f"CALLER{suffix}"),
         callvalue=Uint256(f"CALLVALUE{suffix}"),

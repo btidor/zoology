@@ -32,6 +32,8 @@ from vm import printable_execution
 PLAYER = Uint160(0xCACACACACACACACACACACACACACACACACACACACA)
 PROXY = Uint160(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0)
 
+TSTART = int(time.time())
+
 
 def create_transaction(factory: Uint160) -> Transaction:
     """Return a Transaction representing a call to createInstance."""
@@ -88,7 +90,7 @@ def starting_sequence(
         while True:
             line = next(generator)
             if prints:
-                print(line)
+                vprint(line + "\n")
     except StopIteration as e:
         end = e.value
         assert isinstance(end, State)
@@ -210,10 +212,9 @@ def search(
     z = ""
     for i in range(depth):
         suffix = f"@{i+1}"
-        if verbose:
-            if z != "\n":
-                print()
-            print(f"Trans {i+1:03} | {int(time.time())-startux:06}")
+        if z != "\n":
+            vprint("\n")
+        vprint(f"Trans {i+1:03} | {int(time.time())-TSTART:06}\n")
         j = 0
         subsequent = list[Sequence]()
         for sequence in sequences:
@@ -253,17 +254,15 @@ def search(
                     initial=True,
                 )
 
-                # TODO: also consider SELFDESTRUCTing to other addresses
                 selfdestruct = copy.deepcopy(start)
-
                 universal = universal_transaction(
-                    start, check=False, prints=(verbose > 2)
+                    start, check=False, prints=(verbose > 1)
                 )
                 for end in chain(universal, (selfdestruct,)):
                     candidate = sequence.extend(end)
-                    if verbose > 1:
-                        print(f"- {candidate.pz()}")
-                    elif verbose:
+                    if verbose:
+                        vprint(f"- {candidate.pz()}\n")
+                    else:
                         vprint(f"{j:03x}")
                     j += 1
                     z = " " if j % 16 else "\n"
@@ -273,13 +272,13 @@ def search(
                     # are represented by a SELFDESTRUCT -- it's more general
                     # than a `receve()` method because it always succeeds.
                     if not end.changed and not isinstance(end.pc, int):
-                        if verbose > 1:
-                            print("  > read-only")
+                        if verbose:
+                            vprint("  > read-only\n")
                         else:
                             vprint("." + z)
                         continue
 
-                    if verbose > 1:
+                    if verbose:
                         try:
                             solver = Solver()
                             candidate.constrain(solver)
@@ -287,14 +286,13 @@ def search(
                             newline = True
                             for part in candidate.describe(solver):
                                 if newline:
-                                    print("  : ", end="")
+                                    vprint("  : ")
                                     newline = False
-                                print(part, end="")
+                                vprint(part)
                                 if part.endswith("\n"):
                                     newline = True
-                                sys.stdout.flush()
                         except ConstrainingError:
-                            print("  ! constraining error")
+                            vprint("  ! constraining error\n")
                             continue
 
                     solution = validate_concrete(candidate, validator)
@@ -302,13 +300,13 @@ def search(
                     solution.constrain(solver, check=False)
                     if solver.check():
                         solution.narrow(solver)
-                        if verbose > 1:
-                            print("  > found solution!")
+                        if verbose:
+                            vprint("  > found solution!\n")
                         else:
                             vprint("#" + z)
                         return solution, solver
 
-                    if not verbose > 1:
+                    if not verbose:
                         try:
                             solver = Solver()
                             candidate.constrain(solver)
@@ -316,8 +314,8 @@ def search(
                             vprint("!" + z)
                             continue
 
-                    if verbose > 1:
-                        print("  > candidate")
+                    if verbose:
+                        vprint("  > candidate\n")
                     else:
                         vprint("*" + z)
                     subsequent.append(candidate)
@@ -329,7 +327,7 @@ def search(
 
 def vprint(part: str) -> None:
     """Print a partial line, if verbose mode is enabled."""
-    if "args" in globals() and args.verbose:
+    if "args" in globals():
         print(part, end="")
         sys.stdout.flush()
 
@@ -338,9 +336,9 @@ def handle_level(factory: Uint160, args: argparse.Namespace) -> None:
     """Solve an Ethernaut level (from the cli)."""
     contracts = snapshot_contracts(factory)
     vprint("C")
-    beginning = starting_sequence(contracts, factory, prints=(args.verbose > 2))
+    beginning = starting_sequence(contracts, factory, prints=(args.verbose > 1))
     vprint("V")
-    validator = validate_universal(beginning, prints=(args.verbose > 2))
+    validator = validate_universal(beginning, prints=(args.verbose > 1))
     vprint("a" if validator is None else "A")
     solution = validate_concrete(beginning, validator)
     vprint("Z")
@@ -351,26 +349,24 @@ def handle_level(factory: Uint160, args: argparse.Namespace) -> None:
 
     result = search(beginning, validator, args.depth, verbose=args.verbose)
     if result is None:
-        print("\tno solution")
+        vprint("\tno solution\n")
         return
 
     solution, solver = result
     newline = True
     indent = 0
-    if args.verbose:
-        print(f"\nResult    | {int(time.time())-startux:06}")
-        indent = 2
+    vprint(f"\nResult    | {int(time.time())-TSTART:06}\n")
+    indent = 2
     for part in solution.describe(solver):
         if newline:
-            print(" " * indent, end="")
+            vprint(" " * indent)
             newline = False
-        print(part, end="")
+        vprint(part)
         if part.endswith("\n"):
             newline = True
 
 
 if __name__ == "__main__":
-    startux = int(time.time())
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "-l", "--level", help="select which level(s) to run", action="append", type=int
@@ -389,12 +385,4 @@ if __name__ == "__main__":
     for i in args.level:
         factory = LEVEL_FACTORIES[i]
         vprint(f"Level {i:03} | L")
-        try:
-            handle_level(factory, args)
-        except Exception as e:
-            suffix = ""
-            if str(e) != "":
-                suffix = f": {e}"
-            print(f"\t{e.__class__.__name__}{suffix}")
-            if args.verbose:
-                raise e
+        handle_level(factory, args)
