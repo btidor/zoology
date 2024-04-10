@@ -30,27 +30,22 @@ from vm import printable_execution
 TSTART = int(time.time())
 
 
-def create_transaction(factory: Uint160) -> Transaction:
-    """Return a Transaction representing a call to createInstance."""
-    assert (arg0 := PLAYER.reveal()) is not None
-    calldata = abiencode("createInstance(address)") + arg0.to_bytes(32)
-    return Transaction(
-        origin=PLAYER,
-        caller=PLAYER,
-        address=factory,
-        calldata=Bytes(calldata),
-        callvalue=Uint256(10**15),
-    )
-
-
 def starting_sequence(
     contracts: dict[int, Contract], factory: Uint160, prints: bool = False
 ) -> Sequence:
     """Call createInstance to set up the level."""
     # ASSUMPTION: the only contracts in existence are the ones related to the
     # level factory. This means precompiled contracts are not available!
+    assert (arg0 := PLAYER.reveal()) is not None
+    calldata = abiencode("createInstance(address)") + arg0.to_bytes(32)
     start = State(
-        transaction=create_transaction(factory),
+        transaction=Transaction(
+            origin=PLAYER,
+            caller=PLAYER,
+            address=factory,
+            calldata=Bytes(calldata),
+            callvalue=Uint256(10**15),
+        ),
         contracts=contracts,
         mystery_proxy=PROXY,
         mystery_size=Uint256("MYSTERYSIZE"),
