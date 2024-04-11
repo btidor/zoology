@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 from functools import reduce
 from typing import Any, Iterable
 
@@ -56,7 +57,7 @@ class Validator:
         )
         self.constraint, self.carryover = None, None
 
-        carryover, block = sequence.subsequent(validation=True)
+        previous, block = sequence.states[-1], sequence.blocks[-1]
         start = State(
             suffix="-V",
             block=block,
@@ -64,9 +65,9 @@ class Validator:
             sha3=SHA3(),  # validator optimization requires this SHA3 go unused
             contracts={},
             balances=Array[Uint160, Uint256]("BALANCE"),
-            constraint=carryover.constraint,
+            constraint=previous.constraint,
             mystery_proxy=PROXY,
-            mystery_size=carryover.mystery_size,
+            mystery_size=previous.mystery_size,
             gas_count=0,
             # ASSUMPTION: when executing validateInstance(...), we only call
             # into contracts defined at the outset, and no contract calls
@@ -74,7 +75,7 @@ class Validator:
             skip_self_calls=True,
         )
 
-        for reference in carryover.contracts.values():
+        for reference in previous.contracts.values():
             assert (a := reference.address.reveal()) is not None
             assert isinstance(reference, ConcreteContract)
             start = start.with_contract(
@@ -97,7 +98,7 @@ class Validator:
             b: Uint256 = end.pc.returndata.slice(Uint256(0), Uint256(32)).bigvector()
             predicates.append(end.constraint & (b != Uint256(0)))
 
-            if len(end.contracts) > len(carryover.contracts):
+            if len(end.contracts) > len(previous.contracts):
                 # We can't handle validators that create contracts. That would
                 # be pretty strange, though.
                 raise NotImplementedError
@@ -135,13 +136,13 @@ class Validator:
         for name, term in self.constants.items():
             if name.startswith("STORAGE@"):
                 addr = int(name[8:], 16)
-                substitutions[term] = sequence.next.contracts[addr].storage
+                substitutions[term] = sequence.states[-1].contracts[addr].storage
             elif name == "BALANCE":
-                substitutions[term] = sequence.next.balances
+                substitutions[term] = sequence.states[-1].balances
             elif name == "CODESIZE":
                 pass
             elif name == "NUMBER":
-                substitutions[term] = sequence.peek_next_block().number
+                substitutions[term] = sequence.blocks[len(sequence.states) - 1].number
             else:
                 raise ValueError(f"unknown variable: {name}")
 
@@ -159,17 +160,17 @@ class Validator:
                 return Solution(sequence, solver, None)
             return None
 
-        carryover, block = sequence.subsequent(validation=True)
+        previous, block = sequence.states[-1], sequence.blocks[-1]
         start = State(
             suffix="-V",
             block=block,
             transaction=self.transaction,
-            sha3=carryover.sha3,
-            contracts=carryover.contracts,
-            balances=carryover.balances,
-            constraint=carryover.constraint,
+            sha3=copy.deepcopy(previous.sha3),
+            contracts={k: v.clone_and_reset() for (k, v) in previous.contracts.items()},
+            balances=previous.balances.clone_and_reset(),
+            constraint=previous.constraint,
             mystery_proxy=PROXY,
-            mystery_size=carryover.mystery_size,
+            mystery_size=previous.mystery_size,
             gas_count=0,
         )
 

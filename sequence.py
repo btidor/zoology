@@ -3,18 +3,13 @@
 from __future__ import annotations
 
 import copy
-from dataclasses import dataclass
 from typing import Any, Iterable
 
-from environment import Block, Contract
-from sha3 import SHA3
+from environment import Block
 from smt import (
-    Array,
     ConstrainingError,
-    Constraint,
     Solver,
     Uint160,
-    Uint256,
 )
 from state import State
 
@@ -28,10 +23,9 @@ class Sequence:
     proxy: Uint160
     blocks: list[Block]
 
-    create: State | None  # the concrete createInstance call
-    states: list[State]  # synthetic transactions
-
-    next: Next
+    # The first state is the concrete createInstance(...) call, followed by the
+    # synthetic transactions.
+    states: list[State]
 
     def __init__(
         self,
@@ -55,10 +49,7 @@ class Sequence:
             block = block.successor()
             self.blocks.append(block)
 
-        self.create = start
-        self.states = list[State]()
-
-        self.next = Next.from_state(start)
+        self.states = list[State]([start])
 
     def __deepcopy__(self, memo: Any) -> Sequence:
         result = copy.copy(self)
@@ -69,30 +60,17 @@ class Sequence:
         """Return a human-readable version of the sequence of paths."""
         return "Pz" + ":".join(map(lambda s: s.px()[2:], self.states))
 
-    def subsequent(self, validation: bool = False) -> tuple[Next, Block]:
-        """Set up the execution of a new transaction."""
-        return self.next.clone_and_reset(), self.peek_next_block(validation)
-
-    def peek_next_block(self, validation: bool = False) -> Block:
-        """Return the next block."""
-        return self.blocks[-1 if validation else len(self.states)]
-
-    def peek_contracts(self) -> set[int]:
-        """Return the set of contracts in the latest universe state."""
-        return set(self.next.contracts.keys())
-
     def extend(self, state: State) -> Sequence:
         """Add a new transaction to the Sequence."""
         result = copy.deepcopy(self)
         result.states.append(state)
-        result.next = Next.from_state(state)
-        if len(result.states) > 15:
+        if len(result.states) > 16:
             raise OverflowError("sequence is limited to 15 states")
         return result
 
     def constrain(self, solver: Solver, check: bool = True) -> None:
         """Apply hard constraints to the given solver instance."""
-        solver.add(self.next.constraint)
+        solver.add(self.states[-1].constraint)
         if check and not solver.check():
             raise ConstrainingError
 
@@ -100,7 +78,7 @@ class Sequence:
         """Apply soft and deferred constraints to a given solver instance."""
         for state in self.states:
             state.narrow(solver)
-        self.next.sha3.narrow(solver)
+        self.states[-1].sha3.narrow(solver)
         assert solver.check()
 
     def describe(self, solver: Solver) -> Iterable[str]:
@@ -109,7 +87,7 @@ class Sequence:
         if (sz := solver.evaluate(codesize)) != 0x123:
             yield f"Proxy CODESIZE {hex(sz)}{' (via constructor)' if sz == 0 else ''}\n"
 
-        for state in self.states:
+        for state in self.states[1:]:
             if (state.transaction.address == self.instance).reveal() is not True:
                 assert (addr := state.transaction.address.reveal()) is not None
                 yield f"To 0x{addr.to_bytes(20).hex()}:\n    "
@@ -133,35 +111,3 @@ class Sequence:
 
             for call in state.calls:
                 yield from call.describe(solver, state.mystery_proxy)
-
-
-@dataclass
-class Next:
-    """Represents the information carried from one transaction to the next."""
-
-    constraint: Constraint
-    contracts: dict[int, Contract]
-    balances: Array[Uint160, Uint256]
-    sha3: SHA3
-    mystery_size: Uint256 | None
-
-    @classmethod
-    def from_state(cls, state: State) -> Next:
-        """Extract carryover information from a State."""
-        return Next(
-            state.constraint,
-            state.contracts,
-            state.balances,
-            state.sha3,
-            state.mystery_size,
-        )
-
-    def clone_and_reset(self) -> Next:
-        """Clone this Next and reset array access tracking."""
-        return Next(
-            self.constraint,
-            {k: v.clone_and_reset() for (k, v) in self.contracts.items()},
-            self.balances.clone_and_reset(),
-            copy.deepcopy(self.sha3),
-            self.mystery_size,
-        )
