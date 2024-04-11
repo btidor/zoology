@@ -7,6 +7,9 @@ import argparse
 import copy
 import sys
 import time
+from dataclasses import dataclass
+from heapq import heappush
+from typing import Any
 
 from bytes import Bytes
 from disassembler import abiencode
@@ -35,11 +38,12 @@ def search(
     beginning: Sequence, validator: Validator, depth: int, verbose: int = 0
 ) -> Solution | None:
     """Symbolically execute the given level until a solution is found."""
-    queue = list[tuple[State, Sequence]]()
+    queue = list[Node]()
     for head in make_heads(beginning):
-        queue.append((head, beginning))
+        heappush(queue, Node(beginning, head))
     while queue:
-        state, prefix = queue.pop(0)
+        node = queue.pop(0)
+        prefix, state = node.prefix, node.state
         while isinstance(state.pc, int):
             if verbose > 1:
                 print(state.program.instructions[state.pc])
@@ -51,11 +55,11 @@ def search(
                     continue
                 case Jump(targets):
                     for target in targets:
-                        queue.append((target, prefix))
+                        heappush(queue, Node(prefix, target))
                     break
                 case Descend(substates):
                     for substate in substates:
-                        queue.append((substate, prefix))
+                        heappush(queue, Node(prefix, substate))
                     break
                 case Unreachable():
                     break
@@ -68,7 +72,7 @@ def search(
             # We need to collect *all* terminal states, since if the
             # subcontract reverts the parent contract will continue to
             # execute.
-            queue.append((state.recursion(state), prefix))
+            heappush(queue, Node(prefix, state.recursion(state)))
             continue
         if not state.pc.success:
             continue
@@ -78,12 +82,27 @@ def search(
                 if len(candidate.states) > depth:
                     continue
                 for head in make_heads(candidate):
-                    queue.append((head, candidate))
+                    heappush(queue, Node(candidate, head))
             case False:
                 continue
             case Solution():
                 return result
     return None
+
+
+@dataclass(frozen=True)
+class Node:
+    """A state on the search heap, with its history."""
+
+    __slots__ = ("prefix", "state")
+
+    prefix: Sequence
+    state: State
+
+    def __lt__(self, other: Any) -> bool:
+        if not isinstance(other, Node):
+            return NotImplemented
+        return self.state < other.state
 
 
 def starting_sequence(
@@ -168,6 +187,8 @@ def make_heads(prefix: Sequence) -> list[State]:
             mystery_proxy=PROXY,
             mystery_size=previous.mystery_size,
             gas_count=0,
+            cost=previous.cost * 2,
+            branching=copy.deepcopy(previous.branching),
         )
         head.transfer(
             head.transaction.origin,
@@ -191,10 +212,11 @@ def check_candidate(
         vprint(f"- {candidate.pz()}\n")
     else:
         global count
-        if count % 32 == 0:
-            vprint("\n")
-        if count > 0 and count % (32 * 16) == 0:
-            vprint("\n")
+        if count > 0:
+            if count % 32 == 0:
+                vprint("\n")
+            if count % (32 * 16) == 0:
+                vprint("\n")
         vprint(f"{len(candidate.states)-1:X}")
         count += 1
 
@@ -265,7 +287,7 @@ def handle_level(factory: Uint160, args: argparse.Namespace) -> None:
     validator = Validator(beginning, prints=(args.verbose > 1))
     vprint("a" if validator.constraint is None else "A")
     assert not validator.check(beginning)
-    vprint("*")
+    vprint("*\n")
 
     solution = search(beginning, validator, args.depth, verbose=args.verbose)
     if not solution:

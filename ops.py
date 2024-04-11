@@ -893,6 +893,7 @@ def _call_common(
                 )
 
                 def callback(state: State, substate: State) -> State:
+                    assert isinstance(substate.pc, Termination)
                     call = Call(
                         transaction,
                         Constraint(True),
@@ -901,6 +902,8 @@ def _call_common(
                     )
                     state.calls = original
                     _apply_call(state, call, retSize, retOffset)
+                    if not substate.pc.success:  # skip REVERTs
+                        state.constraint = Constraint(False)
                     return state
 
                 substates.append(

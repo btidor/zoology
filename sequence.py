@@ -58,7 +58,7 @@ class Sequence:
 
     def pz(self) -> str:
         """Return a human-readable version of the sequence of paths."""
-        return "Pz" + ":".join(map(lambda s: s.px()[2:], self.states))
+        return "Pz" + ":".join(map(lambda s: s.px()[2:], self.states[1:]))
 
     def extend(self, state: State) -> Sequence:
         """Add a new transaction to the Sequence."""
