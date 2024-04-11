@@ -248,7 +248,6 @@ def check_candidate(
             vprint("  ! constraining error\n")
             return False
 
-    # TODO: can we reduce duplicative solving here?
     if solution := validator.check(candidate):
         if verbose:
             vprint("  > found solution!\n")
