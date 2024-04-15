@@ -13,6 +13,7 @@ from smt import (
     Uint160,
     Uint256,
 )
+from snapshot import PLAYER
 from state import State
 
 
@@ -142,9 +143,8 @@ def _selfdestruct(state: State, i: int) -> dict[int, Uint256]:
     for address, contract in state.contracts.items():
         if contract.invisible:
             continue
-        balance = state.balances.peek(Uint160(address))
         deltas[address] = Uint64(f"SELFDESTRUCT@{address.to_bytes(20).hex()}-{i}").into(
             Uint256
         )
-        state.balances.poke(Uint160(address), balance + deltas[address])
+        state.transfer(PLAYER, Uint160(address), deltas[address], initial=True)
     return deltas
