@@ -198,9 +198,6 @@ def make_heads(prefix: Sequence) -> list[State]:
         )
         heads.append(head)
 
-        # TODO: "Pure transfers of value are represented by a SELFDESTRUCT. This
-        # is more general than a `receive()` method because it always succeeds."
-
     return heads
 
 
@@ -285,13 +282,16 @@ def handle_level(factory: Uint160, args: argparse.Namespace) -> None:
     vprint("V")
     validator = Validator(beginning, prints=(args.verbose > 1))
     vprint("a" if validator.constraint is None else "A")
-    assert not validator.check(beginning)
-    vprint("*\n")
 
-    solution = search(beginning, validator, args.depth, verbose=args.verbose)
-    if not solution:
-        vprint("\tno solution\n")
-        return
+    if solution := validator.check(beginning):
+        pass  # simple SELFDESTRUCT, or a bug
+    else:
+        vprint("*\n")
+        solution = search(beginning, validator, args.depth, verbose=args.verbose)
+        if not solution:
+            vprint("\tno solution\n")
+            return
+
     newline = True
     indent = 0
     vprint(f"\nResult    | {int(time.time())-TSTART:06}\n")

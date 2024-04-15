@@ -11,10 +11,9 @@ def check_level(i: int, fixture: list[str]) -> None:
 
     beginning = starting_sequence(contracts, factory)
     validator = Validator(beginning)
-    assert not validator.check(beginning), "validation passed initially"
-
-    solution = search(beginning, validator, depth=10)
-    assert solution, "search failed"
+    if not (solution := validator.check(beginning)):
+        solution = search(beginning, validator, depth=10)
+        assert solution, "search failed"
     assert "".join(solution.describe()).strip() == "\n".join(fixture)
 
 
@@ -46,16 +45,16 @@ def test_fallout() -> None:
 
 def test_coinflip() -> None:
     fixture = [
-        "1d263f67 0000000000000000000000000000000000000000000000000000000000000001",
-        "1d263f67 0000000000000000000000000000000000000000000000000000000000000001",
         "1d263f67 0000000000000000000000000000000000000000000000000000000000000000",
-        "1d263f67 0000000000000000000000000000000000000000000000000000000000000000",
+        "1d263f67 0000000000000000000000000000000000000000000000000000000000000001",
         "1d263f67 0000000000000000000000000000000000000000000000000000000000000001",
         "1d263f67 0000000000000000000000000000000000000000000000000000000000000000",
         "1d263f67 0000000000000000000000000000000000000000000000000000000000000000",
-        "1d263f67 0000000000000000000000000000000000000000000000000000000000000000",
-        "1d263f67 0000000000000000000000000000000000000000000000000000000000000000",
         "1d263f67 0000000000000000000000000000000000000000000000000000000000000001",
+        "1d263f67 0000000000000000000000000000000000000000000000000000000000000000",
+        "1d263f67 0000000000000000000000000000000000000000000000000000000000000000",
+        "1d263f67 0000000000000000000000000000000000000000000000000000000000000000",
+        "1d263f67 0000000000000000000000000000000000000000000000000000000000000000",
     ]
     check_level(3, fixture)
 
@@ -85,11 +84,11 @@ def test_delegation() -> None:
     check_level(6, fixture)
 
 
-# def test_force() -> None:
-#     fixture = [
-#         "SELFDESTRUCT\tvalue: 1",
-#     ]
-#     check_level(7, fixture)
+def test_force() -> None:
+    fixture = [
+        "SELFDESTRUCT\tvalue: 1",
+    ]
+    check_level(7, fixture)
 
 
 def test_vault() -> None:
@@ -111,12 +110,12 @@ def test_king() -> None:
 
 def test_reentrance() -> None:
     fixtures = [
-        "00362a95 ffffffffffffffffffffffffc0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0\tvalue: 1125899906842623",
-        "2e1a7d4d 0000000000000000000000000000000000000000000000000003c7ffffff8000\tvia proxy",
-        " -> Proxy CALL -       \tvalue: 1064327255654400",
+        "00362a95 000000000000000000000000c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0\tvalue: 1125899906842623",
+        "2e1a7d4d 0000000000000000000000000000000000000000000000000003c77ea4c67fff\tvia proxy",
+        " -> Proxy CALL -       \tvalue: 1063771674411007",
         "     -> To 0x147f43c9dbfb7e782775060587fd9e194cbed03c:",
-        "        CALL 2e1a7d4d 0000000000000000000000000000000000000000000000000003c57ea4c6ffff",
-        "         -> Proxy CALL -       \tvalue: 1061572651188223",
+        "        CALL 2e1a7d4d 0000000000000000000000000000000000000000000000000003c60000000000",
+        "         -> Proxy CALL -       \tvalue: 1062128232431616",
         "            RETURN 00",
         "        RETURN -       ",
         "    RETURN 00",
@@ -261,17 +260,17 @@ def test_good_samaritan() -> None:
     check_level(27, fixture)
 
 
-# def test_gatekeeper_three() -> None:
-#     fixture = [
-#         "b9966e56\tvia proxy",
-#         "f7edf099",
-#         "c960174e 00000000000000000000000000000000000000000000000000000000637e311f",
-#         "SELFDESTRUCT\tvalue: 1125899906842623",
-#         "e97dcb62\tvia proxy",
-#         " -> Proxy CALL -       \tvalue: 1000000000000000",
-#         "    REVERT -",
-#     ]
-#     check_level(28, fixture)
+def test_gatekeeper_three() -> None:
+    fixture = [
+        "b9966e56\tvia proxy",
+        "f7edf099",
+        "c960174e 00000000000000000000000000000000000000000000000000000000637e3113",
+        "SELFDESTRUCT\tvalue: 1125899906842623",
+        "e97dcb62\tvia proxy",
+        " -> Proxy CALL -       \tvalue: 1000000000000000",
+        "    REVERT -",
+    ]
+    check_level(28, fixture)
 
 
 def test_switch() -> None:
