@@ -8,7 +8,7 @@ import copy
 import sys
 import time
 from dataclasses import dataclass
-from heapq import heappush
+from heapq import heappop, heappush
 from typing import Any
 
 from bytes import Bytes
@@ -42,7 +42,7 @@ def search(
     for head in make_heads(beginning):
         heappush(queue, Node(beginning, head))
     while queue:
-        node = queue.pop(0)
+        node = heappop(queue)
         prefix, state = node.prefix, node.state
         while isinstance(state.pc, int):
             if verbose > 1:
