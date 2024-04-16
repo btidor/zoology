@@ -511,12 +511,16 @@ def LOG(ins: Instruction, s: State, offset: Uint256, size: Uint256) -> None:
     """AX - Append log record with N topics."""
     if ins.suffix is None:
         raise ValueError("somehow got a LOG without a suffix")
+    if s.changed is None:
+        raise ValueError(f"LOG{ins.suffix} is forbidden during a STATICCALL")
     topics = tuple(s.stack.pop() for _ in range(ins.suffix))
     s.logs.append(Log(s.memory.slice(offset, size), topics))
 
 
 def CREATE(s: State, value: Uint256, offset: Uint256, size: Uint256) -> ControlFlow:
     """F0 - Create a new account with associated code."""
+    if s.changed is None:
+        raise ValueError("CREATE is forbidden during a STATICCALL")
     initcode = s.compact_bytes(s.memory.slice(offset, size))
     sender_address = s.transaction.address.reveal()
     assert sender_address is not None, "CREATE requires concrete sender address"
@@ -655,6 +659,8 @@ def CREATE2(
     s: State, value: Uint256, offset: Uint256, size: Uint256, _salt: Uint256
 ) -> ControlFlow:
     """F5 - Create a new account with associated code at a predictable address."""
+    if s.changed is None:
+        raise ValueError("CREATE2 is forbidden during a STATICCALL")
     initcode = s.compact_bytes(s.memory.slice(offset, size))
     assert initcode.reveal() is not None, "CREATE2 requires concrete program data"
     # ...because the code is hashed and used in the address, which must be concrete
@@ -705,6 +711,8 @@ def INVALID(s: State) -> None:
 
 def SELFDESTRUCT(s: State, address: Uint256) -> None:
     """FF - Halt execution and register account for later deletion."""
+    if s.changed is None:
+        raise ValueError("SELFDESTRUCT is forbidden during a STATICCALL")
     s.transfer(
         s.transaction.address, address.into(Uint160), s.balances[s.transaction.address]
     )
