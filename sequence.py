@@ -82,6 +82,12 @@ class Sequence:
 
     def narrow(self, solver: Solver) -> None:
         """Apply soft and deferred constraints to a given solver instance."""
+        for i in range(9):
+            constraint = self.states[0].mystery_size == Uint256(0x123 >> i)
+            if solver.check(constraint):
+                solver.add(constraint)
+                break
+
         for i, (state, selfdestruct) in enumerate(zip(self.states, self.selfdestructs)):
             if i != 0:  # skip narrowing on createInstance(...) for speed
                 state.narrow(solver)

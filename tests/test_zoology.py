@@ -111,24 +111,24 @@ def test_king() -> None:
 def test_reentrance() -> None:
     fixtures = [
         "00362a95 ffffffffffffffffffffffffc0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0\tvalue: 1125899906842623",
-        "2e1a7d4d 0000000000000000000000000000000000000000000000000003c73ffca46000\tvia proxy",
-        " -> Proxy CALL -       \tvalue: 1063502565629952",
+        "2e1a7d4d 0000000000000000000000000000000000000000000000000003cd7ea4c67fff\tvia proxy",
+        " -> Proxy CALL -       \tvalue: 1070368744177663",
         "     -> To 0x147f43c9dbfb7e782775060587fd9e194cbed03c:",
-        "        CALL 2e1a7d4d 0000000000000000000000000000000000000000000000000003c63ea8221fff",
-        "         -> Proxy CALL -       \tvalue: 1062397341212671",
+        "        CALL 2e1a7d4d 0000000000000000000000000000000000000000000000000003c00000000000",
+        "         -> Proxy CALL -       \tvalue: 1055531162664960",
         "            RETURN 00",
         "        RETURN -       ",
-        "    RETURN 00",
+        "    RETURN -",
     ]
     check_level(10, fixtures)
 
 
 def test_elevator() -> None:
     fixture = [
-        "ed9a7134 ffffffffffffffffffffffffffffffffffffffffffffffffffffffff000000ff\tvia proxy",
-        " -> Proxy CALL 5f9a4bca ffffffffffffffffffffffffffffffffffffffffffffffffffffffff000000ff",
+        "ed9a7134 ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\tvia proxy",
+        " -> Proxy CALL 5f9a4bca ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
         "    RETURN 0000000000000000000000000000000000000000000000000000000000000000",
-        " -> Proxy CALL 5f9a4bca ffffffffffffffffffffffffffffffffffffffffffffffffffffffff000000ff",
+        " -> Proxy CALL 5f9a4bca ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
         "    RETURN 0000000000000000000000000000000000000000000000000000000000000001",
     ]
     check_level(11, fixture)
@@ -161,7 +161,7 @@ def test_naughtcoin() -> None:
         "095ea7b3 000000000000000000000000cacacacacacacacacacacacacacacacacacacaca"
         + "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
         "23b872dd 000000000000000000000000cacacacacacacacacacacacacacacacacacacaca"
-        + "0000000000000000000000004acacacacacacacacacacacacacacacacacacaca"
+        + "000000000000000000000000ffffffffffffffffffffffffffffffffffffffff"
         + "00000000000000000000000000000000000000000000d3c21bcecceda1000000",
     ]
     check_level(15, fixture)
@@ -172,8 +172,8 @@ def test_preservation() -> None:
         "5bda8fa4 ffffffffffffffffffffffffc0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0",
         "f1e02620 0000000000000000000000000000000000000000000000000000000000000000",
         " -> Proxy DELEGATECALL 3beb26c4 0000000000000000000000000000000000000000000000000000000000000000",
-        "    RETURN -       ",
-        "      0x3 -> 0xffffffffffffffffffffffffc0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0",
+        "    RETURN 00",
+        "      0x3 -> 0x1",
         "      0x2 -> 0xcacacacacacacacacacacacacacacacacacacaca",
     ]
     check_level(16, fixture)
@@ -182,7 +182,7 @@ def test_preservation() -> None:
 def test_recovery() -> None:
     fixture = [
         "To 0x64a87bbadfa695f967ce1306fb172d956140f067:",
-        "    00f55d9d 000000000000000000000000c7e3802ffab92a54c6211d2b07ddb4574fdb19b6",
+        "    00f55d9d 000000000000000000000000b4b157c7c4b0921065dded675dfe10759eecaa6c",
     ]
     check_level(17, fixture)
 
@@ -277,7 +277,7 @@ def test_switch() -> None:
     fixture = [
         "30c13ade "
         + "0000000000000000000000000000000000000000000000000000000000000044"
-        + "6000000000000000000000000000000000000000000000000000000000000000"
+        + "6e6e6e6e00000000000000000000000000000000000000000000000000004444"
         + "20606e1500000000000000000000000000000000000000000000000000000000"
         + "0000000476227e12"
     ]

@@ -205,12 +205,6 @@ class State:
         for call in self.calls:
             call.narrow(solver)
 
-        for i in range(9):
-            constraint = self.mystery_size == Uint256(0x123 >> i)
-            if solver.check(constraint):
-                solver.add(constraint)
-                break
-
         solver.add(self.narrower)
         assert solver.check()
 
