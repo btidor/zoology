@@ -161,9 +161,7 @@ class State:
             return NotImplemented
         return self.cost < other.cost
 
-    def transfer(
-        self, src: Uint160, dst: Uint160, val: Uint256, initial: bool = False
-    ) -> None:
+    def transfer(self, src: Uint160, dst: Uint160, val: Uint256) -> None:
         """Transfer value from one account to another."""
         if val.reveal() == 0:
             return
@@ -179,8 +177,7 @@ class State:
 
         self.balances[src] -= val
         self.balances[dst] += val
-        if not initial:
-            self.changed = True
+        self.changed = True
 
     def narrow(self, solver: Solver) -> None:
         """Apply soft constraints to a given model instance."""

@@ -171,12 +171,7 @@ if __name__ == "__main__":
     start = symbolic_start(program, SHA3(), "")
     start.skip_self_calls = True
     init = copy.deepcopy(start)
-    init.transfer(
-        init.transaction.caller,
-        init.transaction.address,
-        init.transaction.callvalue,
-        initial=True,
-    )
+    init.balances[init.transaction.address] = init.transaction.callvalue
     for end in universal_transaction(init):
         for line in printable_transition(start, end):
             print(line)

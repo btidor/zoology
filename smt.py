@@ -14,6 +14,7 @@ from zbitvector import Constraint, Int, Solver, Symbolic, Uint, _bitwuzla
 from zbitvector._bitwuzla import BZLA, BitwuzlaTerm, Kind
 
 Uint8 = Uint[Literal[8]]
+Uint52 = Uint[Literal[52]]
 Uint64 = Uint[Literal[64]]
 Uint160 = Uint[Literal[160]]
 Uint256 = Uint[Literal[256]]

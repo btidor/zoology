@@ -19,7 +19,7 @@ from smt import (
     ConstrainingError,
     Constraint,
     Solver,
-    Uint64,
+    Uint52,
     Uint160,
     Uint256,
     describe,
@@ -126,11 +126,10 @@ def starting_sequence(
         mystery_size=Uint256("MYSTERYSIZE"),
     )
 
-    # ASSUMPTION: the only account with a nonzero balance belongs to the player.
+    # ASSUMPTION: the only accounts with a nonzero balance belong to the player
+    # and the factory contract.
     start.balances[PLAYER] = Uint256(10**18)
-    start.transfer(
-        start.transaction.caller, start.transaction.address, start.transaction.callvalue
-    )
+    start.balances[start.transaction.address] = start.transaction.callvalue
 
     generator = printable_execution(start)
     try:
@@ -175,8 +174,8 @@ def make_heads(prefix: Sequence) -> list[State]:
                 # ASSUMPTION: all transactions are originated by the player, but
                 # may (or may not!) be bounced through a "proxy" contract.
                 caller=Constraint(f"CALLERAB{suffix}").ite(PLAYER, PROXY),
-                # ASSUMPTION: each transaction sends less than ~18 ETH.
-                callvalue=Uint64(f"CALLVALUE{suffix}").into(Uint256),
+                # ASSUMPTION: each transaction sends less than ~0.0045 ETH.
+                callvalue=Uint52(f"CALLVALUE{suffix}").into(Uint256),
                 calldata=Bytes.symbolic(f"CALLDATA{suffix}"),
                 gasprice=Uint256(f"GASPRICE{suffix}"),
             ),
@@ -190,12 +189,12 @@ def make_heads(prefix: Sequence) -> list[State]:
             cost=previous.cost * 2,
             branching=copy.deepcopy(previous.branching),
         )
-        head.transfer(
-            head.transaction.origin,
-            head.transaction.address,
-            head.transaction.callvalue,
-            initial=True,
-        )
+        # Because the callvalue of each head is about 16 times less than the
+        # player's starting balance, we can guarantee that the transfer always
+        # succeeds. This allows us to avoid adding a costly underflow check to
+        # the constraint.
+        head.balances[head.transaction.origin] -= head.transaction.callvalue
+        head.balances[head.transaction.address] += head.transaction.callvalue
         heads.append(head)
 
     return heads

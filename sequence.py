@@ -9,7 +9,7 @@ from environment import Block
 from smt import (
     ConstrainingError,
     Solver,
-    Uint64,
+    Uint52,
     Uint160,
     Uint256,
 )
@@ -144,8 +144,8 @@ def _selfdestruct(state: State, i: int) -> dict[int, Uint256]:
     for address, contract in state.contracts.items():
         if contract.invisible:
             continue
-        deltas[address] = Uint64(f"SELFDESTRUCT@{address.to_bytes(20).hex()}-{i}").into(
-            Uint256
-        )
-        state.transfer(PLAYER, Uint160(address), deltas[address], initial=True)
+        d = Uint52(f"SELFDESTRUCT@{address.to_bytes(20).hex()}-{i}").into(Uint256)
+        state.balances[PLAYER] -= d
+        state.balances[Uint160(address)] += d
+        deltas[address] = d
     return deltas
