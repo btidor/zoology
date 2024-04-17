@@ -98,15 +98,27 @@ def MULMOD(a: Uint256, b: Uint256, N: Uint256) -> Uint256:
     )
 
 
-def EXP(a: Uint256, _exponent: Uint256) -> Uint256:
+def EXP(base: Uint256, exponent: Uint256) -> Uint256:
     """0A - Exponential operation."""
-    exponent = _exponent.reveal()
-    assert exponent is not None, "EXP requires concrete exponent"
-
-    r = Uint256(1)
-    for _ in range(exponent):
-        r *= a
-    return r
+    if (exp := exponent.reveal()) is not None:
+        # Common case: exponent is concrete, unroll multiplications.
+        r = Uint256(1)
+        for _ in range(exp):
+            r *= base
+        return r
+    elif (b := base.reveal()) is not None:
+        # Fallback: make a table of all possible exponents and results. Assumes
+        # base^n (mod 2^256) converges to zero.
+        result = Uint256(0)
+        concrete = 1
+        for i in range(256):
+            result = (exponent == Uint256(i)).ite(Uint256(concrete), result)
+            concrete = (concrete * b) % (2**256)
+            if concrete == 0:
+                return result
+        raise RecursionError("EXP failed to converge")
+    else:
+        raise ValueError("EXP requires concrete base or exponent")
 
 
 def SIGNEXTEND(b: Uint256, x: Uint256) -> Uint256:
