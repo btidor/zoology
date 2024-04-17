@@ -337,7 +337,7 @@ class DelegateCall(Call):
     """Information about a symbolic DELEGATECALL instruction."""
 
     previous_storage: Array[Uint256, Uint256]
-    next_storage: Array[Uint256, Uint256]
+    next_storage: Array[Uint256, Uint256] | None  # None if SELFDESTRUCTed
 
     def describe(
         self, solver: Solver, select_: Uint160, prints: bool = False
@@ -351,15 +351,18 @@ class DelegateCall(Call):
         yield "\n"
         assert not self.subcalls
 
-        ok = evaluate(solver, self.ok)
-        yield f"    {'RETURN' if ok else 'REVERT'} "
-        yield from self.returndata.describe(solver, prefix=0)
-        yield "\n"
-        if ok:
-            prev = evaluate(solver, self.previous_storage)
-            for k, v in evaluate(solver, self.next_storage).items():
-                if prev[k] != v:
-                    yield f"      {hex(k)} -> {hex(v)}\n"
+        if self.next_storage is None:
+            yield "    SELFDESTRUCT\n"
+        else:
+            ok = evaluate(solver, self.ok)
+            yield f"    {'RETURN' if ok else 'REVERT'} "
+            yield from self.returndata.describe(solver, prefix=0)
+            yield "\n"
+            if ok:
+                prev = evaluate(solver, self.previous_storage)
+                for k, v in evaluate(solver, self.next_storage).items():
+                    if prev[k] != v:
+                        yield f"      {hex(k)} -> {hex(v)}\n"
 
 
 @dataclass(frozen=True)

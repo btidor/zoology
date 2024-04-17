@@ -687,7 +687,7 @@ def SELFDESTRUCT(s: State, address: Uint256) -> None:
     if s.changed is None:
         raise ValueError("SELFDESTRUCT is forbidden during a STATICCALL")
 
-    contract = s.transaction.address.into(Uint160)
+    contract = s.transaction.address
     recipient = address.into(Uint160)
     value = s.balances[contract]
 
@@ -834,7 +834,7 @@ def _call_common(
                     gasprice=s.transaction.gasprice,
                 )
 
-                # Case I proxy reverts, no side effects.
+                # Delegate Case I: proxy reverts, no side effects.
                 s.path <<= 1
                 state = copy.deepcopy(s)
                 state.path |= 1
@@ -850,8 +850,8 @@ def _call_common(
                 _apply_call(state, dc, retSize, retOffset)
                 substates.append(state)
 
-                # Case II: proxy overwrites arbitrary storage slot(s) and
-                # returns successfully.
+                # Delegate Case II: proxy overwrites arbitrary storage slot(s)
+                # and returns successfully.
                 s.path <<= 1
                 state = copy.deepcopy(s)
                 state.path |= 1
@@ -865,9 +865,37 @@ def _call_common(
                     Array[Uint256, Uint256](f"DCSTORAGE{suffix}"),
                 )
                 assert (a := state.transaction.address.reveal()) is not None
+                assert dc.next_storage is not None
                 state.contracts[a].storage = copy.deepcopy(dc.next_storage)
                 _apply_call(state, dc, retSize, retOffset)
                 state.changed = True
+                substates.append(state)
+
+                # Delegate Case III: proxy invokes SELFDESTRUCT on the contract.
+                # For simplicity, assume the value is burned.
+                s.path <<= 1
+                state = copy.deepcopy(s)
+                state.path |= 1
+                state.constraint &= cond
+
+                state.balances[state.transaction.address] = Uint256(0)
+                state.changed = True
+
+                dc = DelegateCall(
+                    transaction,
+                    Constraint(True),
+                    Bytes(),
+                    (),
+                    state.storage,
+                    None,
+                )
+                state.calls = (*state.calls, dc)
+                state.pc = Termination(True, Bytes())
+
+                # HACK: technically this cleanup should be done at the end of
+                # the transaction.
+                assert (c := state.transaction.address.reveal()) is not None
+                del state.contracts[c]
                 substates.append(state)
             else:
                 transaction = Transaction(
@@ -879,7 +907,7 @@ def _call_common(
                     gasprice=s.transaction.gasprice,
                 )
 
-                # Case I: proxy returns or reverts without side effects.
+                # Call Case I: proxy returns or reverts without side effects.
                 s.path <<= 1
                 state = copy.deepcopy(s)
                 state.path |= 1
@@ -892,8 +920,8 @@ def _call_common(
                 _apply_call(state, call, retSize, retOffset)
                 substates.append(state)
 
-                # Case II: proxy consumes all available gas, potentially causing
-                # the calling contract to revert.
+                # Call Case II: proxy consumes all available gas, potentially
+                # causing the calling contract to revert.
                 s.path <<= 1
                 state = copy.deepcopy(s)
                 state.path |= 1
@@ -904,8 +932,8 @@ def _call_common(
                 _apply_call(state, call, retSize, retOffset)
                 substates.append(state)
 
-                # Case III: proxy makes a reentrant call back into the calling
-                # contract, then returns or reverts with a simple value.
+                # Call Case III: proxy makes a reentrant call back into the
+                # calling contract, then returns or reverts with a simple value.
                 #
                 # ASSUMPTION: to prevent infinite loops, we only allow one level
                 # of reentrant self-call (and only to the immediate caller).
