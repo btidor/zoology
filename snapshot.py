@@ -14,7 +14,9 @@ from environment import Contract
 from smt import Uint160, Uint256
 
 # For consistency, make requests at a fixed block offset
-TAG = "0x9fd700"
+TAG = "0x574800"
+
+COUNT = 32
 
 _ROOT = Path(__file__).resolve().parent
 
@@ -29,7 +31,7 @@ PROXY = Uint160(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0)
 with open(_ROOT / "ethernaut.json") as f:
     _eth = json.load(f)
     LEVEL_FACTORIES = [
-        Uint160(int.from_bytes(bytes.fromhex(_eth[str(i)][2:]))) for i in range(30)
+        Uint160(int.from_bytes(bytes.fromhex(_eth[str(i)][2:]))) for i in range(COUNT)
     ]
 
 cache: Snapshot | None = None
@@ -99,7 +101,7 @@ def _api_request(action: str, **kwargs: str) -> bytes:
     while True:
         i += 1
         res = requests.get(
-            "https://api-goerli.etherscan.io/api",
+            "https://api-sepolia.etherscan.io/api",
             {
                 **kwargs,
                 "module": "proxy",
@@ -152,7 +154,7 @@ def is_sibling_contract(slot: int, value: int) -> bool:
 if __name__ == "__main__":
     snapshot: Snapshot = {}
     for i, address in enumerate(LEVEL_FACTORIES):
-        print(f"Downloading level {i}")
+        print(f"Downloading level {i} of {COUNT-1}")
         download_contract(snapshot, address)
     with open(_ROOT / "snapshot.json", "w") as f:
         json.dump(snapshot, f, indent=4)
