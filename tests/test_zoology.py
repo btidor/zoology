@@ -243,9 +243,19 @@ def test_shop() -> None:
 #     check_level(24, [])
 
 
-# def test_motorbike() -> None:
-#     # infinite loops + needs multiple transactions
-#     check_level(25, [])
+def test_motorbike() -> None:
+    fixture = [
+        "To 0x509044f053cdbfbd9d2d56d95d24843ceb6b570b:",
+        "    8129fc1c",
+        "To 0x509044f053cdbfbd9d2d56d95d24843ceb6b570b:",
+        "    4f1ef286 000000000000000000000000c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0"
+        + "0000000000000000000000000000000000000000000000000000000000000040"
+        + "0000000000000000000000000000000000000000000000000000000000000001"
+        + "00",
+        " -> Proxy DELEGATECALL 00",
+        "    SELFDESTRUCT",
+    ]
+    check_level(25, fixture)
 
 
 # def test_double_entry_point() -> None:

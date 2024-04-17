@@ -234,6 +234,9 @@ class State:
 
         length = solver.evaluate(data.length)
         constraint = data.length == Uint256(length)
+        if solver.check(~constraint):
+            return data  # length may be arbitrarily large
+        assert solver.check()
 
         result: list[Uint8] = []
         for i in range(4):
