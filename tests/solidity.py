@@ -8,7 +8,7 @@ from pathlib import Path
 
 from bytes import Bytes
 from disassembler import Program, disassemble
-from environment import ConcreteContract, Contract
+from environment import Contract
 from sha3 import concrete_hash
 from smt import Uint160
 
@@ -60,7 +60,7 @@ def contracts_multiple(path: str) -> tuple[dict[int, Contract], dict[str, Uint16
     for name, program in loads_solidity(path).items():
         addresses[name] = concrete_hash(name).into(Uint160)
         assert (a := addresses[name].reveal()) is not None
-        contracts[a] = ConcreteContract(
+        contracts[a] = Contract(
             address=addresses[name],
             program=program,
         )

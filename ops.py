@@ -6,7 +6,7 @@ from typing import Any, Callable, Literal
 
 from bytes import Bytes
 from disassembler import Instruction, Program, disassemble
-from environment import ConcreteContract, Transaction
+from environment import Contract, Transaction
 from opcodes import REFERENCE, SPECIAL, UNIMPLEMENTED
 from smt import (
     Array,
@@ -298,9 +298,6 @@ def EXTCODECOPY(
     assert address is not None, "EXTCODECOPY requires concrete address"
 
     contract = s.contracts.get(address, None)
-    assert (
-        isinstance(contract, ConcreteContract) or contract is None
-    ), "EXTCODECOPY requires concrete contract"
     code = contract.program.code if contract else Bytes()
     s.memory.graft(code.slice(offset, size), destOffset)
 
@@ -331,10 +328,6 @@ def EXTCODEHASH(s: State, _address: Uint256) -> Uint256:
         # Properly, EXTCODEHASH should return zero if the address does not exist
         # or is empty, and the empty hash otherwise. See: EIP-1052.
         raise NotImplementedError("EXTCODEHASH of non-contract address")
-
-    assert isinstance(
-        contract, ConcreteContract
-    ), "EXTCODEHASH requires concrete contract"
 
     digest, constraint = s.sha3.hash(contract.program.code)
     s.constraint &= constraint
@@ -724,7 +717,7 @@ def _create_common(
     assert sender is not None, "CREATE requires concrete sender address"
     s.contracts[sender].nonce += Uint256(1)
 
-    s = s.with_contract(ConcreteContract(address=address))
+    s = s.with_contract(Contract(address=address))
     transaction = Transaction(
         origin=s.transaction.origin,
         caller=s.transaction.address,
@@ -741,7 +734,6 @@ def _create_common(
             state.stack.append(Uint256(0))
         else:
             contract = state.contracts[destination]
-            assert isinstance(contract, ConcreteContract)
             contract.program = disassemble(substate.pc.returndata)
             state = state.with_contract(contract, True)
             state.stack.append(address.into(Uint256))
@@ -784,7 +776,6 @@ def _call_common(
             and s.skip_self_calls
         ):
             continue
-        assert isinstance(contract, ConcreteContract)
 
         cond = address == contract.address
         eoa &= ~cond

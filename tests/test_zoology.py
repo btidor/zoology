@@ -229,22 +229,27 @@ def test_shop() -> None:
 
 
 # def test_dex() -> None:
+#     # slow + quadratic space
 #     check_level(22, [])
 
 
 # def test_dex2() -> None:
+#     # slow or infinite + needs multiple transactions
 #     check_level(23, [])
 
 
 # def test_puzzle_wallet() -> None:
+#     # infinite loops + needs multiple transactions
 #     check_level(24, [])
 
 
 # def test_motorbike() -> None:
+#     # infinite loops + needs multiple transactions
 #     check_level(25, [])
 
 
 # def test_double_entry_point() -> None:
+#     # uhhh Forta
 #     check_level(26, [])
 
 

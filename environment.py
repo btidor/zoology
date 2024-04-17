@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import abc
 import copy
 from collections import OrderedDict
 from dataclasses import dataclass, field
-from typing import Any, Self, override
+from typing import Any, Self
 
 from bytes import Bytes
 from disassembler import Program, disassemble
@@ -80,13 +79,14 @@ class Block:
 
 
 @dataclass
-class Contract(abc.ABC):
+class Contract:
     """A deployed contract account."""
 
     address: Uint160 = Uint160(0xADADADADADADADADADADADADADADADADADADADAD)
     storage: Array[Uint256, Uint256] = field(
         default_factory=lambda: Array[Uint256, Uint256](Uint256(0)),
     )
+    program: Program = disassemble(Bytes())
     nonce: Uint256 = Uint256(1)  # starts at 1, see EIP-161
     invisible: bool = False  # can't be CALLed during analysis
 
@@ -97,25 +97,12 @@ class Contract(abc.ABC):
         return result
 
     @property
-    @abc.abstractmethod
     def codesize(self) -> Uint256:
         """Return the size of the code, in bytes."""
-        raise NotImplementedError
+        return self.program.code.length
 
     def __post_init__(self) -> None:
         assert self.address.reveal() is not None, "Contract requires concrete address"
-
-
-@dataclass
-class ConcreteContract(Contract):
-    """A deployed contract account with concrete, executable code."""
-
-    program: Program = disassemble(Bytes())
-
-    @property
-    @override
-    def codesize(self) -> Uint256:
-        return self.program.code.length
 
 
 @dataclass(frozen=True)

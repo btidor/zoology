@@ -8,7 +8,7 @@ from typing import Any, Iterable
 
 from bytes import Bytes
 from disassembler import abiencode
-from environment import ConcreteContract, Transaction
+from environment import Contract, Transaction
 from sequence import Sequence
 from sha3 import SHA3
 from smt import (
@@ -77,9 +77,8 @@ class Validator:
 
         for reference in previous.contracts.values():
             assert (a := reference.address.reveal()) is not None
-            assert isinstance(reference, ConcreteContract)
             start = start.with_contract(
-                ConcreteContract(
+                Contract(
                     address=reference.address,
                     program=reference.program,
                     storage=Array[Uint256, Uint256](f"STORAGE@{a.to_bytes(20).hex()}"),

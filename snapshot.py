@@ -10,7 +10,7 @@ import requests
 
 from bytes import Bytes
 from disassembler import disassemble
-from environment import ConcreteContract, Contract
+from environment import Contract
 from smt import Uint160, Uint256
 
 # For consistency, make requests at a fixed block offset
@@ -48,7 +48,7 @@ def snapshot_contracts(address: Uint160, invisible: bool = True) -> dict[int, Co
     address = Uint160(a)
     program = disassemble(Bytes.fromhex(saved["code"]))
     # ASSUMPTION: no solution requires interacting with the factory contract.
-    contract = ConcreteContract(address=address, program=program, invisible=invisible)
+    contract = Contract(address=address, program=program, invisible=invisible)
     contracts = dict[int, Contract]()
 
     for k, v in saved.items():
@@ -68,12 +68,12 @@ def snapshot_contracts(address: Uint160, invisible: bool = True) -> dict[int, Co
     return contracts
 
 
-def get_code(address: Uint160) -> ConcreteContract:
+def get_code(address: Uint160) -> Contract:
     """Load the Contract at a given address."""
     assert (a := address.reveal()) is not None
     data = _api_request("eth_getCode", address=a.to_bytes(20).hex(), tag=TAG)
     program = disassemble(Bytes(data))
-    return ConcreteContract(address=address, program=program)
+    return Contract(address=address, program=program)
 
 
 def get_storage_at(address: Uint160, position: Uint256) -> Uint256:

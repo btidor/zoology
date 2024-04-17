@@ -7,7 +7,7 @@ from typing import Iterable, Iterator
 
 from bytes import Bytes
 from disassembler import Program
-from environment import Block, ConcreteContract, Contract, Transaction
+from environment import Block, Contract, Transaction
 from sha3 import SHA3
 from smt import Array, Solver, Uint160, Uint256, describe
 from state import Descend, GasHogCall, Jump, State, Termination, Unreachable
@@ -76,7 +76,7 @@ def symbolic_start(program: Contract | Program, sha3: SHA3, suffix: str) -> Stat
     if isinstance(program, Contract):
         contract = program
     else:
-        contract = ConcreteContract(
+        contract = Contract(
             program=program,
             storage=Array[Uint256, Uint256](f"STORAGE{suffix}"),
             nonce=Uint256(f"NONCE{suffix}"),
