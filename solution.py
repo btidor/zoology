@@ -135,7 +135,10 @@ class Validator:
         for name, term in self.constants.items():
             if name.startswith("STORAGE@"):
                 addr = int(name[8:], 16)
-                substitutions[term] = sequence.states[-1].contracts[addr].storage
+                if addr in sequence.states[-1].contracts:
+                    substitutions[term] = sequence.states[-1].contracts[addr].storage
+                else:
+                    substitutions[term] = Array[Uint256, Uint256](Uint256(0))
             elif name == "BALANCE":
                 substitutions[term] = sequence.states[-1].balances
             elif name == "CODESIZE":

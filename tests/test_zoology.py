@@ -113,7 +113,7 @@ def test_reentrance() -> None:
         "00362a95 ffffffffffffffffffffffffc0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0\tvalue: 1125899906842623",
         "2e1a7d4d 0000000000000000000000000000000000000000000000000003cd7ea4c67fff\tvia proxy",
         " -> Proxy CALL -       \tvalue: 1070368744177663",
-        "     -> To 0x147f43c9dbfb7e782775060587fd9e194cbed03c:",
+        "     -> To 0x79cf5bd9e06f09ace1ade01aedeac5c979b77d6c:",
         "        CALL 2e1a7d4d 0000000000000000000000000000000000000000000000000003c00000000000",
         "         -> Proxy CALL -       \tvalue: 1055531162664960",
         "            RETURN 00",
@@ -172,7 +172,7 @@ def test_preservation() -> None:
         "5bda8fa4 000000000000000000000000c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0",
         "f1e02620 0000000000000000000000000000000000000000000000000000000000000000",
         " -> Proxy DELEGATECALL 3beb26c4 0000000000000000000000000000000000000000000000000000000000000000",
-        "    RETURN 00",
+        "    RETURN -       ",
         "      0x2 -> 0xffffffffffffffffffffffffcacacacacacacacacacacacacacacacacacacaca",
     ]
     check_level(16, fixture)
@@ -180,8 +180,8 @@ def test_preservation() -> None:
 
 def test_recovery() -> None:
     fixture = [
-        "To 0x64a87bbadfa695f967ce1306fb172d956140f067:",
-        "    00f55d9d 000000000000000000000000b4b157c7c4b0921065dded675dfe10759eecaa6c",
+        "To 0xfab8648a23eebdd484c15aaeebba94e17ac78129:",
+        "    00f55d9d 000000000000000000000000af98ab8f2e2b24f42c661ed023237f5b7acab049",
     ]
     check_level(17, fixture)
 
@@ -245,9 +245,9 @@ def test_shop() -> None:
 
 def test_motorbike() -> None:
     fixture = [
-        "To 0x509044f053cdbfbd9d2d56d95d24843ceb6b570b:",
+        "To 0x42976789d3e2613934d9386f952bea594f8f4a54:",
         "    8129fc1c",
-        "To 0x509044f053cdbfbd9d2d56d95d24843ceb6b570b:",
+        "To 0x42976789d3e2613934d9386f952bea594f8f4a54:",
         "    4f1ef286 000000000000000000000000c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0"
         + "0000000000000000000000000000000000000000000000000000000000000040"
         + "0000000000000000000000000000000000000000000000000000000000000001"
@@ -291,8 +291,20 @@ def test_switch() -> None:
     fixture = [
         "30c13ade "
         + "0000000000000000000000000000000000000000000000000000000000000044"
-        + "6e6e6e6e00000000000000000000000000000000000000000000000000004444"
+        + "6e6e000000000000000000000000000000000000000000000000000000000000"
         + "20606e1500000000000000000000000000000000000000000000000000000000"
         + "0000000476227e12"
     ]
     check_level(29, fixture)
+
+
+def test_higher_order() -> None:
+    fixture = [
+        "211c85ab 80000000000000000000000000000000000000000000000000000000000000ff",
+        "5b3e8fe7",
+    ]
+    check_level(30, fixture)
+
+
+# def test_stake() -> None:
+#     check_level(31, [])
