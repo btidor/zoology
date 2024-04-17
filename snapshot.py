@@ -35,7 +35,7 @@ with open(_ROOT / "ethernaut.json") as f:
 cache: Snapshot | None = None
 
 
-def snapshot_contracts(address: Uint160) -> dict[int, Contract]:
+def snapshot_contracts(address: Uint160, invisible: bool = True) -> dict[int, Contract]:
     """Load the given contract from the snapshot, and any contracts it references."""
     global cache
     if cache is None:
@@ -48,7 +48,7 @@ def snapshot_contracts(address: Uint160) -> dict[int, Contract]:
     address = Uint160(a)
     program = disassemble(Bytes.fromhex(saved["code"]))
     # ASSUMPTION: no solution requires interacting with the factory contract.
-    contract = ConcreteContract(address=address, program=program, invisible=True)
+    contract = ConcreteContract(address=address, program=program, invisible=invisible)
     contracts = dict[int, Contract]()
 
     for k, v in saved.items():
@@ -56,11 +56,13 @@ def snapshot_contracts(address: Uint160) -> dict[int, Contract]:
             continue
         contract.storage.poke(Uint256(int(k)), Uint256(int(v, 16)))
         if is_sibling_contract(int(k), int(v, 16)):
-            contracts.update(snapshot_contracts(Uint160(int(v, 16))))
+            # Warning! Levels like Delegation include global non-factory
+            # contracts that *do* need to be interacted with.
+            contracts.update(snapshot_contracts(Uint160(int(v, 16)), False))
 
-    # Some level factories create other contracts in their constructor. To
-    # avoid address collisions between these fixed contracts and created
-    # level contracts, bump up the nonce.
+    # Some level factories create other contracts in their constructor. To avoid
+    # address collisions between these fixed contracts and created level
+    # contracts, bump up the nonce.
     contract.nonce = Uint256(16)
     contracts[a] = contract
     return contracts

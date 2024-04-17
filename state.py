@@ -82,11 +82,6 @@ class State:
     # encountered in the execution.
     constraint: Constraint = field(default=Constraint(True))
 
-    # Symbolic constraint that must be satisfied in order for narrowing to
-    # succeed. Currently used to check that DELEGATECALL to a symbolic address
-    # can be fully controlled.
-    narrower: Constraint = field(default=Constraint(True))
-
     # Tracks the path of the program's execution. Each JUMPI is a bit, 1 if
     # taken, 0 if not. MSB-first with a leading 1 prepended.
     path: int = 1
@@ -205,7 +200,6 @@ class State:
         for call in self.calls:
             call.narrow(solver)
 
-        solver.add(self.narrower)
         assert solver.check()
 
     def describe(self, solver: Solver) -> OrderedDict[str, str]:

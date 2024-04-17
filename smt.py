@@ -305,11 +305,6 @@ class Array(zArray[K, V]):
         """Set the given symbolic key, but don't track the write."""
         super().__setitem__(key, value)
 
-    @classmethod
-    def equals(cls, left: Array[K, V], right: Array[K, V]) -> Constraint:
-        """Compare the two arrays for equality."""
-        return _from_expr(Constraint, Kind.EQUAL, left, right)
-
     def printable_diff(
         self, name: str, solver: Solver, original: Array[K, V]
     ) -> Iterable[str]:

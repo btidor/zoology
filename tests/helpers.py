@@ -51,10 +51,10 @@ Token = (
 )
 
 Delegation = (
-    ("Px191", "VIEW", "$any4"),  # *
-    ("Px193", "SAVE", "pwn()"),
+    ("Px331", "VIEW", "$any4"),  # *
+    ("Px333", "SAVE", "pwn()"),
     ("PxD", "VIEW", "owner()"),
-    ("Px3F", "VIEW", None),  # *
+    ("Px7F", "VIEW", None),  # *
     # * if Delegate reverts, Delegation will still return successfully
 )
 
@@ -112,9 +112,9 @@ GatekeeperTwo = (
 )
 
 Preservation = (
-    ("Px60E6F", "SAVE", "setFirstTime(uint256)"),
+    ("PxC1CEF", "SAVE", "setFirstTime(uint256)"),
     ("Px61", "VIEW", "owner()"),
-    ("Px18E6F", "SAVE", "setSecondTime(uint256)"),
+    ("Px31CEF", "SAVE", "setSecondTime(uint256)"),
     ("Px19", "VIEW", "timeZone1Library()"),
     ("PxD", "VIEW", "timeZone2Library()"),
 )

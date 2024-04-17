@@ -571,7 +571,8 @@ def CALL(
         argsSize,
         retOffset,
         retSize,
-        s.changed is None,
+        static=s.changed is None,
+        delegate=False,
     )
 
 
@@ -597,7 +598,7 @@ def RETURN(s: State, offset: Uint256, size: Uint256) -> None:
 def DELEGATECALL(
     s: State,
     gas: Uint256,
-    _address: Uint256,
+    address: Uint256,
     argsOffset: Uint256,
     argsSize: Uint256,
     retOffset: Uint256,
@@ -611,60 +612,17 @@ def DELEGATECALL(
     """
     if s.changed is None:
         raise ValueError("DELEGATECALL is forbidden during a STATICCALL")
-
-    if (address := _address.reveal()) is None:
-        # A DELEGATECALL to an arbitrary contract can overwrite any storage
-        # addresses. (Assume we can control the address completely; if not,
-        # narrowing will fail.)
-        assert s.mystery_proxy is not None
-        n = len(s.calls)
-        transaction = Transaction(
-            origin=s.transaction.origin,
-            caller=s.transaction.caller,
-            address=s.mystery_proxy,
-            callvalue=s.transaction.callvalue,
-            calldata=s.memory.slice(argsOffset, argsSize),
-            gasprice=s.transaction.gasprice,
-        )
-        dc = DelegateCall(
-            transaction,
-            Constraint(f"DCOK{n}{s.suffix}"),
-            Bytes.symbolic(f"DCRETURN{n}{s.suffix}"),
-            (),
-            s.storage,
-            Array[Uint256, Uint256](f"DCSTORAGE{n}{s.suffix}"),
-        )
-        s.narrower &= _address.into(Uint160) == s.mystery_proxy
-        assert (sender := s.transaction.address.reveal()) is not None
-        s.contracts[sender].storage = copy.deepcopy(dc.next_storage)
-        _apply_call(s, dc, retSize, retOffset)
-        s.constraint &= dc.ok | Array[Uint256, Uint256].equals(
-            dc.previous_storage, dc.next_storage
-        )
-        s.changed = True
-        return None
-
-    if address not in s.contracts:
-        raise ValueError("DELEGATECALL to unknown contract: " + hex(address))
-    contract = s.contracts[address]
-    assert isinstance(
-        contract, ConcreteContract
-    ), "DELEGATECALL requires concrete contract"
-
-    transaction = Transaction(
-        origin=s.transaction.origin,
-        caller=s.transaction.caller,
-        address=s.transaction.address,
-        callvalue=s.transaction.callvalue,
-        calldata=s.memory.slice(argsOffset, argsSize),
-        gasprice=s.transaction.gasprice,
-    )
-    return Descend(
-        (
-            _descend_substate(
-                s, transaction, contract.program, (retOffset, retSize), gas, Uint256(0)
-            ),
-        )
+    return _call_common(
+        s,
+        gas,
+        address,
+        Uint256(0),
+        argsOffset,
+        argsSize,
+        retOffset,
+        retSize,
+        static=False,
+        delegate=True,
     )
 
 
@@ -703,7 +661,16 @@ def STATICCALL(
 ) -> ControlFlow:
     """FA - Static message-call into an account."""
     return _call_common(
-        s, gas, address, Uint256(0), argsOffset, argsSize, retOffset, retSize, True
+        s,
+        gas,
+        address,
+        Uint256(0),
+        argsOffset,
+        argsSize,
+        retOffset,
+        retSize,
+        static=True,
+        delegate=False,
     )
 
 
@@ -799,6 +766,7 @@ def _call_common(
     retOffset: Uint256,
     retSize: Uint256,
     static: bool,
+    delegate: bool,
 ) -> ControlFlow:
     address = _address.into(Uint160)
     calldata = s.memory.slice(argsOffset, argsSize)
@@ -816,6 +784,7 @@ def _call_common(
             and s.skip_self_calls
         ):
             continue
+        assert isinstance(contract, ConcreteContract)
 
         cond = address == contract.address
         eoa &= ~cond
@@ -826,14 +795,24 @@ def _call_common(
         state = copy.deepcopy(s)
         state.path |= 1
         state.constraint &= cond
-        transaction = Transaction(
-            origin=state.transaction.origin,
-            caller=state.transaction.address,
-            address=contract.address,
-            callvalue=value,
-            calldata=calldata,
-            gasprice=state.transaction.gasprice,
-        )
+        if delegate:
+            transaction = Transaction(
+                origin=state.transaction.origin,
+                caller=state.transaction.caller,
+                address=state.transaction.address,
+                callvalue=state.transaction.callvalue,
+                calldata=calldata,
+                gasprice=state.transaction.gasprice,
+            )
+        else:
+            transaction = Transaction(
+                origin=state.transaction.origin,
+                caller=state.transaction.address,
+                address=contract.address,
+                callvalue=value,
+                calldata=calldata,
+                gasprice=state.transaction.gasprice,
+            )
         # ASSUMPTION: we assume that the CALL does not revert due to running out
         # of gas, attempting to transfer more than the available balance, and
         # other non-modeled conditions.
@@ -841,7 +820,7 @@ def _call_common(
             _descend_substate(
                 state,
                 transaction,
-                None,
+                contract.program if delegate else None,
                 (retOffset, retSize),
                 gas,
                 transaction.callvalue,
@@ -853,51 +832,53 @@ def _call_common(
         cond = address == s.mystery_proxy
         eoa &= ~cond
         if cond.reveal() is not False:
-            # Case I: proxy returns or reverts without side effects.
             suffix = f"{s.suffix}-{len(s.calls)}"
-            transaction = Transaction(
-                origin=s.transaction.origin,
-                caller=s.transaction.address,
-                address=s.mystery_proxy,
-                callvalue=value,
-                calldata=calldata,
-                gasprice=s.transaction.gasprice,
-            )
-            s.path <<= 1
-            state = copy.deepcopy(s)
-            state.path |= 1
-            state.constraint &= cond
-            ok = Constraint(f"RETURNOK{suffix}")
-            state.transfer(
-                transaction.caller, transaction.address, ok.ite(value, Uint256(0))
-            )
-            call = Call(transaction, ok, Bytes.symbolic(f"RETURNDATA{suffix}"), ())
-            _apply_call(state, call, retSize, retOffset)
-            substates.append(state)
+            if delegate:
+                transaction = Transaction(
+                    origin=s.transaction.origin,
+                    caller=s.transaction.caller,
+                    address=s.transaction.address,
+                    callvalue=s.transaction.callvalue,
+                    calldata=calldata,
+                    gasprice=s.transaction.gasprice,
+                )
 
-            # Case II: proxy consumes all available gas, potentially causing the
-            # calling contract to revert.
-            s.path <<= 1
-            state = copy.deepcopy(s)
-            state.path |= 1
-            state.cost *= 2
-            state.constraint &= cond
-            state.gas_hogged += gas
-            call = GasHogCall(transaction, Constraint(False), Bytes(), (), gas)
-            _apply_call(state, call, retSize, retOffset)
-            substates.append(state)
+                # Case I proxy reverts, no side effects.
+                s.path <<= 1
+                state = copy.deepcopy(s)
+                state.path |= 1
+                state.constraint &= cond
+                dc = DelegateCall(
+                    transaction,
+                    Constraint(False),
+                    Bytes.symbolic(f"DCREVERT{suffix}"),
+                    (),
+                    state.storage,
+                    state.storage,
+                )
+                _apply_call(state, dc, retSize, retOffset)
+                substates.append(state)
 
-            # Case III: proxy makes a reentrant call back into the calling
-            # contract, then returns or reverts with a simple value.
-            #
-            # ASSUMPTION: to prevent infinite loops, we only allow one level of
-            # reentrant self-call (and only to the immediate caller).
-            #
-            # We ignore the possibility of reentrancy during a STATICCALL.
-            # Because no writes can occur and no value can be transferred, the
-            # proxy can effectively simulate the result of any reentrant call.
-            #
-            if not static and "R" not in s.suffix and not s.skip_self_calls:
+                # Case II: proxy overwrites arbitrary storage slot(s) and
+                # returns successfully.
+                s.path <<= 1
+                state = copy.deepcopy(s)
+                state.path |= 1
+                state.constraint &= cond
+                dc = DelegateCall(
+                    transaction,
+                    Constraint(True),
+                    Bytes.symbolic(f"DCRETURN{suffix}"),
+                    (),
+                    state.storage,
+                    Array[Uint256, Uint256](f"DCSTORAGE{suffix}"),
+                )
+                assert (a := state.transaction.address.reveal()) is not None
+                state.contracts[a].storage = copy.deepcopy(dc.next_storage)
+                _apply_call(state, dc, retSize, retOffset)
+                state.changed = True
+                substates.append(state)
+            else:
                 transaction = Transaction(
                     origin=s.transaction.origin,
                     caller=s.transaction.address,
@@ -906,52 +887,106 @@ def _call_common(
                     calldata=calldata,
                     gasprice=s.transaction.gasprice,
                 )
+
+                # Case I: proxy returns or reverts without side effects.
                 s.path <<= 1
                 state = copy.deepcopy(s)
                 state.path |= 1
                 state.constraint &= cond
-                state.transfer(transaction.caller, transaction.address, value)
-                state.suffix += "R"
-                original, state.calls = state.calls, ()
-                reentry = Transaction(
-                    origin=s.transaction.origin,
-                    caller=s.mystery_proxy,
-                    address=s.transaction.address,
-                    callvalue=Uint64(f"REENTRYVALUE{state.suffix}").into(Uint256),
-                    calldata=Bytes.symbolic(f"REENTRYDATA{state.suffix}"),
-                    gasprice=state.transaction.gasprice,
+                ok = Constraint(f"RETURNOK{suffix}")
+                state.transfer(
+                    transaction.caller, transaction.address, ok.ite(value, Uint256(0))
                 )
+                call = Call(transaction, ok, Bytes.symbolic(f"RETURNDATA{suffix}"), ())
+                _apply_call(state, call, retSize, retOffset)
+                substates.append(state)
 
-                def callback(state: State, substate: State) -> State:
-                    assert isinstance(substate.pc, Termination)
-                    call = Call(
-                        transaction,
-                        Constraint(True),
-                        Bytes.symbolic(f"RETURNDATA{suffix}"),
-                        state.calls,
-                    )
-                    state.calls = original
-                    _apply_call(state, call, retSize, retOffset)
-                    if not substate.pc.success:  # skip REVERTs
-                        state.constraint = Constraint(False)
-                    return state
+                # Case II: proxy consumes all available gas, potentially causing
+                # the calling contract to revert.
+                s.path <<= 1
+                state = copy.deepcopy(s)
+                state.path |= 1
+                state.cost *= 2
+                state.constraint &= cond
+                state.gas_hogged += gas
+                call = GasHogCall(transaction, Constraint(False), Bytes(), (), gas)
+                _apply_call(state, call, retSize, retOffset)
+                substates.append(state)
 
-                substates.append(
-                    _descend_substate(
-                        state, reentry, None, callback, gas, reentry.callvalue, static
+                # Case III: proxy makes a reentrant call back into the calling
+                # contract, then returns or reverts with a simple value.
+                #
+                # ASSUMPTION: to prevent infinite loops, we only allow one level
+                # of reentrant self-call (and only to the immediate caller).
+                #
+                # We ignore the possibility of reentrancy during a STATICCALL.
+                # Because no writes can occur and no value can be transferred,
+                # the proxy can effectively simulate the result of any reentrant
+                # call.
+                #
+                if not static and "R" not in s.suffix and not s.skip_self_calls:
+                    s.path <<= 1
+                    state = copy.deepcopy(s)
+                    state.path |= 1
+                    state.constraint &= cond
+                    state.transfer(transaction.caller, transaction.address, value)
+                    state.suffix += "R"
+                    original, state.calls = state.calls, ()
+                    reentry = Transaction(
+                        origin=s.transaction.origin,
+                        caller=s.mystery_proxy,
+                        address=s.transaction.address,
+                        callvalue=Uint64(f"REENTRYVALUE{state.suffix}").into(Uint256),
+                        calldata=Bytes.symbolic(f"REENTRYDATA{state.suffix}"),
+                        gasprice=state.transaction.gasprice,
                     )
-                )
+
+                    def callback(state: State, substate: State) -> State:
+                        assert isinstance(substate.pc, Termination)
+                        call = Call(
+                            transaction,
+                            Constraint(True),
+                            Bytes.symbolic(f"RETURNDATA{suffix}"),
+                            state.calls,
+                        )
+                        state.calls = original
+                        _apply_call(state, call, retSize, retOffset)
+                        if not substate.pc.success:  # skip REVERTs
+                            state.constraint = Constraint(False)
+                        return state
+
+                    substates.append(
+                        _descend_substate(
+                            state,
+                            reentry,
+                            None,
+                            callback,
+                            gas,
+                            reentry.callvalue,
+                            static,
+                        )
+                    )
 
     if eoa.reveal() is not False:
         s.constraint &= eoa
-        transaction = Transaction(
-            origin=s.transaction.origin,
-            caller=s.transaction.address,
-            address=address,
-            callvalue=value,
-            calldata=calldata,
-            gasprice=s.transaction.gasprice,
-        )
+        if delegate:
+            transaction = Transaction(
+                origin=s.transaction.origin,
+                caller=s.transaction.caller,
+                address=s.transaction.address,
+                callvalue=s.transaction.callvalue,
+                calldata=calldata,
+                gasprice=s.transaction.gasprice,
+            )
+        else:
+            transaction = Transaction(
+                origin=s.transaction.origin,
+                caller=s.transaction.address,
+                address=address,
+                callvalue=value,
+                calldata=calldata,
+                gasprice=s.transaction.gasprice,
+            )
         s.transfer(transaction.caller, transaction.address, value)
         _apply_call(
             s, Call(transaction, Constraint(True), Bytes(), ()), retSize, retOffset
@@ -990,7 +1025,6 @@ def _descend_substate(
         logs=state.logs,
         gas_count=state.gas_count,
         constraint=state.constraint,
-        narrower=state.narrower,
         path=state.path,
         cost=state.cost,
         changed=state.changed if not static else None,
@@ -1027,7 +1061,6 @@ def _descend_substate(
         next.gas_count = substate.gas_count
         next.calls = (*next.calls, call)
         next.constraint = substate.constraint
-        next.narrower = substate.narrower
         next.path = substate.path
         next.cost = substate.cost
         if static:

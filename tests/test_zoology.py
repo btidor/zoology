@@ -169,12 +169,11 @@ def test_naughtcoin() -> None:
 
 def test_preservation() -> None:
     fixture = [
-        "5bda8fa4 ffffffffffffffffffffffffc0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0",
+        "5bda8fa4 000000000000000000000000c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0",
         "f1e02620 0000000000000000000000000000000000000000000000000000000000000000",
         " -> Proxy DELEGATECALL 3beb26c4 0000000000000000000000000000000000000000000000000000000000000000",
         "    RETURN 00",
-        "      0x3 -> 0x1",
-        "      0x2 -> 0xcacacacacacacacacacacacacacacacacacacaca",
+        "      0x2 -> 0xffffffffffffffffffffffffcacacacacacacacacacacacacacacacacacacaca",
     ]
     check_level(16, fixture)
 
