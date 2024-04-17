@@ -176,7 +176,7 @@ class Validator:
             gas_count=0,
         )
 
-        for end in universal_transaction(start):
+        for end in universal_transaction(start, check=False):
             assert isinstance(end.pc, Termination)
             solver = Solver()
             candidate = sequence.extend(end)
