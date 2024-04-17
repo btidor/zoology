@@ -19,6 +19,7 @@ from smt import (
     Uint256,
     bvlshr_harder,
     concat_bytes,
+    overflow_safe,
 )
 from state import (
     Call,
@@ -725,13 +726,22 @@ def SELFDESTRUCT(s: State, address: Uint256) -> None:
     """FF - Halt execution and register account for later deletion."""
     if s.changed is None:
         raise ValueError("SELFDESTRUCT is forbidden during a STATICCALL")
-    s.transfer(
-        s.transaction.address, address.into(Uint160), s.balances[s.transaction.address]
-    )
-    assert (addr := s.transaction.address.into(Uint160).reveal()) is not None
+
+    contract = s.transaction.address.into(Uint160)
+    recipient = address.into(Uint160)
+    value = s.balances[contract]
+
+    # Note: if `current` and `recipient` are equal, the value disappears.
+    s.balances[recipient] += value
+    s.constraint &= overflow_safe(s.balances[recipient], value)
+    s.balances[contract] = Uint256(0)
+    s.changed = True
+
     # HACK: technically this cleanup should be done at the end of the
     # transaction.
-    del s.contracts[addr]
+    assert (c := contract.reveal()) is not None
+    del s.contracts[c]
+
     s.pc = Termination(True, Bytes())
 
 
