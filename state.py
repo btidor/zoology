@@ -289,11 +289,12 @@ class Call:
 
     def narrow(self, solver: Solver) -> None:
         """Apply soft constraints to a given solver instance."""
-        for i in range(257):
-            constraint = self.returndata.length == Uint256(i)
-            if solver.check(constraint):
-                solver.add(constraint)
-                break
+        if self.returndata.length.reveal() is None:
+            for i in range(257):
+                constraint = self.returndata.length == Uint256(i)
+                if solver.check(constraint):
+                    solver.add(constraint)
+                    break
         if self.transaction.calldata.length.reveal() is None:
             for i in range(257):
                 constraint = self.transaction.calldata.length == Uint256(i)
