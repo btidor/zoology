@@ -234,6 +234,9 @@ class State:
 
     def compact_calldata(self, data: Bytes) -> Bytes | None:
         """Simplify the given bytes (optimized for calldata)."""
+        if data.slice(Uint256(0), Uint256(4)).reveal():
+            return data
+
         solver = Solver()
         solver.add(self.constraint)
         if not solver.check():
