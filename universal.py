@@ -16,7 +16,7 @@ from vm import step
 
 
 def universal_transaction(
-    state: State, /, check: bool = True, prints: bool = False
+    state: State, /, *, check: bool = True, prints: bool = False
 ) -> Iterator[State]:
     """
     Compute the "universal transaction" over a fully symbolic input.

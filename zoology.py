@@ -107,7 +107,7 @@ class Node:
 
 
 def starting_sequence(
-    contracts: dict[int, Contract], factory: Uint160, prints: bool = False
+    contracts: dict[int, Contract], factory: Uint160, /, *, prints: bool = False
 ) -> Sequence:
     """Call createInstance to set up the level."""
     # ASSUMPTION: the only contracts in existence are the ones related to the

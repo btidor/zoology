@@ -301,7 +301,7 @@ class Call:
             call.narrow(solver)
 
     def describe(
-        self, solver: Solver, select_: Uint160, prints: bool = False
+        self, solver: Solver, select_: Uint160, /, *, prints: bool = False
     ) -> Iterable[str]:
         """Yield a human-readable description of the Call."""
         address = solver.evaluate(self.transaction.address)
@@ -322,7 +322,7 @@ class Call:
 
         for call in self.subcalls:
             first = True
-            for line in call.describe(solver, select_, prints):
+            for line in call.describe(solver, select_, prints=prints):
                 if prints:
                     if first:
                         yield "    "
@@ -350,7 +350,7 @@ class DelegateCall(Call):
     next_storage: Array[Uint256, Uint256] | None  # None if SELFDESTRUCTed
 
     def describe(
-        self, solver: Solver, select_: Uint160, prints: bool = False
+        self, solver: Solver, select_: Uint160, /, *, prints: bool = False
     ) -> Iterable[str]:
         """Yield a human-readable description of the Call."""
         yield " -> Proxy DELEGATECALL "
@@ -382,7 +382,7 @@ class GasHogCall(Call):
     gas: Uint256
 
     def describe(
-        self, solver: Solver, select_: Uint160, prints: bool = False
+        self, solver: Solver, select_: Uint160, /, *, prints: bool = False
     ) -> Iterable[str]:
         """Yield a human-readable description of the Call."""
         yield " -> Proxy CALL "
