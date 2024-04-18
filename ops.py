@@ -818,7 +818,7 @@ def _call_common(
                 contract.program if delegate else None,
                 (retOffset, retSize),
                 gas,
-                transaction.callvalue,
+                value,
                 static,
             )
         )
