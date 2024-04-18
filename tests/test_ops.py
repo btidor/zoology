@@ -673,6 +673,7 @@ def test_SELFDESTRUCT() -> None:
     s = State().with_contract(Contract(address=address))
     s.balances[address] = Uint256(999)
     SELFDESTRUCT(s, Uint256(0x1234))
-    assert len(s.contracts) == 0
+    assert len(s.contracts) == 1
+    assert s.contracts[0xADADADADADADADADADADADADADADADADADADADAD].destructed is True
     assert s.balances[address].reveal() == 0
     assert s.balances[Uint160(0x1234)].reveal() == 999

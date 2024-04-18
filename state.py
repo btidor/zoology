@@ -173,6 +173,12 @@ class State:
         self.balances[dst] += val
         self.changed = True
 
+    def cleanup(self) -> None:
+        """Perform deferred cleanup from SELFDESTRUCT operatoins."""
+        for key, contract in list(self.contracts.items()):
+            if contract.destructed:
+                del self.contracts[key]
+
     def narrow(self, solver: Solver) -> None:
         """Apply soft constraints to a given model instance."""
         constraint = self.transaction.caller == Uint160(

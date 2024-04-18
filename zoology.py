@@ -76,6 +76,7 @@ def search(
             continue
         if not state.pc.success:
             continue
+        state.cleanup()
         candidate = prefix.extend(state)
         match result := check_candidate(candidate, validator, verbose):
             case True:

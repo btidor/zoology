@@ -89,6 +89,7 @@ class Contract:
     program: Program = disassemble(Bytes())
     nonce: Uint256 = Uint256(1)  # starts at 1, see EIP-161
     invisible: bool = False  # can't be CALLed during analysis
+    destructed: bool = False  # SELFDESTRUCTed, to be cleaned up
 
     def clone_and_reset(self) -> Self:
         """Clone this Contract and reset array access tracking."""

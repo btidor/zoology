@@ -63,6 +63,7 @@ def universal_transaction(
                 continue
             if not state.pc.success:
                 continue
+            state.cleanup()
             if check:
                 solver = Solver()
                 solver.add(state.constraint)

@@ -701,10 +701,8 @@ def SELFDESTRUCT(s: State, address: Uint256) -> None:
     s.balances[contract] = Uint256(0)
     s.changed = True
 
-    # HACK: technically this cleanup should be done at the end of the
-    # transaction.
     assert (c := contract.reveal()) is not None
-    del s.contracts[c]
+    s.contracts[c].destructed = True
 
     s.pc = Termination(True, Bytes())
 
@@ -894,12 +892,11 @@ def _call_common(
                     None,
                 )
                 state.calls = (*state.calls, dc)
-                state.pc = Termination(True, Bytes())
 
-                # HACK: technically this cleanup should be done at the end of
-                # the transaction.
                 assert (c := state.transaction.address.reveal()) is not None
-                del state.contracts[c]
+                state.contracts[c].destructed = True
+
+                state.pc = Termination(True, Bytes())
                 substates.append(state)
             else:
                 transaction = Transaction(
@@ -1101,6 +1098,10 @@ def _descend_substate(
                 next.stack.append(call.ok.ite(Uint256(1), Uint256(0)))
             case _:
                 next = callback(next, substate)
+
+        assert (c := state.transaction.address.reveal()) is not None
+        if state.contracts[c].destructed:
+            next.pc = Termination(True, Bytes())
         return next
 
     substate.recursion = metacallback
