@@ -5,7 +5,7 @@ from disassembler import abiencode, disassemble
 from environment import Transaction
 from smt import Uint160, Uint256
 from state import State, Termination
-from vm import printable_execution, step
+from vm import execute, step
 
 from .solidity import compile_solidity, contracts_multiple, load_binary, load_solidity
 
@@ -14,8 +14,8 @@ def concretize_stack(state: State) -> list[int]:
     return [v for v in (x.reveal() for x in state.stack) if v is not None]
 
 
-def execute(state: State) -> State:
-    generator = printable_execution(state)
+def complete(state: State) -> State:
+    generator = execute(state, prints=False)
     try:
         while True:
             next(generator)
@@ -131,7 +131,7 @@ def test_basic_solidity() -> None:
         ),
     ).with_contract(program)
 
-    state = execute(state)
+    state = complete(state)
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
     assert state.pc.returndata.reveal() == b"\x00" * 32
@@ -143,7 +143,7 @@ def test_basic_solidity() -> None:
         contracts=state.contracts,  # carries forward storage
         balances=state.balances,
     )
-    state = execute(state)
+    state = complete(state)
     assert isinstance(state.pc, Termination)
     assert state.pc.success is False
     assert (data := state.pc.returndata.reveal()) is not None
@@ -157,7 +157,7 @@ def test_basic_solidity() -> None:
         contracts=state.contracts,
         balances=state.balances,
     )
-    state = execute(state)
+    state = complete(state)
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
     assert state.pc.returndata.reveal() == b""
@@ -169,7 +169,7 @@ def test_basic_solidity() -> None:
         contracts=state.contracts,
         balances=state.balances,
     )
-    state = execute(state)
+    state = complete(state)
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
     assert (data := state.pc.returndata.reveal()) is not None
@@ -212,7 +212,7 @@ def test_basic_printable() -> None:
         REVERT b''""".splitlines()
     fixture = map(lambda x: x[8:], raw[1:])
 
-    for actual, expected in zip(printable_execution(state), fixture, strict=True):
+    for actual, expected in zip(execute(state, prints=True), fixture, strict=True):
         assert actual == expected
 
 
@@ -223,7 +223,7 @@ def test_fallback() -> None:
         ),
     ).with_contract(load_solidity("fixtures/01_Fallback.sol"))
 
-    state = execute(state)
+    state = complete(state)
 
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
@@ -237,7 +237,7 @@ def test_fallout() -> None:
         ),
     ).with_contract(load_solidity("fixtures/02_Fallout.sol"))
 
-    state = execute(state)
+    state = complete(state)
 
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
@@ -257,7 +257,7 @@ def test_coinflip() -> None:
         57896044618658097711785492504343953926634992332820282019728792003956564819968
     )
 
-    state = execute(state)
+    state = complete(state)
 
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
@@ -278,7 +278,7 @@ def test_telephone() -> None:
         ),
     ).with_contract(load_solidity("fixtures/04_Telephone.sol"))
 
-    state = execute(state)
+    state = complete(state)
 
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
@@ -296,7 +296,7 @@ def test_token() -> None:
         ),
     ).with_contract(load_solidity("fixtures/05_Token.sol"))
 
-    state = execute(state)
+    state = complete(state)
 
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
@@ -314,7 +314,7 @@ def test_delegation() -> None:
     )
     state.storage.poke(Uint256(1), addresses["Delegate"].into(Uint256))
 
-    state = execute(state)
+    state = complete(state)
 
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
@@ -326,7 +326,7 @@ def test_force() -> None:
         transaction=Transaction(callvalue=Uint256(0x1234)),
     ).with_contract(load_binary("fixtures/07_Force.bin"))
 
-    state = execute(state)
+    state = complete(state)
 
     assert isinstance(state.pc, Termination)
     assert state.pc.success is False
@@ -340,7 +340,7 @@ def test_vault() -> None:
         ),
     ).with_contract(load_solidity("fixtures/08_Vault.sol"))
 
-    state = execute(state)
+    state = complete(state)
 
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
@@ -352,7 +352,7 @@ def test_king() -> None:
         transaction=Transaction(callvalue=Uint256(0x1234)),
     ).with_contract(load_solidity("fixtures/09_King.sol"))
 
-    state = execute(state)
+    state = complete(state)
 
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
@@ -367,7 +367,7 @@ def test_reentrancy() -> None:
         ),
     ).with_contract(load_solidity("fixtures/10_Reentrancy.sol"))
 
-    state = execute(state)
+    state = complete(state)
 
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
@@ -385,7 +385,7 @@ def test_elevator() -> None:
         contracts=contracts,
     )
 
-    state = execute(state)
+    state = complete(state)
 
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
@@ -400,7 +400,7 @@ def test_privacy() -> None:
     ).with_contract(load_binary("fixtures/12_Privacy.bin"))
     state.storage.poke(Uint256(5), Uint256(0x4321 << 128))
 
-    state = execute(state)
+    state = complete(state)
 
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
@@ -425,7 +425,7 @@ def test_gatekeeper_two() -> None:
         ),
     ).with_contract(load_solidity("fixtures/14_GatekeeperTwo.sol"))
 
-    state = execute(state)
+    state = complete(state)
 
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
@@ -444,7 +444,7 @@ def test_preservation() -> None:
     state.storage.poke(Uint256(0), addresses["LibraryContract"].into(Uint256))
     state.storage.poke(Uint256(1), addresses["LibraryContract"].into(Uint256))
 
-    state = execute(state)
+    state = complete(state)
 
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True

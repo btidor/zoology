@@ -27,7 +27,7 @@ from smt import (
 from snapshot import LEVEL_FACTORIES, PLAYER, PROXY, snapshot_contracts
 from solution import Solution, Validator
 from state import Descend, Jump, State, Termination, Unreachable
-from vm import printable_execution, step
+from vm import execute, step
 
 TSTART = int(time.time())
 
@@ -132,12 +132,11 @@ def starting_sequence(
     start.balances[PLAYER] = Uint256(10**18)
     start.balances[start.transaction.address] = start.transaction.callvalue
 
-    generator = printable_execution(start)
+    generator = execute(start, prints=prints)
     try:
         while True:
             line = next(generator)
-            if prints:
-                vprint(line + "\n")
+            vprint(line + "\n")
     except StopIteration as e:
         end = e.value
         assert isinstance(end, State)

@@ -58,7 +58,7 @@ def step(state: State) -> ControlFlow | None:
             return result
 
 
-def printable_execution(state: State) -> Generator[str, None, State]:
+def execute(state: State, /, *, prints: bool = False) -> Generator[str, None, State]:
     """
     Invoke a contract with concrete inputs and state.
 
@@ -68,7 +68,8 @@ def printable_execution(state: State) -> Generator[str, None, State]:
     while isinstance(state.pc, int):
         # Print next instruction
         ins = program.instructions[state.pc]
-        yield str(ins)
+        if prints:
+            yield str(ins)
 
         # Execute a single instruction with concrete jumps
         match step(state):
@@ -79,7 +80,7 @@ def printable_execution(state: State) -> Generator[str, None, State]:
             case Descend(substates):
                 if len(substates) > 1:
                     raise ValueError("control flow branches on symbolic condition")
-                substate = yield from printable_execution(substates[0])
+                substate = yield from execute(substates[0], prints=prints)
                 if substate.recursion is not None:
                     state = substate.recursion(substate)
             case Unreachable():
@@ -87,15 +88,16 @@ def printable_execution(state: State) -> Generator[str, None, State]:
             case unknown:
                 raise ValueError(f"unknown action: {unknown}")
 
-        # Print stack
-        for x in state.stack:
-            assert (v := x.reveal()) is not None
-            yield "  " + v.to_bytes(32).hex()
-        yield ""
+        if prints:  # print stack
+            for x in state.stack:
+                assert (v := x.reveal()) is not None
+                yield "  " + v.to_bytes(32).hex()
+            yield ""
 
     assert isinstance(state.pc, Termination)
-    assert (r := state.pc.returndata.reveal()) is not None
-    yield ("RETURN" if state.pc.success else "REVERT") + " " + str(r)
+    if prints:
+        assert (r := state.pc.returndata.reveal()) is not None
+        yield ("RETURN" if state.pc.success else "REVERT") + " " + str(r)
     return state
 
 
@@ -107,5 +109,5 @@ if __name__ == "__main__":
         ),
     ).with_contract(load_solidity("fixtures/02_Fallout.sol"))
 
-    for line in printable_execution(start):
+    for line in execute(start, prints=True):
         print(line)
