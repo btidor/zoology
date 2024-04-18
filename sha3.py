@@ -7,10 +7,10 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable, Literal, TypeAlias
 
 from Crypto.Hash import keccak
-from zbitvector import Constraint
 
 from bytes import BYTES, Bytes
 from smt import (
+    Constraint,
     NarrowingError,
     Solver,
     Uint,

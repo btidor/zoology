@@ -176,6 +176,12 @@ class Validator:
             gas_count=0,
         )
 
+        # Allow validateInstance(...) to call back into the factory contract.
+        # This is done in Double Entry Point in order to invoke a helper
+        # function, for example.
+        assert (address := self.transaction.address.reveal()) is not None
+        start.contracts[address].invisible = False
+
         for end in universal_transaction(start, check=False):
             assert isinstance(end.pc, Termination)
             solver = Solver()
