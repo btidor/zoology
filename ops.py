@@ -528,6 +528,8 @@ def CREATE(s: State, value: Uint256, offset: Uint256, size: Uint256) -> ControlF
     if s.changed is None:
         raise ValueError("CREATE is forbidden during a STATICCALL")
     initcode = s.compact_bytes(s.memory.slice(offset, size))
+    if initcode is None:
+        return Unreachable()
     sender_address = s.transaction.address.reveal()
     assert sender_address is not None, "CREATE requires concrete sender address"
 
@@ -626,6 +628,8 @@ def CREATE2(
     if s.changed is None:
         raise ValueError("CREATE2 is forbidden during a STATICCALL")
     initcode = s.compact_bytes(s.memory.slice(offset, size))
+    if initcode is None:
+        return Unreachable()
     assert initcode.reveal() is not None, "CREATE2 requires concrete program data"
     # ...because the code is hashed and used in the address, which must be concrete
     salt = _salt.reveal()

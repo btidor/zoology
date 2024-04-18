@@ -214,14 +214,15 @@ class State:
             r["Return"] = "0x" + returndata.hex()
         return r
 
-    def compact_bytes(self, bytes: Bytes) -> Bytes:
+    def compact_bytes(self, bytes: Bytes) -> Bytes | None:
         """Simplify the given bytes using the current constraints."""
         if bytes.reveal() is not None:
             return bytes
 
         solver = Solver()
         solver.add(self.constraint)
-        assert solver.check()
+        if not solver.check():
+            return None  # this path is unreachable
         self.constraint &= bytes.compact(solver, Constraint(True))
         return bytes
 
