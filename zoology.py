@@ -267,7 +267,7 @@ def check_candidate(
 
 
 def vprint(part: str) -> None:
-    """Print a partial line, if verbose mode is enabled."""
+    """Print a partial line of debugging output."""
     if "args" in globals():
         print(part, end="")
         sys.stdout.flush()

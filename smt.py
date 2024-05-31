@@ -203,7 +203,7 @@ def evaluate(solver: Solver, s: Array[K, V]) -> dict[int, int]: ...
 def evaluate(solver: Solver, s: Constraint | Array[K, V]) -> bool | dict[int, int]:
     """Backdoor method for evaluating non-bitvectors."""
     if not solver._current or _bitwuzla.last_check is not solver:  # type: ignore
-        raise ValueError("solver is not ready for model evaluation.")
+        raise ValueError("solver is not ready for model evaluation")
 
     match s:
         case Constraint():

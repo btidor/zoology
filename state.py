@@ -174,7 +174,7 @@ class State:
         self.changed = True
 
     def cleanup(self) -> None:
-        """Perform deferred cleanup from SELFDESTRUCT operatoins."""
+        """Perform deferred cleanup from SELFDESTRUCT operations."""
         for key, contract in list(self.contracts.items()):
             if contract.destructed:
                 del self.contracts[key]

@@ -109,7 +109,7 @@ def test_king() -> None:
 
 
 def test_reentrance() -> None:
-    fixtures = [
+    fixture = [
         "00362a95 ffffffffffffffffffffffffc0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0\tvalue: 1125899906842623",
         "2e1a7d4d 0000000000000000000000000000000000000000000000000003c67ea4c67f00\tvia proxy",
         " -> Proxy CALL -       \tvalue: 1062672162782976",
@@ -120,7 +120,7 @@ def test_reentrance() -> None:
         "        RETURN -       ",
         "    RETURN -",
     ]
-    check_level(10, fixtures)
+    check_level(10, fixture)
 
 
 def test_elevator() -> None:
