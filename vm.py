@@ -80,6 +80,7 @@ def execute(state: State, /, *, prints: bool = False) -> Generator[str, None, St
             case Descend(substates):
                 if len(substates) > 1:
                     raise ValueError("control flow branches on symbolic condition")
+                assert len(substates) == 1
                 substate = yield from execute(substates[0], prints=prints)
                 if substate.recursion is not None:
                     state = substate.recursion(substate)

@@ -176,6 +176,8 @@ class SHA3:
         vectors = list[Uint[Any]]()
         lengths = [solver.evaluate(k.length) for (k, _) in self.free]
         for i, ((key, digest), length) in enumerate(zip(self.free, lengths)):
+            if length == 0:
+                continue  # handled with symbolic constraints
             vector = concat_bytes(*(key[Uint256(i)] for i in range(length)))
             vectors.append(vector)
             for (key2, digest2), length2 in zip(self.free[i + 1 :], lengths[i + 1 :]):
