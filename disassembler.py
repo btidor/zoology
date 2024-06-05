@@ -50,6 +50,8 @@ class Instruction:
     # Operand (PUSH only)
     operand: Uint256 | None = None
 
+    custom: LoopCopy | None = None
+
     def __str__(self) -> str:
         msg = f"{self.offset:04x}  {self.name}"
         if self.suffix is not None:
@@ -176,6 +178,20 @@ def _decode_instruction(code: bytes | Bytes, offset: int) -> Instruction:
 def abiencode(signature: str) -> bytes:
     """Encode a Solidity function-call signature."""
     return keccak.new(data=signature.encode(), digest_bits=256).digest()[:4]
+
+
+@dataclass
+class LoopCopy:
+    """An custom instruction to copy data between memory addresses."""
+
+    start: Uint256
+    end: Uint256
+    stride: Uint256
+
+    read: Uint256
+    write: Uint256
+
+    exit: int
 
 
 if __name__ == "__main__":

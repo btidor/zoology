@@ -161,7 +161,7 @@ def test_naughtcoin() -> None:
         "095ea7b3 000000000000000000000000cacacacacacacacacacacacacacacacacacacaca"
         + "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
         "23b872dd 000000000000000000000000cacacacacacacacacacacacacacacacacacacaca"
-        + "000000000000000000000000ffffffffffffffffffffffffffffffffffffffff"
+        + "0000000000000000000000008acacacacacacacacacacacacacacacacacacacf"
         + "00000000000000000000000000000000000000000000d3c21bcecceda1000000",
     ]
     check_level(15, fixture)
@@ -172,7 +172,7 @@ def test_preservation() -> None:
         "5bda8fa4 000000000000000000000000c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0",
         "f1e02620 0000000000000000000000000000000000000000000000000000000000000000",
         " -> Proxy DELEGATECALL 3beb26c4 0000000000000000000000000000000000000000000000000000000000000000",
-        "    RETURN -       ",
+        "    RETURN 00",
         "      0x2 -> 0xffffffffffffffffffffffffcacacacacacacacacacacacacacacacacacacaca",
     ]
     check_level(16, fixture)
@@ -297,7 +297,7 @@ def test_switch() -> None:
     fixture = [
         "30c13ade "
         + "0000000000000000000000000000000000000000000000000000000000000044"
-        + "6e6e000000000000000000000000000000000000000000000000000000000000"
+        + "7622ff1500000000000000000000000000000000000000000000000000000044"
         + "20606e1500000000000000000000000000000000000000000000000000000000"
         + "0000000476227e12"
     ]

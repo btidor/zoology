@@ -15,8 +15,8 @@ def check_level(i: int) -> None:
             pass
 
 
-# def test_hello() -> None:
-#     check_level(0)
+def test_hello() -> None:
+    check_level(0)
 
 
 def test_fallback() -> None:
@@ -103,8 +103,8 @@ def test_shop() -> None:
     check_level(21)
 
 
-def test_dex() -> None:
-    check_level(22)
+# def test_dex() -> None:
+#     check_level(22)
 
 
 # def test_dex2() -> None:
@@ -139,5 +139,5 @@ def test_higher_order() -> None:
     check_level(30)
 
 
-# def test_stake() -> None:
-#     check_level(31)
+def test_stake() -> None:
+    check_level(31)

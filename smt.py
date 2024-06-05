@@ -151,6 +151,18 @@ def substitute(s: S, replacements: dict[BitwuzlaTerm, Expression]) -> S:
     )
 
 
+def substitute2(s: S, replacements: dict[Uint[N], Uint[N]]) -> S:
+    """Perform term substitution according to the given map."""
+    if len(replacements) == 0:
+        return s
+    return _make_symbolic(
+        s.__class__,
+        BZLA.substitute(
+            _term(s), dict((_term(k), _term(v)) for k, v in replacements.items())
+        ),
+    )
+
+
 def compact_zarray(
     solver: Solver, constraint: Constraint, array: zArray[Uint256, Uint8]
 ) -> Constraint:

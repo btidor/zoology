@@ -5,7 +5,7 @@ from inspect import Signature, signature
 from typing import Any, Callable, Literal
 
 from bytes import Bytes
-from disassembler import Instruction, Program, disassemble
+from disassembler import Instruction, LoopCopy, Program, disassemble
 from environment import Contract, Transaction
 from opcodes import REFERENCE, SPECIAL, UNIMPLEMENTED
 from smt import (
@@ -20,6 +20,7 @@ from smt import (
     bvlshr_harder,
     concat_bytes,
     overflow_safe,
+    substitute2,
 )
 from state import (
     Call,
@@ -1106,6 +1107,32 @@ def _descend_substate(
 
     substate.recursion = metacallback
     return substate
+
+
+def CUSTOM(s: State, ins: Instruction) -> None:
+    """XX - Implement custom logic for loop flattening."""
+    match ins.custom:
+        case LoopCopy(start, end, stride, read, write, exit):
+            stack = list(reversed(s.stack))
+            substitutions = dict((Uint256(f"STACK{i}"), stack[i]) for i in range(8))
+            start = substitute2(start, substitutions)
+            end = substitute2(end, substitutions)
+            stride = substitute2(stride, substitutions)
+            read = substitute2(read, substitutions)
+            write = substitute2(write, substitutions)
+
+            if stride.reveal() != 0x20:
+                raise NotImplementedError(f"unsupported stride length: {stride}")
+
+            s.memory.graft(
+                s.memory.slice(read + start, end - start),
+                write + start,
+            )
+            s.stack.pop()
+            s.stack.append(end)
+            s.pc = s.program.jumps[exit]
+        case None:
+            raise ValueError("CUSTOM requires a descriptor object")
 
 
 def _load_ops() -> dict[str, tuple[Any, Signature]]:

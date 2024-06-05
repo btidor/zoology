@@ -14,6 +14,7 @@ from typing import Any
 from bytes import Bytes
 from disassembler import abiencode
 from environment import Contract, Transaction
+from loops import flatten_loops
 from sequence import Sequence
 from smt import (
     ConstrainingError,
@@ -146,6 +147,12 @@ def starting_sequence(
     error = data[68:].strip().decode()
     assert end.pc.success, f"createInstance() failed{': ' + error if error else ''}"
     instance = Uint160(int.from_bytes(data))
+
+    for contract in end.contracts.values():
+        if contract.invisible:
+            continue
+        contract.program = flatten_loops(contract.program)
+
     return Sequence(
         factory,
         instance,

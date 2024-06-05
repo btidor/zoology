@@ -16,11 +16,13 @@ def do_code(level: int) -> None:
     contracts = snapshot_contracts(factory)
     beginning = starting_sequence(contracts, factory)
 
-    assert (instance := beginning.instance.reveal()) is not None
-    assert (
-        code := beginning.states[-1].contracts[instance].program.code.reveal()
-    ) is not None
-    print(code.hex())
+    for contract in beginning.states[-1].contracts.values():
+        if contract.invisible:
+            continue
+        x = "*" if (contract.address == beginning.instance).reveal() else ""
+        print(str(contract.address) + x)
+        assert (code := contract.program.code.reveal()) is not None
+        print("-", code.hex())
 
 
 def do_trace(level: int, path: int) -> None:
@@ -61,13 +63,6 @@ def _offset(program: Program, pc: int) -> str:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "-l",
-        "--level",
-        help="select which level(s) to analyze",
-        action="append",
-        type=int,
-    )
     commands = parser.add_subparsers(dest="command")
     code = commands.add_parser("code")
     code.add_argument("level", type=int)
@@ -75,8 +70,8 @@ if __name__ == "__main__":
     trace = commands.add_parser("trace")
     trace.add_argument("level", type=int)
     trace.add_argument("path")
-    args = parser.parse_args()
 
+    args = parser.parse_args()
     match args.command:
         case "code":
             do_code(args.level)
@@ -89,4 +84,4 @@ if __name__ == "__main__":
                 p = int(args.path, 16)
             do_trace(args.level, p)
         case _:
-            raise ValueError(f"unknown action: {args.action}")
+            parser.print_help()
