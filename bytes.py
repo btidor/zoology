@@ -268,6 +268,7 @@ class Memory:
         for k, v in self.writes:
             if isinstance(v, ByteSlice):
                 constraint &= v.compact(solver, constraint)
+                assert solver.check()
         constraint, self.length = compact_helper(
             solver, constraint, self.length, length_
         )
