@@ -1,7 +1,10 @@
 #!/usr/bin/env pytest
 
+from heapq import heappop, heappush
+
 from snapshot import LEVEL_FACTORIES, snapshot_contracts
-from universal import universal_transaction
+from state import Descend, Jump, Termination, Unreachable
+from vm import step
 from zoology import make_heads, starting_sequence
 
 
@@ -10,9 +13,27 @@ def check_level(i: int) -> None:
     contracts = snapshot_contracts(factory)
 
     beginning = starting_sequence(contracts, factory)
-    for head in make_heads(beginning):
-        for _ in universal_transaction(head, check=False):
-            pass
+    queue = make_heads(beginning)
+    while queue:
+        state = heappop(queue)
+        while isinstance(state.pc, int):
+            match step(state):
+                case None:
+                    continue
+                case Jump(targets):
+                    for target in targets:
+                        heappush(queue, target)
+                    break
+                case Descend():
+                    break  # don't analyze cross-contract calls
+                case Unreachable():
+                    break
+                case unknown:
+                    raise ValueError(f"unknown action: {unknown}")
+
+        if isinstance(state.pc, Termination):
+            assert state.recursion is None
+            state.cleanup()
 
 
 def test_hello() -> None:
@@ -103,16 +124,16 @@ def test_shop() -> None:
     check_level(21)
 
 
-# def test_dex() -> None:
-#     check_level(22)
+def test_dex() -> None:
+    check_level(22)
 
 
-# def test_dex2() -> None:
-#     check_level(23)
+def test_dex2() -> None:
+    check_level(23)
 
 
-# def test_puzzle_wallet() -> None:
-#     check_level(24)
+def test_puzzle_wallet() -> None:
+    check_level(24)
 
 
 # def test_motorbike() -> None:
@@ -131,8 +152,8 @@ def test_gatekeeper_three() -> None:
     check_level(28)
 
 
-# def test_switch() -> None:
-#     check_level(29)
+def test_switch() -> None:
+    check_level(29)
 
 
 def test_higher_order() -> None:
