@@ -4,13 +4,22 @@
 
 from __future__ import annotations
 
-import copy
 from itertools import batched
-from typing import Any, Iterable, Literal, Self, TypeAlias, TypeVar, Union, overload
+from typing import (
+    Any,
+    Literal,
+    Protocol,
+    Self,
+    Sequence,
+    TypeAlias,
+    TypeVar,
+    Union,
+    overload,
+    runtime_checkable,
+)
 
 from Crypto.Hash import keccak
-from zbitvector import Array as zArray
-from zbitvector import Constraint, Int, Solver, Symbolic, Uint, _bitwuzla
+from zbitvector import Array, Constraint, Int, Solver, Symbolic, Uint, _bitwuzla
 from zbitvector._bitwuzla import BZLA, BitwuzlaTerm, Kind
 
 Uint8 = Uint[Literal[8]]
@@ -19,7 +28,7 @@ Uint64 = Uint[Literal[64]]
 Uint160 = Uint[Literal[160]]
 Uint256 = Uint[Literal[256]]
 
-Expression: TypeAlias = "Symbolic | zArray[Any, Any]"
+Expression: TypeAlias = "Symbolic | Array[Any, Any]"
 
 N = TypeVar("N", bound=int)
 S = TypeVar("S", bound=Expression)
@@ -141,30 +150,48 @@ def get_constants(s: Symbolic) -> dict[str, BitwuzlaTerm]:
     return constants
 
 
-def substitute(s: S, replacements: dict[BitwuzlaTerm, Expression]) -> S:
-    """Perform term substitution according to the given map."""
-    if len(replacements) == 0:
-        return s
-    return _make_symbolic(
-        s.__class__,
-        BZLA.substitute(_term(s), dict((k, _term(v)) for k, v in replacements.items())),
-    )
+Substitutions: TypeAlias = Sequence[
+    tuple[Uint256, Uint256]
+    | tuple[Uint160, Uint160]
+    | tuple[Uint64, Uint64]
+    | tuple[Array[Uint256, Uint256], Array[Uint256, Uint256]]
+    | tuple[Array[Uint160, Uint256], Array[Uint160, Uint256]]
+    | tuple[Array[Uint8, Uint256], Array[Uint8, Uint256]]
+    | tuple[Array[Uint256, Uint8], Array[Uint256, Uint8]]
+]
 
 
-def substitute2(s: S, replacements: dict[Uint[N], Uint[N]]) -> S:
+@runtime_checkable
+class Substitutable(Protocol):
+    """Classes on which term substitution can be performed."""
+
+    def __substitute__(self, replacements: Substitutions) -> Self: ...
+
+
+R = TypeVar("R", bound=object)
+
+
+def substitute(item: R, subs: Substitutions) -> R:
     """Perform term substitution according to the given map."""
-    if len(replacements) == 0:
-        return s
-    return _make_symbolic(
-        s.__class__,
-        BZLA.substitute(
-            _term(s), dict((_term(k), _term(v)) for k, v in replacements.items())
-        ),
-    )
+    if len(subs) == 0:
+        return item
+    match item:
+        case Symbolic() | Array():
+            return _make_symbolic(
+                item.__class__,  # type: ignore
+                BZLA.substitute(
+                    _term(item),  # type: ignore
+                    dict((_term(k), _term(v)) for k, v in subs),
+                ),
+            )  # type: ignore
+        case Substitutable():
+            return item.__substitute__(subs)
+        case _:
+            return item
 
 
 def compact_zarray(
-    solver: Solver, constraint: Constraint, array: zArray[Uint256, Uint8]
+    solver: Solver, constraint: Constraint, array: Array[Uint256, Uint8]
 ) -> Constraint:
     """Simplify array keys using the given solver's contraints."""
     assert solver.check()
@@ -275,88 +302,3 @@ class NarrowingError(Exception):
 
     def __str__(self) -> str:
         return self.key.hex() if self.key else "unknown"
-
-
-class Array(zArray[K, V]):
-    """A wrapper around zbitvector.Array. Supports read and write tracking."""
-
-    def __init__(self, value: V | str, /) -> None:
-        """Create a new Array."""
-        super().__init__(value)
-        self.accessed = list[K]()
-        self.written = list[K]()
-
-    def __deepcopy__(self, memo: Any) -> Self:
-        result = super().__deepcopy__(memo)
-        result.accessed = copy.copy(self.accessed)
-        result.written = copy.copy(self.written)
-        return result
-
-    def clone_and_reset(self) -> Self:
-        """Clone this Array and reset access tracking."""
-        result = super().__deepcopy__(None)
-        result.accessed = []
-        result.written = []
-        return result
-
-    def __getitem__(self, key: K) -> V:
-        """Look up the given symbolic key."""
-        self.accessed.append(key)
-        return self.peek(key)
-
-    def __setitem__(self, key: K, value: V) -> None:
-        """Set the given symbolic key to the given symbolic value."""
-        self.written.append(key)
-        self.poke(key, value)
-
-    def peek(self, key: K) -> V:
-        """Look up the given symbolic key, but don't track the lookup."""
-        return super().__getitem__(key)
-
-    def poke(self, key: K, value: V) -> None:
-        """Set the given symbolic key, but don't track the write."""
-        super().__setitem__(key, value)
-
-    def printable_diff(
-        self, name: str, solver: Solver, original: Array[K, V]
-    ) -> Iterable[str]:
-        """
-        Evaluate a diff of this array against another.
-
-        Yields a human-readable description of the differences.
-        """
-        diffs: list[tuple[str, list[tuple[K, V, V | None]]]] = [
-            ("R", [(key, original.peek(key), None) for key in self.accessed]),
-            (
-                "W",
-                [(key, self.peek(key), original.peek(key)) for key in self.written],
-            ),
-        ]
-        line = name
-
-        for prefix, rows in diffs:
-            concrete = dict[str, tuple[str, str | None]]()
-            for key, value, prior in rows:
-                k = describe(solver.evaluate(key))
-                v = describe(solver.evaluate(value))
-                p = describe(solver.evaluate(prior)) if prior is not None else None
-                if v != p:
-                    concrete[k] = (v, p)
-
-            for k in sorted(concrete.keys()):
-                line += f"\t{prefix}: {k} "
-                if len(k) > 34:
-                    yield line
-                    line = "\t"
-                v, p = concrete[k]
-                line += f"-> {v}"
-                if p is not None:
-                    if len(v) > 34:
-                        yield line
-                        line = "\t  "
-                    line += f" (from {p})"
-                yield line
-                line = ""
-
-        if line == "":
-            yield ""

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass, field
-from typing import Any, Iterable, Literal, TypeAlias
+from typing import Any, Literal, TypeAlias
 
 from Crypto.Hash import keccak
 
@@ -13,14 +13,14 @@ from smt import (
     Constraint,
     NarrowingError,
     Solver,
+    Substitutions,
     Uint,
-    Uint8,
     Uint256,
     concat_bytes,
-    describe,
     iff,
     implies,
     prequal,
+    substitute,
 )
 
 Uint128: TypeAlias = Uint[Literal[128]]
@@ -197,7 +197,7 @@ class SHA3:
 
             constraint = key.length == Uint256(len(data))
             for i, b in enumerate(data):
-                constraint &= key[Uint256(i)] == Uint8(b)
+                constraint &= key[Uint256(i)] == BYTES[b]
             constraint &= digest == digest1
 
             for vector2, digest2 in concretized:
@@ -213,25 +213,13 @@ class SHA3:
 
         return concretized
 
-    def printable(self, solver: Solver) -> Iterable[str]:
-        """Yield a human-readable evaluation using the given model."""
-        line = "SHA3"
-        seen = set[str]()
-        hashes = list(self.concrete.values()) + self.narrow(solver)
-        for vector, digest in hashes:
-            assert (scalar := vector.reveal()) is not None
-            k = "0x" + scalar.to_bytes(vector.width // 8).hex()
-            if k in seen:
-                continue
-            line += f"\t{k} "
-            if len(k) > 34:
-                yield line
-                line = "\t"
-            v = describe(digest)
-            line += f"-> {v}"
-            yield line
-            line = ""
-            seen.add(k)
-
-        if line == "":
-            yield ""
+    def __substitute__(self, subs: Substitutions) -> SHA3:
+        free = [(substitute(a, subs), substitute(b, subs)) for a, b in self.free]
+        symbolic = [
+            (substitute(a, subs), substitute(b, subs)) for a, b in self.symbolic
+        ]
+        concrete = dict(
+            (a, (substitute(b, subs), substitute(c, subs)))
+            for a, (b, c) in self.concrete.items()
+        )
+        return SHA3(free, symbolic, concrete)

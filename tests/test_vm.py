@@ -1,13 +1,12 @@
 #!/usr/bin/env pytest
 
+
 from bytes import Bytes
 from disassembler import abiencode, disassemble
-from environment import Transaction
 from smt import Uint160, Uint256
-from state import State, Termination
-from vm import execute, step
+from state import State, Termination, Transaction
 
-from .solidity import compile_solidity, contracts_multiple, load_binary, load_solidity
+from .solidity import compile_solidity, load_binary, load_solidity
 
 
 def concretize_stack(state: State) -> list[int]:
@@ -141,7 +140,7 @@ def test_basic_solidity() -> None:
             calldata=Bytes(abiencode("withdraw()")),
         ),
         contracts=state.contracts,  # carries forward storage
-        balances=state.balances,
+        balance=state.balance,
     )
     state = complete(state)
     assert isinstance(state.pc, Termination)
@@ -155,7 +154,7 @@ def test_basic_solidity() -> None:
             calldata=Bytes(abiencode("contribute()")),
         ),
         contracts=state.contracts,
-        balances=state.balances,
+        balance=state.balance,
     )
     state = complete(state)
     assert isinstance(state.pc, Termination)
@@ -167,7 +166,7 @@ def test_basic_solidity() -> None:
             calldata=Bytes(abiencode("owner()")),
         ),
         contracts=state.contracts,
-        balances=state.balances,
+        balance=state.balance,
     )
     state = complete(state)
     assert isinstance(state.pc, Termination)

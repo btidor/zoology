@@ -1,4 +1,4 @@
-"""Types for representing symbolic sequence of bytes."""
+"""Types for representing a symbolic sequence of bytes."""
 
 from __future__ import annotations
 
@@ -6,8 +6,10 @@ import copy
 from typing import Any, Iterable, Self, TypeVar
 
 from smt import (
+    Array,
     Constraint,
     Solver,
+    Substitutions,
     Uint,
     Uint8,
     Uint64,
@@ -17,7 +19,7 @@ from smt import (
     concat_bytes,
     concat_words,
     explode_bytes,
-    zArray,
+    substitute,
 )
 
 T = TypeVar("T", bound="Bytes")
@@ -38,7 +40,7 @@ class Bytes:
         self.data = data if isinstance(data, bytes) else None
         self.length = Uint256(len(data))
         self.check_length = False
-        self.array = zArray[Uint256, Uint8](BYTES[0])
+        self.array = Array[Uint256, Uint8](BYTES[0])
         if isinstance(data, bytes):
             for i in range(len(INTEGERS), len(data)):
                 INTEGERS.append(Uint256(i))
@@ -61,11 +63,11 @@ class Bytes:
         # should be a reasonable upper limit.
         return cls.custom(
             Uint64(length if length is not None else f"{name}.length").into(Uint256),
-            zArray[Uint256, Uint8](name),
+            Array[Uint256, Uint8](name),
         )
 
     @classmethod
-    def custom(cls, length: Uint256, array: zArray[Uint256, Uint8]) -> Bytes:
+    def custom(cls, length: Uint256, array: Array[Uint256, Uint8]) -> Bytes:
         """Create a new Bytes with custom properties."""
         result = cls.__new__(cls)
         result.data, result.length, result.array = None, length, array
@@ -131,6 +133,9 @@ class Bytes:
             return self.data
         return _reveal(self)
 
+    def __substitute__(self, subs: Substitutions) -> Bytes:
+        return self.custom(substitute(self.length, subs), substitute(self.array, subs))
+
 
 class ByteSlice(Bytes):
     """Represents an immutable slice of Bytes or Memory."""
@@ -177,6 +182,13 @@ class ByteSlice(Bytes):
         )
         return constraint
 
+    def __substitute__(self, subs: Substitutions) -> ByteSlice:
+        return ByteSlice(
+            substitute(self.inner, subs),
+            substitute(self.offset, subs),
+            substitute(self.length, subs),
+        )
+
 
 class Memory:
     """A mutable, symbolic-length sequence of symbolic bytes."""
@@ -186,7 +198,7 @@ class Memory:
     def __init__(self, data: bytes = b"") -> None:
         """Create a new, empty Memory."""
         self.length = Uint256(0)
-        self.array = zArray[Uint256, Uint8](BYTES[0])
+        self.array = Array[Uint256, Uint8](BYTES[0])
         self.writes = list[BytesWrite]()  # writes to apply *on top of* array
         # When hashing mapping keys, Solidity programs put the values to be
         # hashed in the reserved range [0x0, 0x40). Splitting up the key into

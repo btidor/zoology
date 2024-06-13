@@ -8,9 +8,6 @@ from pathlib import Path
 
 from bytes import Bytes
 from disassembler import Program, disassemble
-from environment import Contract
-from sha3 import concrete_hash
-from smt import Uint160
 
 
 class Solidity(Enum):
@@ -52,19 +49,6 @@ def load_binary(path: str) -> Program:
     with open(_ROOT / path, "rb") as f:
         code = Bytes(f.read())
     return disassemble(code)
-
-
-def contracts_multiple(path: str) -> tuple[dict[int, Contract], dict[str, Uint160]]:
-    contracts = dict[int, Contract]()
-    addresses = dict[str, Uint160]()
-    for name, program in loads_solidity(path).items():
-        addresses[name] = concrete_hash(name).into(Uint160)
-        assert (a := addresses[name].reveal()) is not None
-        contracts[a] = Contract(
-            address=addresses[name],
-            program=program,
-        )
-    return contracts, addresses
 
 
 def compile_solidity(source: str) -> dict[str, Bytes]:

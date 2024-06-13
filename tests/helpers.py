@@ -1,12 +1,5 @@
 """Test helpers, mostly related to fixtures."""
 
-from disassembler import Program
-from environment import Contract
-from sha3 import SHA3
-from smt import Uint160, Uint256
-from state import State
-from universal import symbolic_start
-
 Fallback = (
     ("Px19", "SAVE", None, 1),
     ("PxB9", "SAVE", "withdraw()"),
@@ -118,27 +111,3 @@ Preservation = (
     ("Px19", "VIEW", "timeZone1Library()"),
     ("PxD", "VIEW", "timeZone2Library()"),
 )
-
-
-def delegation_start(programs: dict[str, Program]) -> State:
-    """Set up the Delegation level."""
-    other = Contract(address=Uint160(0xABCDEF), program=programs["Delegate"])
-    start = symbolic_start(programs["Delegation"], SHA3(), "").with_contract(other)
-    start.balances[start.transaction.address] = start.transaction.callvalue
-    start.storage.poke(Uint256(1), other.address.into(Uint256))
-    return start
-
-
-def preservation_start(programs: dict[str, Program]) -> State:
-    """Set up the Preservation level."""
-    preservation = Contract(program=programs["Preservation"])
-    library = Contract(
-        address=Uint160(0x1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B),
-        program=programs["LibraryContract"],
-    )
-
-    start = symbolic_start(preservation.program, SHA3(), "").with_contract(library)
-    start.balances[start.transaction.address] = start.transaction.callvalue
-    start.storage.poke(Uint256(0), library.address.into(Uint256))
-    start.storage.poke(Uint256(1), library.address.into(Uint256))
-    return start

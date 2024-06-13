@@ -6,11 +6,11 @@ from typing import Any
 import pytest
 
 from bytes import Bytes
+from compiler import compile
 from disassembler import Program, abiencode, disassemble
 from sha3 import SHA3
 from smt import Solver, Uint160, Uint256
 from state import State, Termination
-from universal import printable_transition, symbolic_start, universal_transaction
 
 from . import helpers as cases
 from .solidity import load_binary, load_solidity, loads_solidity
@@ -22,7 +22,7 @@ def check_transitions(start: Program | State, branches: tuple[Any, ...]) -> None
     start.skip_self_calls = True
 
     expected = dict((b[0], b[1:]) for b in branches)
-    for end in universal_transaction(start):
+    for end in compile(start):
         assert end.px() in expected, f"unexpected path: {end.px()}"
         assert isinstance(end.pc, Termination)
         assert end.pc.success is True
@@ -71,7 +71,7 @@ def test_basic() -> None:
         init.transaction.address,
         init.transaction.callvalue,
     )
-    universal = universal_transaction(init)
+    universal = compile(init)
 
     end = next(universal)
     assert isinstance(end.pc, Termination)
@@ -114,7 +114,7 @@ def test_sudoku() -> None:
     program = load_solidity("fixtures/99_Sudoku.sol")
 
     start = symbolic_start(program, SHA3(), "")
-    universal = universal_transaction(start)
+    universal = compile(start)
 
     end = next(universal)
     assert isinstance(end.pc, Termination)

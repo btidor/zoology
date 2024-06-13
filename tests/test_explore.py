@@ -2,10 +2,10 @@
 
 from typing import Any
 
+from compiler import compile, symbolic_start
 from disassembler import Program
 from sha3 import SHA3
 from state import State
-from universal import symbolic_start, universal_transaction
 
 from . import helpers as cases
 from .solidity import load_binary, load_solidity, loads_solidity
@@ -17,7 +17,7 @@ def check_paths(input: Program | State, branches: tuple[Any, ...]) -> None:
         input = symbolic_start(input, SHA3(), "")
     input.skip_self_calls = True
     actual = set[str]()
-    for end in universal_transaction(input):
+    for end in compile(input):
         assert end.px() not in actual, "duplicate path"
         actual.add(end.px())
     assert actual == expected

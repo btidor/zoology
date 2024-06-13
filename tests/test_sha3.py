@@ -107,20 +107,3 @@ def test_impossible_symbolic() -> None:
         == Uint256(0x0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF)
     )
     assert not solver.check()
-
-
-def test_printable() -> None:
-    sha3 = SHA3()
-    _, constraint = sha3.hash(Bytes(b"testing"))
-
-    solver = Solver()
-    solver.add(constraint)
-    assert solver.check()
-    sha3.narrow(solver)
-
-    fixture = [
-        "SHA3\t0x74657374696e67 -> 0x5f16f4c7f149ac4f9510d9cf8cf384038ad348b3bcdc01915f95de12df9d1b02",
-        "",
-    ]
-    for actual, expected in zip(sha3.printable(solver), fixture, strict=True):
-        assert actual == expected

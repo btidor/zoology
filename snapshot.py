@@ -9,8 +9,7 @@ from typing import TypeAlias
 import requests
 
 from bytes import Bytes
-from disassembler import disassemble
-from environment import Contract
+from disassembler import Program, disassemble
 from smt import Uint160, Uint256
 
 # For consistency, make requests at a fixed block offset
@@ -56,7 +55,7 @@ def snapshot_contracts(address: Uint160, invisible: bool = True) -> dict[int, Co
     for k, v in saved.items():
         if k == "code":
             continue
-        contract.storage.poke(Uint256(int(k)), Uint256(int(v, 16)))
+        contract.storage[Uint256(int(k))] = Uint256(int(v, 16))
         if is_sibling_contract(int(k), int(v, 16)):
             # Warning! Levels like Delegation include global non-factory
             # contracts that *do* need to be interacted with.
@@ -70,12 +69,11 @@ def snapshot_contracts(address: Uint160, invisible: bool = True) -> dict[int, Co
     return contracts
 
 
-def get_code(address: Uint160) -> Contract:
+def get_code(address: Uint160) -> Program:
     """Load the Contract at a given address."""
     assert (a := address.reveal()) is not None
     data = _api_request("eth_getCode", address=a.to_bytes(20).hex(), tag=TAG)
-    program = disassemble(Bytes(data))
-    return Contract(address=address, program=program)
+    return disassemble(Bytes(data))
 
 
 def get_storage_at(address: Uint160, position: Uint256) -> Uint256:
@@ -126,8 +124,8 @@ def _api_request(action: str, **kwargs: str) -> bytes:
 def download_contract(snapshot: Snapshot, address: Uint160) -> None:
     """Download a given address's code and data."""
     assert (a := address.reveal()) is not None
-    contract = get_code(address)
-    assert (c := contract.program.code.reveal()) is not None
+    program = get_code(address)
+    assert (c := program.code.reveal()) is not None
     snapshot[a.to_bytes(20).hex()] = {"code": c.hex()}
 
     for j in range(8):
@@ -138,8 +136,7 @@ def download_contract(snapshot: Snapshot, address: Uint160) -> None:
         assert (v := storage.reveal()) is not None
         if v != 0:
             snapshot[a.to_bytes(20).hex()][str(j)] = v.to_bytes(32).hex()
-        if j > 0 and v > 2**156 and v < 2**160:
-            # The Level interface puts the owner in Slot 0; skip it.
+        if is_sibling_contract(j, v):
             download_contract(snapshot, Uint160(v))
         if is_sibling_contract(j, v):
             download_contract(snapshot, Uint160(v))
@@ -147,7 +144,8 @@ def download_contract(snapshot: Snapshot, address: Uint160) -> None:
 
 def is_sibling_contract(slot: int, value: int) -> bool:
     """Check if a given storage slot refers to a related contract."""
-    # The Level interface puts the owner in Slot 0; skip it.
+    # According to the `Level` interface, the contract's owner is stored in slot
+    # zero. Don't try to download that contract.
     return slot > 0 and value > 2**156 and value < 2**160
 
 

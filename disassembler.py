@@ -10,7 +10,7 @@ from Crypto.Hash import keccak
 
 from bytes import Bytes
 from opcodes import REFERENCE, UNIMPLEMENTED
-from smt import Uint256
+from smt import Uint, Uint256
 
 
 @dataclass(frozen=True)
@@ -47,25 +47,42 @@ class Instruction:
     # Numeric suffix, e.g. 1 for DUP1
     suffix: int | None = None
 
-    # Operand (PUSH only)
-    operand: Uint256 | None = None
-
-    custom: LoopCopy | None = None
+    # Operand (PUSH and CUSTOM only)
+    operand: Uint256 | CustomCopy | None = None
 
     def __str__(self) -> str:
         msg = f"{self.offset:04x}  {self.name}"
         if self.suffix is not None:
             msg += str(self.suffix)
-        if self.operand is not None and self.suffix is not None:
+        if isinstance(self.operand, Uint) and self.suffix is not None:
             assert (operand := self.operand.reveal()) is not None
             msg += "\t0x" + operand.to_bytes(self.suffix).hex()
         return msg
+
+
+@dataclass
+class CustomCopy:
+    """An custom instruction to copy data between memory addresses."""
+
+    start: Uint256
+    end: Uint256
+    stride: Uint256
+
+    read: Uint256
+    write: Uint256
+
+    exit: int
 
 
 class DisassemblyError(Exception):
     """Disassembly failed because the code was malformed."""
 
     pass
+
+
+def abiencode(signature: str) -> bytes:
+    """Encode a Solidity function-call signature."""
+    return keccak.new(data=signature.encode(), digest_bits=256).digest()[:4]
 
 
 def disassemble(code: Bytes) -> Program:
@@ -112,25 +129,6 @@ def disassemble(code: Bytes) -> Program:
     )
 
 
-def printable_disassembly(code: Bytes) -> Iterable[str]:
-    """
-    Parse and validate an EVM contract's code.
-
-    Yields a human-readable string for each instruction.
-    """
-    assert (data := code.reveal()) is not None
-    offset = 0
-    while offset < len(data):
-        ins = _decode_instruction(data, offset)
-        assert ins is not None
-        yield str(ins)
-
-        offset += ins.size
-
-        if ins.name == "INVALID":
-            break
-
-
 def _decode_instruction(code: bytes | Bytes, offset: int) -> Instruction:
     """Decode a single instruction from the given offset within `code`."""
     if isinstance(code, bytes):
@@ -175,23 +173,19 @@ def _decode_instruction(code: bytes | Bytes, offset: int) -> Instruction:
     return Instruction(offset, size, name, suffix, operand)
 
 
-def abiencode(signature: str) -> bytes:
-    """Encode a Solidity function-call signature."""
-    return keccak.new(data=signature.encode(), digest_bits=256).digest()[:4]
+def printable_disassembly(code: Bytes) -> Iterable[str]:
+    """Produce a human-readable transcript of disassembly."""
+    assert (data := code.reveal()) is not None
+    offset = 0
+    while offset < len(data):
+        ins = _decode_instruction(data, offset)
+        assert ins is not None
+        yield str(ins)
 
+        offset += ins.size
 
-@dataclass
-class LoopCopy:
-    """An custom instruction to copy data between memory addresses."""
-
-    start: Uint256
-    end: Uint256
-    stride: Uint256
-
-    read: Uint256
-    write: Uint256
-
-    exit: int
+        if ins.name == "INVALID":
+            break
 
 
 if __name__ == "__main__":

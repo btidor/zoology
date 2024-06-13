@@ -11,7 +11,7 @@ pytest.register_assert_rewrite("helpers", "solidity")
 ### ### ### ### ###
 
 from pathlib import Path
-from typing import Any, Iterator, cast
+from typing import Any, Iterable, cast
 
 from pyinstrument.profiler import Profiler
 from pyinstrument.renderers.speedscope import SpeedscopeRenderer
@@ -40,7 +40,7 @@ def pytest_addoption(
 def pyinstrument_single(
     request: Any,
     reset_bitwuzla: None,  # reset *before* starting profiler
-) -> Iterator[None]:
+) -> Iterable[None]:
     if not request.config.getoption("profile"):
         yield
         return
@@ -64,7 +64,7 @@ def pyinstrument_single(
 
 
 @pytest.fixture(scope="session", autouse=True)
-def pyinstrument_combined(pytestconfig: pytest.Config) -> Iterator[None]:
+def pyinstrument_combined(pytestconfig: pytest.Config) -> Iterable[None]:
     if not pytestconfig.getoption("profile"):
         yield
         return
@@ -96,7 +96,7 @@ from smt import Array
 
 
 @pytest.fixture(autouse=True)
-def reset_bitwuzla() -> Iterator[None]:
+def reset_bitwuzla() -> Iterable[None]:
     """
     Reinitialize the Bitwuzla solver and migrate constants to the new solver.
 

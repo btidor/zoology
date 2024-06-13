@@ -1,5 +1,7 @@
 #!/usr/bin/env pytest
 
+from typing import cast
+
 import pytest
 
 from bytes import Bytes
@@ -17,7 +19,7 @@ def test_disassemble_basic() -> None:
     assert p.instructions[0].name == "PUSH"
     assert p.instructions[0].suffix == 1
     assert p.instructions[0].operand is not None
-    assert p.instructions[0].operand.reveal() == 0xAA
+    assert cast(Uint256, p.instructions[0].operand).reveal() == 0xAA
 
     assert p.instructions[4].offset == 7
     assert p.instructions[4].name == "JUMPI"
@@ -37,7 +39,7 @@ def test_disassemble_suffix() -> None:
     assert p.instructions[0].name == "PUSH"
     assert p.instructions[0].suffix == 4
     assert p.instructions[0].operand is not None
-    assert p.instructions[0].operand.reveal() == 0x01020304
+    assert cast(Uint256, p.instructions[0].operand).reveal() == 0x01020304
 
     assert p.instructions[1].name == "DUP"
     assert p.instructions[1].suffix == 16
@@ -50,7 +52,7 @@ def test_disassemble_suffix() -> None:
     assert p.instructions[3].name == "PUSH"
     assert p.instructions[3].suffix == 0
     assert p.instructions[3].operand is not None
-    assert p.instructions[3].operand.reveal() == 0x0
+    assert cast(Uint256, p.instructions[3].operand).reveal() == 0x0
 
     assert len(p.jumps) == 0
 
@@ -63,7 +65,7 @@ def test_disassemble_trailer() -> None:
 
     assert p.instructions[0].name == "PUSH"
     assert p.instructions[0].operand is not None
-    assert p.instructions[0].operand.reveal() == 0xFE
+    assert cast(Uint256, p.instructions[0].operand).reveal() == 0xFE
 
     assert p.instructions[1].name == "INVALID"
 
@@ -96,7 +98,7 @@ def test_disassemble_symbolic() -> None:
 
     assert p.instructions[0].name == "PUSH"
     assert p.instructions[0].operand is not None
-    assert p.instructions[0].operand.reveal() == 0xFE
+    assert cast(Uint256, p.instructions[0].operand).reveal() == 0xFE
 
     assert p.instructions[1].name == "INVALID"
 
