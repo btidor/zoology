@@ -186,6 +186,8 @@ def substitute(item: R, subs: Substitutions) -> R:
             )  # type: ignore
         case Substitutable():
             return item.__substitute__(subs)
+        case list():
+            return [substitute(r, subs) for r in item]  # type: ignore
         case _:
             return item
 

@@ -5,7 +5,7 @@ from typing import cast
 import pytest
 
 from bytes import Bytes
-from disassembler import DisassemblyError, disassemble, printable_disassembly
+from disassembler import DisassemblyError, disassemble
 from smt import Array, Uint8, Uint256
 
 
@@ -101,22 +101,3 @@ def test_disassemble_symbolic() -> None:
     assert cast(Uint256, p.instructions[0].operand).reveal() == 0xFE
 
     assert p.instructions[1].name == "INVALID"
-
-
-def test_output_basic() -> None:
-    code = Bytes.fromhex("60AA605601600957005B60006000FD")
-    raw = """
-        0000  PUSH1\t0xaa
-        0002  PUSH1\t0x56
-        0004  ADD
-        0005  PUSH1\t0x09
-        0007  JUMPI
-        0008  STOP
-        0009  JUMPDEST
-        000a  PUSH1\t0x00
-        000c  PUSH1\t0x00
-        000e  REVERT""".splitlines()
-    fixture = map(lambda x: x[8:], raw[1:])
-
-    for actual, expected in zip(printable_disassembly(code), fixture, strict=True):
-        assert actual == expected

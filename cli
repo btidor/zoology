@@ -1,0 +1,178 @@
+#!/usr/bin/env python3
+"""A command-line interface for testing and debugging."""
+
+import argparse
+import json
+import sys
+
+from zbitvector import Solver
+
+from bytes import Bytes
+from compiler import compile
+from disassembler import abiencode, decode_instruction, disassemble
+from smt import Array, Uint256
+from snapshot import (
+    COUNT,
+    LEVEL_FACTORIES,
+    Snapshot,
+    download_contract,
+    snapshot_contracts,
+)
+from state import Block, CreateCallout, Termination
+from vm import execute
+
+
+def _disassemble(code: bytes) -> None:
+    """Disassemble the given bytecode."""
+    offset = 0
+    while offset < len(code):
+        assert (ins := decode_instruction(code, offset))
+        print(str(ins))
+
+        offset += ins.size
+
+        if ins.name == "INVALID":
+            break
+
+
+def _compile(code: bytes) -> None:
+    """Compile the given bytecode."""
+    program = disassemble(Bytes(code))
+    for state in compile(program):
+        assert isinstance(state.pc, Termination)
+        prefix = "*" if not state.static and state.pc.success else "-"
+        line = f"{prefix} {state.px().ljust(12)} "
+
+        solver = Solver()
+        solver.add(state.constraint)
+        if not solver.check():
+            print(f"{line}UNREACHABLE")
+            continue
+        state.narrow(solver)
+
+        calldata = state.transaction.calldata.evaluate(solver).hex()
+        prefix, calldata = calldata[:8], calldata[8:]
+        line += prefix
+        while calldata:
+            part, calldata = calldata[:64], calldata[64:]
+            line = f"{line} {part}"
+        print(line)
+
+        line = "  " + ("RETURN" if state.pc.success else "REVERT").ljust(12)
+        returndata = state.pc.returndata.evaluate(solver).hex()
+        if not state.pc.success:
+            prefix, returndata = returndata[:8], returndata[8:]
+        else:
+            prefix = "        "
+        print(f"{line} {prefix} {returndata}")
+
+
+def _execute(code: bytes, calldata: bytes) -> None:
+    """Execute the given bytecode."""
+    program = disassemble(Bytes(code))
+    block, input = Block.sample(0), Bytes(calldata)
+    storage = Array[Uint256, Uint256](Uint256(0))
+
+    for state in compile(program):
+        state = execute(state, block, input, storage)
+        solver = Solver()
+        solver.add(state.constraint)
+        if not solver.check():
+            continue
+
+        assert isinstance(state.pc, Termination)
+        print(
+            f"{state.px()}\t{state.pc.success} {state.pc.returndata.evaluate(solver).hex()}"
+        )
+        for callout in state.callouts:
+            print(callout)
+
+
+def _snapshot() -> None:
+    """Download a snapshot of the Ethernaut CTF contracts."""
+    snapshot: Snapshot = {}
+    for i, address in enumerate(LEVEL_FACTORIES):
+        sys.stderr.write(f"Downloading level {i} of {COUNT-1}\n")
+        download_contract(snapshot, address)
+    print(json.dumps(snapshot, indent=4))
+
+
+def _load(level: int) -> bytes:
+    """Simulate createInstance() to load a given level."""
+    factory = LEVEL_FACTORIES[level]
+    contracts = snapshot_contracts(factory)
+    assert (f := factory.reveal()) is not None
+
+    block = Block.sample(0)
+    input = Bytes(abiencode("createInstance(address)") + (0xB).to_bytes(32))
+    storage = Array[Uint256, Uint256](Uint256(0))
+    for state in compile(contracts[f].program):
+        state = execute(state, block, input, storage)
+        solver = Solver()
+        solver.add(state.constraint)
+        if not solver.check():
+            continue
+
+        assert len(state.callouts) == 1
+        assert isinstance(state.callouts[0], CreateCallout)
+        subcode = state.callouts[0].initcode.evaluate(solver)
+        program = disassemble(Bytes(subcode))
+
+        subinput, substorage = Bytes(), Array[Uint256, Uint256](Uint256(0))
+        for state in compile(program):
+            state = execute(state, block, subinput, substorage)
+            solver = Solver()
+            solver.add(state.constraint)
+            if not solver.check():
+                continue
+
+            assert isinstance(state.pc, Termination)
+            return state.pc.returndata.evaluate(solver)
+
+    raise RuntimeError("createInstance(...) failed")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    cmd = parser.add_subparsers(dest="command")
+
+    dis = cmd.add_parser("disassemble").add_mutually_exclusive_group(required=True)
+    dis.add_argument("-l", "--level", type=int)
+    dis.add_argument("-c", "--code", type=bytes.fromhex)
+
+    cmp = cmd.add_parser("compile").add_mutually_exclusive_group(required=True)
+    cmp.add_argument("-l", "--level", type=int)
+    cmp.add_argument("-c", "--code", type=bytes.fromhex)
+
+    exe = cmd.add_parser("execute")
+    exg = exe.add_mutually_exclusive_group(required=True)
+    exg.add_argument("-l", "--level", type=int)
+    exg.add_argument("-c", "--code", type=bytes.fromhex)
+    exe.add_argument("-d", "--data", type=bytes.fromhex)
+
+    snp = cmd.add_parser("snapshot")
+
+    args = parser.parse_args()
+    match args.command:
+        case "disassemble":
+            if args.level is not None:
+                code = _load(args.level)
+                _disassemble(code)
+            else:
+                _disassemble(args.code)
+        case "compile":
+            if args.level is not None:
+                code = _load(args.level)
+                _compile(code)
+            else:
+                _compile(args.code)
+        case "execute":
+            if args.level is not None:
+                code = _load(args.level)
+                _execute(code, args.data)
+            else:
+                _execute(args.code, args.data)
+        case "snapshot":
+            _snapshot()
+        case _:
+            parser.print_help()

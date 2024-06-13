@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """A client for the Ethereum JSON-RPC API."""
 
 import json
@@ -11,6 +10,7 @@ import requests
 from bytes import Bytes
 from disassembler import Program, disassemble
 from smt import Uint160, Uint256
+from state import Contract
 
 # For consistency, make requests at a fixed block offset
 TAG = "0x574800"
@@ -147,13 +147,3 @@ def is_sibling_contract(slot: int, value: int) -> bool:
     # According to the `Level` interface, the contract's owner is stored in slot
     # zero. Don't try to download that contract.
     return slot > 0 and value > 2**156 and value < 2**160
-
-
-if __name__ == "__main__":
-    snapshot: Snapshot = {}
-    for i, address in enumerate(LEVEL_FACTORIES):
-        print(f"Downloading level {i} of {COUNT-1}")
-        download_contract(snapshot, address)
-    with open(_ROOT / "snapshot.json", "w") as f:
-        json.dump(snapshot, f, indent=4)
-        f.write("\n")

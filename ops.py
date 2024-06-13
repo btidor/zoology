@@ -8,6 +8,7 @@ from bytes import Bytes
 from disassembler import CustomCopy, Instruction
 from opcodes import REFERENCE, SPECIAL, UNIMPLEMENTED
 from smt import (
+    Constraint,
     Int,
     Uint,
     Uint8,
@@ -18,7 +19,7 @@ from smt import (
     overflow_safe,
     substitute,
 )
-from state import State, Termination
+from state import CreateCallout, State, Termination
 
 Int256 = Int[Literal[256]]
 Uint257 = Uint[Literal[257]]
@@ -262,7 +263,7 @@ def GASPRICE(s: State) -> Uint256:
 
 def EXTCODESIZE(s: State, address: Uint256) -> Uint256:
     """3B - Get size of an account's code."""
-    raise NotImplementedError(".sym")
+    raise NotImplementedError("EXTCODESIZE")
 
 
 def EXTCODECOPY(
@@ -290,7 +291,7 @@ def RETURNDATACOPY(
 
 def EXTCODEHASH(s: State, _address: Uint256) -> Uint256:
     """3F - Get hash of an account's code."""
-    raise NotImplementedError(".sym")
+    raise NotImplementedError("EXTCODEHASH")
 
 
 def BLOCKHASH(s: State, blockNumber: Uint256) -> Uint256:
@@ -435,7 +436,7 @@ def GAS(s: State) -> Uint256:
     Since we don't actually track gas usage, return either a symbolic value or a
     concrete dummy value based on the execution mode.
     """
-    raise NotImplementedError(".sym")
+    return Uint256("TODO")
 
 
 def JUMPDEST() -> None:
@@ -470,12 +471,18 @@ def LOG(ins: Instruction, s: State, offset: Uint256, size: Uint256) -> None:
     s.static = False
     if ins.suffix is None:
         raise ValueError("somehow got a LOG without a suffix")
-    raise NotImplementedError("LOG")
+    for _ in range(ins.suffix):
+        s.stack.pop()  # we don't actually save the log entries anywhere
 
 
-def CREATE(s: State, value: Uint256, offset: Uint256, size: Uint256) -> None:
+def CREATE(s: State, value: Uint256, offset: Uint256, size: Uint256) -> Uint256:
     """F0 - Create a new account with associated code."""
-    raise NotImplementedError(".sym")
+    s.static = False
+    ok = Constraint(f"CREATE{len(s.callouts)}")
+    s.callouts.append(
+        CreateCallout(s.memory.slice(offset, size), value, ok),
+    )
+    return ok.ite(Uint256(1), Uint256(0))
 
 
 def CALL(
@@ -489,7 +496,7 @@ def CALL(
     retSize: Uint256,
 ) -> None:
     """F1 - Message-call into an account."""
-    raise NotImplementedError(".sym")
+    raise NotImplementedError("CALL")
 
 
 def CALLCODE(
@@ -526,14 +533,14 @@ def DELEGATECALL(
     Message-call into this account with an alternative account's code, but
     persisting the current values for sender and value.
     """
-    raise NotImplementedError(".sym")
+    raise NotImplementedError("DELEGATECALL")
 
 
 def CREATE2(
     s: State, value: Uint256, offset: Uint256, size: Uint256, _salt: Uint256
 ) -> None:
     """F5 - Create a new account with associated code at a predictable address."""
-    raise NotImplementedError(".sym")
+    raise NotImplementedError("CREATE2")
 
 
 def STATICCALL(
@@ -544,9 +551,9 @@ def STATICCALL(
     argsSize: Uint256,
     retOffset: Uint256,
     retSize: Uint256,
-) -> None:
+) -> Uint256:
     """FA - Static message-call into an account."""
-    raise NotImplementedError(".sym")
+    return Uint256("TODO")
 
 
 def REVERT(s: State, offset: Uint256, size: Uint256) -> None:

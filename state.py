@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import abc
 from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any, Self, TypeVar
@@ -134,8 +135,8 @@ class State:
     # Whether the path is legal to execute during a STATICCALL.
     static: bool = True
 
-    # TODO:
-    # callouts: list[Callout] = field(default_factory=list)
+    # TODO: document me!
+    callouts: list[Callout] = field(default_factory=list)
 
     def __lt__(self, other: Any) -> bool:
         if not isinstance(other, State):
@@ -181,3 +182,42 @@ def _substitute(item: S, subs: Substitutions) -> S:
         value = getattr(item, key)
         args[key] = substitute(value, subs)
     return item.__class__(**args)
+
+
+@dataclass
+class Contract:
+    """A deployed contract account."""
+
+    address: Uint160
+    program: Program
+
+    storage: Array[Uint256, Uint256] = field(
+        default_factory=lambda: Array[Uint256, Uint256](Uint256(0))
+    )
+    nonce: Uint256 = Uint256(1)  # starts at 1, see EIP-161
+
+    invisible: bool = False  # can't be CALLed during analysis
+
+    @property
+    def codesize(self) -> Uint256:
+        """Return the size of the code, in bytes."""
+        return self.program.code.length
+
+    def __post_init__(self) -> None:
+        assert self.address.reveal() is not None, "Contract requires concrete address"
+
+
+class Callout(abc.ABC):
+    """TODO."""
+
+    pass
+
+
+@dataclass
+class CreateCallout(Callout):
+    """TODO."""
+
+    initcode: Bytes
+    value: Uint256
+
+    success: Constraint

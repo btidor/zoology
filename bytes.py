@@ -26,7 +26,7 @@ T = TypeVar("T", bound="Bytes")
 
 BytesWrite = tuple[Uint256, "Uint8 | ByteSlice"]
 
-DESCRIBE_LIMIT = 256
+DESCRIBE_LIMIT = 4096
 
 BYTES = [Uint8(i) for i in range(256)]
 INTEGERS = list[Uint256]()
