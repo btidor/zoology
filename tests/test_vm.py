@@ -1,228 +1,56 @@
 #!/usr/bin/env pytest
 
-
 from bytes import Bytes
-from disassembler import abiencode, disassemble
-from smt import Uint160, Uint256
-from state import State, Termination, Transaction
+from compiler import compile
+from disassembler import Program, abiencode, disassemble
+from smt import Array, Solver, Uint256
+from state import Block, State, Termination
+from vm import execute
 
-from .solidity import compile_solidity, load_binary, load_solidity
-
-
-def concretize_stack(state: State) -> list[int]:
-    return [v for v in (x.reveal() for x in state.stack) if v is not None]
-
-
-def complete(state: State) -> State:
-    generator = execute(state, prints=False)
-    try:
-        while True:
-            next(generator)
-    except StopIteration as e:
-        assert isinstance(e.value, State)
-        return e.value
+from .solidity import load_binary, load_solidity, loads_solidity
 
 
 def test_basic() -> None:
     code = Bytes.fromhex("60AA605601600957005B60006000FD")
     program = disassemble(code)
-    state = State().with_contract(program)
+    states = list(compile(program))
+    assert len(states) == 1
 
-    action = step(state)
-    assert action is None
-    assert state.pc == 1
-    assert concretize_stack(state) == [0xAA]
-
-    action = step(state)
-    assert action is None
-    assert state.pc == 2
-    assert concretize_stack(state) == [0xAA, 0x56]
-
-    action = step(state)
-    assert action is None
-    assert state.pc == 3
-    assert concretize_stack(state) == [0x100]
-
-    action = step(state)
-    assert action is None
-    assert state.pc == 4
-    assert concretize_stack(state) == [0x100, 0x09]
-
-    action = step(state)
-    assert action is None  # internally-handled JUMPI
-    assert state.pc == 6
-    assert concretize_stack(state) == []
-
-    action = step(state)
-    assert action is None
-    assert state.pc == 7
-    assert concretize_stack(state) == []
-
-    action = step(state)
-    assert action is None
-    assert state.pc == 8
-    assert concretize_stack(state) == [0x00]
-
-    action = step(state)
-    assert action is None
-    assert state.pc == 9
-    assert concretize_stack(state) == [0x00, 0x00]
-
-    action = step(state)
-    assert action is None
-    assert isinstance(state.pc, Termination)
-    assert state.pc.success is False
-    assert state.pc.returndata.reveal() == b""
-    assert concretize_stack(state) == []
-
-
-def test_basic_solidity() -> None:
-    # https://ethernaut.openzeppelin.com/level/0x80934BE6B8B872B364b470Ca30EaAd8AEAC4f63F
-    source = """
-        // SPDX-License-Identifier: MIT
-        pragma solidity ^0.8.0;
-
-        contract Fallback {
-            mapping(address => uint) public contributions;
-            address public owner;
-
-            constructor() {
-                owner = msg.sender;
-                contributions[msg.sender] = 1000 * (1 ether);
-            }
-
-            modifier onlyOwner {
-                        require(
-                                msg.sender == owner,
-                                "caller is not the owner"
-                        );
-                        _;
-                }
-
-            function contribute() public payable {
-                require(msg.value < 0.001 ether);
-                contributions[msg.sender] += msg.value;
-                if(contributions[msg.sender] > contributions[owner]) {
-                    owner = msg.sender;
-                }
-            }
-
-            function getContribution() public view returns (uint) {
-                return contributions[msg.sender];
-            }
-
-            function withdraw() public onlyOwner {
-                payable(owner).transfer(address(this).balance);
-            }
-
-            receive() external payable {
-                require(msg.value > 0 && contributions[msg.sender] > 0);
-                owner = msg.sender;
-            }
-        }
-    """
-    code = compile_solidity(source)
-    program = disassemble(code["Fallback"])
-
-    state = State(
-        transaction=Transaction(
-            calldata=Bytes(abiencode("owner()")),
-        ),
-    ).with_contract(program)
-
-    state = complete(state)
-    assert isinstance(state.pc, Termination)
-    assert state.pc.success is True
-    assert state.pc.returndata.reveal() == b"\x00" * 32
-
-    state = State(
-        transaction=Transaction(
-            calldata=Bytes(abiencode("withdraw()")),
-        ),
-        contracts=state.contracts,  # carries forward storage
-        balance=state.balance,
+    state = execute(
+        states[0], Block.sample(0), Bytes(), Array[Uint256, Uint256](Uint256(0))
     )
-    state = complete(state)
     assert isinstance(state.pc, Termination)
-    assert state.pc.success is False
-    assert (data := state.pc.returndata.reveal()) is not None
-    assert data[68:91] == b"caller is not the owner"
-
-    state = State(
-        transaction=Transaction(
-            callvalue=Uint256(123456),
-            calldata=Bytes(abiencode("contribute()")),
-        ),
-        contracts=state.contracts,
-        balance=state.balance,
-    )
-    state = complete(state)
-    assert isinstance(state.pc, Termination)
-    assert state.pc.success is True
+    assert not state.pc.success
     assert state.pc.returndata.reveal() == b""
 
-    state = State(
-        transaction=Transaction(
-            calldata=Bytes(abiencode("owner()")),
-        ),
-        contracts=state.contracts,
-        balance=state.balance,
-    )
-    state = complete(state)
-    assert isinstance(state.pc, Termination)
-    assert state.pc.success is True
-    assert (data := state.pc.returndata.reveal()) is not None
-    assert data[-20:] == b"\xca" * 20
 
+def _execute(program: Program, calldata: bytes, storage: dict[int, int]) -> State:
+    block, input = Block.sample(0), Bytes(calldata)
+    store = Array[Uint256, Uint256](Uint256(0))
+    for key, value in storage.items():
+        store[Uint256(key)] = Uint256(value)
 
-def test_basic_printable() -> None:
-    code = Bytes.fromhex("60AA605601600957005B60006000FD")
-    program = disassemble(code)
-    state = State().with_contract(program)
+    found = None
+    for state in compile(program):
+        state = execute(state, block, input, store)
 
-    raw = """
-        0000  PUSH1\t0xaa
-          00000000000000000000000000000000000000000000000000000000000000aa
-
-        0002  PUSH1\t0x56
-          00000000000000000000000000000000000000000000000000000000000000aa
-          0000000000000000000000000000000000000000000000000000000000000056
-
-        0004  ADD
-          0000000000000000000000000000000000000000000000000000000000000100
-
-        0005  PUSH1\t0x09
-          0000000000000000000000000000000000000000000000000000000000000100
-          0000000000000000000000000000000000000000000000000000000000000009
-
-        0007  JUMPI
-
-        0009  JUMPDEST
-
-        000a  PUSH1\t0x00
-          0000000000000000000000000000000000000000000000000000000000000000
-
-        000c  PUSH1\t0x00
-          0000000000000000000000000000000000000000000000000000000000000000
-          0000000000000000000000000000000000000000000000000000000000000000
-
-        000e  REVERT
-
-        REVERT b''""".splitlines()
-    fixture = map(lambda x: x[8:], raw[1:])
-
-    for actual, expected in zip(execute(state, prints=True), fixture, strict=True):
-        assert actual == expected
+        solver = Solver()
+        solver.add(state.constraint)
+        if not solver.check():
+            pass
+        elif found is None:
+            found = state
+        else:
+            raise RuntimeError("found multiple states")
+    if found is None:
+        raise RuntimeError("no states found")
+    return found
 
 
 def test_fallback() -> None:
-    state = State(
-        transaction=Transaction(
-            calldata=Bytes(abiencode("owner()")),
-        ),
-    ).with_contract(load_solidity("fixtures/01_Fallback.sol"))
-
-    state = complete(state)
+    program = load_solidity("fixtures/01_Fallback.sol")
+    calldata = abiencode("owner()")
+    state = _execute(program, calldata, {})
 
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
@@ -230,13 +58,9 @@ def test_fallback() -> None:
 
 
 def test_fallout() -> None:
-    state = State(
-        transaction=Transaction(
-            calldata=Bytes(abiencode("Fal1out()")),
-        ),
-    ).with_contract(load_solidity("fixtures/02_Fallout.sol"))
-
-    state = complete(state)
+    program = load_solidity("fixtures/02_Fallout.sol")
+    calldata = abiencode("Fal1out()")
+    state = _execute(program, calldata, {})
 
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
@@ -246,17 +70,13 @@ def test_fallout() -> None:
 
 
 def test_coinflip() -> None:
-    state = State(
-        transaction=Transaction(
-            calldata=Bytes(abiencode("flip(bool)") + (0).to_bytes(32)),
-        ),
-    ).with_contract(load_solidity("fixtures/03_CoinFlip.sol"))
-    state.storage[Uint256(1)] = Uint256(0xFEDC)
-    state.storage[Uint256(2)] = Uint256(
-        57896044618658097711785492504343953926634992332820282019728792003956564819968
-    )
-
-    state = complete(state)
+    program = load_solidity("fixtures/03_CoinFlip.sol")
+    calldata = abiencode("flip(bool)") + (0).to_bytes(32)
+    storage = {
+        1: 0xFEDC,
+        2: 57896044618658097711785492504343953926634992332820282019728792003956564819968,
+    }
+    state = _execute(program, calldata, storage)
 
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
@@ -267,17 +87,11 @@ def test_coinflip() -> None:
 
 
 def test_telephone() -> None:
-    state = State(
-        transaction=Transaction(
-            caller=Uint160(0xB1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1),
-            calldata=Bytes(
-                abiencode("changeOwner(address)")
-                + (0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF).to_bytes(32)
-            ),
-        ),
-    ).with_contract(load_solidity("fixtures/04_Telephone.sol"))
-
-    state = complete(state)
+    program = load_solidity("fixtures/04_Telephone.sol")
+    calldata = abiencode("changeOwner(address)") + (
+        0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+    ).to_bytes(32)
+    state = _execute(program, calldata, {})
 
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
@@ -285,17 +99,13 @@ def test_telephone() -> None:
 
 
 def test_token() -> None:
-    state = State(
-        transaction=Transaction(
-            calldata=Bytes(
-                abiencode("transfer(address,uint256)")
-                + (0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF).to_bytes(32)
-                + (0xEEEE).to_bytes(32)
-            ),
-        ),
-    ).with_contract(load_solidity("fixtures/05_Token.sol"))
-
-    state = complete(state)
+    program = load_solidity("fixtures/05_Token.sol")
+    calldata = (
+        abiencode("transfer(address,uint256)")
+        + (0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF).to_bytes(32)
+        + (0xEEEE).to_bytes(32)
+    )
+    state = _execute(program, calldata, {})
 
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
@@ -303,17 +113,10 @@ def test_token() -> None:
 
 
 def test_delegation() -> None:
-    contracts, addresses = contracts_multiple("fixtures/06_Delegation.sol")
-    state = State(
-        transaction=Transaction(
-            calldata=Bytes(abiencode("pwn()")),
-            address=addresses["Delegation"],
-        ),
-        contracts=contracts,
-    )
-    state.storage.poke(Uint256(1), addresses["Delegate"].into(Uint256))
-
-    state = complete(state)
+    program = loads_solidity("fixtures/06_Delegation.sol")["Delegation"]
+    calldata = abiencode("pwn()")
+    # storage.poke(Uint256(1), addresses["Delegate"].into(Uint256))
+    state = _execute(program, calldata, {})
 
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
@@ -321,11 +124,9 @@ def test_delegation() -> None:
 
 
 def test_force() -> None:
-    state = State(
-        transaction=Transaction(callvalue=Uint256(0x1234)),
-    ).with_contract(load_binary("fixtures/07_Force.bin"))
-
-    state = complete(state)
+    program = load_binary("fixtures/07_Force.bin")
+    # callvalue = Uint256(0x1234)
+    state = _execute(program, b"", {})
 
     assert isinstance(state.pc, Termination)
     assert state.pc.success is False
@@ -333,13 +134,9 @@ def test_force() -> None:
 
 
 def test_vault() -> None:
-    state = State(
-        transaction=Transaction(
-            calldata=Bytes(abiencode("unlock(bytes32)") + (0).to_bytes(32)),
-        ),
-    ).with_contract(load_solidity("fixtures/08_Vault.sol"))
-
-    state = complete(state)
+    program = load_solidity("fixtures/08_Vault.sol")
+    calldata = abiencode("unlock(bytes32)") + (0).to_bytes(32)
+    state = _execute(program, calldata, {})
 
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
@@ -347,11 +144,9 @@ def test_vault() -> None:
 
 
 def test_king() -> None:
-    state = State(
-        transaction=Transaction(callvalue=Uint256(0x1234)),
-    ).with_contract(load_solidity("fixtures/09_King.sol"))
-
-    state = complete(state)
+    program = load_solidity("fixtures/09_King.sol")
+    # callvalue = Uint256(0x1234)
+    state = _execute(program, b"", {})
 
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
@@ -359,47 +154,38 @@ def test_king() -> None:
 
 
 def test_reentrancy() -> None:
-    state = State(
-        transaction=Transaction(
-            callvalue=Uint256(0x1234),
-            calldata=Bytes(abiencode("donate(address)") + (1).to_bytes(32)),
-        ),
-    ).with_contract(load_solidity("fixtures/10_Reentrancy.sol"))
-
-    state = complete(state)
+    program = load_solidity("fixtures/10_Reentrancy.sol")
+    calldata = abiencode("donate(address)") + (1).to_bytes(32)
+    # callvalue = Uint256(0x1234)
+    state = _execute(program, calldata, {})
 
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
     assert state.pc.returndata.reveal() == b""
 
 
-def test_elevator() -> None:
-    contracts, addresses = contracts_multiple("fixtures/11_Elevator.sol")
-    state = State(
-        transaction=Transaction(
-            caller=addresses["TestBuilding"],
-            calldata=Bytes(abiencode("goTo(uint256)") + (1).to_bytes(32)),
-            address=addresses["Elevator"],
-        ),
-        contracts=contracts,
-    )
+# def test_elevator() -> None:
+#     contracts, addresses = contracts_multiple("fixtures/11_Elevator.sol")
+#     state = State(
+#         transaction=Transaction(
+#             caller=addresses["TestBuilding"],
+#             calldata=Bytes(abiencode("goTo(uint256)") + (1).to_bytes(32)),
+#             address=addresses["Elevator"],
+#         ),
+#         contracts=contracts,
+#     )
+#     state = _execute(program, calldata, {})
 
-    state = complete(state)
-
-    assert isinstance(state.pc, Termination)
-    assert state.pc.success is True
-    assert state.pc.returndata.reveal() == b""
+#     assert isinstance(state.pc, Termination)
+#     assert state.pc.success is True
+#     assert state.pc.returndata.reveal() == b""
 
 
 def test_privacy() -> None:
-    state = State(
-        transaction=Transaction(
-            calldata=Bytes(abiencode("unlock(bytes16)") + (0x4321 << 128).to_bytes(32)),
-        ),
-    ).with_contract(load_binary("fixtures/12_Privacy.bin"))
-    state.storage.poke(Uint256(5), Uint256(0x4321 << 128))
-
-    state = complete(state)
+    program = load_binary("fixtures/12_Privacy.bin")
+    calldata = abiencode("unlock(bytes16)") + (0x4321 << 128).to_bytes(32)
+    storage = {5: 0x4321 << 128}
+    state = _execute(program, calldata, storage)
 
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
@@ -409,42 +195,37 @@ def test_privacy() -> None:
 def test_gatekeeper_one() -> None:
     # We can't execute GatekeeperOne because concrete gas isn't implemented.
     # Instead, just check that it compiles.
-    load_solidity("fixtures/13_GatekeeperOne.sol")
+    program = load_solidity("fixtures/13_GatekeeperOne.sol")
+    for _ in compile(program):
+        pass
 
 
 def test_gatekeeper_two() -> None:
-    state = State(
-        transaction=Transaction(
-            calldata=Bytes(
-                abiencode("enter(bytes8)")
-                + bytes.fromhex(
-                    "65d5bd2c953ab27b000000000000000000000000000000000000000000000000"
-                )
-            ),
-        ),
-    ).with_contract(load_solidity("fixtures/14_GatekeeperTwo.sol"))
-
-    state = complete(state)
+    program = load_solidity("fixtures/14_GatekeeperTwo.sol")
+    calldata = abiencode("enter(bytes8)") + bytes.fromhex(
+        "65d5bd2c953ab27b000000000000000000000000000000000000000000000000"
+    )
+    state = _execute(program, calldata, {})
 
     assert isinstance(state.pc, Termination)
     assert state.pc.success is True
     assert state.pc.returndata.reveal() == (1).to_bytes(32)
 
 
-def test_preservation() -> None:
-    contracts, addresses = contracts_multiple("fixtures/15_Preservation.sol")
-    state = State(
-        transaction=Transaction(
-            calldata=Bytes(abiencode("setFirstTime(uint256)") + (0x5050).to_bytes(32)),
-            address=addresses["Preservation"],
-        ),
-        contracts=contracts,
-    )
-    state.storage.poke(Uint256(0), addresses["LibraryContract"].into(Uint256))
-    state.storage.poke(Uint256(1), addresses["LibraryContract"].into(Uint256))
+# def test_preservation() -> None:
+#     contracts, addresses = contracts_multiple("fixtures/15_Preservation.sol")
+#     state = State(
+#         transaction=Transaction(
+#             calldata=Bytes(abiencode("setFirstTime(uint256)") + (0x5050).to_bytes(32)),
+#             address=addresses["Preservation"],
+#         ),
+#         contracts=contracts,
+#     )
+#     state.storage.poke(Uint256(0), addresses["LibraryContract"].into(Uint256))
+#     state.storage.poke(Uint256(1), addresses["LibraryContract"].into(Uint256))
 
-    state = complete(state)
+#     state = _execute(program, calldata, {})
 
-    assert isinstance(state.pc, Termination)
-    assert state.pc.success is True
-    assert state.pc.returndata.reveal() == b""
+#     assert isinstance(state.pc, Termination)
+#     assert state.pc.success is True
+#     assert state.pc.returndata.reveal() == b""

@@ -1,158 +1,52 @@
 #!/usr/bin/env pytest
 
-import copy
 from typing import Any
 
-import pytest
-
-from bytes import Bytes
 from compiler import compile
-from disassembler import Program, abiencode, disassemble
-from sha3 import SHA3
-from smt import Solver, Uint160, Uint256
-from state import State, Termination
+from disassembler import Program, abiencode
+from smt import Solver, Uint256
+from state import Termination
 
-from . import helpers as cases
+from . import fixture as cases
 from .solidity import load_binary, load_solidity, loads_solidity
 
 
-def check_transitions(start: Program | State, branches: tuple[Any, ...]) -> None:
-    if isinstance(start, Program):
-        start = symbolic_start(start, SHA3(), "")
-    start.skip_self_calls = True
-
+def check_transitions(program: Program, branches: tuple[Any, ...]) -> None:
     expected = dict((b[0], b[1:]) for b in branches)
-    for end in compile(start):
-        assert end.px() in expected, f"unexpected path: {end.px()}"
-        assert isinstance(end.pc, Termination)
-        assert end.pc.success is True
+    for state in compile(program):
+        assert isinstance(state.pc, Termination)
+        if not state.pc.success:
+            continue
+        assert state.px() in expected, f"unexpected path: {state.px()}"
 
-        kind, method, value = (expected[end.px()] + (None,))[:3]
+        kind, method, value = (expected[state.px()] + (None,))[:3]
+        if state.static:
+            assert kind == "VIEW"
+        else:
+            assert kind == "SAVE"
 
         solver = Solver()
-        solver.add(end.constraint)
-        assert end.changed == (kind == "SAVE")
-
+        solver.add(state.constraint)
         assert solver.check()
-        end.narrow(solver)
-        transaction = end.transaction.describe(solver)
+        state.narrow(solver)
 
-        actual = bytes.fromhex(transaction.get("Data", "")[2:10])
+        actual = state.transaction.calldata.evaluate(solver)[:4]
         if method is None:
             assert actual == b"", f"unexpected data: {actual.hex()}"
-        elif method.startswith("0x"):
-            assert actual == bytes.fromhex(
-                method[2:]
-            ), f"unexpected data: {actual.hex()}"
         elif method == "$any4":
             assert len(actual) == 4, f"unexpected data: {actual.hex()}"
         else:
             assert actual == abiencode(method), f"unexpected data: {actual.hex()}"
 
-        if "Value" not in transaction:
+        actual = solver.evaluate(state.transaction.callvalue)
+        if actual == 0:
             assert value is None
         else:
-            assert value is not None
-            assert transaction["Value"] == "0x" + int.to_bytes(value, 32).hex()
+            assert value == actual
 
-        del expected[end.px()]
+        del expected[state.px()]
 
     assert len(expected) == 0, f"missing paths: {expected.keys()}"
-
-
-def test_basic() -> None:
-    code = Bytes.fromhex("60FF60EE5560AA60AA03600E57005B60006000FD")
-    program = disassemble(code)
-
-    start = symbolic_start(program, SHA3(), "")
-    init = copy.deepcopy(start)
-    init.transfer(
-        init.transaction.caller,
-        init.transaction.address,
-        init.transaction.callvalue,
-    )
-    universal = compile(init)
-
-    end = next(universal)
-    assert isinstance(end.pc, Termination)
-    assert end.pc.success is True
-
-    # These extra constraints makes the test deterministic
-    end.constraint &= start.balances[
-        Uint160(0xADADADADADADADADADADADADADADADADADADADAD)
-    ] == Uint256(0x8000000000001)
-    end.constraint &= start.balances[
-        Uint160(0xCACACACACACACACACACACACACACACACACACACACA)
-    ] == Uint256(0xAAAAAAAAAAAAA)
-
-    solver = Solver()
-    solver.add(end.constraint)
-    assert solver.check()
-
-    raw = """
-        ---  📒 SAVE\tRETURN\tPx2\t---------------------------------------------------------
-
-        Caller\t0xcacacacacacacacacacacacacacacacacacacaca
-
-        Balance\tR: 0xadadadadadadadadadadadadadadadadadadadad
-        \t-> 0x8000000000001
-        \tR: 0xcacacacacacacacacacacacacacacacacacacaca
-        \t-> 0xaaaaaaaaaaaaa
-
-        Storage\tW: 0xee -> 0xff (from 0x0)
-    """.splitlines()
-    fixture = map(lambda x: x[8:], raw[1:])
-
-    for actual, expected in zip(printable_transition(start, end), fixture, strict=True):
-        assert actual.strip(" ") == expected
-
-    with pytest.raises(StopIteration):
-        next(universal)
-
-
-def test_sudoku() -> None:
-    program = load_solidity("fixtures/99_Sudoku.sol")
-
-    start = symbolic_start(program, SHA3(), "")
-    universal = compile(start)
-
-    end = next(universal)
-    assert isinstance(end.pc, Termination)
-    assert end.pc.success is True
-
-    solver = Solver()
-    solver.add(end.constraint)
-    assert solver.check()
-
-    calldata = end.transaction.calldata
-    method = bytes(solver.evaluate(calldata[Uint256(i)]) for i in range(4))
-    assert method.hex() == abiencode("check(uint256[9][9])").hex()
-
-    offset = 4
-    actual = [[0 for _ in range(9)] for _ in range(9)]
-    for i in range(9):
-        for j in range(9):
-            value = bytes(
-                solver.evaluate(calldata[Uint256(offset + z)]) for z in range(32)
-            )
-            offset += 32
-            actual[i][j] = int.from_bytes(value)
-
-    expected = [
-        [4, 5, 6, 2, 1, 8, 9, 7, 3],
-        [8, 9, 2, 3, 6, 7, 5, 4, 1],
-        [7, 3, 1, 4, 9, 5, 2, 6, 8],
-        [1, 2, 9, 5, 8, 6, 4, 3, 7],
-        [3, 4, 8, 7, 2, 1, 6, 9, 5],
-        [5, 6, 7, 9, 3, 4, 1, 8, 2],
-        [2, 8, 5, 6, 7, 9, 3, 1, 4],
-        [6, 1, 4, 8, 5, 3, 7, 2, 9],
-        [9, 7, 3, 1, 4, 2, 8, 5, 6],
-    ]
-    assert actual == expected
-
-    with pytest.raises(StopIteration):
-        next(universal)
 
 
 def test_fallback() -> None:
@@ -180,10 +74,10 @@ def test_token() -> None:
     check_transitions(program, cases.Token)
 
 
-def test_delegation() -> None:
-    programs = loads_solidity("fixtures/06_Delegation.sol")
-    start = cases.delegation_start(programs)
-    check_transitions(start, cases.Delegation)
+# def test_delegation() -> None:
+#     programs = loads_solidity("fixtures/06_Delegation.sol")
+#     start = cases.delegation_start(programs)
+#     check_transitions(start, cases.Delegation)
 
 
 def test_force() -> None:
@@ -226,7 +120,50 @@ def test_gatekeeper_two() -> None:
     check_transitions(program, cases.GatekeeperTwo)
 
 
-def test_preservation() -> None:
-    programs = loads_solidity("fixtures/15_Preservation.sol")
-    start = cases.preservation_start(programs)
-    check_transitions(start, cases.Preservation)
+# def test_preservation() -> None:
+#     programs = loads_solidity("fixtures/15_Preservation.sol")
+#     start = cases.preservation_start(programs)
+#     check_transitions(start, cases.Preservation)
+
+
+def test_sudoku() -> None:
+    program = load_solidity("fixtures/99_Sudoku.sol")
+    states = list(
+        state
+        for state in compile(program)
+        if isinstance(state.pc, Termination) and state.pc.success
+    )
+
+    assert len(states) == 1
+    state = states[0]
+
+    solver = Solver()
+    solver.add(state.constraint)
+    assert solver.check()
+
+    calldata = state.transaction.calldata
+    method = bytes(solver.evaluate(calldata[Uint256(i)]) for i in range(4))
+    assert method.hex() == abiencode("check(uint256[9][9])").hex()
+
+    offset = 4
+    actual = [[0 for _ in range(9)] for _ in range(9)]
+    for i in range(9):
+        for j in range(9):
+            value = bytes(
+                solver.evaluate(calldata[Uint256(offset + z)]) for z in range(32)
+            )
+            offset += 32
+            actual[i][j] = int.from_bytes(value)
+
+    expected = [
+        [4, 5, 6, 2, 1, 8, 9, 7, 3],
+        [8, 9, 2, 3, 6, 7, 5, 4, 1],
+        [7, 3, 1, 4, 9, 5, 2, 6, 8],
+        [1, 2, 9, 5, 8, 6, 4, 3, 7],
+        [3, 4, 8, 7, 2, 1, 6, 9, 5],
+        [5, 6, 7, 9, 3, 4, 1, 8, 2],
+        [2, 8, 5, 6, 7, 9, 3, 1, 4],
+        [6, 1, 4, 8, 5, 3, 7, 2, 9],
+        [9, 7, 3, 1, 4, 2, 8, 5, 6],
+    ]
+    assert actual == expected

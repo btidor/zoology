@@ -37,12 +37,24 @@ class Termination:
 class Transaction:
     """The inputs to a contract call."""
 
-    origin: Uint160 = Uint160("ORIGIN")
-    caller: Uint160 = Uint160("CALLER")
-    address: Uint160 = Uint160("ADDRESS")
-    callvalue: Uint256 = Uint256("CALLVALUE")
-    calldata: Bytes = Bytes.symbolic("CALLDATA")
-    gasprice: Uint256 = Uint256("GASPRICE")
+    origin: Uint160 = field(
+        default_factory=lambda: Uint160("ORIGIN"),
+    )
+    caller: Uint160 = field(
+        default_factory=lambda: Uint160("CALLER"),
+    )
+    address: Uint160 = field(
+        default_factory=lambda: Uint160("ADDRESS"),
+    )
+    callvalue: Uint256 = field(
+        default_factory=lambda: Uint256("CALLVALUE"),
+    )
+    calldata: Bytes = field(
+        default_factory=lambda: Bytes.symbolic("CALLDATA"),
+    )
+    gasprice: Uint256 = field(
+        default_factory=lambda: Uint256("GASPRICE"),
+    )
 
     def __substitute__(self, subs: Substitutions) -> Self:
         return _substitute(self, subs)
@@ -52,13 +64,27 @@ class Transaction:
 class Block:
     """A block in the blockchain."""
 
-    number: Uint256 = Uint256("NUMBER")
-    coinbase: Uint160 = Uint160("COINBASE")
-    timestamp: Uint256 = Uint256("TIMESTAMP")
-    prevrandao: Uint256 = Uint256("PREVRANDAO")
-    gaslimit: Uint256 = Uint256("GASLIMIT")
-    chainid: Uint256 = Uint256("CHAINID")
-    basefee: Uint256 = Uint256("BASEFEE")
+    number: Uint256 = field(
+        default_factory=lambda: Uint256("NUMBER"),
+    )
+    coinbase: Uint160 = field(
+        default_factory=lambda: Uint160("COINBASE"),
+    )
+    timestamp: Uint256 = field(
+        default_factory=lambda: Uint256("TIMESTAMP"),
+    )
+    prevrandao: Uint256 = field(
+        default_factory=lambda: Uint256("PREVRANDAO"),
+    )
+    gaslimit: Uint256 = field(
+        default_factory=lambda: Uint256("GASLIMIT"),
+    )
+    chainid: Uint256 = field(
+        default_factory=lambda: Uint256("CHAINID"),
+    )
+    basefee: Uint256 = field(
+        default_factory=lambda: Uint256("BASEFEE"),
+    )
 
     # Map from offset -> blockhash for the last 256 complete blocks. The most
     # recent block has offset 255.

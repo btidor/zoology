@@ -1,4 +1,4 @@
-"""Test helpers, mostly related to fixtures."""
+"""Tables of expected test results for the fixtures."""
 
 Fallback = (
     ("Px19", "SAVE", None, 1),
