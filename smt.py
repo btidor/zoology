@@ -133,6 +133,16 @@ def bvlshr_harder(value: Uint[N], shift: Uint[N]) -> Uint[N]:
     return _make_symbolic(value.__class__, BZLA.mk_term(Kind.BV_CONCAT, (prefix, term)))
 
 
+def concrete_hash(data: bytes | str) -> Uint256:
+    """Hash a concrete input and return the digest as a Uint256."""
+    encoded = data if isinstance(data, bytes) else data.encode()
+    digest = keccak.new(data=encoded, digest_bits=256).digest()
+    return Uint256(int.from_bytes(digest))
+
+
+EMPTY_DIGEST = concrete_hash(b"")
+
+
 def get_constants(s: Symbolic) -> dict[str, BitwuzlaTerm]:
     """Recursively search the term for constants."""
     constants = dict[str, BitwuzlaTerm]()
@@ -151,7 +161,8 @@ def get_constants(s: Symbolic) -> dict[str, BitwuzlaTerm]:
 
 
 Substitutions: TypeAlias = Sequence[
-    tuple[Uint256, Uint256]
+    tuple[Constraint, Constraint]
+    | tuple[Uint256, Uint256]
     | tuple[Uint160, Uint160]
     | tuple[Uint64, Uint64]
     | tuple[Array[Uint256, Uint256], Array[Uint256, Uint256]]
@@ -188,6 +199,8 @@ def substitute(item: R, subs: Substitutions) -> R:
             return item.__substitute__(subs)
         case list():
             return [substitute(r, subs) for r in item]  # type: ignore
+        case dict():
+            return dict((k, substitute(v, subs)) for k, v in item.items())  # type: ignore
         case _:
             return item
 

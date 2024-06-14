@@ -1,4 +1,4 @@
-"""A symbolic adapter for SHA3 (Keccak) hashing."""
+"""A library for representing the path constraint."""
 
 from __future__ import annotations
 
@@ -6,55 +6,63 @@ import copy
 from dataclasses import dataclass, field
 from typing import Any, Literal, TypeAlias
 
-from Crypto.Hash import keccak
-
 from bytes import BYTES, Bytes
 from smt import (
+    EMPTY_DIGEST,
     Constraint,
     NarrowingError,
     Solver,
-    Substitutions,
     Uint,
     Uint256,
     concat_bytes,
+    concrete_hash,
     iff,
     implies,
     prequal,
-    substitute,
 )
 
 Uint128: TypeAlias = Uint[Literal[128]]
 
 
-def concrete_hash(data: bytes | str) -> Uint256:
-    """Hash a concrete input and return the digest as a Uint256."""
-    encoded = data if isinstance(data, bytes) else data.encode()
-    digest = keccak.new(data=encoded, digest_bits=256).digest()
-    return Uint256(int.from_bytes(digest))
-
-
-EMPTY_DIGEST = concrete_hash(b"")
-
-
 @dataclass
-class SHA3:
-    """
-    Tracks SHA3 (Keccak) hashes.
+class Path:
+    """The symbolic constraints associated with a path."""
 
-    Within a single SHA3 instance, we symbolically constrain the state so that
-    there are no hash *collisions* (other preimage attacks are legal).
-    """
+    # The main symbolic constraint. This constraint is updated at each JUMPI
+    # instruction.
+    constraint: Constraint = field(default_factory=lambda: Constraint(True))
 
+    # Tracks the path of the program's execution. Each JUMPI is a bit, 1 if
+    # taken, 0 if not. MSB-first with a leading 1 prepended.
+    trace: int = 1
+
+    # Whether any mutations have been performed on this path, i.e. if it's legal
+    # to execute during a STATICCALL.
+    static: bool = True
+
+    # When performing SHA3 hashing, we create symbolic constraints to assert
+    # that there are no hash collisions. To do this, we log every SHA3 call in
+    # the path.
+    #
+    # Note: other types of preimage attacks are legal!
+    #
     free: list[tuple[Bytes, Uint256]] = field(default_factory=list)
     symbolic: list[tuple[Uint[Any], Uint256]] = field(default_factory=list)
     concrete: dict[bytes, tuple[Uint[Any], Uint256]] = field(default_factory=dict)
 
-    def __deepcopy__(self, memo: Any) -> SHA3:
-        return SHA3(
+    def __deepcopy__(self, memo: Any) -> Path:
+        return Path(
+            constraint=self.constraint,
+            trace=self.trace,
+            static=self.static,
             free=copy.copy(self.free),
             symbolic=copy.copy(self.symbolic),
             concrete=copy.copy(self.concrete),
         )
+
+    def px(self) -> str:
+        """Return a human-readable version of the path."""
+        return "Px" + hex(self.trace)[2:].upper()
 
     def hash(self, input: Bytes) -> tuple[Uint256, Constraint]:
         """
@@ -212,14 +220,3 @@ class SHA3:
             concretized.append((vector1, digest1))
 
         return concretized
-
-    def __substitute__(self, subs: Substitutions) -> SHA3:
-        free = [(substitute(a, subs), substitute(b, subs)) for a, b in self.free]
-        symbolic = [
-            (substitute(a, subs), substitute(b, subs)) for a, b in self.symbolic
-        ]
-        concrete = dict(
-            (a, (substitute(b, subs), substitute(c, subs)))
-            for a, (b, c) in self.concrete.items()
-        )
-        return SHA3(free, symbolic, concrete)

@@ -5,7 +5,7 @@ from typing import Any
 from compiler import compile
 from disassembler import Program, abiencode
 from smt import Solver, Uint256
-from state import Termination
+from state import Terminus
 
 from . import fixture as cases
 from .solidity import load_binary, load_solidity, loads_solidity
@@ -14,7 +14,7 @@ from .solidity import load_binary, load_solidity, loads_solidity
 def check_transitions(program: Program, branches: tuple[Any, ...]) -> None:
     expected = dict((b[0], b[1:]) for b in branches)
     for state in compile(program):
-        assert isinstance(state.pc, Termination)
+        assert isinstance(state.pc, Terminus)
         if not state.pc.success:
             continue
         assert state.px() in expected, f"unexpected path: {state.px()}"
@@ -26,7 +26,7 @@ def check_transitions(program: Program, branches: tuple[Any, ...]) -> None:
             assert kind == "SAVE"
 
         solver = Solver()
-        solver.add(state.constraint)
+        solver.add(state.path)
         assert solver.check()
         state.narrow(solver)
 
@@ -131,14 +131,14 @@ def test_sudoku() -> None:
     states = list(
         state
         for state in compile(program)
-        if isinstance(state.pc, Termination) and state.pc.success
+        if isinstance(state.pc, Terminus) and state.pc.success
     )
 
     assert len(states) == 1
     state = states[0]
 
     solver = Solver()
-    solver.add(state.constraint)
+    solver.add(state.path)
     assert solver.check()
 
     calldata = state.transaction.calldata

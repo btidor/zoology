@@ -7,13 +7,13 @@ from bytes import Bytes, Memory
 from disassembler import Instruction, disassemble
 from ops import *
 from smt import Array, Solver, Uint160, Uint256
-from state import Block, Termination, Transaction
+from state import Block, Terminus, Transaction
 
 
 def test_STOP() -> None:
     s = State(latest_return=Bytes(b"\x12\x34"))
     STOP(s)
-    assert isinstance(s.pc, Termination)
+    assert isinstance(s.pc, Terminus)
     assert s.pc.success is True
     assert s.pc.returndata.reveal() == b""
 
@@ -611,7 +611,7 @@ def test_RETURN() -> None:
         memory=Memory(b"\xff\x01"),
     )
     RETURN(s, Uint256(0), Uint256(2))
-    assert isinstance(s.pc, Termination)
+    assert isinstance(s.pc, Terminus)
     assert s.pc.success is True
     assert s.pc.returndata.reveal() == b"\xff\x01"
 
@@ -636,7 +636,7 @@ def test_REVERT() -> None:
         memory=Memory(b"\xff\x01"),
     )
     REVERT(s, Uint256(0), Uint256(2))
-    assert isinstance(s.pc, Termination)
+    assert isinstance(s.pc, Terminus)
     assert s.pc.success is False
     assert s.pc.returndata.reveal() == b"\xff\x01"
 
@@ -644,7 +644,7 @@ def test_REVERT() -> None:
 def test_INVALID() -> None:
     s = State(latest_return=Bytes(b"\x12\x34"))
     INVALID(s)
-    assert isinstance(s.pc, Termination)
+    assert isinstance(s.pc, Terminus)
     assert s.pc.success is False
     assert s.pc.returndata.reveal() == b""
 

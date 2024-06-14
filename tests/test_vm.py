@@ -2,12 +2,14 @@
 
 from bytes import Bytes
 from compiler import compile
-from disassembler import Program, abiencode, disassemble
-from smt import Array, Solver, Uint256
-from state import Block, State, Termination
-from vm import execute
+from disassembler import abiencode, disassemble
+from smt import Array, Uint160, Uint256
+from state import Block, Contract, Terminus
+from vm import execute, translate
 
 from .solidity import load_binary, load_solidity, loads_solidity
+
+DEFAULT_ADDRESS = 0xADADADADADADADADADADADADADADADADADADADAD
 
 
 def test_basic() -> None:
@@ -16,43 +18,29 @@ def test_basic() -> None:
     states = list(compile(program))
     assert len(states) == 1
 
-    state = execute(
-        states[0], Block.sample(0), Bytes(), Array[Uint256, Uint256](Uint256(0))
+    state = translate(
+        states[0],
+        Block.sample(0),
+        Bytes(),
+        Uint256(0),
+        Array[Uint256, Uint256](Uint256(0)),
     )
-    assert isinstance(state.pc, Termination)
+    assert isinstance(state.pc, Terminus)
     assert not state.pc.success
     assert state.pc.returndata.reveal() == b""
 
 
-def _execute(program: Program, calldata: bytes, storage: dict[int, int]) -> State:
-    block, input = Block.sample(0), Bytes(calldata)
-    store = Array[Uint256, Uint256](Uint256(0))
-    for key, value in storage.items():
-        store[Uint256(key)] = Uint256(value)
-
-    found = None
-    for state in compile(program):
-        state = execute(state, block, input, store)
-
-        solver = Solver()
-        solver.add(state.constraint)
-        if not solver.check():
-            pass
-        elif found is None:
-            found = state
-        else:
-            raise RuntimeError("found multiple states")
-    if found is None:
-        raise RuntimeError("no states found")
-    return found
-
-
 def test_fallback() -> None:
-    program = load_solidity("fixtures/01_Fallback.sol")
+    contracts = {
+        DEFAULT_ADDRESS: Contract(
+            address=Uint160(DEFAULT_ADDRESS),
+            program=load_solidity("fixtures/01_Fallback.sol"),
+        )
+    }
     calldata = abiencode("owner()")
-    state = _execute(program, calldata, {})
+    state, _ = execute(contracts, DEFAULT_ADDRESS, calldata, 0, {})
 
-    assert isinstance(state.pc, Termination)
+    assert isinstance(state.pc, Terminus)
     assert state.pc.success is True
     assert state.pc.returndata.reveal() == (0).to_bytes(32)
 
@@ -62,7 +50,7 @@ def test_fallout() -> None:
     calldata = abiencode("Fal1out()")
     state = _execute(program, calldata, {})
 
-    assert isinstance(state.pc, Termination)
+    assert isinstance(state.pc, Terminus)
     assert state.pc.success is True
     assert (
         state.storage[Uint256(1)].reveal() == 0xCACACACACACACACACACACACACACACACACACACACA
@@ -73,16 +61,15 @@ def test_coinflip() -> None:
     program = load_solidity("fixtures/03_CoinFlip.sol")
     calldata = abiencode("flip(bool)") + (0).to_bytes(32)
     storage = {
-        1: 0xFEDC,
-        2: 57896044618658097711785492504343953926634992332820282019728792003956564819968,
+        2: 0x8000000000000000000000000000000000000000000000000000000000000000,
     }
     state = _execute(program, calldata, storage)
 
-    assert isinstance(state.pc, Termination)
+    assert isinstance(state.pc, Terminus)
     assert state.pc.success is True
     assert (
         state.storage[Uint256(1)].reveal()
-        == 0x1F6D785BDB6AE9ECE46F3323FB3289240BD2D1C4C683CF558EE200C89933DF4F
+        == 0x8B1A944CF13A9A1C08FACB2C9E98623EF3254D2DDB48113885C3E8E97FEC8DB9
     )
 
 
@@ -93,7 +80,7 @@ def test_telephone() -> None:
     ).to_bytes(32)
     state = _execute(program, calldata, {})
 
-    assert isinstance(state.pc, Termination)
+    assert isinstance(state.pc, Terminus)
     assert state.pc.success is True
     assert state.pc.returndata.reveal() == b""
 
@@ -107,7 +94,7 @@ def test_token() -> None:
     )
     state = _execute(program, calldata, {})
 
-    assert isinstance(state.pc, Termination)
+    assert isinstance(state.pc, Terminus)
     assert state.pc.success is True
     assert state.pc.returndata.reveal() == (1).to_bytes(32)
 
@@ -118,7 +105,7 @@ def test_delegation() -> None:
     # storage.poke(Uint256(1), addresses["Delegate"].into(Uint256))
     state = _execute(program, calldata, {})
 
-    assert isinstance(state.pc, Termination)
+    assert isinstance(state.pc, Terminus)
     assert state.pc.success is True
     assert state.pc.returndata.reveal() == b""
 
@@ -128,7 +115,7 @@ def test_force() -> None:
     # callvalue = Uint256(0x1234)
     state = _execute(program, b"", {})
 
-    assert isinstance(state.pc, Termination)
+    assert isinstance(state.pc, Terminus)
     assert state.pc.success is False
     assert state.pc.returndata.reveal() == b""
 
@@ -138,7 +125,7 @@ def test_vault() -> None:
     calldata = abiencode("unlock(bytes32)") + (0).to_bytes(32)
     state = _execute(program, calldata, {})
 
-    assert isinstance(state.pc, Termination)
+    assert isinstance(state.pc, Terminus)
     assert state.pc.success is True
     assert state.pc.returndata.reveal() == b""
 
@@ -148,7 +135,7 @@ def test_king() -> None:
     # callvalue = Uint256(0x1234)
     state = _execute(program, b"", {})
 
-    assert isinstance(state.pc, Termination)
+    assert isinstance(state.pc, Terminus)
     assert state.pc.success is True
     assert state.pc.returndata.reveal() == b""
 
@@ -159,7 +146,7 @@ def test_reentrancy() -> None:
     # callvalue = Uint256(0x1234)
     state = _execute(program, calldata, {})
 
-    assert isinstance(state.pc, Termination)
+    assert isinstance(state.pc, Terminus)
     assert state.pc.success is True
     assert state.pc.returndata.reveal() == b""
 
@@ -187,7 +174,7 @@ def test_privacy() -> None:
     storage = {5: 0x4321 << 128}
     state = _execute(program, calldata, storage)
 
-    assert isinstance(state.pc, Termination)
+    assert isinstance(state.pc, Terminus)
     assert state.pc.success is True
     assert state.pc.returndata.reveal() == b""
 
@@ -207,7 +194,7 @@ def test_gatekeeper_two() -> None:
     )
     state = _execute(program, calldata, {})
 
-    assert isinstance(state.pc, Termination)
+    assert isinstance(state.pc, Terminus)
     assert state.pc.success is True
     assert state.pc.returndata.reveal() == (1).to_bytes(32)
 

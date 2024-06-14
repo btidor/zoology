@@ -5,30 +5,30 @@ from inspect import Signature, signature
 from typing import Any, Literal
 
 from bytes import Bytes
-from disassembler import CustomCopy, Instruction
+from disassembler import Instruction
 from opcodes import REFERENCE, SPECIAL, UNIMPLEMENTED
 from smt import (
-    Constraint,
     Int,
     Uint,
     Uint8,
-    Uint160,
     Uint256,
     bvlshr_harder,
     concat_bytes,
-    overflow_safe,
-    substitute,
 )
-from state import CreateCallout, State, Termination
+from state import Block, Runtime, Transaction
 
 Int256 = Int[Literal[256]]
 Uint257 = Uint[Literal[257]]
 Uint512 = Uint[Literal[512]]
 
+Fork = tuple[Runtime, Runtime]
+Terminate = tuple[bool, Bytes]
+OpResult = None | Uint256 | Fork | Terminate
 
-def STOP(s: State) -> None:
+
+def STOP() -> Terminate:
     """00 - Halts execution."""
-    s.pc = Termination(True, Bytes())
+    return (True, Bytes())
 
 
 def ADD(a: Uint256, b: Uint256) -> Uint256:
@@ -194,150 +194,150 @@ def SAR(shift: Uint256, value: Uint256) -> Uint256:
     return (value.into(Int256) >> shift).into(Uint256)
 
 
-def KECCAK256(s: State, offset: Uint256, size: Uint256) -> Uint256:
+def KECCAK256(r: Runtime, offset: Uint256, size: Uint256) -> Uint256:
     """20 - Compute Keccak-256 (SHA3) hash."""
-    digest, constraint = s.sha3.hash(s.memory.slice(offset, size))
-    s.constraint &= constraint
-    return digest
+    raise NotImplementedError("KECCAK256")
 
 
-def ADDRESS(s: State) -> Uint256:
+def ADDRESS(tx: Transaction) -> Uint256:
     """30 - Get address of currently executing account."""
-    return s.transaction.address.into(Uint256)
+    return tx.address.into(Uint256)
 
 
-def BALANCE(s: State, address: Uint256) -> Uint256:
+def BALANCE(r: Runtime, address: Uint256) -> Uint256:
     """31 - Get balance of the given account."""
-    return s.balance[address.into(Uint160)]
+    raise NotImplementedError("BALANCE")
 
 
-def ORIGIN(s: State) -> Uint256:
+def ORIGIN(tx: Transaction) -> Uint256:
     """32 - Get execution origination address."""
-    return s.transaction.origin.into(Uint256)
+    return tx.origin.into(Uint256)
 
 
-def CALLER(s: State) -> Uint256:
+def CALLER(tx: Transaction) -> Uint256:
     """33 - Get caller address."""
-    return s.transaction.caller.into(Uint256)
+    return tx.caller.into(Uint256)
 
 
-def CALLVALUE(s: State) -> Uint256:
+def CALLVALUE(tx: Transaction) -> Uint256:
     """
     34.
 
     Get deposited value by the instruction/transaction responsible for this
     execution.
     """
-    return s.transaction.callvalue
+    return tx.callvalue
 
 
-def CALLDATALOAD(s: State, i: Uint256) -> Uint256:
+def CALLDATALOAD(tx: Transaction, i: Uint256) -> Uint256:
     """35 - Get input data of current environment."""
-    return concat_bytes(*[s.transaction.calldata[i + Uint256(j)] for j in range(32)])
+    return concat_bytes(*[tx.calldata[i + Uint256(j)] for j in range(32)])
 
 
-def CALLDATASIZE(s: State) -> Uint256:
+def CALLDATASIZE(tx: Transaction) -> Uint256:
     """36 - Get size of input data in current environment."""
-    return s.transaction.calldata.length
+    return tx.calldata.length
 
 
-def CALLDATACOPY(s: State, destOffset: Uint256, offset: Uint256, size: Uint256) -> None:
+def CALLDATACOPY(
+    r: Runtime, tx: Transaction, destOffset: Uint256, offset: Uint256, size: Uint256
+) -> None:
     """37 - Copy input data in current environment to memory."""
-    s.memory.graft(s.transaction.calldata.slice(offset, size), destOffset)
+    r.memory.graft(tx.calldata.slice(offset, size), destOffset)
 
 
-def CODESIZE(s: State) -> Uint256:
+def CODESIZE(r: Runtime) -> Uint256:
     """38 - Get size of code running in current environment."""
-    return s.program.code.length
+    return r.program.code.length
 
 
-def CODECOPY(s: State, destOffset: Uint256, offset: Uint256, size: Uint256) -> None:
+def CODECOPY(r: Runtime, destOffset: Uint256, offset: Uint256, size: Uint256) -> None:
     """39 - Copy code running in current environment to memory."""
-    s.memory.graft(s.program.code.slice(offset, size), destOffset)
+    r.memory.graft(r.program.code.slice(offset, size), destOffset)
 
 
-def GASPRICE(s: State) -> Uint256:
+def GASPRICE(tx: Transaction) -> Uint256:
     """3A - Get price of gas in current environment."""
-    return s.transaction.gasprice
+    return tx.gasprice
 
 
-def EXTCODESIZE(s: State, address: Uint256) -> Uint256:
+def EXTCODESIZE(r: Runtime, address: Uint256) -> Uint256:
     """3B - Get size of an account's code."""
     raise NotImplementedError("EXTCODESIZE")
 
 
 def EXTCODECOPY(
-    s: State, address: Uint256, destOffset: Uint256, offset: Uint256, size: Uint256
+    r: Runtime, address: Uint256, destOffset: Uint256, offset: Uint256, size: Uint256
 ) -> None:
     """3C - Copy an account's code to memory."""
     raise NotImplementedError("EXTCODECOPY")
 
 
-def RETURNDATASIZE(s: State) -> Uint256:
+def RETURNDATASIZE(r: Runtime) -> Uint256:
     """
     3D.
 
     Get size of output data from the previous call from the current environment.
     """
-    return s.latest_return.length
+    raise NotImplementedError("RETURNDATASIZE")
 
 
 def RETURNDATACOPY(
-    s: State, destOffset: Uint256, offset: Uint256, size: Uint256
+    r: Runtime, destOffset: Uint256, offset: Uint256, size: Uint256
 ) -> None:
     """3E - Copy output data from the previous call to memory."""
-    s.memory.graft(s.latest_return.slice(offset, size), destOffset)
+    raise NotImplementedError("RETURNDATACOPY")
 
 
-def EXTCODEHASH(s: State, _address: Uint256) -> Uint256:
+def EXTCODEHASH(r: Runtime, address: Uint256) -> Uint256:
     """3F - Get hash of an account's code."""
     raise NotImplementedError("EXTCODEHASH")
 
 
-def BLOCKHASH(s: State, blockNumber: Uint256) -> Uint256:
+def BLOCKHASH(blk: Block, blockNumber: Uint256) -> Uint256:
     """40 - Get the hash of one of the 256 most recent complete blocks."""
-    offset = s.block.number - blockNumber - Uint256(1)
-    return (offset < Uint256(256)).ite(s.block.hashes[offset.into(Uint8)], Uint256(0))
+    offset = Uint256(256) - blk.number + blockNumber
+    return (offset < Uint256(256)).ite(blk.hashes[offset.into(Uint8)], Uint256(0))
 
 
-def COINBASE(s: State) -> Uint256:
+def COINBASE(blk: Block) -> Uint256:
     """41 - Get the block's beneficiary address."""
-    return s.block.coinbase.into(Uint256)
+    return blk.coinbase.into(Uint256)
 
 
-def TIMESTAMP(s: State) -> Uint256:
+def TIMESTAMP(blk: Block) -> Uint256:
     """42 - Get the block's timestamp."""
-    return s.block.timestamp
+    return blk.timestamp
 
 
-def NUMBER(s: State) -> Uint256:
+def NUMBER(blk: Block) -> Uint256:
     """43 - Get the block's number."""
-    return s.block.number
+    return blk.number
 
 
-def PREVRANDAO(s: State) -> Uint256:
+def PREVRANDAO(blk: Block) -> Uint256:
     """44 - Get the previous block's RANDAO mix."""
-    return s.block.prevrandao
+    return blk.prevrandao
 
 
-def GASLIMIT(s: State) -> Uint256:
+def GASLIMIT(blk: Block) -> Uint256:
     """45 - Get the block's gas limit."""
-    return s.block.gaslimit
+    return blk.gaslimit
 
 
-def CHAINID(s: State) -> Uint256:
+def CHAINID(blk: Block) -> Uint256:
     """46 - Get the chain ID."""
-    return s.block.chainid
+    return blk.chainid
 
 
-def SELFBALANCE(s: State) -> Uint256:
+def SELFBALANCE(r: Runtime) -> Uint256:
     """47 - Get balance of currently executing account."""
-    return s.balance[s.transaction.address]
+    raise NotImplementedError("SELFBALANCE")
 
 
-def BASEFEE(s: State) -> Uint256:
+def BASEFEE(blk: Block) -> Uint256:
     """48 - Get the base fee."""
-    return s.block.basefee
+    return blk.basefee
 
 
 def POP(y: Uint256) -> None:
@@ -345,33 +345,33 @@ def POP(y: Uint256) -> None:
     pass
 
 
-def MLOAD(s: State, offset: Uint256) -> Uint256:
+def MLOAD(r: Runtime, offset: Uint256) -> Uint256:
     """51 - Load word from memory."""
-    return concat_bytes(*[s.memory[offset + Uint256(i)] for i in range(32)])
+    return concat_bytes(*[r.memory[offset + Uint256(i)] for i in range(32)])
 
 
-def MSTORE(s: State, offset: Uint256, value: Uint256) -> None:
+def MSTORE(r: Runtime, offset: Uint256, value: Uint256) -> None:
     """52 - Save word to memory."""
-    s.memory.setword(offset, value)
+    r.memory.setword(offset, value)
 
 
-def MSTORE8(s: State, offset: Uint256, value: Uint256) -> None:
+def MSTORE8(r: Runtime, offset: Uint256, value: Uint256) -> None:
     """53 - Save byte to memory."""
-    s.memory[offset] = value.into(Uint8)
+    r.memory[offset] = value.into(Uint8)
 
 
-def SLOAD(s: State, key: Uint256) -> Uint256:
+def SLOAD(r: Runtime, key: Uint256) -> Uint256:
     """54 - Load word from storage."""
-    return s.storage[key]
+    return r.storage[key]
 
 
-def SSTORE(s: State, key: Uint256, value: Uint256) -> None:
+def SSTORE(r: Runtime, key: Uint256, value: Uint256) -> None:
     """55 - Save word to storage."""
-    s.static = False
-    s.storage[key] = value
+    r.path.static = False
+    r.storage[key] = value
 
 
-def JUMP(s: State, _counter: Uint256) -> None:
+def JUMP(r: Runtime, _counter: Uint256) -> None:
     """56 - Alter the program counter."""
     counter = _counter.reveal()
     assert counter is not None, "JUMP requires concrete counter"
@@ -380,34 +380,30 @@ def JUMP(s: State, _counter: Uint256) -> None:
     # Instead, raise an error and fail the whole analysis. This lets us prove
     # that all jump targets are valid and within the body of the code, which is
     # why it's safe to strip the metadata trailer.
-    s.pc = s.program.jumps[counter]
+    r.pc = r.program.jumps[counter]
 
 
-def JUMPI(
-    s: State, ins: Instruction, _counter: Uint256, b: Uint256
-) -> tuple[State, State] | None:
+def JUMPI(r: Runtime, ins: Instruction, _counter: Uint256, b: Uint256) -> Fork | None:
     """57 - Conditionally alter the program counter."""
     counter = _counter.reveal()
     assert counter is not None, "JUMPI requires concrete counter"
 
-    s.path <<= 1
-    s.cost += 2 ** (s.branching[ins.offset])
-    s.branching[ins.offset] += 1
+    r.path.trace <<= 1
     c = b == Uint256(0)
     match c.reveal():
         case None:  # unknown, must prepare both branches :(
-            s0, s1 = copy.deepcopy(s), s
-            s0.constraint &= c
+            r0, r1 = copy.deepcopy(r), r
+            r0.path.constraint &= c
 
-            s1.pc = s.program.jumps[counter]
-            s1.path |= 1
-            s1.constraint &= ~c
-            return (s0, s1)
+            r1.pc = r.program.jumps[counter]
+            r1.path.trace |= 1
+            r1.path.constraint &= ~c
+            return (r0, r1)
         case True:  # branch never taken, fall through
             return None
         case False:  # branch always taken
-            s.pc = s.program.jumps[counter]
-            s.path |= 1
+            r.pc = r.program.jumps[counter]
+            r.path.trace |= 1
             return None
 
 
@@ -421,12 +417,12 @@ def PC(ins: Instruction) -> Uint256:
     return Uint256(ins.offset)
 
 
-def MSIZE(s: State) -> Uint256:
+def MSIZE(r: Runtime) -> Uint256:
     """59 - Get the size of active memory in bytes."""
-    return s.memory.length
+    return r.memory.length
 
 
-def GAS(s: State) -> Uint256:
+def GAS(r: Runtime) -> Uint256:
     """
     5A.
 
@@ -451,42 +447,37 @@ def PUSH(ins: Instruction) -> Uint256:
     return ins.operand
 
 
-def DUP(ins: Instruction, s: State) -> Uint256:
+def DUP(ins: Instruction, r: Runtime) -> Uint256:
     """8X - Duplicate Nth stack item."""
     if ins.suffix is None:
         raise ValueError("somehow got a DUP without a suffix")
-    return s.stack[-ins.suffix]
+    return r.stack[-ins.suffix]
 
 
-def SWAP(ins: Instruction, s: State) -> None:
+def SWAP(ins: Instruction, r: Runtime) -> None:
     """9X - Exchange 1st and (N+1)th stack items."""
     if ins.suffix is None:
         raise ValueError("somehow got a SWAP without a suffix")
     m = ins.suffix + 1
-    s.stack[-1], s.stack[-m] = s.stack[-m], s.stack[-1]
+    r.stack[-1], r.stack[-m] = r.stack[-m], r.stack[-1]
 
 
-def LOG(ins: Instruction, s: State, offset: Uint256, size: Uint256) -> None:
+def LOG(ins: Instruction, r: Runtime, offset: Uint256, size: Uint256) -> None:
     """AX - Append log record with N topics."""
-    s.static = False
+    r.path.static = False
     if ins.suffix is None:
         raise ValueError("somehow got a LOG without a suffix")
     for _ in range(ins.suffix):
-        s.stack.pop()  # we don't actually save the log entries anywhere
+        r.stack.pop()  # we don't actually save the log entries anywhere
 
 
-def CREATE(s: State, value: Uint256, offset: Uint256, size: Uint256) -> Uint256:
+def CREATE(r: Runtime, value: Uint256, offset: Uint256, size: Uint256) -> Uint256:
     """F0 - Create a new account with associated code."""
-    s.static = False
-    ok = Constraint(f"CREATE{len(s.callouts)}")
-    s.callouts.append(
-        CreateCallout(s.memory.slice(offset, size), value, ok),
-    )
-    return ok.ite(Uint256(1), Uint256(0))
+    raise NotImplementedError("CREATE")
 
 
 def CALL(
-    s: State,
+    r: Runtime,
     gas: Uint256,
     address: Uint256,
     value: Uint256,
@@ -500,7 +491,7 @@ def CALL(
 
 
 def CALLCODE(
-    s: State,
+    r: Runtime,
     gas: Uint256,
     _address: Uint256,
     value: Uint256,
@@ -513,13 +504,13 @@ def CALLCODE(
     raise NotImplementedError("CALLCODE")
 
 
-def RETURN(s: State, offset: Uint256, size: Uint256) -> None:
+def RETURN(r: Runtime, offset: Uint256, size: Uint256) -> Terminate:
     """F3 - Halts execution returning output data."""
-    s.pc = Termination(True, s.memory.slice(offset, size))
+    return (True, r.memory.slice(offset, size))
 
 
 def DELEGATECALL(
-    s: State,
+    r: Runtime,
     gas: Uint256,
     address: Uint256,
     argsOffset: Uint256,
@@ -537,14 +528,14 @@ def DELEGATECALL(
 
 
 def CREATE2(
-    s: State, value: Uint256, offset: Uint256, size: Uint256, _salt: Uint256
+    r: Runtime, value: Uint256, offset: Uint256, size: Uint256, _salt: Uint256
 ) -> None:
     """F5 - Create a new account with associated code at a predictable address."""
     raise NotImplementedError("CREATE2")
 
 
 def STATICCALL(
-    s: State,
+    r: Runtime,
     gas: Uint256,
     address: Uint256,
     argsOffset: Uint256,
@@ -556,63 +547,23 @@ def STATICCALL(
     return Uint256("TODO")
 
 
-def REVERT(s: State, offset: Uint256, size: Uint256) -> None:
+def REVERT(r: Runtime, offset: Uint256, size: Uint256) -> Terminate:
     """
     FD.
 
     Halt execution reverting state changes but returning data and remaining gas.
     """
-    s.pc = Termination(False, s.memory.slice(offset, size))
+    return (False, r.memory.slice(offset, size))
 
 
-def INVALID(s: State) -> None:
+def INVALID(r: Runtime) -> Terminate:
     """FE - Designated invalid instruction."""
-    s.pc = Termination(False, Bytes())
+    return (False, Bytes())
 
 
-def SELFDESTRUCT(s: State, address: Uint256) -> None:
+def SELFDESTRUCT(r: Runtime, tx: Transaction, address: Uint256) -> None:
     """FF - Halt execution and register account for later deletion."""
-    s.static = False
-
-    contract = s.transaction.address
-    recipient = address.into(Uint160)
-    value = s.balance[contract]
-
-    # Note: if `current` and `recipient` are equal, the value disappears.
-    s.balance[recipient] += value
-    s.constraint &= overflow_safe(s.balance[recipient], value)
-    s.balance[contract] = Uint256(0)
-
-    # TODO
-    # assert (c := contract.reveal()) is not None
-    # s.contracts[c].destructed = True
-
-    s.pc = Termination(True, Bytes())
-
-
-def CUSTOM(s: State, ins: Instruction) -> None:
-    """XX - Implement custom logic for loop flattening."""
-    if not isinstance(ins.operand, CustomCopy):
-        raise ValueError("CUSTOM requires a descriptor operand")
-
-    stack = list(reversed(s.stack))
-    substitutions = list((Uint256(f"STACK{i}"), stack[i]) for i in range(8))
-    start = substitute(ins.operand.start, substitutions)
-    end = substitute(ins.operand.end, substitutions)
-    stride = substitute(ins.operand.stride, substitutions)
-    read = substitute(ins.operand.read, substitutions)
-    write = substitute(ins.operand.write, substitutions)
-
-    if stride.reveal() != 0x20:
-        raise NotImplementedError(f"unsupported stride length: {stride}")
-
-    s.memory.graft(
-        s.memory.slice(read + start, end - start),
-        write + start,
-    )
-    s.stack.pop()
-    s.stack.append(end)
-    s.pc = s.program.jumps[ins.operand.exit]
+    raise NotImplementedError("SELFDESTRUCT")
 
 
 def _load_ops() -> dict[str, tuple[Any, Signature]]:

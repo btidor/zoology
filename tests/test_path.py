@@ -3,12 +3,12 @@
 import pytest
 
 from bytes import BYTES, Bytes
-from sha3 import SHA3
+from path import Path
 from smt import NarrowingError, Solver, Uint256
 
 
 def test_concrete() -> None:
-    sha3 = SHA3()
+    sha3 = Path()
     input = Bytes(b"testing")
     digest, _ = sha3.hash(input)
     assert (
@@ -18,7 +18,7 @@ def test_concrete() -> None:
 
 
 def test_symbolic() -> None:
-    sha3 = SHA3()
+    sha3 = Path()
     input = Bytes.symbolic("INPUT", 7)
     digest, constraint = sha3.hash(input)
     assert digest.reveal() is None
@@ -38,7 +38,7 @@ def test_symbolic() -> None:
 
 
 def test_fully_symbolic() -> None:
-    sha3 = SHA3()
+    sha3 = Path()
     input = Bytes.symbolic("INPUT")
     digest, constraint = sha3.hash(input)
     assert digest.reveal() is None
@@ -62,7 +62,7 @@ def test_fully_symbolic() -> None:
 
 
 def test_zero() -> None:
-    sha3 = SHA3()
+    sha3 = Path()
     digest, _ = sha3.hash(Bytes.symbolic("INPUT", 0))
     assert (
         digest.reveal()
@@ -76,7 +76,7 @@ def test_zero() -> None:
 
 
 def test_impossible_concrete() -> None:
-    sha3 = SHA3()
+    sha3 = Path()
     input = Bytes.symbolic("INPUT", 7)
     digest, constraint = sha3.hash(input)
 
@@ -97,7 +97,7 @@ def test_impossible_concrete() -> None:
 
 
 def test_impossible_symbolic() -> None:
-    sha3 = SHA3()
+    sha3 = Path()
     digest, constraint = sha3.hash(Bytes(b"testing"))
 
     solver = Solver()

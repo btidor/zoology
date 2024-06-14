@@ -30,60 +30,56 @@ PROXY = Uint160(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0)
 with open(_ROOT / "ethernaut.json") as f:
     _eth = json.load(f)
     LEVEL_FACTORIES = [
-        Uint160(int.from_bytes(bytes.fromhex(_eth[str(i)][2:]))) for i in range(COUNT)
+        int.from_bytes(bytes.fromhex(_eth[str(i)][2:])) for i in range(COUNT)
     ]
 
 cache: Snapshot | None = None
 
 
-def snapshot_contracts(address: Uint160, invisible: bool = True) -> dict[int, Contract]:
+def snapshot_contracts(address: int) -> dict[int, Contract]:
     """Load the given contract from the snapshot, and any contracts it references."""
     global cache
     if cache is None:
         with open(_ROOT / "snapshot.json") as f:
             cache = json.load(f)
         assert cache is not None
+    raw = cache[address.to_bytes(20).hex()]
 
-    assert (a := address.reveal()) is not None
-    saved = cache[a.to_bytes(20).hex()]
-    address = Uint160(a)
-    program = disassemble(Bytes.fromhex(saved["code"]))
-    # ASSUMPTION: no solution requires interacting with the factory contract.
-    contract = Contract(address=address, program=program, invisible=invisible)
     contracts = dict[int, Contract]()
-
-    for k, v in saved.items():
+    contract = Contract(
+        address=address,
+        program=disassemble(Bytes.fromhex(raw["code"])),
+        # Some level factories create other contracts in their constructor. To
+        # avoid address collisions between these fixed contracts and created
+        # level contracts, bump up the nonce.
+        nonce=Uint256(16),
+    )
+    for k, v in raw.items():
         if k == "code":
             continue
-        contract.storage[Uint256(int(k))] = Uint256(int(v, 16))
-        if is_sibling_contract(int(k), int(v, 16)):
+        vx = int(v, 16)
+        contract.storage[Uint256(int(k))] = Uint256(vx)
+        if is_sibling_contract(int(k), vx):
             # Warning! Levels like Delegation include global non-factory
             # contracts that *do* need to be interacted with.
-            contracts.update(snapshot_contracts(Uint160(int(v, 16)), False))
+            contracts.update(snapshot_contracts(vx))
 
-    # Some level factories create other contracts in their constructor. To avoid
-    # address collisions between these fixed contracts and created level
-    # contracts, bump up the nonce.
-    contract.nonce = Uint256(16)
-    contracts[a] = contract
+    contracts[address] = contract
     return contracts
 
 
-def get_code(address: Uint160) -> Program:
+def get_code(address: int) -> Program:
     """Load the Contract at a given address."""
-    assert (a := address.reveal()) is not None
-    data = _api_request("eth_getCode", address=a.to_bytes(20).hex(), tag=TAG)
+    data = _api_request("eth_getCode", address=address.to_bytes(20).hex(), tag=TAG)
     return disassemble(Bytes(data))
 
 
-def get_storage_at(address: Uint160, position: Uint256) -> Uint256:
+def get_storage_at(address: int, position: int) -> Uint256:
     """Load the contents of a given storage slot."""
-    assert (a := address.reveal()) is not None
-    assert (p := position.reveal()) is not None
     value = _api_request(
         "eth_getStorageAt",
-        address=a.to_bytes(20).hex(),
-        position=p.to_bytes(32).hex(),
+        address=address.to_bytes(20).hex(),
+        position=position.to_bytes(32).hex(),
         tag=TAG,
     )
     return Uint256(int.from_bytes(value))
@@ -121,25 +117,22 @@ def _api_request(action: str, **kwargs: str) -> bytes:
         return bytes.fromhex(result[2:])
 
 
-def download_contract(snapshot: Snapshot, address: Uint160) -> None:
+def download_contract(snapshot: Snapshot, address: int) -> None:
     """Download a given address's code and data."""
-    assert (a := address.reveal()) is not None
     program = get_code(address)
+    key = address.to_bytes(20).hex()
     assert (c := program.code.reveal()) is not None
-    snapshot[a.to_bytes(20).hex()] = {"code": c.hex()}
+    snapshot[key] = {"code": c.hex()}
 
     for j in range(8):
         # HACK: level factories only use the first few storage slots. Higher
-        # slots are for maps keyed by player, which we can initialize to
-        # zero.
-        storage = get_storage_at(address, Uint256(j))
+        # slots are for maps keyed by player, which we can initialize to zero.
+        storage = get_storage_at(address, j)
         assert (v := storage.reveal()) is not None
         if v != 0:
-            snapshot[a.to_bytes(20).hex()][str(j)] = v.to_bytes(32).hex()
+            snapshot[key][str(j)] = v.to_bytes(32).hex()
         if is_sibling_contract(j, v):
-            download_contract(snapshot, Uint160(v))
-        if is_sibling_contract(j, v):
-            download_contract(snapshot, Uint160(v))
+            download_contract(snapshot, v)
 
 
 def is_sibling_contract(slot: int, value: int) -> bool:

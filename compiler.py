@@ -3,28 +3,32 @@
 from heapq import heappop, heappush
 from typing import Iterable
 
+from bytes import Bytes
 from disassembler import Instruction, Program
-from ops import OPS
+from ops import OPS, OpResult
 from smt import (
     Array,
     Uint,
+    Uint8,
     Uint160,
     Uint256,
 )
-from state import State, Termination
+from state import Block, Runtime, Terminus, Transaction
 
 
-def compile(program: Program) -> Iterable[State]:
+def compile(program: Program) -> Iterable[Terminus]:
     """Compile an EVM contract into a set of symbolic paths."""
-    state = State(
+    state = Runtime(
         program=program,
         storage=Array[Uint256, Uint256]("STORAGE"),
-        balance=Array[Uint160, Uint256]("BALANCE"),
     )
-    queue = list[State]([state])
+    block = symbolic_block()
+    transaction = symbolic_transaction()
+
+    queue = list[Runtime]([state])
     while queue:
         state = heappop(queue)
-        while isinstance(state.pc, int):
+        while True:
             ins = state.program.instructions[state.pc]
             if ins.name not in OPS:
                 raise ValueError(f"unimplemented opcode: {ins.name}")
@@ -32,23 +36,27 @@ def compile(program: Program) -> Iterable[State]:
             fn, sig = OPS[ins.name]
             args = list[object]()
             for name in sig.parameters:
-                kls = sig.parameters[name].annotation
-                if kls == Uint256:
-                    val = state.stack.pop()
-                    args.append(val)
-                elif kls == State:
-                    args.append(state)
-                elif kls == Instruction:
-                    args.append(ins)
-                else:
-                    raise TypeError(f"unknown arg class: {kls}")
+                match kls := sig.parameters[name].annotation:
+                    case Uint():
+                        val = state.stack.pop()
+                        args.append(val)
+                    case Runtime():
+                        args.append(state)
+                    case Transaction():
+                        args.append(transaction)
+                    case Block():
+                        args.append(block)
+                    case Instruction():
+                        args.append(ins)
+                    case _:
+                        raise TypeError(f"unknown arg class: {kls}")
 
             # Note: we increment the program counter *before* executing the
             # instruction because instructions may overwrite it (e.g. in the
             # case of a JUMP).
             state.pc += 1
 
-            result: Uint256 | tuple[State, State] | None = fn(*args)
+            result: OpResult = fn(*args)
             match result:
                 case None:
                     pass
@@ -56,10 +64,43 @@ def compile(program: Program) -> Iterable[State]:
                     state.stack.append(result)
                     if len(state.stack) > 1024:
                         raise RuntimeError("evm stack overflow")
-                case tuple(states):
-                    for state in states:
+                case (Runtime(), Runtime()):
+                    for state in result:
                         heappush(queue, state)
                     break
+                case (success, returndata):
+                    storage = (
+                        state.storage if success and not state.path.static else None
+                    )
+                    yield Terminus(state.path, success, returndata, storage)
+                    break
 
-        if isinstance(state.pc, Termination):
-            yield state
+
+# TODO: since they're immutable, these should be global variables, but that
+# doesn't seem to work with pytest state resetting.
+
+
+def symbolic_block() -> Block:
+    """Return the standard fully-symbolic Block."""
+    return Block(
+        number=Uint256("NUMBER"),
+        coinbase=Uint160("COINBASE"),
+        timestamp=Uint256("TIMESTAMP"),
+        prevrandao=Uint256("PREVRANDAO"),
+        gaslimit=Uint256("GASLIMIT"),
+        chainid=Uint256("CHAINID"),
+        basefee=Uint256("BASEFEE"),
+        hashes=Array[Uint8, Uint256]("BLOCKHASH"),
+    )
+
+
+def symbolic_transaction() -> Transaction:
+    """Return the standard fully-symbolic Transaction."""
+    return Transaction(
+        origin=Uint160("ORIGIN"),
+        caller=Uint160("CALLER"),
+        address=Uint160("ADDRESS"),
+        callvalue=Uint256("CALLVALUE"),
+        calldata=Bytes.symbolic("CALLDATA"),
+        gasprice=Uint256("GASPRICE"),
+    )

@@ -24,7 +24,7 @@ from smt import (
 
 T = TypeVar("T", bound="Bytes")
 
-BytesWrite = tuple[Uint256, "Uint8 | ByteSlice"]
+BytesWrite = tuple[Uint256, "Uint8 | Bytes"]
 
 DESCRIBE_LIMIT = 4096
 
@@ -213,7 +213,7 @@ class Memory:
             return BYTES[0]
         item = self.array[i]
         for k, v in self.writes:
-            if isinstance(v, ByteSlice):
+            if isinstance(v, Bytes):
                 destOffset = k
                 item = ((i >= destOffset) & (i < destOffset + v.length)).ite(
                     v[i - destOffset],
@@ -254,7 +254,7 @@ class Memory:
         """Return a symbolic slice of this instance."""
         return ByteSlice(self, offset, size)
 
-    def graft(self, slice: ByteSlice, at: Uint256) -> None:
+    def graft(self, slice: Bytes, at: Uint256) -> None:
         """Graft in a Bytes at the given offset."""
         if slice.length.reveal() == 0:
             # Short circuit e.g. in DELEGATECALL when retSize is zero.
@@ -278,7 +278,7 @@ class Memory:
         """Simplify array keys using the given solver's contraints."""
         length_ = Uint256(solver.evaluate(self.length))
         for k, v in self.writes:
-            if isinstance(v, ByteSlice):
+            if isinstance(v, Bytes):
                 constraint &= v.compact(solver, constraint)
                 assert solver.check()
         constraint, self.length = compact_helper(
@@ -289,7 +289,7 @@ class Memory:
         # we've simplified the slice lengths:
         while self.writes:
             k, v = self.writes[0]
-            if isinstance(v, ByteSlice):
+            if isinstance(v, Bytes):
                 if (n := v.length.reveal()) is None:
                     break
                 for i in range(n):

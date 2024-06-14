@@ -1,8 +1,6 @@
 #!/usr/bin/env pytest
 
 from snapshot import LEVEL_FACTORIES, snapshot_contracts
-from solution import Validator
-from zoology import search, starting_sequence
 
 
 def check_level(i: int, fixture: list[str]) -> None:
