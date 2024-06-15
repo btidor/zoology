@@ -202,6 +202,8 @@ def substitute(item: R, subs: Substitutions) -> R:
             return item.__substitute__(subs)
         case list():
             return [substitute(r, subs) for r in item]  # type: ignore
+        case tuple():
+            return tuple(substitute(r, subs) for r in item)  # type: ignore
         case dict():
             return dict((k, substitute(v, subs)) for k, v in item.items())  # type: ignore
         case _:

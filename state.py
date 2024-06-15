@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, NewType
+from typing import Any, Callable, Self
 
 from bytes import BYTES, Bytes, Memory
 from disassembler import Program, disassemble
@@ -19,7 +19,7 @@ from smt import (
 
 
 @dataclass
-class Blockchain:
+class Blockchain(Substitutable):
     """Durable global state, persists across transactions."""
 
     contracts: Contracts = field(default_factory=dict)
@@ -30,7 +30,7 @@ class Blockchain:
 
 
 @dataclass
-class Contract:
+class Contract(Substitutable):
     """A contract account and its durable state."""
 
     program: Program
@@ -38,15 +38,26 @@ class Contract:
     storage: Array[Uint256, Uint256] = field(
         default_factory=lambda: Array[Uint256, Uint256](Uint256(0))
     )
-    nonce: Uint256 = Uint256(1)  # starts at 1, see EIP-161
+    nonce: int = 1  # starts at 1, see EIP-161
 
 
-Address = NewType("Address", int)  # a concrete contract address
+class Address(int):
+    """A concrete contract address."""
+
+    @classmethod
+    def unwrap(cls, address: Uint160, op: str = "operation") -> Self:
+        """Convert a Uint160 to an Address."""
+        v = address.reveal()
+        if v is None:
+            raise ValueError(f"{op} requires concrete address")
+        return cls(v)
+
+
 Contracts = dict[Address, Contract]
 
 
 @dataclass(frozen=True)
-class Block:
+class Block(Substitutable):
     """A block in the blockchain."""
 
     number: Uint256 = Uint256(16030969)
@@ -74,7 +85,7 @@ class Block:
 
 
 @dataclass(frozen=True)
-class Transaction:
+class Transaction(Substitutable):
     """A contract call."""
 
     origin: Uint160 = Uint160(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0)
@@ -116,6 +127,9 @@ class Runtime:
     pc: int = 0
     stack: list[Uint256] = field(default_factory=list)
     memory: Memory = field(default_factory=Memory)
+    latest_return: Bytes = Bytes()
+
+    hyper: list[Hypercall] = field(default_factory=list)
 
     def __lt__(self, other: Any) -> bool:
         if not isinstance(other, Runtime):
@@ -128,8 +142,34 @@ class Terminus(Substitutable):
     """The result of running a contract to completion."""
 
     path: Path
+    hyper: tuple[Hypercall, ...]
 
     success: bool
     returndata: Bytes
 
     storage: Array[Uint256, Uint256] | None  # unset if static or reverted
+
+
+@dataclass
+class HyperGlobal(Substitutable):
+    """A hypercall for getting information from global state."""
+
+    input: Uint256
+    fn: Callable[[Blockchain, Uint256], Uint256]
+
+    result: Uint256
+
+
+@dataclass
+class HyperCreate(Substitutable):
+    """A CREATE/CREATE2 hypercall."""
+
+    initcode: Bytes
+    value: Uint256
+    sender: Uint160
+    salt: Uint256 | None  # for CREATE2
+
+    address: Uint160  # zero on failure
+
+
+Hypercall = HyperGlobal | HyperCreate

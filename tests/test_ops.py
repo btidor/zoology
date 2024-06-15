@@ -7,7 +7,7 @@ from bytes import Bytes, Memory
 from disassembler import Instruction, disassemble
 from ops import *
 from smt import Array, Solver, Uint160, Uint256
-from state import Block, Transaction
+from state import Block, Contract, Transaction
 
 
 def test_STOP() -> None:
@@ -253,10 +253,10 @@ def test_ADDRESS() -> None:
 
 
 def test_BALANCE() -> None:
-    s = Runtime()
-    # s.balance[Uint160(0x9BBFED6889322E016E0A02EE459D306FC19545D8)] = Uint256(125985)
+    k = Blockchain()
+    k.balance[Uint160(0x9BBFED6889322E016E0A02EE459D306FC19545D8)] = Uint256(125985)
     assert (
-        BALANCE(s, Uint256(0x9BBFED6889322E016E0A02EE459D306FC19545D8)).reveal()
+        BALANCE(k, Uint256(0x9BBFED6889322E016E0A02EE459D306FC19545D8)).reveal()
         == 125985
     )
 
@@ -348,39 +348,41 @@ def test_GASPRICE() -> None:
 
 
 def test_EXTCODESIZE() -> None:
-    address = 0xABCDABCDABCDABCDABCDABCDABCDABCDABCDABCD
-    _tx = Transaction(address=Uint160(address))
-    r = Runtime(
+    k = Blockchain()
+    address = Address(0xABCDABCDABCDABCDABCDABCDABCDABCDABCDABCD)
+    k.contracts[address] = Contract(
         program=disassemble(Bytes.fromhex("66000000000000005B")),
     )
-    assert EXTCODESIZE(r, Uint256(address)).reveal() == 9
-    assert EXTCODESIZE(r, Uint256(0x1234)).reveal() == 0
+    assert EXTCODESIZE(k, Uint256(address)).reveal() == 9
+    assert EXTCODESIZE(k, Uint256(0x1234)).reveal() == 0
 
 
 def test_EXTCODECOPY() -> None:
-    address = 0xABCDABCDABCDABCDABCDABCDABCDABCDABCDABCD
-    _tx = Transaction(address=Uint160(address))
-    r = Runtime(
+    k = Blockchain()
+    address = Address(0xABCDABCDABCDABCDABCDABCDABCDABCDABCDABCD)
+    k.contracts[address] = Contract(
         program=disassemble(Bytes.fromhex("66000000000000005B")),
     )
-
-    EXTCODECOPY(r, Uint256(address), Uint256(3), Uint256(5), Uint256(7))
+    r = Runtime()
+    EXTCODECOPY(k, r, Uint256(address), Uint256(3), Uint256(5), Uint256(7))
     assert r.memory.reveal() == bytes.fromhex("0000000000005b000000")
 
-    EXTCODECOPY(r, Uint256(0x1234), Uint256(0), Uint256(0), Uint256(10))
+    EXTCODECOPY(k, r, Uint256(0x1234), Uint256(0), Uint256(0), Uint256(10))
     assert r.memory.reveal() == bytes.fromhex("00000000000000000000")
 
 
 def test_RETURNDATASIZE() -> None:
-    r = Runtime()  # latest_return=Bytes(b"abcdefghijklmnopqrstuvwxyz")
+    r = Runtime(
+        latest_return=Bytes(b"abcdefghijklmnopqrstuvwxyz"),
+    )
     assert RETURNDATASIZE(r).reveal() == 26
 
 
 def test_RETURNDATACOPY() -> None:
     r = Runtime(
-        # latest_return=Bytes(
-        #     b"\x7d\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\x7f"
-        # )
+        latest_return=Bytes(
+            b"\x7d\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\x7f"
+        )
     )
 
     RETURNDATACOPY(r, Uint256(0), Uint256(0), Uint256(32))
@@ -395,18 +397,19 @@ def test_RETURNDATACOPY() -> None:
 
 
 def test_EXTCODEHASH() -> None:
-    address = 0xABCDABCDABCDABCDABCDABCDABCDABCDABCDABCD
-    _tx = Transaction(address=Uint160(address))
-    r = Runtime(
+    k = Blockchain()
+    address = Address(0xABCDABCDABCDABCDABCDABCDABCDABCDABCDABCD)
+    k.contracts[address] = Contract(
         program=disassemble(Bytes.fromhex("66000000000000005B")),
     )
+    r = Runtime()
 
     assert (
-        EXTCODEHASH(r, Uint256(address)).reveal()
+        EXTCODEHASH(k, r, Uint256(address)).reveal()
         == 0xD579742AEE22A336CAC42EFE05B2CF1281DB892E213257B929C2338EA0675B00
     )
     with pytest.raises(NotImplementedError):
-        EXTCODEHASH(r, Uint256(0x1234))
+        EXTCODEHASH(k, r, Uint256(0x1234))
 
 
 def test_BLOCKHASH() -> None:
@@ -455,9 +458,17 @@ def test_CHAINID() -> None:
     assert CHAINID(blk).reveal() == 1
 
 
+def test_SELFBALANCE() -> None:
+    raise NotImplementedError
+
+
 def test_BASEFEE() -> None:
     blk = Block(basefee=Uint256(10))
     assert BASEFEE(blk).reveal() == 10
+
+
+def test_POP() -> None:
+    POP(Uint256(0))
 
 
 def test_MLOAD() -> None:
@@ -520,6 +531,10 @@ def test_JUMP() -> None:
         JUMP(r, Uint256(99))
 
 
+def test_JUMPI() -> None:
+    raise NotImplementedError
+
+
 def test_PC() -> None:
     ins = Instruction(0x12, 1, "PC")
     assert PC(ins).reveal() == 0x12
@@ -528,6 +543,14 @@ def test_PC() -> None:
 def test_MSIZE() -> None:
     r = Runtime(memory=Memory(b"\x00" * 123 + b"\x01"))
     assert MSIZE(r).reveal() == 124
+
+
+def test_GAS() -> None:
+    raise NotImplementedError
+
+
+def test_JUMPDEST() -> None:
+    JUMPDEST()
 
 
 def test_PUSH() -> None:
@@ -574,48 +597,42 @@ def test_LOG() -> None:
 
 def test_CREATE() -> None:
     raise NotImplementedError
-    # address = Uint160(0x6AC7EA33F8831EA9DCC53393AAA88B25A785DBF0)
-    # r = Runtime(
-    #     memory=Memory(b"\xfe\x63\xff\xff\xff\xff\x60\x00\x52\x60\x04\x60\x1c\xf3"),
-    #     transaction=Transaction(address=address),
-    # )
-    # _ = CREATE(s, Uint256(999), Uint256(2), Uint256(100))
-    # assert isinstance(flow, Descend)
-    # assert len(flow.states) == 1
-    # assert (
-    #     flow.states[0].transaction.address.reveal()
-    #     == 0x343C43A37D37DFF08AE8C4A11544C718ABB4FCF8
-    # )
-    # assert contract.nonce.reveal() == 2
+
+
+def test_CALL() -> None:
+    raise NotImplementedError
+
+
+def test_CALLCODE() -> None:
+    raise NotImplementedError
 
 
 def test_RETURN() -> None:
     r = Runtime(
-        # latest_return=Bytes(b"\x12\x34"),
         memory=Memory(b"\xff\x01"),
+        latest_return=Bytes(b"\x12\x34"),
     )
     s, d = RETURN(r, Uint256(0), Uint256(2))
     assert s is True
     assert d.reveal() == b"\xff\x01"
 
 
+def test_DELEGATECALL() -> None:
+    raise NotImplementedError
+
+
 def test_CREATE2() -> None:
-    _tx = (Transaction(address=Uint160(0x0)),)
-    r = Runtime()
-    _ = CREATE2(r, Uint256(999), Uint256(0), Uint256(0), Uint256(0x0))
-    # assert isinstance(flow, Descend)
-    # assert len(flow.states) == 1
-    # assert (
-    #     flow.states[0].transaction.address.reveal()
-    #     == 0xE33C0C7F7DF4809055C3EBA6C09CFE4BAF1BD9E0  # from EIP-1014
-    # )
-    # assert contract.nonce.reveal() == 2
+    raise NotImplementedError
+
+
+def test_STATICCALL() -> None:
+    raise NotImplementedError
 
 
 def test_REVERT() -> None:
     r = Runtime(
-        # latest_return=Bytes(b"\x12\x34"),
         memory=Memory(b"\xff\x01"),
+        latest_return=Bytes(b"\x12\x34"),
     )
     s, d = REVERT(r, Uint256(0), Uint256(2))
     assert s is False
@@ -623,7 +640,9 @@ def test_REVERT() -> None:
 
 
 def test_INVALID() -> None:
-    r = Runtime()  # latest_return=Bytes(b"\x12\x34")
+    r = Runtime(
+        latest_return=Bytes(b"\x12\x34"),
+    )
     s, d = INVALID(r)
     assert s is False
     assert d.reveal() == b""
@@ -631,12 +650,3 @@ def test_INVALID() -> None:
 
 def test_SELFDESTRUCT() -> None:
     raise NotImplementedError
-    # address = Uint160(0xADADADADADADADADADADADADADADADADADADADAD)
-    # transaction = Transaction(address=address)
-    # r = Runtime()
-    # r.balance[address] = Uint256(999)
-    # SELFDESTRUCT(r, Uint256(0x1234))
-    # assert len(s.contracts) == 1
-    # assert s.contracts[0xADADADADADADADADADADADADADADADADADADADAD].destructed is True
-    # assert s.balances[address].reveal() == 0
-    # assert s.balances[Uint160(0x1234)].reveal() == 999

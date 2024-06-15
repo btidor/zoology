@@ -11,11 +11,12 @@ from smt import (
     Int,
     Uint,
     Uint8,
+    Uint160,
     Uint256,
     bvlshr_harder,
     concat_bytes,
 )
-from state import Block, Runtime, Transaction
+from state import Address, Block, Blockchain, HyperCreate, Runtime, Transaction
 
 Int256 = Int[Literal[256]]
 Uint257 = Uint[Literal[257]]
@@ -204,9 +205,9 @@ def ADDRESS(tx: Transaction) -> Uint256:
     return tx.address.into(Uint256)
 
 
-def BALANCE(r: Runtime, address: Uint256) -> Uint256:
+def BALANCE(k: Blockchain, address: Uint256) -> Uint256:
     """31 - Get balance of the given account."""
-    raise NotImplementedError("BALANCE")
+    return k.balance[address.into(Uint160)]
 
 
 def ORIGIN(tx: Transaction) -> Uint256:
@@ -261,16 +262,32 @@ def GASPRICE(tx: Transaction) -> Uint256:
     return tx.gasprice
 
 
-def EXTCODESIZE(r: Runtime, address: Uint256) -> Uint256:
+def EXTCODESIZE(k: Blockchain, address: Uint256) -> Uint256:
     """3B - Get size of an account's code."""
-    raise NotImplementedError("EXTCODESIZE")
+    result = Uint256(0)
+    for a, contract in k.contracts.items():
+        result = (address.into(Uint160) == Uint160(a)).ite(
+            contract.program.code.length, result
+        )
+    # TODO: consider mystery proxy as well
+    return result
 
 
 def EXTCODECOPY(
-    r: Runtime, address: Uint256, destOffset: Uint256, offset: Uint256, size: Uint256
+    k: Blockchain,
+    r: Runtime,
+    address: Uint256,
+    destOffset: Uint256,
+    offset: Uint256,
+    size: Uint256,
 ) -> None:
     """3C - Copy an account's code to memory."""
-    raise NotImplementedError("EXTCODECOPY")
+    key = Address.unwrap(address.into(Uint160), "EXTCODECOPY")
+    if key in k.contracts:
+        code = k.contracts[key].program.code
+    else:
+        code = Bytes()
+    r.memory.graft(code.slice(offset, size), destOffset)
 
 
 def RETURNDATASIZE(r: Runtime) -> Uint256:
@@ -279,19 +296,25 @@ def RETURNDATASIZE(r: Runtime) -> Uint256:
 
     Get size of output data from the previous call from the current environment.
     """
-    raise NotImplementedError("RETURNDATASIZE")
+    return r.latest_return.length
 
 
 def RETURNDATACOPY(
     r: Runtime, destOffset: Uint256, offset: Uint256, size: Uint256
 ) -> None:
     """3E - Copy output data from the previous call to memory."""
-    raise NotImplementedError("RETURNDATACOPY")
+    r.memory.graft(r.latest_return.slice(offset, size), destOffset)
 
 
-def EXTCODEHASH(r: Runtime, address: Uint256) -> Uint256:
+def EXTCODEHASH(k: Blockchain, r: Runtime, address: Uint256) -> Uint256:
     """3F - Get hash of an account's code."""
-    raise NotImplementedError("EXTCODEHASH")
+    key = Address.unwrap(address.into(Uint160), "EXTCODEHASH")
+    if key in k.contracts:
+        return r.path.keccak256(k.contracts[key].program.code)
+    else:
+        # Properly, EXTCODEHASH should return zero if the address does not exist
+        # or is empty, and the empty hash otherwise. See: EIP-1052.
+        raise NotImplementedError("EXTCODEHASH of non-contract address")
 
 
 def BLOCKHASH(blk: Block, blockNumber: Uint256) -> Uint256:
@@ -330,9 +353,9 @@ def CHAINID(blk: Block) -> Uint256:
     return blk.chainid
 
 
-def SELFBALANCE(r: Runtime) -> Uint256:
+def SELFBALANCE(k: Blockchain, tx: Transaction) -> Uint256:
     """47 - Get balance of currently executing account."""
-    raise NotImplementedError("SELFBALANCE")
+    return k.balance[tx.address]
 
 
 def BASEFEE(blk: Block) -> Uint256:
@@ -371,22 +394,22 @@ def SSTORE(r: Runtime, key: Uint256, value: Uint256) -> None:
     r.storage[key] = value
 
 
-def JUMP(r: Runtime, _counter: Uint256) -> None:
+def JUMP(r: Runtime, counter: Uint256) -> None:
     """56 - Alter the program counter."""
-    counter = _counter.reveal()
-    assert counter is not None, "JUMP requires concrete counter"
+    j = counter.reveal()
+    assert j is not None, "JUMP requires concrete counter"
 
     # In theory, JUMP should revert if counter is not a valid jump target.
     # Instead, raise an error and fail the whole analysis. This lets us prove
     # that all jump targets are valid and within the body of the code, which is
     # why it's safe to strip the metadata trailer.
-    r.pc = r.program.jumps[counter]
+    r.pc = r.program.jumps[j]
 
 
-def JUMPI(r: Runtime, ins: Instruction, _counter: Uint256, b: Uint256) -> Fork | None:
+def JUMPI(r: Runtime, ins: Instruction, counter: Uint256, b: Uint256) -> Fork | None:
     """57 - Conditionally alter the program counter."""
-    counter = _counter.reveal()
-    assert counter is not None, "JUMPI requires concrete counter"
+    j = counter.reveal()
+    assert j is not None, "JUMPI requires concrete counter"
 
     r.path.id <<= 1
     c = b == Uint256(0)
@@ -395,14 +418,14 @@ def JUMPI(r: Runtime, ins: Instruction, _counter: Uint256, b: Uint256) -> Fork |
             r0, r1 = copy.deepcopy(r), r
             r0.path.constraint &= c
 
-            r1.pc = r.program.jumps[counter]
+            r1.pc = r.program.jumps[j]
             r1.path.id |= 1
             r1.path.constraint &= ~c
             return (r0, r1)
         case True:  # branch never taken, fall through
             return None
         case False:  # branch always taken
-            r.pc = r.program.jumps[counter]
+            r.pc = r.program.jumps[j]
             r.path.id |= 1
             return None
 
@@ -471,9 +494,20 @@ def LOG(ins: Instruction, r: Runtime, offset: Uint256, size: Uint256) -> None:
         r.stack.pop()  # we don't actually save the log entries anywhere
 
 
-def CREATE(r: Runtime, value: Uint256, offset: Uint256, size: Uint256) -> Uint256:
+def CREATE(
+    r: Runtime, tx: Transaction, value: Uint256, offset: Uint256, size: Uint256
+) -> Uint256:
     """F0 - Create a new account with associated code."""
-    raise NotImplementedError("CREATE")
+    r.path.static = False
+    hyper = HyperCreate(
+        initcode=r.memory.slice(offset, size),
+        value=value,
+        sender=tx.address,
+        salt=None,
+        address=Uint160(f"CREATE{len(r.hyper)}"),
+    )
+    r.hyper.append(hyper)
+    return hyper.address.into(Uint256)
 
 
 def CALL(
@@ -493,7 +527,7 @@ def CALL(
 def CALLCODE(
     r: Runtime,
     gas: Uint256,
-    _address: Uint256,
+    address: Uint256,
     value: Uint256,
     argsOffset: Uint256,
     argsSize: Uint256,
@@ -528,10 +562,24 @@ def DELEGATECALL(
 
 
 def CREATE2(
-    r: Runtime, value: Uint256, offset: Uint256, size: Uint256, _salt: Uint256
-) -> None:
+    r: Runtime,
+    tx: Transaction,
+    value: Uint256,
+    offset: Uint256,
+    size: Uint256,
+    salt: Uint256,
+) -> Uint256:
     """F5 - Create a new account with associated code at a predictable address."""
-    raise NotImplementedError("CREATE2")
+    r.path.static = False
+    hyper = HyperCreate(
+        initcode=r.memory.slice(offset, size),
+        value=value,
+        sender=tx.address,
+        salt=salt,
+        address=Uint160(f"CREATE{len(r.hyper)}"),
+    )
+    r.hyper.append(hyper)
+    return hyper.address.into(Uint256)
 
 
 def STATICCALL(

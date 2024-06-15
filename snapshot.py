@@ -30,7 +30,7 @@ PROXY = Uint160(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0)
 with open(_ROOT / "ethernaut.json") as f:
     _eth = json.load(f)
     LEVEL_FACTORIES = [
-        int.from_bytes(bytes.fromhex(_eth[str(i)][2:])) for i in range(COUNT)
+        Address(int.from_bytes(bytes.fromhex(_eth[str(i)][2:]))) for i in range(COUNT)
     ]
 
 cache: Snapshot | None = None
@@ -51,7 +51,7 @@ def snapshot_contracts(address: Address) -> Contracts:
         # Some level factories create other contracts in their constructor. To
         # avoid address collisions between these fixed contracts and created
         # level contracts, bump up the nonce.
-        nonce=Uint256(16),
+        nonce=16,
     )
     for k, v in raw.items():
         if k == "code":

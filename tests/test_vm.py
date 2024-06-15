@@ -3,9 +3,9 @@
 from bytes import Bytes
 from compiler import compile
 from disassembler import Program, abiencode, disassemble
-from smt import Array, Uint256
-from state import Address, Block, Contract, Terminus
-from vm import execute, translate
+from smt import Uint256, substitute
+from state import Address, Block, Blockchain, Contract, Terminus
+from vm import execute, substitutions
 
 from .solidity import load_binary, load_solidity, loads_solidity
 
@@ -15,19 +15,23 @@ ADDRESS = Address(0xADADADADADADADADADADADADADADADADADADADAD)
 def test_basic() -> None:
     code = Bytes.fromhex("60AA605601600957005B60006000FD")
     program = disassemble(code)
-    states = list(compile(program))
-    assert len(states) == 1
 
-    term = translate(
-        states[0], Block(), Bytes(), Uint256(0), Array[Uint256, Uint256](Uint256(0))
-    )
+    k = Blockchain()
+    k.contracts[ADDRESS] = Contract(program)
+
+    terms = list(compile(program))
+    assert len(terms) == 1
+
+    subs = substitutions(k, ADDRESS, Block(), Bytes(), Uint256(0))
+    term = substitute(terms[0], subs)
     assert not term.success
     assert term.returndata.reveal() == b""
 
 
 def _execute(program: Program, calldata: bytes = b"", callvalue: int = 0) -> Terminus:
-    contracts = {ADDRESS: Contract(program)}
-    term, _ = execute(contracts, ADDRESS, calldata, callvalue)
+    k = Blockchain()
+    k.contracts = {ADDRESS: Contract(program)}
+    term, _ = execute(k, ADDRESS, calldata, callvalue)
     return term
 
 
@@ -55,13 +59,13 @@ def test_fallout() -> None:
 
 def test_coinflip() -> None:
     program = load_solidity("fixtures/03_CoinFlip.sol")
-    contracts = {ADDRESS: Contract(program)}
-    contracts[ADDRESS].storage[Uint256(2)] = Uint256(
+    k = Blockchain(contracts={ADDRESS: Contract(program)})
+    k.contracts[ADDRESS].storage[Uint256(2)] = Uint256(
         0x8000000000000000000000000000000000000000000000000000000000000000
     )
 
     calldata = abiencode("flip(bool)") + (0).to_bytes(32)
-    term, _ = execute(contracts, ADDRESS, calldata)
+    term, _ = execute(k, ADDRESS, calldata)
 
     assert term.success is True
     assert term.storage is not None
@@ -99,13 +103,15 @@ def test_token() -> None:
 
 def test_delegation() -> None:
     programs = loads_solidity("fixtures/06_Delegation.sol")
-    contracts = {
-        ADDRESS: Contract(programs["Delegation"]),
-        Address(0x8001): Contract(programs["Delegate"]),
-    }
-    contracts[ADDRESS].storage[Uint256(1)] = Uint256(0x8001)
+    k = Blockchain(
+        contracts={
+            ADDRESS: Contract(programs["Delegation"]),
+            Address(0x8001): Contract(programs["Delegate"]),
+        }
+    )
+    k.contracts[ADDRESS].storage[Uint256(1)] = Uint256(0x8001)
     calldata = abiencode("pwn()")
-    term, _ = execute(contracts, ADDRESS, calldata)
+    term, _ = execute(k, ADDRESS, calldata)
 
     assert term.success is True
     assert term.returndata.reveal() == b""
@@ -152,13 +158,15 @@ def test_reentrancy() -> None:
 def test_elevator() -> None:
     programs = loads_solidity("fixtures/11_Elevator.sol")
     caller = Address(0xCACACACACACACACACACACACACACACACACACACACA)
-    contracts = {
-        caller: Contract(programs["TestBuilding"]),
-        ADDRESS: Contract(programs["Elevator"]),
-    }
+    k = Blockchain(
+        contracts={
+            caller: Contract(programs["TestBuilding"]),
+            ADDRESS: Contract(programs["Elevator"]),
+        }
+    )
 
     calldata = abiencode("goTo(uint256)") + (1).to_bytes(32)
-    term, _ = execute(contracts, ADDRESS, calldata)
+    term, _ = execute(k, ADDRESS, calldata)
 
     assert term.success is True
     assert term.returndata.reveal() == b""
@@ -166,11 +174,11 @@ def test_elevator() -> None:
 
 def test_privacy() -> None:
     program = load_binary("fixtures/12_Privacy.bin")
-    contracts = {ADDRESS: Contract(program)}
-    contracts[ADDRESS].storage[Uint256(5)] = Uint256(0x4321 << 128)
+    k = Blockchain(contracts={ADDRESS: Contract(program)})
+    k.contracts[ADDRESS].storage[Uint256(5)] = Uint256(0x4321 << 128)
 
     calldata = abiencode("unlock(bytes16)") + (0x4321 << 128).to_bytes(32)
-    term, _ = execute(contracts, ADDRESS, calldata)
+    term, _ = execute(k, ADDRESS, calldata)
 
     assert term.success is True
     assert term.returndata.reveal() == b""
@@ -200,15 +208,17 @@ def test_gatekeeper_two() -> None:
 def test_preservation() -> None:
     programs = loads_solidity("fixtures/15_Preservation.sol")
     library = Address(0x12345678)
-    contracts = {
-        ADDRESS: Contract(programs["Preservation"]),
-        library: Contract(programs["LibraryContract"]),
-    }
-    contracts[ADDRESS].storage[Uint256(0)] = Uint256(library)
-    contracts[ADDRESS].storage[Uint256(1)] = Uint256(library)
+    k = Blockchain(
+        contracts={
+            ADDRESS: Contract(programs["Preservation"]),
+            library: Contract(programs["LibraryContract"]),
+        }
+    )
+    k.contracts[ADDRESS].storage[Uint256(0)] = Uint256(library)
+    k.contracts[ADDRESS].storage[Uint256(1)] = Uint256(library)
 
     calldata = abiencode("setFirstTime(uint256)") + (0x5050).to_bytes(32)
-    term, _ = execute(contracts, ADDRESS, calldata)
+    term, _ = execute(k, ADDRESS, calldata)
 
     assert term.success is True
     assert term.returndata.reveal() == b""

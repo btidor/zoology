@@ -70,7 +70,7 @@ def compile(program: Program) -> Iterable[Terminus]:
                     break
                 case (success, returndata):
                     storage = r.storage if success and not r.path.static else None
-                    yield Terminus(r.path, success, returndata, storage)
+                    yield Terminus(r.path, tuple(r.hyper), success, returndata, storage)
                     break
 
 

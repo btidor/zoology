@@ -17,6 +17,7 @@ from snapshot import (
     download_contract,
     snapshot_contracts,
 )
+from state import Blockchain
 from vm import execute
 
 
@@ -81,14 +82,14 @@ def _snapshot() -> None:
 def _load(level: int) -> bytes:
     """Simulate createInstance() to load a given level."""
     factory = LEVEL_FACTORIES[level]
-    contracts = snapshot_contracts(factory)
-    original = set(contracts.keys())
+    k = Blockchain(contracts=snapshot_contracts(factory))
+    original = set(k.contracts.keys())
 
     input = abiencode("createInstance(address)") + (0xB).to_bytes(32)
-    term, contracts = execute(contracts, factory, input, 0)
+    term, k = execute(k, factory, input, 0)
     assert term.success
 
-    added = [v for k, v in contracts.items() if k not in original]
+    added = [v for k, v in k.contracts.items() if k not in original]
     assert len(added) == 1
     assert (program := added[0].program.code.reveal()) is not None
     return program
@@ -97,6 +98,9 @@ def _load(level: int) -> bytes:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     cmd = parser.add_subparsers(dest="command")
+
+    cod = cmd.add_parser("code")
+    cod.add_argument("-l", "--level", type=int, required=True)
 
     dis = cmd.add_parser("disassemble").add_mutually_exclusive_group(required=True)
     dis.add_argument("-l", "--level", type=int)
@@ -116,6 +120,9 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     match args.command:
+        case "code":
+            code = _load(args.level)
+            print(code.hex())
         case "disassemble":
             if args.level is not None:
                 code = _load(args.level)
