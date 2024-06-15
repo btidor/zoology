@@ -148,11 +148,11 @@ class Terminus(Substitutable):
 
 
 @dataclass
-class HyperGlobal(Substitutable):
+class HyperGlobal[*P](Substitutable):
     """A hypercall for getting information from global state."""
 
-    input: Uint256
-    fn: Callable[[Blockchain, Uint256], Uint256]
+    input: tuple[*P]
+    fn: Callable[[*P], Uint256]
 
     result: Uint256
 
@@ -169,4 +169,4 @@ class HyperCreate(Substitutable):
     address: Uint160  # zero on failure
 
 
-type Hypercall = HyperGlobal | HyperCreate
+type Hypercall = HyperGlobal[Any, Any] | HyperCreate

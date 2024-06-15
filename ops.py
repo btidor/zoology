@@ -282,12 +282,7 @@ def EXTCODECOPY(
     size: Uint256,
 ) -> None:
     """3C - Copy an account's code to memory."""
-    key = Address.unwrap(address.into(Uint160), "EXTCODECOPY")
-    if key in k.contracts:
-        code = k.contracts[key].program.code
-    else:
-        code = Bytes()
-    r.memory.graft(code.slice(offset, size), destOffset)
+    raise NotImplementedError("EXTCODECOPY")
 
 
 def RETURNDATASIZE(r: Runtime) -> Uint256:

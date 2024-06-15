@@ -1,7 +1,7 @@
 """A compiler from bytecode to symbolic representation."""
 
 from heapq import heappop, heappush
-from typing import Iterable
+from typing import Any, Iterable, cast
 
 from bytes import Bytes
 from disassembler import Instruction, Program
@@ -13,7 +13,7 @@ from smt import (
     Uint160,
     Uint256,
 )
-from state import Block, Runtime, Terminus, Transaction
+from state import Block, Blockchain, HyperGlobal, Runtime, Terminus, Transaction
 
 
 def compile(program: Program) -> Iterable[Terminus]:
@@ -35,6 +35,7 @@ def compile(program: Program) -> Iterable[Terminus]:
 
             fn, sig = OPS[ins.name]
             args = list[object]()
+            defer = False
             for name in sig.parameters:
                 kls = sig.parameters[name].annotation
                 if kls == Uint256:
@@ -48,6 +49,9 @@ def compile(program: Program) -> Iterable[Terminus]:
                     args.append(block)
                 elif kls == Instruction:
                     args.append(ins)
+                elif kls == Blockchain:
+                    args.append(None)
+                    defer = True
                 else:
                     raise TypeError(f"unknown arg class: {kls}")
 
@@ -56,22 +60,32 @@ def compile(program: Program) -> Iterable[Terminus]:
             # case of a JUMP).
             r.pc += 1
 
-            result: OpResult = fn(*args)
-            match result:
-                case None:
-                    pass
-                case Uint():
-                    r.stack.append(result)
-                    if len(r.stack) > 1024:
-                        raise RuntimeError("evm stack overflow")
-                case (Runtime(), Runtime()):
-                    for r in result:
-                        heappush(queue, r)
-                    break
-                case (success, returndata):
-                    storage = r.storage if success and not r.path.static else None
-                    yield Terminus(r.path, tuple(r.hyper), success, returndata, storage)
-                    break
+            if defer:
+                # Operations with side-effects (i.e. memory writes) cannot be
+                # automatically deferred.
+                assert not any(isinstance(a, Runtime) for a in args)
+                result = Uint256(f"GLOBAL{len(r.hyper)}")
+                r.hyper.append(HyperGlobal(cast(Any, args), fn, result))
+                r.stack.append(result)
+            else:
+                result: OpResult = fn(*args)
+                match result:
+                    case None:
+                        pass
+                    case Uint():
+                        r.stack.append(result)
+                        if len(r.stack) > 1024:
+                            raise RuntimeError("evm stack overflow")
+                    case (Runtime(), Runtime()):
+                        for r in result:
+                            heappush(queue, r)
+                        break
+                    case (success, returndata):
+                        storage = r.storage if success and not r.path.static else None
+                        yield Terminus(
+                            r.path, tuple(r.hyper), success, returndata, storage
+                        )
+                        break
 
 
 # TODO: since they're immutable, these should be global variables, but that

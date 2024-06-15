@@ -6,8 +6,119 @@ from compiler import compile, symbolic_transaction
 from disassembler import Program, abiencode
 from smt import Solver, Uint256
 
-from . import fixture as cases
 from .solidity import load_binary, load_solidity, loads_solidity
+
+Fallback = (
+    ("Px19", "SAVE", None, 1),
+    ("PxB9", "SAVE", "withdraw()"),
+    ("Px23", "VIEW", "owner()"),
+    ("Px5F", "SAVE", "withdraw()"),
+    ("Px4F", "VIEW", "contributions(address)"),
+    ("Px83", "VIEW", "getContribution()"),
+    ("Px10E", "SAVE", "contribute()"),
+    ("Px10F", "SAVE", "contribute()"),
+)
+
+Fallout = (
+    ("Px5", "SAVE", "Fal1out()"),
+    ("Px23", "VIEW", "owner()"),
+    ("Px139", "SAVE", "collectAllocations()"),
+    ("Px9F", "SAVE", "collectAllocations()"),
+    ("Px83", "SAVE", "allocate()"),
+    ("Px10F9", "SAVE", "sendAllocation(address)"),
+    ("Px87F", "SAVE", "sendAllocation(address)"),
+    ("Px40F", "VIEW", "allocatorBalance(address)"),
+)
+
+CoinFlip = (
+    ("Px6FF", "SAVE", "flip(bool)"),
+    ("PxDFD", "SAVE", "flip(bool)"),
+    ("Px6FD", "SAVE", "flip(bool)"),
+    ("PxDF9", "SAVE", "flip(bool)"),
+    ("PxDFD", "SAVE", "flip(bool)"),
+    ("Px19", "VIEW", "consecutiveWins()"),
+)
+
+Telephone = (
+    ("PxD", "VIEW", "owner()"),
+    ("PxCF", "VIEW", "changeOwner(address)"),
+    ("PxCE", "SAVE", "changeOwner(address)"),
+)
+
+Token = (
+    ("PxD", "VIEW", "totalSupply()"),
+    ("Px33", "VIEW", "balanceOf(address)"),
+    ("PxC7", "SAVE", "transfer(address,uint256)"),
+)
+
+Delegation = (
+    ("Px331", "VIEW", "$any4"),  # *
+    ("Px333", "SAVE", "pwn()"),
+    ("PxD", "VIEW", "owner()"),
+    ("Px7F", "VIEW", None),  # *
+    # * if Delegate reverts, Delegation will still return successfully
+)
+
+Force = ()
+
+Vault = (
+    ("PxD", "VIEW", "locked()"),
+    ("PxCF", "VIEW", "unlock(bytes32)"),
+    ("PxCE", "SAVE", "unlock(bytes32)"),
+)
+
+King = (
+    ("PxB", "VIEW", "_king()"),
+    ("Px13", "VIEW", "owner()"),
+    ("PxC9", "SAVE", None, None),
+    ("PxD9", "SAVE", None, None),
+    ("Px23", "VIEW", "prize()"),
+    ("Px6F", "SAVE", None, None),
+    ("Px67", "SAVE", None, None),
+)
+
+Reentrancy = (
+    ("Px6", "VIEW", None),
+    ("Px2F", "SAVE", "donate(address)"),
+    ("Px4F", "VIEW", "balances(address)"),
+    ("Px11F", "VIEW", "withdraw(uint256)"),
+    ("Px10F", "VIEW", "balanceOf(address)"),
+    ("Px8F5", "SAVE", "withdraw(uint256)"),
+    ("Px8F7", "SAVE", "withdraw(uint256)"),
+    ("Px11E3", "SAVE", "withdraw(uint256)"),
+    ("Px11E7", "SAVE", "withdraw(uint256)"),
+)
+
+Elevator = (
+    ("PxD", "VIEW", "floor()"),
+    ("Px31", "VIEW", "top()"),
+    ("PxCFF", "VIEW", "goTo(uint256)"),
+    ("PxCFEF", "SAVE", "goTo(uint256)"),
+)
+
+Privacy = (
+    ("PxD", "VIEW", "ID()"),
+    ("Px19", "VIEW", "locked()"),
+    ("Px18F", "SAVE", "unlock(bytes16)"),
+)
+
+GatekeeperOne = (
+    ("PxDFF", "SAVE", "enter(bytes8)"),
+    ("Px19", "VIEW", "entrant()"),
+)
+
+GatekeeperTwo = (
+    ("Px1BF", "SAVE", "enter(bytes8)"),
+    ("Px19", "VIEW", "entrant()"),
+)
+
+Preservation = (
+    ("PxC1CEF", "SAVE", "setFirstTime(uint256)"),
+    ("Px61", "VIEW", "owner()"),
+    ("Px31CEF", "SAVE", "setSecondTime(uint256)"),
+    ("Px19", "VIEW", "timeZone1Library()"),
+    ("PxD", "VIEW", "timeZone2Library()"),
+)
 
 
 def check_transitions(program: Program, branches: tuple[Any, ...]) -> None:
@@ -52,79 +163,77 @@ def check_transitions(program: Program, branches: tuple[Any, ...]) -> None:
 
 def test_fallback() -> None:
     program = load_solidity("fixtures/01_Fallback.sol")
-    check_transitions(program, cases.Fallback)
+    check_transitions(program, Fallback)
 
 
 def test_fallout() -> None:
     program = load_solidity("fixtures/02_Fallout.sol")
-    check_transitions(program, cases.Fallout)
+    check_transitions(program, Fallout)
 
 
 def test_coinflip() -> None:
     program = load_solidity("fixtures/03_CoinFlip.sol")
-    check_transitions(program, cases.CoinFlip)
+    check_transitions(program, CoinFlip)
 
 
 def test_telephone() -> None:
     program = load_solidity("fixtures/04_Telephone.sol")
-    check_transitions(program, cases.Telephone)
+    check_transitions(program, Telephone)
 
 
 def test_token() -> None:
     program = load_solidity("fixtures/05_Token.sol")
-    check_transitions(program, cases.Token)
+    check_transitions(program, Token)
 
 
-# def test_delegation() -> None:
-#     programs = loads_solidity("fixtures/06_Delegation.sol")
-#     start = cases.delegation_start(programs)
-#     check_transitions(start, cases.Delegation)
+def test_delegation() -> None:
+    programs = loads_solidity("fixtures/06_Delegation.sol")
+    check_transitions(programs["Delegation"], Delegation)
 
 
 def test_force() -> None:
     program = load_binary("fixtures/07_Force.bin")
-    check_transitions(program, cases.Force)
+    check_transitions(program, Force)
 
 
 def test_vault() -> None:
     program = load_solidity("fixtures/08_Vault.sol")
-    check_transitions(program, cases.Vault)
+    check_transitions(program, Vault)
 
 
 def test_king() -> None:
     program = load_solidity("fixtures/09_King.sol")
-    check_transitions(program, cases.King)
+    check_transitions(program, King)
 
 
 def test_reentrancy() -> None:
     program = load_solidity("fixtures/10_Reentrancy.sol")
-    check_transitions(program, cases.Reentrancy)
+    check_transitions(program, Reentrancy)
 
 
 def test_elevator() -> None:
     programs = loads_solidity("fixtures/11_Elevator.sol")
-    check_transitions(programs["Elevator"], cases.Elevator)
+    check_transitions(programs["Elevator"], Elevator)
 
 
 def test_privacy() -> None:
     program = load_binary("fixtures/12_Privacy.bin")
-    check_transitions(program, cases.Privacy)
+    check_transitions(program, Privacy)
 
 
 def test_gatekeeper_one() -> None:
     program = load_solidity("fixtures/13_GatekeeperOne.sol")
-    check_transitions(program, cases.GatekeeperOne)
+    check_transitions(program, GatekeeperOne)
 
 
 def test_gatekeeper_two() -> None:
     program = load_solidity("fixtures/14_GatekeeperTwo.sol")
-    check_transitions(program, cases.GatekeeperTwo)
+    check_transitions(program, GatekeeperTwo)
 
 
-# def test_preservation() -> None:
-#     programs = loads_solidity("fixtures/15_Preservation.sol")
-#     start = cases.preservation_start(programs)
-#     check_transitions(start, cases.Preservation)
+def test_preservation() -> None:
+    programs = loads_solidity("fixtures/15_Preservation.sol")
+    check_transitions(programs["Preservation"], Preservation)
 
 
 def test_sudoku() -> None:

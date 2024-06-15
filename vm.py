@@ -41,7 +41,7 @@ def execute(
         subs = substitutions(blockchain, address, block, input, value)
         term, k = substitute(term, subs), substitute(blockchain, subs)
         for hyper in term.hyper:
-            term, k = hypercall(k, term, hyper)
+            term, k = hypercall(k, term, subs, hyper)
 
         solver = Solver()
         solver.add(term.path.constraint)
@@ -81,12 +81,13 @@ def substitutions(
 
 
 def hypercall(
-    k: Blockchain, term: Terminus, hyper: Hypercall
+    k: Blockchain, term: Terminus, subs: Substitutions, hyper: Hypercall
 ) -> tuple[Terminus, Blockchain]:
     """Simulate a hypercall."""
     match hyper:
-        case HyperGlobal():
-            raise NotImplementedError("HyperGlobal")
+        case HyperGlobal(input, fn, result):
+            input = [substitute(arg, subs) if arg else k for arg in input]
+            subs = [(result, fn(*input))]
         case HyperCreate(initcode, _value, sender, salt, result):
             sender = Address.unwrap(sender, "CREATE/CREATE2")
             if salt is None:
