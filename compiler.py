@@ -18,61 +18,59 @@ from state import Block, Runtime, Terminus, Transaction
 
 def compile(program: Program) -> Iterable[Terminus]:
     """Compile an EVM contract into a set of symbolic paths."""
-    state = Runtime(
+    r = Runtime(
         program=program,
         storage=Array[Uint256, Uint256]("STORAGE"),
     )
     block = symbolic_block()
     transaction = symbolic_transaction()
 
-    queue = list[Runtime]([state])
+    queue = list[Runtime]([r])
     while queue:
-        state = heappop(queue)
+        r = heappop(queue)
         while True:
-            ins = state.program.instructions[state.pc]
+            ins = r.program.instructions[r.pc]
             if ins.name not in OPS:
                 raise ValueError(f"unimplemented opcode: {ins.name}")
 
             fn, sig = OPS[ins.name]
             args = list[object]()
             for name in sig.parameters:
-                match kls := sig.parameters[name].annotation:
-                    case Uint():
-                        val = state.stack.pop()
-                        args.append(val)
-                    case Runtime():
-                        args.append(state)
-                    case Transaction():
-                        args.append(transaction)
-                    case Block():
-                        args.append(block)
-                    case Instruction():
-                        args.append(ins)
-                    case _:
-                        raise TypeError(f"unknown arg class: {kls}")
+                kls = sig.parameters[name].annotation
+                if kls == Uint256:
+                    val = r.stack.pop()
+                    args.append(val)
+                elif kls == Runtime:
+                    args.append(r)
+                elif kls == Transaction:
+                    args.append(transaction)
+                elif kls == Block:
+                    args.append(block)
+                elif kls == Instruction:
+                    args.append(ins)
+                else:
+                    raise TypeError(f"unknown arg class: {kls}")
 
             # Note: we increment the program counter *before* executing the
             # instruction because instructions may overwrite it (e.g. in the
             # case of a JUMP).
-            state.pc += 1
+            r.pc += 1
 
             result: OpResult = fn(*args)
             match result:
                 case None:
                     pass
                 case Uint():
-                    state.stack.append(result)
-                    if len(state.stack) > 1024:
+                    r.stack.append(result)
+                    if len(r.stack) > 1024:
                         raise RuntimeError("evm stack overflow")
                 case (Runtime(), Runtime()):
-                    for state in result:
-                        heappush(queue, state)
+                    for r in result:
+                        heappush(queue, r)
                     break
                 case (success, returndata):
-                    storage = (
-                        state.storage if success and not state.path.static else None
-                    )
-                    yield Terminus(state.path, success, returndata, storage)
+                    storage = r.storage if success and not r.path.static else None
+                    yield Terminus(r.path, success, returndata, storage)
                     break
 
 

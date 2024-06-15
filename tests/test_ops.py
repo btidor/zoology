@@ -7,15 +7,13 @@ from bytes import Bytes, Memory
 from disassembler import Instruction, disassemble
 from ops import *
 from smt import Array, Solver, Uint160, Uint256
-from state import Block, Terminus, Transaction
+from state import Block, Transaction
 
 
 def test_STOP() -> None:
-    s = State(latest_return=Bytes(b"\x12\x34"))
-    STOP(s)
-    assert isinstance(s.pc, Terminus)
-    assert s.pc.success is True
-    assert s.pc.returndata.reveal() == b""
+    s, d = STOP()
+    assert s is True
+    assert d.reveal() == b""
 
 
 def test_ADD() -> None:
@@ -235,11 +233,11 @@ def test_SAR() -> None:
 
 
 def test_KECCAK256() -> None:
-    s = State(memory=Memory(b"\xff\xff\xff\xff"))
+    s = Runtime(memory=Memory(b"\xff\xff\xff\xff"))
     digest = KECCAK256(s, Uint256(0), Uint256(4))
 
     solver = Solver()
-    solver.add(s.constraint)
+    solver.add(s.path.constraint)
     assert solver.check()
     assert (
         solver.evaluate(digest)
@@ -248,16 +246,15 @@ def test_KECCAK256() -> None:
 
 
 def test_ADDRESS() -> None:
-    address = Uint160(0x9BBFED6889322E016E0A02EE459D306FC19545D8)
-    s = State(
-        transaction=Transaction(address=address),
+    tx = Transaction(
+        address=Uint160(0x9BBFED6889322E016E0A02EE459D306FC19545D8),
     )
-    assert ADDRESS(s).reveal() == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
+    assert ADDRESS(tx).reveal() == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
 
 
 def test_BALANCE() -> None:
-    s = State()
-    s.balance[Uint160(0x9BBFED6889322E016E0A02EE459D306FC19545D8)] = Uint256(125985)
+    s = Runtime()
+    # s.balance[Uint160(0x9BBFED6889322E016E0A02EE459D306FC19545D8)] = Uint256(125985)
     assert (
         BALANCE(s, Uint256(0x9BBFED6889322E016E0A02EE459D306FC19545D8)).reveal()
         == 125985
@@ -265,272 +262,262 @@ def test_BALANCE() -> None:
 
 
 def test_ORIGIN() -> None:
-    transaction = Transaction(
-        origin=Uint160(0x9BBFED6889322E016E0A02EE459D306FC19545D8)
+    tx = Transaction(
+        origin=Uint160(0x9BBFED6889322E016E0A02EE459D306FC19545D8),
     )
-    s = State(transaction=transaction)
-    assert ORIGIN(s).reveal() == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
+    assert ORIGIN(tx).reveal() == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
 
 
 def test_CALLER() -> None:
-    transaction = Transaction(
-        caller=Uint160(0x9BBFED6889322E016E0A02EE459D306FC19545D8)
+    tx = Transaction(
+        caller=Uint160(0x9BBFED6889322E016E0A02EE459D306FC19545D8),
     )
-    s = State(transaction=transaction)
-    assert CALLER(s).reveal() == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
+    assert CALLER(tx).reveal() == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
 
 
 def test_CALLVALUE() -> None:
-    transaction = Transaction(callvalue=Uint256(123456789))
-    s = State(transaction=transaction)
-    assert CALLVALUE(s).reveal() == 123456789
+    tx = Transaction(callvalue=Uint256(123456789))
+    assert CALLVALUE(tx).reveal() == 123456789
 
 
 def test_CALLDATALOAD() -> None:
-    transaction = Transaction(
+    tx = Transaction(
         calldata=Bytes(
             b"\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff"
         )
     )
-    s = State(transaction=transaction)
     assert (
-        CALLDATALOAD(s, Uint256(0)).reveal()
+        CALLDATALOAD(tx, Uint256(0)).reveal()
         == 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
     )
     assert (
-        CALLDATALOAD(s, Uint256(31)).reveal()
+        CALLDATALOAD(tx, Uint256(31)).reveal()
         == 0xFF00000000000000000000000000000000000000000000000000000000000000
     )
-    assert CALLDATALOAD(s, Uint256(32)).reveal() == 0
+    assert CALLDATALOAD(tx, Uint256(32)).reveal() == 0
 
 
 def test_CALLDATASIZE() -> None:
-    transaction = Transaction(calldata=Bytes(b"\xff"))
-    s = State(transaction=transaction)
-    assert CALLDATASIZE(s).reveal() == 1
+    tx = Transaction(calldata=Bytes(b"\xff"))
+    assert CALLDATASIZE(tx).reveal() == 1
 
 
 def test_CALLDATACOPY() -> None:
-    transaction = Transaction(
+    tx = Transaction(
         calldata=Bytes(
             b"\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff"
         )
     )
-    s = State(transaction=transaction)
+    r = Runtime()
 
-    CALLDATACOPY(s, Uint256(0), Uint256(0), Uint256(32))
-    assert s.memory.reveal() == bytes.fromhex(
+    CALLDATACOPY(r, tx, Uint256(0), Uint256(0), Uint256(32))
+    assert r.memory.reveal() == bytes.fromhex(
         "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
     )
 
-    CALLDATACOPY(s, Uint256(0), Uint256(31), Uint256(8))
-    assert s.memory.reveal() == bytes.fromhex(
+    CALLDATACOPY(r, tx, Uint256(0), Uint256(31), Uint256(8))
+    assert r.memory.reveal() == bytes.fromhex(
         "ff00000000000000ffffffffffffffffffffffffffffffffffffffffffffffff"
     )
 
 
 def test_CODESIZE() -> None:
-    s = State(
+    r = Runtime(
         program=disassemble(Bytes.fromhex("66000000000000005B")),
     )
-    assert CODESIZE(s).reveal() == 9
+    assert CODESIZE(r).reveal() == 9
 
 
 def test_CODECOPY() -> None:
-    s = State(
+    r = Runtime(
         program=disassemble(Bytes.fromhex("66000000000000005B")),
     )
 
-    CODECOPY(s, Uint256(0), Uint256(0), Uint256(0x09))
-    assert s.memory.reveal() == bytes.fromhex("66000000000000005b")
+    CODECOPY(r, Uint256(0), Uint256(0), Uint256(0x09))
+    assert r.memory.reveal() == bytes.fromhex("66000000000000005b")
 
-    CODECOPY(s, Uint256(1), Uint256(8), Uint256(0x20))
-    assert s.memory.reveal() == bytes.fromhex(
+    CODECOPY(r, Uint256(1), Uint256(8), Uint256(0x20))
+    assert r.memory.reveal() == bytes.fromhex(
         "665b00000000000000000000000000000000000000000000000000000000000000"
     )
 
 
 def test_GASPRICE() -> None:
-    transaction = Transaction(gasprice=Uint256(10))
-    s = State(transaction=transaction)
-    assert GASPRICE(s).reveal() == 10
+    tx = Transaction(gasprice=Uint256(10))
+    assert GASPRICE(tx).reveal() == 10
 
 
 def test_EXTCODESIZE() -> None:
     address = 0xABCDABCDABCDABCDABCDABCDABCDABCDABCDABCD
-    s = State(
-        transaction=Transaction(address=Uint160(address)),
+    _tx = Transaction(address=Uint160(address))
+    r = Runtime(
         program=disassemble(Bytes.fromhex("66000000000000005B")),
     )
-    assert EXTCODESIZE(s, Uint256(address)).reveal() == 9
-    assert EXTCODESIZE(s, Uint256(0x1234)).reveal() == 0
+    assert EXTCODESIZE(r, Uint256(address)).reveal() == 9
+    assert EXTCODESIZE(r, Uint256(0x1234)).reveal() == 0
 
 
 def test_EXTCODECOPY() -> None:
     address = 0xABCDABCDABCDABCDABCDABCDABCDABCDABCDABCD
-    s = State(
-        transaction=Transaction(address=Uint160(address)),
+    _tx = Transaction(address=Uint160(address))
+    r = Runtime(
         program=disassemble(Bytes.fromhex("66000000000000005B")),
     )
 
-    EXTCODECOPY(s, Uint256(address), Uint256(3), Uint256(5), Uint256(7))
-    assert s.memory.reveal() == bytes.fromhex("0000000000005b000000")
+    EXTCODECOPY(r, Uint256(address), Uint256(3), Uint256(5), Uint256(7))
+    assert r.memory.reveal() == bytes.fromhex("0000000000005b000000")
 
-    EXTCODECOPY(s, Uint256(0x1234), Uint256(0), Uint256(0), Uint256(10))
-    assert s.memory.reveal() == bytes.fromhex("00000000000000000000")
+    EXTCODECOPY(r, Uint256(0x1234), Uint256(0), Uint256(0), Uint256(10))
+    assert r.memory.reveal() == bytes.fromhex("00000000000000000000")
 
 
 def test_RETURNDATASIZE() -> None:
-    s = State(latest_return=Bytes(b"abcdefghijklmnopqrstuvwxyz"))
-    assert RETURNDATASIZE(s).reveal() == 26
+    r = Runtime()  # latest_return=Bytes(b"abcdefghijklmnopqrstuvwxyz")
+    assert RETURNDATASIZE(r).reveal() == 26
 
 
 def test_RETURNDATACOPY() -> None:
-    s = State(
-        latest_return=Bytes(
-            b"\x7d\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\x7f"
-        )
+    r = Runtime(
+        # latest_return=Bytes(
+        #     b"\x7d\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\x7f"
+        # )
     )
 
-    RETURNDATACOPY(s, Uint256(0), Uint256(0), Uint256(32))
-    assert s.memory.reveal() == bytes.fromhex(
+    RETURNDATACOPY(r, Uint256(0), Uint256(0), Uint256(32))
+    assert r.memory.reveal() == bytes.fromhex(
         "7dffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f"
     )
 
-    RETURNDATACOPY(s, Uint256(0), Uint256(31), Uint256(8))
-    assert s.memory.reveal() == bytes.fromhex(
+    RETURNDATACOPY(r, Uint256(0), Uint256(31), Uint256(8))
+    assert r.memory.reveal() == bytes.fromhex(
         "7f00000000000000ffffffffffffffffffffffffffffffffffffffffffffff7f"
     )
 
 
 def test_EXTCODEHASH() -> None:
     address = 0xABCDABCDABCDABCDABCDABCDABCDABCDABCDABCD
-    s = State(
-        transaction=Transaction(address=Uint160(address)),
+    _tx = Transaction(address=Uint160(address))
+    r = Runtime(
         program=disassemble(Bytes.fromhex("66000000000000005B")),
     )
 
     assert (
-        EXTCODEHASH(s, Uint256(address)).reveal()
+        EXTCODEHASH(r, Uint256(address)).reveal()
         == 0xD579742AEE22A336CAC42EFE05B2CF1281DB892E213257B929C2338EA0675B00
     )
     with pytest.raises(NotImplementedError):
-        EXTCODEHASH(s, Uint256(0x1234))
+        EXTCODEHASH(r, Uint256(0x1234))
 
 
 def test_BLOCKHASH() -> None:
-    s = State(block=Block(hashes=Array[Uint8, Uint256](Uint256(0x9999))))
-    assert BLOCKHASH(s, s.block.number - Uint256(10)).reveal() == 0x9999
-    assert BLOCKHASH(s, s.block.number - Uint256(256)).reveal() == 0x9999
-    assert BLOCKHASH(s, s.block.number - Uint256(257)).reveal() == 0
-    assert BLOCKHASH(s, s.block.number).reveal() == 0
-    assert BLOCKHASH(s, s.block.number + Uint256(10)).reveal() == 0
+    blk = Block(hashes=Array[Uint8, Uint256](Uint256(0x9999)))
+    assert BLOCKHASH(blk, blk.number - Uint256(10)).reveal() == 0x9999
+    assert BLOCKHASH(blk, blk.number - Uint256(256)).reveal() == 0x9999
+    assert BLOCKHASH(blk, blk.number - Uint256(257)).reveal() == 0
+    assert BLOCKHASH(blk, blk.number).reveal() == 0
+    assert BLOCKHASH(blk, blk.number + Uint256(10)).reveal() == 0
 
 
 def test_COINBASE() -> None:
-    block = Block(coinbase=Uint160(0x9BBFED6889322E016E0A02EE459D306FC19545D8))
-    s = State(block=block)
-    assert COINBASE(s).reveal() == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
+    blk = Block(coinbase=Uint160(0x9BBFED6889322E016E0A02EE459D306FC19545D8))
+    assert COINBASE(blk).reveal() == 0x9BBFED6889322E016E0A02EE459D306FC19545D8
 
 
 def test_TIMESTAMP() -> None:
-    block = Block(timestamp=Uint256(1636704767))
-    s = State(block=block)
-    assert TIMESTAMP(s).reveal() == 1636704767
+    blk = Block(timestamp=Uint256(1636704767))
+    assert TIMESTAMP(blk).reveal() == 1636704767
 
 
 def test_NUMBER() -> None:
-    block = Block(number=Uint256(1636704767))
-    s = State(block=block)
-    assert NUMBER(s).reveal() == 1636704767
+    blk = Block(number=Uint256(1636704767))
+    assert NUMBER(blk).reveal() == 1636704767
 
 
 def test_PREVRANDAO() -> None:
-    block = Block(
+    blk = Block(
         prevrandao=Uint256(
             0xCE124DEE50136F3F93F19667FB4198C6B94EECBACFA300469E5280012757BE94
         )
     )
-    s = State(block=block)
     assert (
-        PREVRANDAO(s).reveal()
+        PREVRANDAO(blk).reveal()
         == 0xCE124DEE50136F3F93F19667FB4198C6B94EECBACFA300469E5280012757BE94
     )
 
 
 def test_GASLIMIT() -> None:
-    block = Block(gaslimit=Uint256(0xFFFFFFFFFFFF))
-    s = State(block=block)
-    assert GASLIMIT(s).reveal() == 0xFFFFFFFFFFFF
+    blk = Block(gaslimit=Uint256(0xFFFFFFFFFFFF))
+    assert GASLIMIT(blk).reveal() == 0xFFFFFFFFFFFF
 
 
 def test_CHAINID() -> None:
-    s = State()
-    assert CHAINID(s).reveal() == 1
+    blk = Block()
+    assert CHAINID(blk).reveal() == 1
 
 
 def test_BASEFEE() -> None:
-    block = Block(basefee=Uint256(10))
-    s = State(block=block)
-    assert BASEFEE(s).reveal() == 10
+    blk = Block(basefee=Uint256(10))
+    assert BASEFEE(blk).reveal() == 10
 
 
 def test_MLOAD() -> None:
-    s = State(
+    r = Runtime(
         memory=Memory(
             bytes.fromhex(
                 "00000000000000000000000000000000000000000000000000000000000000FF"
             )
         )
     )
-    assert MLOAD(s, Uint256(0)).reveal() == 0xFF
-    assert MLOAD(s, Uint256(1)).reveal() == 0xFF00
+    assert MLOAD(r, Uint256(0)).reveal() == 0xFF
+    assert MLOAD(r, Uint256(1)).reveal() == 0xFF00
 
 
 def test_MSTORE() -> None:
-    s = State()
-    MSTORE(s, Uint256(0), Uint256(0xFF))
-    assert s.memory.reveal() == bytes.fromhex(
+    r = Runtime()
+    MSTORE(r, Uint256(0), Uint256(0xFF))
+    assert r.memory.reveal() == bytes.fromhex(
         "00000000000000000000000000000000000000000000000000000000000000ff"
     )
-    MSTORE(s, Uint256(1), Uint256(0xFF))
-    assert s.memory.reveal() == bytes.fromhex(
+    MSTORE(r, Uint256(1), Uint256(0xFF))
+    assert r.memory.reveal() == bytes.fromhex(
         "0000000000000000000000000000000000000000000000000000000000000000ff"
     )
 
 
 def test_MSTORE8() -> None:
-    s = State()
-    MSTORE8(s, Uint256(0), Uint256(0xFFFF))
+    r = Runtime()
+    MSTORE8(r, Uint256(0), Uint256(0xFFFF))
 
-    assert s.memory.reveal() == b"\xff"
-    MSTORE8(s, Uint256(1), Uint256(0xAABBCCDDEE))
-    assert s.memory.reveal() == b"\xff\xee"
+    assert r.memory.reveal() == b"\xff"
+    MSTORE8(r, Uint256(1), Uint256(0xAABBCCDDEE))
+    assert r.memory.reveal() == b"\xff\xee"
 
 
 def test_SLOAD() -> None:
-    s = State()
-    s.storage[Uint256(0)] = Uint256(46)
-    assert SLOAD(s, Uint256(0)).reveal() == 46
+    r = Runtime()
+    r.storage[Uint256(0)] = Uint256(46)
+    assert SLOAD(r, Uint256(0)).reveal() == 46
 
 
 def test_SSTORE() -> None:
-    s = State()
+    r = Runtime()
 
-    SSTORE(s, Uint256(0), Uint256(0xFFFF))
-    assert s.storage[Uint256(0)].reveal() == 0xFFFF
+    SSTORE(r, Uint256(0), Uint256(0xFFFF))
+    assert r.storage[Uint256(0)].reveal() == 0xFFFF
 
-    SSTORE(s, Uint256(8965), Uint256(0xFF))
-    assert s.storage[Uint256(0)].reveal() == 0xFFFF
-    assert s.storage[Uint256(8965)].reveal() == 0xFF
+    SSTORE(r, Uint256(8965), Uint256(0xFF))
+    assert r.storage[Uint256(0)].reveal() == 0xFFFF
+    assert r.storage[Uint256(8965)].reveal() == 0xFF
 
 
 def test_JUMP() -> None:
-    s = State(program=disassemble(Bytes.fromhex("66000000000000005B")))
-    JUMP(s, Uint256(8))
-    assert s.pc == 1
+    r = Runtime(program=disassemble(Bytes.fromhex("66000000000000005B")))
+
+    JUMP(r, Uint256(8))
+    assert r.pc == 1
+
     with pytest.raises(KeyError):
-        JUMP(s, Uint256(99))
+        JUMP(r, Uint256(99))
 
 
 def test_PC() -> None:
@@ -539,8 +526,8 @@ def test_PC() -> None:
 
 
 def test_MSIZE() -> None:
-    s = State(memory=Memory(b"\x00" * 123 + b"\x01"))
-    assert MSIZE(s).reveal() == 124
+    r = Runtime(memory=Memory(b"\x00" * 123 + b"\x01"))
+    assert MSIZE(r).reveal() == 124
 
 
 def test_PUSH() -> None:
@@ -553,49 +540,46 @@ def test_PUSH() -> None:
 
 
 def test_DUP() -> None:
-    s = State(stack=[Uint256(0x1234)])
+    r = Runtime(stack=[Uint256(0x1234)])
 
     ins = Instruction(0x0, 1, "DUP", 1)
-    assert DUP(ins, s).reveal() == 0x1234
+    assert DUP(ins, r).reveal() == 0x1234
 
     ins = Instruction(0x0, 1, "DUP")
     with pytest.raises(ValueError):
-        DUP(ins, s)
+        DUP(ins, r)
 
 
 def test_SWAP() -> None:
-    s = State(stack=[Uint256(0x1234), Uint256(0x5678)])
+    r = Runtime(stack=[Uint256(0x1234), Uint256(0x5678)])
 
     ins = Instruction(0x0, 1, "SWAP", 1)
-    SWAP(ins, s)
-    stack = [x.reveal() for x in s.stack]
+    SWAP(ins, r)
+    stack = [x.reveal() for x in r.stack]
     assert stack == [0x5678, 0x1234]
 
     ins = Instruction(0x0, 1, "SWAP")
     with pytest.raises(ValueError):
-        SWAP(ins, s)
+        SWAP(ins, r)
 
 
 def test_LOG() -> None:
-    s = State(
+    r = Runtime(
         stack=[Uint256(0xABCD)],
         memory=Memory(b"\x12\x34"),
     )
     ins = Instruction(0x0, 1, "LOG", 1)
-    LOG(ins, s, Uint256(1), Uint256(1))
-    # assert len(s.logs) == 1
-    # assert s.logs[0].data.reveal() == b"\x34"
-    # assert len(s.logs[0].topics) == 1
-    # assert s.logs[0].topics[0].reveal() == 0xABCD
+    LOG(ins, r, Uint256(1), Uint256(1))
 
 
 def test_CREATE() -> None:
-    address = Uint160(0x6AC7EA33F8831EA9DCC53393AAA88B25A785DBF0)
-    s = State(
-        memory=Memory(b"\xfe\x63\xff\xff\xff\xff\x60\x00\x52\x60\x04\x60\x1c\xf3"),
-        transaction=Transaction(address=address),
-    )
-    _ = CREATE(s, Uint256(999), Uint256(2), Uint256(100))
+    raise NotImplementedError
+    # address = Uint160(0x6AC7EA33F8831EA9DCC53393AAA88B25A785DBF0)
+    # r = Runtime(
+    #     memory=Memory(b"\xfe\x63\xff\xff\xff\xff\x60\x00\x52\x60\x04\x60\x1c\xf3"),
+    #     transaction=Transaction(address=address),
+    # )
+    # _ = CREATE(s, Uint256(999), Uint256(2), Uint256(100))
     # assert isinstance(flow, Descend)
     # assert len(flow.states) == 1
     # assert (
@@ -606,21 +590,19 @@ def test_CREATE() -> None:
 
 
 def test_RETURN() -> None:
-    s = State(
-        latest_return=Bytes(b"\x12\x34"),
+    r = Runtime(
+        # latest_return=Bytes(b"\x12\x34"),
         memory=Memory(b"\xff\x01"),
     )
-    RETURN(s, Uint256(0), Uint256(2))
-    assert isinstance(s.pc, Terminus)
-    assert s.pc.success is True
-    assert s.pc.returndata.reveal() == b"\xff\x01"
+    s, d = RETURN(r, Uint256(0), Uint256(2))
+    assert s is True
+    assert d.reveal() == b"\xff\x01"
 
 
 def test_CREATE2() -> None:
-    s = State(
-        transaction=Transaction(address=Uint160(0x0)),
-    )
-    _ = CREATE2(s, Uint256(999), Uint256(0), Uint256(0), Uint256(0x0))
+    _tx = (Transaction(address=Uint160(0x0)),)
+    r = Runtime()
+    _ = CREATE2(r, Uint256(999), Uint256(0), Uint256(0), Uint256(0x0))
     # assert isinstance(flow, Descend)
     # assert len(flow.states) == 1
     # assert (
@@ -631,31 +613,29 @@ def test_CREATE2() -> None:
 
 
 def test_REVERT() -> None:
-    s = State(
-        latest_return=Bytes(b"\x12\x34"),
+    r = Runtime(
+        # latest_return=Bytes(b"\x12\x34"),
         memory=Memory(b"\xff\x01"),
     )
-    REVERT(s, Uint256(0), Uint256(2))
-    assert isinstance(s.pc, Terminus)
-    assert s.pc.success is False
-    assert s.pc.returndata.reveal() == b"\xff\x01"
+    s, d = REVERT(r, Uint256(0), Uint256(2))
+    assert s is False
+    assert d.reveal() == b"\xff\x01"
 
 
 def test_INVALID() -> None:
-    s = State(latest_return=Bytes(b"\x12\x34"))
-    INVALID(s)
-    assert isinstance(s.pc, Terminus)
-    assert s.pc.success is False
-    assert s.pc.returndata.reveal() == b""
+    r = Runtime()  # latest_return=Bytes(b"\x12\x34")
+    s, d = INVALID(r)
+    assert s is False
+    assert d.reveal() == b""
 
 
 def test_SELFDESTRUCT() -> None:
-    address = Uint160(0xADADADADADADADADADADADADADADADADADADADAD)
-    s = State(
-        transaction=Transaction(address=address),
-    )
-    s.balance[address] = Uint256(999)
-    SELFDESTRUCT(s, Uint256(0x1234))
+    raise NotImplementedError
+    # address = Uint160(0xADADADADADADADADADADADADADADADADADADADAD)
+    # transaction = Transaction(address=address)
+    # r = Runtime()
+    # r.balance[address] = Uint256(999)
+    # SELFDESTRUCT(r, Uint256(0x1234))
     # assert len(s.contracts) == 1
     # assert s.contracts[0xADADADADADADADADADADADADADADADADADADADAD].destructed is True
     # assert s.balances[address].reveal() == 0

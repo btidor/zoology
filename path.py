@@ -12,6 +12,7 @@ from smt import (
     Constraint,
     NarrowingError,
     Solver,
+    Substitutable,
     Uint,
     Uint256,
     concat_bytes,
@@ -25,16 +26,16 @@ Uint128: TypeAlias = Uint[Literal[128]]
 
 
 @dataclass
-class Path:
+class Path(Substitutable):
     """The symbolic constraints associated with a path."""
+
+    # Each path is numbered based on the forks followed to reach it. Each JUMPI
+    # is a bit, 1 if taken, 0 if not; MSB-first with a leading 1 prepended.
+    id: int = 1
 
     # The main symbolic constraint. This constraint is updated at each JUMPI
     # instruction.
     constraint: Constraint = field(default_factory=lambda: Constraint(True))
-
-    # Tracks the path of the program's execution. Each JUMPI is a bit, 1 if
-    # taken, 0 if not. MSB-first with a leading 1 prepended.
-    trace: int = 1
 
     # Whether any mutations have been performed on this path, i.e. if it's legal
     # to execute during a STATICCALL.
@@ -53,7 +54,7 @@ class Path:
     def __deepcopy__(self, memo: Any) -> Path:
         return Path(
             constraint=self.constraint,
-            trace=self.trace,
+            id=self.id,
             static=self.static,
             free=copy.copy(self.free),
             symbolic=copy.copy(self.symbolic),
@@ -61,14 +62,15 @@ class Path:
         )
 
     def px(self) -> str:
-        """Return a human-readable version of the path."""
-        return "Px" + hex(self.trace)[2:].upper()
+        """Return a human-readable version of the path ID."""
+        return "Px" + hex(self.id)[2:].upper()
 
-    def hash(self, input: Bytes) -> tuple[Uint256, Constraint]:
+    def keccak256(self, input: Bytes) -> Uint256:
         """
-        Compute the SHA3 hash of a given key.
+        Compute the Keccak-256 hash of a given key.
 
-        This method should only be called before constraining and narrowing!
+        This method mutates the path constraint. It should only be called before
+        constraining and narrowing!
         """
         if (size := input.length.reveal()) is None:
             # Case I: Free Digest (symbolic length, symbolic data).
@@ -100,16 +102,17 @@ class Path:
             for input2, digest2 in self.free[:-1]:
                 constraint &= implies(input.length != input2.length, digest != digest2)
                 constraint &= implies(digest == digest2, input.length == input2.length)
-            return (digest, constraint)
+            self.constraint &= constraint
+            return digest
         elif size == 0:
             # Case II: Empty Digest (zero length).
-            return (EMPTY_DIGEST, Constraint(True))
+            return EMPTY_DIGEST
         elif (data := input.reveal()) is None:
             # Case III: Symbolic Digest (concrete length, symbolic data).
             vector = input.bigvector()
             for other, digest in self.symbolic:
                 if prequal(vector, other):
-                    return (digest, Constraint(True))
+                    return digest
             digest = Uint256(f"DIGEST:S{len(self.symbolic)}")
             self.symbolic.append((vector, digest))
 
@@ -136,7 +139,8 @@ class Path:
                     constraint &= implies(
                         digest == digest2, input[Uint256(i)] == input2[Uint256(i)]
                     )
-            return (digest, constraint)
+            self.constraint &= constraint
+            return digest
         else:
             # Case IV: Concrete Digest (concrete length, concrete data).
             constraint = Constraint(True)
@@ -159,7 +163,8 @@ class Path:
                         constraint &= implies(
                             digest == digest2, input[Uint256(i)] == input2[Uint256(i)]
                         )
-            return (self.concrete[data][1], constraint)
+            self.constraint &= constraint
+            return self.concrete[data][1]
 
     def narrow(self, solver: Solver) -> list[tuple[Uint[Any], Uint256]]:
         """

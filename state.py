@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any, NewType
 
 from bytes import BYTES, Bytes, Memory
 from disassembler import Program, disassemble
 from path import Path, concrete_hash
 from smt import (
     Array,
+    Solver,
+    Substitutable,
     Uint8,
     Uint160,
     Uint256,
@@ -19,7 +22,7 @@ from smt import (
 class Blockchain:
     """Durable global state, persists across transactions."""
 
-    contracts: dict[int, Contract] = field(default_factory=dict)
+    contracts: Contracts = field(default_factory=dict)
     balance: Array[Uint160, Uint256] = field(
         # address -> balance in wei
         default_factory=lambda: Array[Uint160, Uint256](Uint256(0))
@@ -30,13 +33,16 @@ class Blockchain:
 class Contract:
     """A contract account and its durable state."""
 
-    address: int
     program: Program
 
     storage: Array[Uint256, Uint256] = field(
         default_factory=lambda: Array[Uint256, Uint256](Uint256(0))
     )
     nonce: Uint256 = Uint256(1)  # starts at 1, see EIP-161
+
+
+Address = NewType("Address", int)  # a concrete contract address
+Contracts = dict[Address, Contract]
 
 
 @dataclass(frozen=True)
@@ -78,6 +84,23 @@ class Transaction:
     calldata: Bytes = Bytes()
     gasprice: Uint256 = Uint256(0x12)
 
+    def narrow(self, solver: Solver) -> None:
+        """Apply soft  constraints to a given solver instance."""
+        # Minimize calldata length
+        for i in range(257):
+            constraint = self.calldata.length == Uint256(i)
+            if solver.check(constraint):
+                solver.add(constraint)
+                break
+
+        # Minimize callvalue
+        for i in range(257):
+            constraint = self.callvalue == Uint256(2**i - 1)
+            if solver.check(constraint):
+                solver.add(constraint)
+                break
+        assert solver.check()
+
 
 @dataclass
 class Runtime:
@@ -94,9 +117,14 @@ class Runtime:
     stack: list[Uint256] = field(default_factory=list)
     memory: Memory = field(default_factory=Memory)
 
+    def __lt__(self, other: Any) -> bool:
+        if not isinstance(other, Runtime):
+            return NotImplemented
+        return self.path.id < other.path.id
+
 
 @dataclass(frozen=True)
-class Terminus:
+class Terminus(Substitutable):
     """The result of running a contract to completion."""
 
     path: Path

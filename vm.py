@@ -2,26 +2,28 @@
 
 from bytes import Bytes
 from compiler import compile
-from smt import Array, Uint8, Uint64, Uint160, Uint256, substitute
-from state import Block, Contract, Terminus
+from smt import Array, Solver, Uint8, Uint64, Uint160, Uint256, substitute
+from state import Address, Block, Contracts, Terminus
 
 
 def execute(
-    contracts: dict[int, Contract],
-    address: int,
-    calldata: bytes,
-    callvalue: int,
-    storage: dict[int, int] = {},
-) -> tuple[Terminus, dict[int, Contract]]:
+    contracts: Contracts,
+    address: Address,
+    calldata: bytes = b"",
+    callvalue: int = 0,
+) -> tuple[Terminus, Contracts]:
     """Execute a program with concrete inputs."""
     block, input, value = Block(), Bytes(calldata), Uint256(callvalue)
-    store = Array[Uint256, Uint256](Uint256(0))
-    for k, v in storage.items():
-        store[Uint256(k)] = Uint256(v)
+    storage = contracts[address].storage
 
     for term in compile(contracts[address].program):
-        term = translate(term, block, input, value, store)
-        raise NotImplementedError
+        term = translate(term, block, input, value, storage)
+
+        solver = Solver()
+        solver.add(term.path.constraint)
+        if solver.check():
+            term.path.narrow(solver)
+            return term, contracts
 
     raise RuntimeError("no termination matched")
 

@@ -2,14 +2,14 @@
 
 from bytes import Bytes
 from compiler import compile
-from disassembler import abiencode, disassemble
-from smt import Array, Uint160, Uint256
-from state import Block, Contract, Terminus
+from disassembler import Program, abiencode, disassemble
+from smt import Array, Uint256
+from state import Address, Block, Contract, Terminus
 from vm import execute, translate
 
 from .solidity import load_binary, load_solidity, loads_solidity
 
-DEFAULT_ADDRESS = 0xADADADADADADADADADADADADADADADADADADADAD
+ADDRESS = Address(0xADADADADADADADADADADADADADADADADADADADAD)
 
 
 def test_basic() -> None:
@@ -18,57 +18,55 @@ def test_basic() -> None:
     states = list(compile(program))
     assert len(states) == 1
 
-    state = translate(
-        states[0],
-        Block.sample(0),
-        Bytes(),
-        Uint256(0),
-        Array[Uint256, Uint256](Uint256(0)),
+    term = translate(
+        states[0], Block(), Bytes(), Uint256(0), Array[Uint256, Uint256](Uint256(0))
     )
-    assert isinstance(state.pc, Terminus)
-    assert not state.pc.success
-    assert state.pc.returndata.reveal() == b""
+    assert not term.success
+    assert term.returndata.reveal() == b""
+
+
+def _execute(program: Program, calldata: bytes = b"", callvalue: int = 0) -> Terminus:
+    contracts = {ADDRESS: Contract(program)}
+    term, _ = execute(contracts, ADDRESS, calldata, callvalue)
+    return term
 
 
 def test_fallback() -> None:
-    contracts = {
-        DEFAULT_ADDRESS: Contract(
-            address=Uint160(DEFAULT_ADDRESS),
-            program=load_solidity("fixtures/01_Fallback.sol"),
-        )
-    }
+    program = load_solidity("fixtures/01_Fallback.sol")
     calldata = abiencode("owner()")
-    state, _ = execute(contracts, DEFAULT_ADDRESS, calldata, 0, {})
+    term = _execute(program, calldata)
 
-    assert isinstance(state.pc, Terminus)
-    assert state.pc.success is True
-    assert state.pc.returndata.reveal() == (0).to_bytes(32)
+    assert term.success is True
+    assert term.returndata.reveal() == (0).to_bytes(32)
+    assert term.storage is None
 
 
 def test_fallout() -> None:
     program = load_solidity("fixtures/02_Fallout.sol")
     calldata = abiencode("Fal1out()")
-    state = _execute(program, calldata, {})
+    term = _execute(program, calldata)
 
-    assert isinstance(state.pc, Terminus)
-    assert state.pc.success is True
+    assert term.success is True
+    assert term.storage is not None
     assert (
-        state.storage[Uint256(1)].reveal() == 0xCACACACACACACACACACACACACACACACACACACACA
+        term.storage[Uint256(1)].reveal() == 0xCACACACACACACACACACACACACACACACACACACACA
     )
 
 
 def test_coinflip() -> None:
     program = load_solidity("fixtures/03_CoinFlip.sol")
-    calldata = abiencode("flip(bool)") + (0).to_bytes(32)
-    storage = {
-        2: 0x8000000000000000000000000000000000000000000000000000000000000000,
-    }
-    state = _execute(program, calldata, storage)
+    contracts = {ADDRESS: Contract(program)}
+    contracts[ADDRESS].storage[Uint256(2)] = Uint256(
+        0x8000000000000000000000000000000000000000000000000000000000000000
+    )
 
-    assert isinstance(state.pc, Terminus)
-    assert state.pc.success is True
+    calldata = abiencode("flip(bool)") + (0).to_bytes(32)
+    term, _ = execute(contracts, ADDRESS, calldata)
+
+    assert term.success is True
+    assert term.storage is not None
     assert (
-        state.storage[Uint256(1)].reveal()
+        term.storage[Uint256(1)].reveal()
         == 0x8B1A944CF13A9A1C08FACB2C9E98623EF3254D2DDB48113885C3E8E97FEC8DB9
     )
 
@@ -78,11 +76,11 @@ def test_telephone() -> None:
     calldata = abiencode("changeOwner(address)") + (
         0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
     ).to_bytes(32)
-    state = _execute(program, calldata, {})
+    term = _execute(program, calldata)
 
-    assert isinstance(state.pc, Terminus)
-    assert state.pc.success is True
-    assert state.pc.returndata.reveal() == b""
+    assert term.success is True
+    assert term.returndata.reveal() == b""
+    assert term.storage is not None
 
 
 def test_token() -> None:
@@ -92,91 +90,91 @@ def test_token() -> None:
         + (0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF).to_bytes(32)
         + (0xEEEE).to_bytes(32)
     )
-    state = _execute(program, calldata, {})
+    term = _execute(program, calldata)
 
-    assert isinstance(state.pc, Terminus)
-    assert state.pc.success is True
-    assert state.pc.returndata.reveal() == (1).to_bytes(32)
+    assert term.success is True
+    assert term.returndata.reveal() == (1).to_bytes(32)
+    assert term.storage is not None
 
 
 def test_delegation() -> None:
-    program = loads_solidity("fixtures/06_Delegation.sol")["Delegation"]
+    programs = loads_solidity("fixtures/06_Delegation.sol")
+    contracts = {
+        ADDRESS: Contract(programs["Delegation"]),
+        Address(0x8001): Contract(programs["Delegate"]),
+    }
+    contracts[ADDRESS].storage[Uint256(1)] = Uint256(0x8001)
     calldata = abiencode("pwn()")
-    # storage.poke(Uint256(1), addresses["Delegate"].into(Uint256))
-    state = _execute(program, calldata, {})
+    term, _ = execute(contracts, ADDRESS, calldata)
 
-    assert isinstance(state.pc, Terminus)
-    assert state.pc.success is True
-    assert state.pc.returndata.reveal() == b""
+    assert term.success is True
+    assert term.returndata.reveal() == b""
+    assert term.storage is None
 
 
 def test_force() -> None:
     program = load_binary("fixtures/07_Force.bin")
-    # callvalue = Uint256(0x1234)
-    state = _execute(program, b"", {})
+    term = _execute(program, callvalue=0x1234)
 
-    assert isinstance(state.pc, Terminus)
-    assert state.pc.success is False
-    assert state.pc.returndata.reveal() == b""
+    assert term.success is False
+    assert term.returndata.reveal() == b""
+    assert term.storage is None
 
 
 def test_vault() -> None:
     program = load_solidity("fixtures/08_Vault.sol")
     calldata = abiencode("unlock(bytes32)") + (0).to_bytes(32)
-    state = _execute(program, calldata, {})
+    term = _execute(program, calldata)
 
-    assert isinstance(state.pc, Terminus)
-    assert state.pc.success is True
-    assert state.pc.returndata.reveal() == b""
+    assert term.success is True
+    assert term.returndata.reveal() == b""
+    assert term.storage is not None
 
 
 def test_king() -> None:
     program = load_solidity("fixtures/09_King.sol")
-    # callvalue = Uint256(0x1234)
-    state = _execute(program, b"", {})
+    term = _execute(program, callvalue=0x1234)
 
-    assert isinstance(state.pc, Terminus)
-    assert state.pc.success is True
-    assert state.pc.returndata.reveal() == b""
+    assert term.success is True
+    assert term.returndata.reveal() == b""
+    assert term.storage is None
 
 
 def test_reentrancy() -> None:
     program = load_solidity("fixtures/10_Reentrancy.sol")
     calldata = abiencode("donate(address)") + (1).to_bytes(32)
-    # callvalue = Uint256(0x1234)
-    state = _execute(program, calldata, {})
+    term = _execute(program, calldata, callvalue=0x1234)
 
-    assert isinstance(state.pc, Terminus)
-    assert state.pc.success is True
-    assert state.pc.returndata.reveal() == b""
+    assert term.success is True
+    assert term.returndata.reveal() == b""
 
 
-# def test_elevator() -> None:
-#     contracts, addresses = contracts_multiple("fixtures/11_Elevator.sol")
-#     state = State(
-#         transaction=Transaction(
-#             caller=addresses["TestBuilding"],
-#             calldata=Bytes(abiencode("goTo(uint256)") + (1).to_bytes(32)),
-#             address=addresses["Elevator"],
-#         ),
-#         contracts=contracts,
-#     )
-#     state = _execute(program, calldata, {})
+def test_elevator() -> None:
+    programs = loads_solidity("fixtures/11_Elevator.sol")
+    caller = Address(0xCACACACACACACACACACACACACACACACACACACACA)
+    contracts = {
+        caller: Contract(programs["TestBuilding"]),
+        ADDRESS: Contract(programs["Elevator"]),
+    }
 
-#     assert isinstance(state.pc, Termination)
-#     assert state.pc.success is True
-#     assert state.pc.returndata.reveal() == b""
+    calldata = abiencode("goTo(uint256)") + (1).to_bytes(32)
+    term, _ = execute(contracts, ADDRESS, calldata)
+
+    assert term.success is True
+    assert term.returndata.reveal() == b""
 
 
 def test_privacy() -> None:
     program = load_binary("fixtures/12_Privacy.bin")
-    calldata = abiencode("unlock(bytes16)") + (0x4321 << 128).to_bytes(32)
-    storage = {5: 0x4321 << 128}
-    state = _execute(program, calldata, storage)
+    contracts = {ADDRESS: Contract(program)}
+    contracts[ADDRESS].storage[Uint256(5)] = Uint256(0x4321 << 128)
 
-    assert isinstance(state.pc, Terminus)
-    assert state.pc.success is True
-    assert state.pc.returndata.reveal() == b""
+    calldata = abiencode("unlock(bytes16)") + (0x4321 << 128).to_bytes(32)
+    term, _ = execute(contracts, ADDRESS, calldata)
+
+    assert term.success is True
+    assert term.returndata.reveal() == b""
+    term = _execute(program, callvalue=0x1234)
 
 
 def test_gatekeeper_one() -> None:
@@ -192,27 +190,25 @@ def test_gatekeeper_two() -> None:
     calldata = abiencode("enter(bytes8)") + bytes.fromhex(
         "65d5bd2c953ab27b000000000000000000000000000000000000000000000000"
     )
-    state = _execute(program, calldata, {})
+    term = _execute(program, calldata)
 
-    assert isinstance(state.pc, Terminus)
-    assert state.pc.success is True
-    assert state.pc.returndata.reveal() == (1).to_bytes(32)
+    assert term.success is True
+    assert term.returndata.reveal() == (1).to_bytes(32)
+    term = _execute(program, callvalue=0x1234)
 
 
-# def test_preservation() -> None:
-#     contracts, addresses = contracts_multiple("fixtures/15_Preservation.sol")
-#     state = State(
-#         transaction=Transaction(
-#             calldata=Bytes(abiencode("setFirstTime(uint256)") + (0x5050).to_bytes(32)),
-#             address=addresses["Preservation"],
-#         ),
-#         contracts=contracts,
-#     )
-#     state.storage.poke(Uint256(0), addresses["LibraryContract"].into(Uint256))
-#     state.storage.poke(Uint256(1), addresses["LibraryContract"].into(Uint256))
+def test_preservation() -> None:
+    programs = loads_solidity("fixtures/15_Preservation.sol")
+    library = Address(0x12345678)
+    contracts = {
+        ADDRESS: Contract(programs["Preservation"]),
+        library: Contract(programs["LibraryContract"]),
+    }
+    contracts[ADDRESS].storage[Uint256(0)] = Uint256(library)
+    contracts[ADDRESS].storage[Uint256(1)] = Uint256(library)
 
-#     state = _execute(program, calldata, {})
+    calldata = abiencode("setFirstTime(uint256)") + (0x5050).to_bytes(32)
+    term, _ = execute(contracts, ADDRESS, calldata)
 
-#     assert isinstance(state.pc, Termination)
-#     assert state.pc.success is True
-#     assert state.pc.returndata.reveal() == b""
+    assert term.success is True
+    assert term.returndata.reveal() == b""

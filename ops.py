@@ -196,7 +196,7 @@ def SAR(shift: Uint256, value: Uint256) -> Uint256:
 
 def KECCAK256(r: Runtime, offset: Uint256, size: Uint256) -> Uint256:
     """20 - Compute Keccak-256 (SHA3) hash."""
-    raise NotImplementedError("KECCAK256")
+    return r.path.keccak256(r.memory.slice(offset, size))
 
 
 def ADDRESS(tx: Transaction) -> Uint256:
@@ -388,7 +388,7 @@ def JUMPI(r: Runtime, ins: Instruction, _counter: Uint256, b: Uint256) -> Fork |
     counter = _counter.reveal()
     assert counter is not None, "JUMPI requires concrete counter"
 
-    r.path.trace <<= 1
+    r.path.id <<= 1
     c = b == Uint256(0)
     match c.reveal():
         case None:  # unknown, must prepare both branches :(
@@ -396,14 +396,14 @@ def JUMPI(r: Runtime, ins: Instruction, _counter: Uint256, b: Uint256) -> Fork |
             r0.path.constraint &= c
 
             r1.pc = r.program.jumps[counter]
-            r1.path.trace |= 1
+            r1.path.id |= 1
             r1.path.constraint &= ~c
             return (r0, r1)
         case True:  # branch never taken, fall through
             return None
         case False:  # branch always taken
             r.pc = r.program.jumps[counter]
-            r.path.trace |= 1
+            r.path.id |= 1
             return None
 
 

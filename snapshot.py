@@ -3,14 +3,14 @@
 import json
 from pathlib import Path
 from time import sleep
-from typing import TypeAlias
+from typing import TypeAlias, TypeGuard
 
 import requests
 
 from bytes import Bytes
 from disassembler import Program, disassemble
 from smt import Uint160, Uint256
-from state import Contract
+from state import Address, Contract, Contracts
 
 # For consistency, make requests at a fixed block offset
 TAG = "0x574800"
@@ -36,7 +36,7 @@ with open(_ROOT / "ethernaut.json") as f:
 cache: Snapshot | None = None
 
 
-def snapshot_contracts(address: int) -> dict[int, Contract]:
+def snapshot_contracts(address: Address) -> Contracts:
     """Load the given contract from the snapshot, and any contracts it references."""
     global cache
     if cache is None:
@@ -45,9 +45,8 @@ def snapshot_contracts(address: int) -> dict[int, Contract]:
         assert cache is not None
     raw = cache[address.to_bytes(20).hex()]
 
-    contracts = dict[int, Contract]()
+    contracts = Contracts()
     contract = Contract(
-        address=address,
         program=disassemble(Bytes.fromhex(raw["code"])),
         # Some level factories create other contracts in their constructor. To
         # avoid address collisions between these fixed contracts and created
@@ -59,7 +58,7 @@ def snapshot_contracts(address: int) -> dict[int, Contract]:
             continue
         vx = int(v, 16)
         contract.storage[Uint256(int(k))] = Uint256(vx)
-        if is_sibling_contract(int(k), vx):
+        if is_sibling_contract(vx, slot=int(k)):
             # Warning! Levels like Delegation include global non-factory
             # contracts that *do* need to be interacted with.
             contracts.update(snapshot_contracts(vx))
@@ -68,13 +67,13 @@ def snapshot_contracts(address: int) -> dict[int, Contract]:
     return contracts
 
 
-def get_code(address: int) -> Program:
+def get_code(address: Address) -> Program:
     """Load the Contract at a given address."""
     data = _api_request("eth_getCode", address=address.to_bytes(20).hex(), tag=TAG)
     return disassemble(Bytes(data))
 
 
-def get_storage_at(address: int, position: int) -> Uint256:
+def get_storage_at(address: Address, position: int) -> Uint256:
     """Load the contents of a given storage slot."""
     value = _api_request(
         "eth_getStorageAt",
@@ -117,7 +116,7 @@ def _api_request(action: str, **kwargs: str) -> bytes:
         return bytes.fromhex(result[2:])
 
 
-def download_contract(snapshot: Snapshot, address: int) -> None:
+def download_contract(snapshot: Snapshot, address: Address) -> None:
     """Download a given address's code and data."""
     program = get_code(address)
     key = address.to_bytes(20).hex()
@@ -131,11 +130,11 @@ def download_contract(snapshot: Snapshot, address: int) -> None:
         assert (v := storage.reveal()) is not None
         if v != 0:
             snapshot[key][str(j)] = v.to_bytes(32).hex()
-        if is_sibling_contract(j, v):
-            download_contract(snapshot, v)
+        if is_sibling_contract(j, slot=v):
+            download_contract(snapshot, j)
 
 
-def is_sibling_contract(slot: int, value: int) -> bool:
+def is_sibling_contract(value: int, *, slot: int) -> TypeGuard[Address]:
     """Check if a given storage slot refers to a related contract."""
     # According to the `Level` interface, the contract's owner is stored in slot
     # zero. Don't try to download that contract.

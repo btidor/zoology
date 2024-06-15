@@ -8,14 +8,13 @@ from itertools import batched
 from typing import (
     Any,
     Literal,
-    Protocol,
     Self,
     Sequence,
     TypeAlias,
     TypeVar,
     Union,
+    cast,
     overload,
-    runtime_checkable,
 )
 
 from Crypto.Hash import keccak
@@ -172,11 +171,15 @@ Substitutions: TypeAlias = Sequence[
 ]
 
 
-@runtime_checkable
-class Substitutable(Protocol):
+class Substitutable:
     """Classes on which term substitution can be performed."""
 
-    def __substitute__(self, replacements: Substitutions) -> Self: ...
+    def __substitute__(self, subs: Substitutions) -> Self:
+        args = dict[str, Any]()
+        for key in cast(Any, self).__dataclass_fields__.keys():
+            value = getattr(self, key)
+            args[key] = substitute(value, subs)
+        return self.__class__(**args)
 
 
 R = TypeVar("R", bound=object)

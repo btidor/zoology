@@ -2,10 +2,9 @@
 
 from typing import Any
 
-from compiler import compile
+from compiler import compile, symbolic_transaction
 from disassembler import Program, abiencode
 from smt import Solver, Uint256
-from state import Terminus
 
 from . import fixture as cases
 from .solidity import load_binary, load_solidity, loads_solidity
@@ -13,24 +12,26 @@ from .solidity import load_binary, load_solidity, loads_solidity
 
 def check_transitions(program: Program, branches: tuple[Any, ...]) -> None:
     expected = dict((b[0], b[1:]) for b in branches)
-    for state in compile(program):
-        assert isinstance(state.pc, Terminus)
-        if not state.pc.success:
+    for term in compile(program):
+        if not term.success:
             continue
-        assert state.px() in expected, f"unexpected path: {state.px()}"
+        assert term.path.px() in expected, f"unexpected path: {term.path.px()}"
 
-        kind, method, value = (expected[state.px()] + (None,))[:3]
-        if state.static:
+        kind, method, value = (expected[term.path.px()] + (None,))[:3]
+        if term.storage is None:
             assert kind == "VIEW"
         else:
             assert kind == "SAVE"
 
         solver = Solver()
-        solver.add(state.path)
+        solver.add(term.path.constraint)
         assert solver.check()
-        state.narrow(solver)
+        term.path.narrow(solver)
 
-        actual = state.transaction.calldata.evaluate(solver)[:4]
+        itx = symbolic_transaction()
+        itx.narrow(solver)
+
+        actual = itx.calldata.evaluate(solver)[:4]
         if method is None:
             assert actual == b"", f"unexpected data: {actual.hex()}"
         elif method == "$any4":
@@ -38,13 +39,13 @@ def check_transitions(program: Program, branches: tuple[Any, ...]) -> None:
         else:
             assert actual == abiencode(method), f"unexpected data: {actual.hex()}"
 
-        actual = solver.evaluate(state.transaction.callvalue)
+        actual = solver.evaluate(itx.callvalue)
         if actual == 0:
             assert value is None
         else:
             assert value == actual
 
-        del expected[state.px()]
+        del expected[term.path.px()]
 
     assert len(expected) == 0, f"missing paths: {expected.keys()}"
 
@@ -128,20 +129,16 @@ def test_gatekeeper_two() -> None:
 
 def test_sudoku() -> None:
     program = load_solidity("fixtures/99_Sudoku.sol")
-    states = list(
-        state
-        for state in compile(program)
-        if isinstance(state.pc, Terminus) and state.pc.success
-    )
+    termini = list(term for term in compile(program) if term.success)
 
-    assert len(states) == 1
-    state = states[0]
+    assert len(termini) == 1
+    term = termini[0]
 
     solver = Solver()
-    solver.add(state.path)
+    solver.add(term.path.constraint)
     assert solver.check()
 
-    calldata = state.transaction.calldata
+    calldata = symbolic_transaction().calldata
     method = bytes(solver.evaluate(calldata[Uint256(i)]) for i in range(4))
     assert method.hex() == abiencode("check(uint256[9][9])").hex()
 
