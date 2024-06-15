@@ -3,14 +3,14 @@
 import json
 from pathlib import Path
 from time import sleep
-from typing import TypeAlias, TypeGuard
+from typing import TypeGuard
 
 import requests
 
 from bytes import Bytes
 from disassembler import Program, disassemble
-from smt import Uint160, Uint256
-from state import Address, Contract, Contracts
+from smt import Uint256
+from state import Address, Blockchain, Contract
 
 # For consistency, make requests at a fixed block offset
 TAG = "0x574800"
@@ -21,11 +21,7 @@ _ROOT = Path(__file__).resolve().parent
 
 _apikey: str | None = None
 
-Snapshot: TypeAlias = dict[str, dict[str, str]]
-
-PLAYER = Uint160(0xCACACACACACACACACACACACACACACACACACACACA)
-PROXY = Uint160(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0)
-
+type Snapshot = dict[str, dict[str, str]]
 
 with open(_ROOT / "ethernaut.json") as f:
     _eth = json.load(f)
@@ -36,7 +32,7 @@ with open(_ROOT / "ethernaut.json") as f:
 cache: Snapshot | None = None
 
 
-def snapshot_contracts(address: Address) -> Contracts:
+def snapshot_contracts(address: Address) -> Blockchain:
     """Load the given contract from the snapshot, and any contracts it references."""
     global cache
     if cache is None:
@@ -45,7 +41,7 @@ def snapshot_contracts(address: Address) -> Contracts:
         assert cache is not None
     raw = cache[address.to_bytes(20).hex()]
 
-    contracts = Contracts()
+    blockchain = Blockchain()
     contract = Contract(
         program=disassemble(Bytes.fromhex(raw["code"])),
         # Some level factories create other contracts in their constructor. To
@@ -61,10 +57,10 @@ def snapshot_contracts(address: Address) -> Contracts:
         if is_sibling_contract(vx, slot=int(k)):
             # Warning! Levels like Delegation include global non-factory
             # contracts that *do* need to be interacted with.
-            contracts.update(snapshot_contracts(vx))
+            blockchain.contracts.update(snapshot_contracts(vx).contracts)
 
-    contracts[address] = contract
-    return contracts
+    blockchain.contracts[address] = contract
+    return blockchain
 
 
 def get_code(address: Address) -> Program:

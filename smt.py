@@ -11,8 +11,6 @@ from typing import (
     Self,
     Sequence,
     TypeAlias,
-    TypeVar,
-    Union,
     cast,
     overload,
 )
@@ -21,28 +19,23 @@ from Crypto.Hash import keccak
 from zbitvector import Array, Constraint, Int, Solver, Symbolic, Uint, _bitwuzla
 from zbitvector._bitwuzla import BZLA, BitwuzlaTerm, Kind
 
-Uint8 = Uint[Literal[8]]
-Uint52 = Uint[Literal[52]]
-Uint64 = Uint[Literal[64]]
-Uint160 = Uint[Literal[160]]
-Uint256 = Uint[Literal[256]]
+Uint8: TypeAlias = Uint[Literal[8]]
+Uint52: TypeAlias = Uint[Literal[52]]
+Uint64: TypeAlias = Uint[Literal[64]]
+Uint160: TypeAlias = Uint[Literal[160]]
+Uint256: TypeAlias = Uint[Literal[256]]
 
-Expression: TypeAlias = "Symbolic | Array[Any, Any]"
-
-N = TypeVar("N", bound=int)
-S = TypeVar("S", bound=Expression)
-
-K = TypeVar("K", bound=Union[Uint[Any], Int[Any]])
-V = TypeVar("V", bound=Union[Uint[Any], Int[Any]])
+type Expression = "Symbolic | Array[Any, Any]"
+type Bitvec = Uint[Any] | Int[Any]
 
 
-def _make_symbolic(cls: type[S], term: Any) -> S:
+def _make_symbolic[S: Expression](cls: type[S], term: Any) -> S:
     instance = cls.__new__(cls)
     instance._term = term  # type: ignore
     return instance
 
 
-def _from_expr(cls: type[S], kind: Kind, *args: Expression) -> S:
+def _from_expr[S: Expression](cls: type[S], kind: Kind, *args: Expression) -> S:
     return cls._from_expr(kind, *args)  # type: ignore
 
 
@@ -107,7 +100,7 @@ def prequal(a: Uint[Any], b: Uint[Any]) -> bool:
     return (a == b).reveal() or False
 
 
-def bvlshr_harder(value: Uint[N], shift: Uint[N]) -> Uint[N]:
+def bvlshr_harder[N: int](value: Uint[N], shift: Uint[N]) -> Uint[N]:
     """Return `(bvlshr value shift)` with better preprocessing."""
     default = value >> shift
     if default.reveal() is not None or (n := shift.reveal()) is None or n == 0:
@@ -182,10 +175,7 @@ class Substitutable:
         return self.__class__(**args)
 
 
-R = TypeVar("R", bound=object)
-
-
-def substitute(item: R, subs: Substitutions) -> R:
+def substitute[R](item: R, subs: Substitutions) -> R:
     """Perform term substitution according to the given map."""
     if len(subs) == 0:
         return item
@@ -197,7 +187,7 @@ def substitute(item: R, subs: Substitutions) -> R:
                     _term(item),  # type: ignore
                     dict((_term(k), _term(v)) for k, v in subs),
                 ),
-            )  # type: ignore
+            )
         case Substitutable():
             return item.__substitute__(subs)
         case list():
@@ -240,7 +230,7 @@ def compact_zarray(
     return constraint
 
 
-def compact_helper(
+def compact_helper[N: int](
     solver: Solver, constraint: Constraint, term: Uint[N], concrete: Uint[N]
 ) -> tuple[Constraint, Uint[N]]:
     """Select between original and concretized versions of a term."""
@@ -256,10 +246,14 @@ def evaluate(solver: Solver, s: Constraint) -> bool: ...
 
 
 @overload
-def evaluate(solver: Solver, s: Array[K, V]) -> dict[int, int]: ...
+def evaluate[K: Bitvec, V: Bitvec](
+    solver: Solver, s: Array[K, V]
+) -> dict[int, int]: ...
 
 
-def evaluate(solver: Solver, s: Constraint | Array[K, V]) -> bool | dict[int, int]:
+def evaluate[K: Bitvec, V: Bitvec](
+    solver: Solver, s: Constraint | Array[K, V]
+) -> bool | dict[int, int]:
     """Backdoor method for evaluating non-bitvectors."""
     if not solver._current or _bitwuzla.last_check is not solver:  # type: ignore
         raise ValueError("solver is not ready for model evaluation")

@@ -17,7 +17,7 @@ from snapshot import (
     download_contract,
     snapshot_contracts,
 )
-from state import Blockchain
+from state import Address, Blockchain, Contract
 from vm import execute
 
 
@@ -65,9 +65,22 @@ def _compile(code: bytes) -> None:
         print(f"{line} {prefix} {returndata}")
 
 
-def _execute(code: bytes, calldata: bytes) -> None:
+def _execute(lc: int | bytes, calldata: bytes) -> None:
     """Execute the given bytecode."""
-    raise NotImplementedError
+    if isinstance(lc, int):
+        k, address = __load(lc)
+    else:
+        k = Blockchain()
+        address = Address(0x1234)
+        k.contracts[address] = Contract(disassemble(Bytes(lc)))
+
+    term, k = execute(k, address, calldata)
+    print("RETURN" if term.success else "REVERT", end=" ")
+    solver = Solver()
+    solver.add(term.path.constraint)
+    assert solver.check()
+    term.path.narrow(solver)
+    print(term.returndata.evaluate(solver).hex())
 
 
 def _snapshot() -> None:
@@ -81,18 +94,24 @@ def _snapshot() -> None:
 
 def _load(level: int) -> bytes:
     """Simulate createInstance() to load a given level."""
+    k, address = __load(level)
+    code = k.contracts[address].program.code.reveal()
+    assert code is not None
+    return code
+
+
+def __load(level: int) -> tuple[Blockchain, Address]:
     factory = LEVEL_FACTORIES[level]
-    k = Blockchain(contracts=snapshot_contracts(factory))
+    k = snapshot_contracts(factory)
     original = set(k.contracts.keys())
 
     input = abiencode("createInstance(address)") + (0xB).to_bytes(32)
     term, k = execute(k, factory, input, 0)
     assert term.success
 
-    added = [v for k, v in k.contracts.items() if k not in original]
+    added = [k for k in k.contracts.keys() if k not in original]
     assert len(added) == 1
-    assert (program := added[0].program.code.reveal()) is not None
-    return program
+    return k, added[0]
 
 
 if __name__ == "__main__":
@@ -137,8 +156,7 @@ if __name__ == "__main__":
                 _compile(args.code)
         case "execute":
             if args.level is not None:
-                code = _load(args.level)
-                _execute(code, args.data)
+                _execute(args.level, args.data)
             else:
                 _execute(args.code, args.data)
         case "snapshot":

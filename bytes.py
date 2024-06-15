@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import copy
-from typing import Any, Iterable, Self, TypeVar
+from typing import Any, Iterable, Self
 
 from smt import (
     Array,
@@ -22,9 +22,7 @@ from smt import (
     substitute,
 )
 
-T = TypeVar("T", bound="Bytes")
-
-BytesWrite = tuple[Uint256, "Uint8 | Bytes"]
+type BytesWrite = tuple[Uint256, Uint8 | Bytes]
 
 DESCRIBE_LIMIT = 4096
 

@@ -22,9 +22,9 @@ Int256 = Int[Literal[256]]
 Uint257 = Uint[Literal[257]]
 Uint512 = Uint[Literal[512]]
 
-Fork = tuple[Runtime, Runtime]
-Terminate = tuple[bool, Bytes]
-OpResult = None | Uint256 | Fork | Terminate
+type Fork = tuple[Runtime, Runtime]
+type Terminate = tuple[bool, Bytes]
+type OpResult = None | Uint256 | Fork | Terminate
 
 
 def STOP() -> Terminate:

@@ -22,7 +22,7 @@ from smt import (
 class Blockchain(Substitutable):
     """Durable global state, persists across transactions."""
 
-    contracts: Contracts = field(default_factory=dict)
+    contracts: dict[Address, Contract] = field(default_factory=dict)
     balance: Array[Uint160, Uint256] = field(
         # address -> balance in wei
         default_factory=lambda: Array[Uint160, Uint256](Uint256(0))
@@ -51,9 +51,6 @@ class Address(int):
         if v is None:
             raise ValueError(f"{op} requires concrete address")
         return cls(v)
-
-
-Contracts = dict[Address, Contract]
 
 
 @dataclass(frozen=True)
@@ -172,4 +169,4 @@ class HyperCreate(Substitutable):
     address: Uint160  # zero on failure
 
 
-Hypercall = HyperGlobal | HyperCreate
+type Hypercall = HyperGlobal | HyperCreate
