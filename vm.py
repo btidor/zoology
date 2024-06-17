@@ -1,20 +1,21 @@
 """A machine to execute compiled symbolic programs."""
 
+import copy
 from typing import Any
 
 from bytes import Bytes
-from compiler import compile
+from compiler import compile, symbolic_block, symbolic_transaction
 from disassembler import Program, disassemble
 from smt import (
     Array,
     Constraint,
     Solver,
     Substitutions,
-    Uint8,
     Uint64,
     Uint160,
     Uint256,
     substitute,
+    substitutions,
 )
 from state import (
     Address,
@@ -25,6 +26,7 @@ from state import (
     HyperCreate,
     HyperGlobal,
     Terminus,
+    Transaction,
 )
 
 
@@ -37,11 +39,24 @@ def execute(
 ) -> tuple[Terminus, Blockchain]:
     """Execute a program with concrete inputs."""
     block, input, value = Block(), Bytes(calldata), Uint256(callvalue)
+    transaction = Transaction(
+        address=Uint160(address),
+        callvalue=value,
+        calldata=input,
+    )
     if program is None:
         program = blockchain.contracts[address].program
 
+    static = substitutions(symbolic_block(), block) + substitutions(
+        symbolic_transaction(),
+        transaction,
+    )
+
     for term in compile(program):
-        subs = substitutions(blockchain, address, block, input, value)
+        subs = copy.copy(static) + [
+            (Array[Uint256, Uint256]("STORAGE"), blockchain.contracts[address].storage),
+            (Array[Uint160, Uint256]("BALANCE"), Array[Uint160, Uint256](Uint256(0))),
+        ]
         term, k = substitute(term, subs), substitute(blockchain, subs)
         for hyper in term.hyper:
             match hyper:
@@ -62,34 +77,6 @@ def execute(
             return term, k
 
     raise RuntimeError("no termination matched")
-
-
-def substitutions(
-    k: Blockchain, address: Address, block: Block, input: Bytes, value: Uint256
-) -> Substitutions:
-    """Derive variable substitutions for the given state."""
-    return [
-        # Block
-        (Uint256("NUMBER"), block.number),
-        (Uint160("COINBASE"), block.coinbase),
-        (Uint256("TIMESTAMP"), block.timestamp),
-        (Uint256("PREVRANDAO"), block.prevrandao),
-        (Uint256("GASLIMIT"), block.gaslimit),
-        (Uint256("CHAINID"), block.chainid),
-        (Uint256("BASEFEE"), block.basefee),
-        (Array[Uint8, Uint256]("BLOCKHASH"), block.hashes),
-        # Transaction
-        (Uint160("ORIGIN"), Uint160(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0)),
-        (Uint160("CALLER"), Uint160(0xCACACACACACACACACACACACACACACACACACACACA)),
-        (Uint160("ADDRESS"), Uint160(address)),
-        (Uint256("CALLVALUE"), value),
-        (Array[Uint256, Uint8]("CALLDATA"), input.array),
-        (Uint64("CALLDATA.length"), input.length.into(Uint64)),
-        (Uint256("GASPRICE"), Uint256(0x12)),
-        # State
-        (Array[Uint256, Uint256]("STORAGE"), k.contracts[address].storage),
-        (Array[Uint160, Uint256]("BALANCE"), Array[Uint160, Uint256](Uint256(0))),
-    ]
 
 
 def hyperglobal(

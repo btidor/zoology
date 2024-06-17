@@ -7,20 +7,20 @@ from typing import Any, Callable, Self
 
 from bytes import BYTES, Bytes, Memory
 from disassembler import Program, disassemble
-from path import Path, concrete_hash
+from path import Path
 from smt import (
     Array,
     Constraint,
     Solver,
-    Substitutable,
     Uint8,
     Uint160,
     Uint256,
+    concrete_hash,
 )
 
 
 @dataclass
-class Blockchain(Substitutable):
+class Blockchain:
     """Durable global state, persists across transactions."""
 
     contracts: dict[Address, Contract] = field(default_factory=dict)
@@ -31,7 +31,7 @@ class Blockchain(Substitutable):
 
 
 @dataclass
-class Contract(Substitutable):
+class Contract:
     """A contract account and its durable state."""
 
     program: Program
@@ -55,7 +55,7 @@ class Address(int):
 
 
 @dataclass(frozen=True)
-class Block(Substitutable):
+class Block:
     """A block in the blockchain."""
 
     number: Uint256 = Uint256(16030969)
@@ -83,7 +83,7 @@ class Block(Substitutable):
 
 
 @dataclass(frozen=True)
-class Transaction(Substitutable):
+class Transaction:
     """A contract call."""
 
     origin: Uint160 = Uint160(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0)
@@ -136,7 +136,7 @@ class Runtime:
 
 
 @dataclass(frozen=True)
-class Terminus(Substitutable):
+class Terminus:
     """The result of running a contract to completion."""
 
     path: Path
@@ -149,7 +149,7 @@ class Terminus(Substitutable):
 
 
 @dataclass(frozen=True)
-class HyperGlobal[*P](Substitutable):
+class HyperGlobal[*P]:
     """A hypercall for getting information from global state."""
 
     input: tuple[*P]
@@ -159,7 +159,7 @@ class HyperGlobal[*P](Substitutable):
 
 
 @dataclass(frozen=True)
-class HyperCreate(Substitutable):
+class HyperCreate:
     """A CREATE/CREATE2 hypercall."""
 
     initcode: Bytes
@@ -171,7 +171,7 @@ class HyperCreate(Substitutable):
 
 
 @dataclass(frozen=True)
-class HyperCall(Substitutable):
+class HyperCall:
     """A CALL/DELEGATECALL/STATICCALL hypercall."""
 
     gas: Uint256

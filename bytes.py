@@ -8,8 +8,8 @@ from typing import Any, Iterable, Self
 from smt import (
     Array,
     Constraint,
+    Expression,
     Solver,
-    Substitutions,
     Uint,
     Uint8,
     Uint64,
@@ -19,7 +19,6 @@ from smt import (
     concat_bytes,
     concat_words,
     explode_bytes,
-    substitute,
 )
 
 type BytesWrite = tuple[Uint256, Uint8 | Bytes]
@@ -59,18 +58,19 @@ class Bytes:
         # ASSUMPTION: call data and return data are no longer than 2^64 bytes.
         # CALL, RETURN, etc. incur gas costs for memory expansion, so this
         # should be a reasonable upper limit.
-        return cls.custom(
-            Uint64(length if length is not None else f"{name}.length").into(Uint256),
-            Array[Uint256, Uint8](name),
-        )
-
-    @classmethod
-    def custom(cls, length: Uint256, array: Array[Uint256, Uint8]) -> Bytes:
-        """Create a new Bytes with custom properties."""
         result = cls.__new__(cls)
-        result.data, result.length, result.array = None, length, array
+        result.data = None
+        result.length = (
+            Uint64(f"{name}.length").into(Uint256)
+            if length is None
+            else Uint256(length)
+        )
+        result.array = Array[Uint256, Uint8](name)
         result.check_length = True
         return result
+
+    def __substitutions__(self) -> tuple[Expression, ...]:
+        return (self.length.into(Uint64), self.array)
 
     def __deepcopy__(self, memo: Any) -> Self:
         return self
@@ -131,9 +131,6 @@ class Bytes:
             return self.data
         return _reveal(self)
 
-    def __substitute__(self, subs: Substitutions) -> Bytes:
-        return self.custom(substitute(self.length, subs), substitute(self.array, subs))
-
 
 class ByteSlice(Bytes):
     """Represents an immutable slice of Bytes or Memory."""
@@ -144,6 +141,9 @@ class ByteSlice(Bytes):
         self.offset = offset
         self.length = size
         self.data = None
+
+    def __substitutions__(self) -> tuple[Expression, ...]:
+        raise NotImplementedError
 
     def __getitem__(self, i: Uint256) -> Uint8:
         item = self.inner[self.offset + i]
@@ -180,13 +180,6 @@ class ByteSlice(Bytes):
         )
         return constraint
 
-    def __substitute__(self, subs: Substitutions) -> ByteSlice:
-        return ByteSlice(
-            substitute(self.inner, subs),
-            substitute(self.offset, subs),
-            substitute(self.length, subs),
-        )
-
 
 class Memory:
     """A mutable, symbolic-length sequence of symbolic bytes."""
@@ -205,6 +198,9 @@ class Memory:
         self.wordcache = dict[int, Uint256]()
         for i, b in enumerate(data):
             self[Uint256(i)] = BYTES[b]
+
+    def __substitutions__(self) -> tuple[Expression, ...]:
+        raise NotImplementedError
 
     def __getitem__(self, i: Uint256) -> Uint8:
         if (i < self.length).reveal() is False:

@@ -12,7 +12,6 @@ from smt import (
     Constraint,
     NarrowingError,
     Solver,
-    Substitutable,
     Uint,
     Uint256,
     concat_bytes,
@@ -26,7 +25,7 @@ Uint128: TypeAlias = Uint[Literal[128]]
 
 
 @dataclass
-class Path(Substitutable):
+class Path:
     """The symbolic constraints associated with a path."""
 
     # Each path is numbered based on the forks followed to reach it. Each JUMPI

@@ -1,13 +1,13 @@
 #!/usr/bin/env pytest
 
 from bytes import Bytes
-from compiler import compile
+from compiler import compile, symbolic_block, symbolic_transaction
 from disassembler import Program, abiencode, disassemble
 from smt import Uint256, substitute
-from state import Address, Block, Blockchain, Contract, Terminus
+from state import Address, Block, Blockchain, Contract, Terminus, Transaction
 from vm import execute, substitutions
 
-from .solidity import load_binary, load_solidity, loads_solidity
+from .solidity import load_binary, load_solidity
 
 ADDRESS = Address(0xADADADADADADADADADADADADADADADADADADADAD)
 
@@ -22,7 +22,9 @@ def test_basic() -> None:
     terms = list(compile(program))
     assert len(terms) == 1
 
-    subs = substitutions(k, ADDRESS, Block(), Bytes(), Uint256(0))
+    subs = substitutions(symbolic_block(), Block()) + substitutions(
+        symbolic_transaction(), Transaction()
+    )
     term = substitute(terms[0], subs)
     assert not term.success
     assert term.returndata.reveal() == b""
