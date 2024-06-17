@@ -55,14 +55,14 @@ def compile(program: Program) -> Iterable[Terminus]:
                 else:
                     raise TypeError(f"unknown arg class: {kls}")
 
-            # Note: we increment the program counter *before* executing the
+            # NOTE: we increment the program counter *before* executing the
             # instruction because instructions may overwrite it (e.g. in the
             # case of a JUMP).
             r.pc += 1
 
             if defer:
-                # Operations with side-effects (i.e. memory writes) cannot be
-                # automatically deferred.
+                # NOTE: operations with side effects (i.e. memory writes) cannot
+                # be automatically deferred.
                 assert not any(isinstance(a, Runtime) for a in args)
                 result = Uint256(f"GLOBAL{len(r.hyper)}")
                 r.hyper.append(HyperGlobal(cast(Any, args), fn, result))
@@ -86,10 +86,6 @@ def compile(program: Program) -> Iterable[Terminus]:
                             r.path, tuple(r.hyper), success, returndata, storage
                         )
                         break
-
-
-# TODO: since they're immutable, these should be global variables, but that
-# doesn't seem to work with pytest state resetting.
 
 
 def symbolic_block() -> Block:

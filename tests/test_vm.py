@@ -31,7 +31,7 @@ def test_basic() -> None:
 def _execute(program: Program, calldata: bytes = b"", callvalue: int = 0) -> Terminus:
     k = Blockchain()
     k.contracts = {ADDRESS: Contract(program)}
-    term, _ = execute(k, ADDRESS, calldata, callvalue)
+    term, k = execute(k, ADDRESS, calldata, callvalue)
     return term
 
 

@@ -8,6 +8,7 @@ from bytes import Bytes
 from disassembler import Instruction
 from opcodes import REFERENCE, SPECIAL, UNIMPLEMENTED
 from smt import (
+    Constraint,
     Int,
     Uint,
     Uint8,
@@ -16,7 +17,15 @@ from smt import (
     bvlshr_harder,
     concat_bytes,
 )
-from state import Address, Block, Blockchain, HyperCreate, Runtime, Transaction
+from state import (
+    Address,
+    Block,
+    Blockchain,
+    HyperCall,
+    HyperCreate,
+    Runtime,
+    Transaction,
+)
 
 Int256 = Int[Literal[256]]
 Uint257 = Uint[Literal[257]]
@@ -308,8 +317,8 @@ def EXTCODEHASH(k: Blockchain, r: Runtime, address: Uint256) -> Uint256:
         return r.path.keccak256(k.contracts[key].program.code)
     else:
         # Properly, EXTCODEHASH should return zero if the address does not exist
-        # or is empty, and the empty hash otherwise. See: EIP-1052.
-        raise NotImplementedError("EXTCODEHASH of non-contract address")
+        # or is empty, and the empty hash otherwise.
+        raise NotImplementedError  # see EIP-1052
 
 
 def BLOCKHASH(blk: Block, blockNumber: Uint256) -> Uint256:
@@ -514,9 +523,24 @@ def CALL(
     argsSize: Uint256,
     retOffset: Uint256,
     retSize: Uint256,
-) -> None:
+) -> Uint256:
     """F1 - Message-call into an account."""
-    raise NotImplementedError("CALL")
+    if value.reveal() != 0:  # TODO: this is a big hack
+        r.path.static = False
+    success = Constraint(f"CALLOK{len(r.hyper)}")
+    returndata = Bytes.symbolic(f"CALLRET{len(r.hyper)}")
+    hyper = HyperCall(
+        gas,
+        address.into(Uint160),
+        value,
+        r.memory.slice(argsOffset, argsSize),
+        success,
+        returndata,
+    )
+    r.hyper.append(hyper)
+    r.latest_return = returndata
+    r.memory.graft(returndata.slice(Uint256(0), retSize), retOffset)
+    return success.ite(Uint256(1), Uint256(0))
 
 
 def CALLCODE(
@@ -528,7 +552,7 @@ def CALLCODE(
     argsSize: Uint256,
     retOffset: Uint256,
     retSize: Uint256,
-) -> None:
+) -> Uint256:
     """F2 - Message-call into this account with alternative account's code."""
     raise NotImplementedError("CALLCODE")
 
@@ -540,20 +564,36 @@ def RETURN(r: Runtime, offset: Uint256, size: Uint256) -> Terminate:
 
 def DELEGATECALL(
     r: Runtime,
+    tx: Transaction,
     gas: Uint256,
     address: Uint256,
     argsOffset: Uint256,
     argsSize: Uint256,
     retOffset: Uint256,
     retSize: Uint256,
-) -> None:
+) -> Uint256:
     """
     F4.
 
     Message-call into this account with an alternative account's code, but
     persisting the current values for sender and value.
     """
-    raise NotImplementedError("DELEGATECALL")
+    # TODO: persist sender
+    success = Constraint(f"CALLOK{len(r.hyper)}")
+    returndata = Bytes.symbolic(f"CALLRET{len(r.hyper)}")
+    hyper = HyperCall(
+        gas,
+        address.into(Uint160),
+        tx.callvalue,
+        r.memory.slice(argsOffset, argsSize),
+        success,
+        returndata,
+        delegate=True,
+    )
+    r.hyper.append(hyper)
+    r.latest_return = returndata
+    r.memory.graft(returndata.slice(Uint256(0), retSize), retOffset)
+    return success.ite(Uint256(1), Uint256(0))
 
 
 def CREATE2(
@@ -587,7 +627,21 @@ def STATICCALL(
     retSize: Uint256,
 ) -> Uint256:
     """FA - Static message-call into an account."""
-    return Uint256("TODO")
+    success = Constraint(f"CALLOK{len(r.hyper)}")
+    returndata = Bytes.symbolic(f"CALLRET{len(r.hyper)}")
+    hyper = HyperCall(
+        gas,
+        address.into(Uint160),
+        Uint256(0),
+        r.memory.slice(argsOffset, argsSize),
+        success,
+        returndata,
+        static=True,
+    )
+    r.hyper.append(hyper)
+    r.latest_return = returndata
+    r.memory.graft(returndata.slice(Uint256(0), retSize), retOffset)
+    return success.ite(Uint256(1), Uint256(0))
 
 
 def REVERT(r: Runtime, offset: Uint256, size: Uint256) -> Terminate:
@@ -606,6 +660,7 @@ def INVALID(r: Runtime) -> Terminate:
 
 def SELFDESTRUCT(r: Runtime, tx: Transaction, address: Uint256) -> None:
     """FF - Halt execution and register account for later deletion."""
+    r.path.static = False
     raise NotImplementedError("SELFDESTRUCT")
 
 

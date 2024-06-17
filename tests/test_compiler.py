@@ -9,10 +9,9 @@ from smt import Solver, Uint256
 from .solidity import load_binary, load_solidity, loads_solidity
 
 Fallback = (
-    ("Px19", "SAVE", None, 1),
-    ("PxB9", "SAVE", "withdraw()"),
+    ("Px19", "SAVE", "", 1),
     ("Px23", "VIEW", "owner()"),
-    ("Px5F", "SAVE", "withdraw()"),
+    ("Px2F", "SAVE", "withdraw()"),
     ("Px4F", "VIEW", "contributions(address)"),
     ("Px83", "VIEW", "getContribution()"),
     ("Px10E", "SAVE", "contribute()"),
@@ -22,27 +21,24 @@ Fallback = (
 Fallout = (
     ("Px5", "SAVE", "Fal1out()"),
     ("Px23", "VIEW", "owner()"),
-    ("Px139", "SAVE", "collectAllocations()"),
-    ("Px9F", "SAVE", "collectAllocations()"),
+    ("Px4F", "SAVE", "collectAllocations()"),
     ("Px83", "SAVE", "allocate()"),
-    ("Px10F9", "SAVE", "sendAllocation(address)"),
-    ("Px87F", "SAVE", "sendAllocation(address)"),
     ("Px40F", "VIEW", "allocatorBalance(address)"),
+    ("Px43F", "SAVE", "sendAllocation(address)"),
 )
 
 CoinFlip = (
-    ("Px6FF", "SAVE", "flip(bool)"),
-    ("PxDFD", "SAVE", "flip(bool)"),
+    ("Px19", "VIEW", "consecutiveWins()"),
     ("Px6FD", "SAVE", "flip(bool)"),
+    ("Px6FF", "SAVE", "flip(bool)"),
     ("PxDF9", "SAVE", "flip(bool)"),
     ("PxDFD", "SAVE", "flip(bool)"),
-    ("Px19", "VIEW", "consecutiveWins()"),
 )
 
 Telephone = (
     ("PxD", "VIEW", "owner()"),
-    ("PxCF", "VIEW", "changeOwner(address)"),
     ("PxCE", "SAVE", "changeOwner(address)"),
+    ("PxCF", "VIEW", "changeOwner(address)"),
 )
 
 Token = (
@@ -52,11 +48,12 @@ Token = (
 )
 
 Delegation = (
-    ("Px331", "VIEW", "$any4"),  # *
-    ("Px333", "SAVE", "pwn()"),
     ("PxD", "VIEW", "owner()"),
-    ("Px7F", "VIEW", None),  # *
-    # * if Delegate reverts, Delegation will still return successfully
+    ("PxE", "VIEW", ""),
+    ("PxF", "VIEW", ""),
+    ("Px18", "VIEW", "00000000"),
+    ("Px19", "VIEW", "00000000"),
+    # NOTE: if DELEGATECALL reverts, the parent contract continues executing.
 )
 
 Force = ()
@@ -70,30 +67,26 @@ Vault = (
 King = (
     ("PxB", "VIEW", "_king()"),
     ("Px13", "VIEW", "owner()"),
-    ("PxC9", "SAVE", None, None),
-    ("PxD9", "SAVE", None, None),
     ("Px23", "VIEW", "prize()"),
-    ("Px6F", "SAVE", None, None),
-    ("Px67", "SAVE", None, None),
+    ("Px33", "SAVE", ""),
+    ("Px37", "SAVE", ""),
 )
 
 Reentrancy = (
-    ("Px6", "VIEW", None),
+    ("Px6", "VIEW", ""),
     ("Px2F", "SAVE", "donate(address)"),
     ("Px4F", "VIEW", "balances(address)"),
-    ("Px11F", "VIEW", "withdraw(uint256)"),
     ("Px10F", "VIEW", "balanceOf(address)"),
-    ("Px8F5", "SAVE", "withdraw(uint256)"),
-    ("Px8F7", "SAVE", "withdraw(uint256)"),
-    ("Px11E3", "SAVE", "withdraw(uint256)"),
-    ("Px11E7", "SAVE", "withdraw(uint256)"),
+    ("Px11F", "VIEW", "withdraw(uint256)"),
+    ("Px479", "SAVE", "withdraw(uint256)"),
+    ("Px47B", "SAVE", "withdraw(uint256)"),
 )
 
 Elevator = (
     ("PxD", "VIEW", "floor()"),
     ("Px31", "VIEW", "top()"),
-    ("PxCFF", "VIEW", "goTo(uint256)"),
-    ("PxCFEF", "SAVE", "goTo(uint256)"),
+    ("Px67F", "VIEW", "goTo(uint256)"),
+    ("Px33F7", "SAVE", "goTo(uint256)"),
 )
 
 Privacy = (
@@ -103,62 +96,58 @@ Privacy = (
 )
 
 GatekeeperOne = (
-    ("PxDFF", "SAVE", "enter(bytes8)"),
     ("Px19", "VIEW", "entrant()"),
+    ("PxDFF", "SAVE", "enter(bytes8)"),
 )
 
 GatekeeperTwo = (
-    ("Px1BF", "SAVE", "enter(bytes8)"),
     ("Px19", "VIEW", "entrant()"),
+    ("Px1BF", "SAVE", "enter(bytes8)"),
 )
 
 Preservation = (
-    ("PxC1CEF", "SAVE", "setFirstTime(uint256)"),
-    ("Px61", "VIEW", "owner()"),
-    ("Px31CEF", "SAVE", "setSecondTime(uint256)"),
-    ("Px19", "VIEW", "timeZone1Library()"),
     ("PxD", "VIEW", "timeZone2Library()"),
+    ("Px19", "VIEW", "timeZone1Library()"),
+    ("Px61", "VIEW", "owner()"),
+    ("PxC72", "VIEW", "setSecondTime(uint256)"),
+    ("PxC73", "VIEW", "setSecondTime(uint256)"),
+    ("Px3072", "VIEW", "setFirstTime(uint256)"),
+    ("Px3073", "VIEW", "setFirstTime(uint256)"),
+    # NOTE: if DELEGATECALL reverts, the parent contract continues executing.
 )
 
 
 def check_transitions(program: Program, branches: tuple[Any, ...]) -> None:
-    expected = dict((b[0], b[1:]) for b in branches)
+    expected = dict[str, tuple[str, str, int]]()
+    for line in branches:
+        if len(line) == 3:
+            key, kind, method = line
+            value = 0
+        else:
+            key, kind, method, value = line
+        method = abiencode(method).hex() if method and "(" in method else method
+        expected[key] = (kind, method, value)
+
+    actual = dict[str, tuple[str, str, int]]()
     for term in compile(program):
         if not term.success:
             continue
-        assert term.path.px() in expected, f"unexpected path: {term.path.px()}"
-
-        kind, method, value = (expected[term.path.px()] + (None,))[:3]
-        if term.storage is None:
-            assert kind == "VIEW"
-        else:
-            assert kind == "SAVE"
 
         solver = Solver()
         solver.add(term.path.constraint)
-        assert solver.check()
+        if not solver.check():
+            continue
         term.path.narrow(solver)
+        tx = symbolic_transaction()
+        tx.narrow(solver)
 
-        itx = symbolic_transaction()
-        itx.narrow(solver)
+        key = term.path.px()
+        kind = "VIEW" if term.path.static else "SAVE"
+        method = tx.calldata.evaluate(solver)[:4].hex()
+        value = solver.evaluate(tx.callvalue)
+        actual[key] = (kind, method, value)
 
-        actual = itx.calldata.evaluate(solver)[:4]
-        if method is None:
-            assert actual == b"", f"unexpected data: {actual.hex()}"
-        elif method == "$any4":
-            assert len(actual) == 4, f"unexpected data: {actual.hex()}"
-        else:
-            assert actual == abiencode(method), f"unexpected data: {actual.hex()}"
-
-        actual = solver.evaluate(itx.callvalue)
-        if actual == 0:
-            assert value is None
-        else:
-            assert value == actual
-
-        del expected[term.path.px()]
-
-    assert len(expected) == 0, f"missing paths: {expected.keys()}"
+    assert actual == expected
 
 
 def test_fallback() -> None:

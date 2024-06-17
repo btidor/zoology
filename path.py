@@ -45,7 +45,7 @@ class Path(Substitutable):
     # that there are no hash collisions. To do this, we log every SHA3 call in
     # the path.
     #
-    # Note: other types of preimage attacks are legal!
+    # NOTE: other types of preimage attacks are legal!
     #
     free: list[tuple[Bytes, Uint256]] = field(default_factory=list)
     symbolic: list[tuple[Uint[Any], Uint256]] = field(default_factory=list)

@@ -10,6 +10,7 @@ from disassembler import Program, disassemble
 from path import Path, concrete_hash
 from smt import (
     Array,
+    Constraint,
     Solver,
     Substitutable,
     Uint8,
@@ -93,7 +94,7 @@ class Transaction(Substitutable):
     gasprice: Uint256 = Uint256(0x12)
 
     def narrow(self, solver: Solver) -> None:
-        """Apply soft  constraints to a given solver instance."""
+        """Apply soft constraints to a given solver instance."""
         # Minimize calldata length
         for i in range(257):
             constraint = self.calldata.length == Uint256(i)
@@ -126,7 +127,7 @@ class Runtime:
     memory: Memory = field(default_factory=Memory)
     latest_return: Bytes = Bytes()
 
-    hyper: list[Hypercall] = field(default_factory=list)
+    hyper: list[Hyper] = field(default_factory=list)
 
     def __lt__(self, other: Any) -> bool:
         if not isinstance(other, Runtime):
@@ -139,15 +140,15 @@ class Terminus(Substitutable):
     """The result of running a contract to completion."""
 
     path: Path
-    hyper: tuple[Hypercall, ...]
+    hyper: tuple[Hyper, ...]
 
     success: bool
     returndata: Bytes
 
-    storage: Array[Uint256, Uint256] | None  # unset if static or reverted
+    storage: Array[Uint256, Uint256] | None
 
 
-@dataclass
+@dataclass(frozen=True)
 class HyperGlobal[*P](Substitutable):
     """A hypercall for getting information from global state."""
 
@@ -157,7 +158,7 @@ class HyperGlobal[*P](Substitutable):
     result: Uint256
 
 
-@dataclass
+@dataclass(frozen=True)
 class HyperCreate(Substitutable):
     """A CREATE/CREATE2 hypercall."""
 
@@ -169,4 +170,20 @@ class HyperCreate(Substitutable):
     address: Uint160  # zero on failure
 
 
-type Hypercall = HyperGlobal[Any, Any] | HyperCreate
+@dataclass(frozen=True)
+class HyperCall(Substitutable):
+    """A CALL/DELEGATECALL/STATICCALL hypercall."""
+
+    gas: Uint256
+    address: Uint160
+    callvalue: Uint256
+    calldata: Bytes
+
+    success: Constraint
+    returndata: Bytes
+
+    static: bool = False
+    delegate: bool = False
+
+
+type Hyper = HyperGlobal[Any, Any] | HyperCreate | HyperCall
