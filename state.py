@@ -24,7 +24,7 @@ class Blockchain:
     """Durable global state, persists across transactions."""
 
     contracts: dict[Address, Contract] = field(default_factory=dict)
-    balance: Array[Uint160, Uint256] = field(
+    balances: Array[Uint160, Uint256] = field(
         # address -> balance in wei
         default_factory=lambda: Array[Uint160, Uint256](Uint256(0))
     )

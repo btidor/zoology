@@ -12,6 +12,7 @@ from smt import (
     Constraint,
     NarrowingError,
     Solver,
+    Substitutions,
     Uint,
     Uint256,
     concat_bytes,
@@ -224,3 +225,29 @@ class Path:
             concretized.append((vector1, digest1))
 
         return concretized
+
+    def update_substitutions(self) -> Substitutions:
+        """After term substitution, handle newly concrete hashes."""
+        subs: Substitutions = []
+
+        symbolic = list[tuple[Uint[Any], Uint256]]()
+        for vector, digest in self.symbolic:
+            if (v := vector.reveal()) is None:
+                symbolic.append((vector, digest))
+            else:
+                data = v.to_bytes(vector.width // 8)
+                concrete = concrete_hash(data)
+                subs.append((digest, concrete))
+                self.concrete[data] = (vector, concrete)
+        self.symbolic = symbolic
+
+        free = list[tuple[Bytes, Uint256]]()
+        for input, digest in self.free:
+            if (data := input.reveal()) is None:
+                free.append((input, digest))
+            else:
+                concrete = concrete_hash(data)
+                subs.append((digest, concrete))
+                self.concrete[data] = (input.bigvector(), concrete)
+        self.free = free
+        return subs

@@ -9,7 +9,6 @@ from typing import (
     Any,
     Literal,
     TypeAlias,
-    cast,
 )
 
 from Crypto.Hash import keccak
@@ -131,16 +130,18 @@ type Substitutions = list[tuple[Expression, Expression]]
 
 def substitutions[R](before: R, after: R) -> Substitutions:
     """Extract substitution pairs from the given state objects."""
-    subs: Substitutions = []
-    if not hasattr(before, "__dict__"):
+    if isinstance(before, Symbolic) or isinstance(before, Array):
+        return [(before, after)]  # type: ignore
+    elif hasattr(before, "__substitutions__"):
+        return list(
+            zip(before.__substitutions__(), after.__substitutions__()),  # type: ignore
+        )
+    elif hasattr(before, "__dict__"):
+        subs: Substitutions = []
+        for k, v in before.__dict__.items():
+            subs.extend(substitutions(v, after.__dict__[k]))
         return subs
-    for k, v in before.__dict__.items():
-        w = after.__dict__[k]
-        if isinstance(v, Symbolic) or isinstance(v, Array):
-            subs.append((cast(Any, v), w))
-        elif hasattr(v, "__substitutions__"):
-            subs.extend(zip(v.__substitutions__(), w.__substitutions__()))
-    return subs
+    return []
 
 
 def substitute[R](item: R, subs: Substitutions) -> R:
@@ -163,7 +164,7 @@ def substitute[R](item: R, subs: Substitutions) -> R:
         case dict():
             return dict((k, substitute(v, subs)) for k, v in item.items())  # type: ignore
         case _:
-            if not hasattr(item, "__dict__"):
+            if not hasattr(item, "__dict__") or callable(item):
                 return item
             result = item.__new__(item.__class__)
             for k, v in item.__dict__.items():

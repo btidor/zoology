@@ -216,7 +216,7 @@ def ADDRESS(tx: Transaction) -> Uint256:
 
 def BALANCE(k: Blockchain, address: Uint256) -> Uint256:
     """31 - Get balance of the given account."""
-    return k.balance[address.into(Uint160)]
+    return k.balances[address.into(Uint160)]
 
 
 def ORIGIN(tx: Transaction) -> Uint256:
@@ -359,7 +359,7 @@ def CHAINID(blk: Block) -> Uint256:
 
 def SELFBALANCE(k: Blockchain, tx: Transaction) -> Uint256:
     """47 - Get balance of currently executing account."""
-    return k.balance[tx.address]
+    return k.balances[tx.address]
 
 
 def BASEFEE(blk: Block) -> Uint256:

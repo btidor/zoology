@@ -9,9 +9,7 @@ from disassembler import Program, disassemble
 from smt import (
     Array,
     Constraint,
-    Solver,
     Substitutions,
-    Uint64,
     Uint160,
     Uint256,
     substitute,
@@ -46,51 +44,63 @@ def execute(
     )
     if program is None:
         program = blockchain.contracts[address].program
-
-    static = substitutions(symbolic_block(), block) + substitutions(
+    subs = substitutions(symbolic_block(), block) + substitutions(
         symbolic_transaction(),
         transaction,
     )
 
     for term in compile(program):
-        subs = copy.copy(static) + [
+        k = copy.deepcopy(blockchain)
+        term = rsubstitute(term, subs)
+        extra: Substitutions = [
             (Array[Uint256, Uint256]("STORAGE"), blockchain.contracts[address].storage),
             (Array[Uint160, Uint256]("BALANCE"), Array[Uint160, Uint256](Uint256(0))),
         ]
-        term, k = substitute(term, subs), substitute(blockchain, subs)
-        for hyper in term.hyper:
+        term = rsubstitute(term, extra)
+        for i in range(len(term.hyper)):
+            hyper = term.hyper[i]
             match hyper:
                 case HyperGlobal():
-                    k, subs = hyperglobal(hyper, k)
+                    k, term = hyperglobal(hyper, k, term)
                 case HyperCreate():
-                    k, subs = hypercreate(hyper, k, term)
+                    k, term = hypercreate(hyper, k, term)
                 case HyperCall():
-                    k, subs = hypercall(hyper, k, program)
-            term, k = substitute(term, subs), substitute(k, subs)
+                    k, term = hypercall(hyper, k, term, address, program)
 
-        # TODO: make Path produce SHA3 substitutions to keep everything
-        # concrete...
-        solver = Solver()
-        solver.add(term.path.constraint)
-        if solver.check():
-            term.path.narrow(solver)
-            return term, k
+        match term.path.constraint.reveal():
+            case True:
+                return term, k
+            case False:
+                pass
+            case None:
+                raise ValueError(
+                    f"expected concrete constraint: {term.path.constraint}"
+                )
 
     raise RuntimeError("no termination matched")
 
 
+def rsubstitute(term: Terminus, subs: Substitutions) -> Terminus:
+    """Recursively perform term substitution on the given Terminus."""
+    term = substitute(term, subs)
+    while extra := term.path.update_substitutions():
+        term = substitute(term, extra)
+    return term
+
+
 def hyperglobal(
-    h: HyperGlobal[Any, Any], k: Blockchain
-) -> tuple[Blockchain, Substitutions]:
+    h: HyperGlobal[Any, Any], k: Blockchain, term: Terminus
+) -> tuple[Blockchain, Terminus]:
     """Simulate a concrete global-state hypercall."""
     input = [k if arg is None else arg for arg in h.input]
     result = h.fn(*input)
-    return k, [(h.result, result)]
+    term = rsubstitute(term, [(h.result, result)])
+    return k, term
 
 
 def hypercreate(
     h: HyperCreate, k: Blockchain, term: Terminus
-) -> tuple[Blockchain, Substitutions]:
+) -> tuple[Blockchain, Terminus]:
     """Simulate a concrete CREATE hypercall."""
     sender = Address.unwrap(h.sender, "CREATE/CREATE2")
     if h.salt is None:
@@ -119,23 +129,38 @@ def hypercreate(
     else:
         del k.contracts[address]
 
-    return k, [(h.address, Uint160(address if t.success else 0))]
+    term = rsubstitute(term, [(h.address, Uint160(address if t.success else 0))])
+    return k, term
 
 
 def hypercall(
-    h: HyperCall, k: Blockchain, program: Program
-) -> tuple[Blockchain, Substitutions]:
+    h: HyperCall, k: Blockchain, term: Terminus, sender: Address, program: Program
+) -> tuple[Blockchain, Terminus]:
     """Simulate a concrete CALL, etc. hypercall."""
     address = Address.unwrap(h.address, "CALL/DELEGATECALL/STATICCALL")
     assert (data := h.calldata.reveal()) is not None
     assert (value := h.callvalue.reveal()) is not None
     override = program if h.delegate else None
-    t, k = execute(k, address, data, value, override)
-    if h.static:
-        assert t.path.static
-    tmp: Uint64 = t.returndata.length.into(Uint64)
-    return k, [
-        (h.success, Constraint(t.success)),
-        (h.returndata.length.into(Uint64), tmp),
-        (h.returndata.array, t.returndata.array),
-    ]
+
+    assert (
+        k.balances[Uint160(sender)] >= h.callvalue
+    ).reveal() is True, "insufficient balance for CALL"
+    k.balances[Uint160(sender)] -= h.callvalue
+    assert (
+        k.balances[Uint160(address)] + h.callvalue >= k.balances[Uint160(address)]
+    ).reveal() is True, "CALL overflows destination account"
+    k.balances[Uint160(address)] += h.callvalue
+
+    if address in k.contracts:
+        t, k = execute(k, address, data, value, override)
+        if h.static:
+            assert t.path.static
+        assert (data := t.returndata.reveal()) is not None
+        subs: Substitutions = [(h.success, Constraint(t.success))] + substitutions(
+            h.returndata, Bytes(data)
+        )
+    else:
+        subs: Substitutions = [(h.success, Constraint(True))] + substitutions(
+            h.returndata, Bytes()
+        )
+    return k, rsubstitute(term, subs)

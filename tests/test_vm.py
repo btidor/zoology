@@ -3,11 +3,11 @@
 from bytes import Bytes
 from compiler import compile, symbolic_block, symbolic_transaction
 from disassembler import Program, abiencode, disassemble
-from smt import Uint256, substitute
+from smt import Uint160, Uint256, substitute
 from state import Address, Block, Blockchain, Contract, Terminus, Transaction
 from vm import execute, substitutions
 
-from .solidity import load_binary, load_solidity
+from .solidity import load_binary, load_solidity, loads_solidity
 
 ADDRESS = Address(0xADADADADADADADADADADADADADADADADADADADAD)
 
@@ -33,6 +33,7 @@ def test_basic() -> None:
 def _execute(program: Program, calldata: bytes = b"", callvalue: int = 0) -> Terminus:
     k = Blockchain()
     k.contracts = {ADDRESS: Contract(program)}
+    k.balances[Uint160(ADDRESS)] = Uint256(10**10)
     term, k = execute(k, ADDRESS, calldata, callvalue)
     return term
 
@@ -112,6 +113,7 @@ def test_delegation() -> None:
         }
     )
     k.contracts[ADDRESS].storage[Uint256(1)] = Uint256(0x8001)
+    k.balances[Uint160(ADDRESS)] = Uint256(10**10)
     calldata = abiencode("pwn()")
     term, _ = execute(k, ADDRESS, calldata)
 
@@ -145,7 +147,7 @@ def test_king() -> None:
 
     assert term.success is True
     assert term.returndata.reveal() == b""
-    assert term.storage is None
+    assert term.storage is not None
 
 
 def test_reentrancy() -> None:
@@ -166,6 +168,7 @@ def test_elevator() -> None:
             ADDRESS: Contract(programs["Elevator"]),
         }
     )
+    k.balances[Uint160(ADDRESS)] = Uint256(10**10)
 
     calldata = abiencode("goTo(uint256)") + (1).to_bytes(32)
     term, _ = execute(k, ADDRESS, calldata)
@@ -218,6 +221,7 @@ def test_preservation() -> None:
     )
     k.contracts[ADDRESS].storage[Uint256(0)] = Uint256(library)
     k.contracts[ADDRESS].storage[Uint256(1)] = Uint256(library)
+    k.balances[Uint160(ADDRESS)] = Uint256(10**10)
 
     calldata = abiencode("setFirstTime(uint256)") + (0x5050).to_bytes(32)
     term, _ = execute(k, ADDRESS, calldata)

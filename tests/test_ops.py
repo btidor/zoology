@@ -254,7 +254,7 @@ def test_ADDRESS() -> None:
 
 def test_BALANCE() -> None:
     k = Blockchain()
-    k.balance[Uint160(0x9BBFED6889322E016E0A02EE459D306FC19545D8)] = Uint256(125985)
+    k.balances[Uint160(0x9BBFED6889322E016E0A02EE459D306FC19545D8)] = Uint256(125985)
     assert (
         BALANCE(k, Uint256(0x9BBFED6889322E016E0A02EE459D306FC19545D8)).reveal()
         == 125985
