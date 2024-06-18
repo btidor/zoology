@@ -29,6 +29,16 @@ class Blockchain:
         default_factory=lambda: Array[Uint160, Uint256](Uint256(0))
     )
 
+    def transfer(self, src: Uint160, dst: Uint160, value: Uint256) -> None:
+        """Transfer value between accounts (checked)."""
+        ok = self.balances[src] >= value
+        assert ok.reveal() is True, "insufficient/unknown balance"
+        self.balances[src] -= value
+
+        ok = self.balances[dst] + value >= self.balances[dst]
+        assert ok.reveal() is True, "balance overflows or is unknown"
+        self.balances[dst] += value
+
 
 @dataclass
 class Contract:
@@ -162,9 +172,8 @@ class HyperGlobal[*P]:
 class HyperCreate:
     """A CREATE/CREATE2 hypercall."""
 
+    callvalue: Uint256
     initcode: Bytes
-    value: Uint256
-    sender: Uint160
     salt: Uint256 | None  # for CREATE2
 
     address: Uint160  # zero on failure

@@ -504,9 +504,8 @@ def CREATE(
     """F0 - Create a new account with associated code."""
     r.path.static = False
     hyper = HyperCreate(
+        callvalue=value,
         initcode=r.memory.slice(offset, size),
-        value=value,
-        sender=tx.address,
         salt=None,
         address=Uint160(f"CREATE{len(r.hyper)}"),
     )
@@ -578,7 +577,6 @@ def DELEGATECALL(
     Message-call into this account with an alternative account's code, but
     persisting the current values for sender and value.
     """
-    # TODO: persist sender
     success = Constraint(f"CALLOK{len(r.hyper)}")
     returndata = Bytes.symbolic(f"CALLRET{len(r.hyper)}")
     hyper = HyperCall(
@@ -607,9 +605,8 @@ def CREATE2(
     """F5 - Create a new account with associated code at a predictable address."""
     r.path.static = False
     hyper = HyperCreate(
+        callvalue=value,
         initcode=r.memory.slice(offset, size),
-        value=value,
-        sender=tx.address,
         salt=salt,
         address=Uint160(f"CREATE{len(r.hyper)}"),
     )

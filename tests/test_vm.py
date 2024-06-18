@@ -34,7 +34,12 @@ def _execute(program: Program, calldata: bytes = b"", callvalue: int = 0) -> Ter
     k = Blockchain()
     k.contracts = {ADDRESS: Contract(program)}
     k.balances[Uint160(ADDRESS)] = Uint256(10**10)
-    term, k = execute(k, ADDRESS, calldata, callvalue)
+    tx = Transaction(
+        address=Uint160(ADDRESS),
+        callvalue=Uint256(callvalue),
+        calldata=Bytes(calldata),
+    )
+    term, k = execute(k, tx)
     return term
 
 
@@ -67,8 +72,11 @@ def test_coinflip() -> None:
         0x8000000000000000000000000000000000000000000000000000000000000000
     )
 
-    calldata = abiencode("flip(bool)") + (0).to_bytes(32)
-    term, _ = execute(k, ADDRESS, calldata)
+    tx = Transaction(
+        address=Uint160(ADDRESS),
+        calldata=Bytes(abiencode("flip(bool)") + (0).to_bytes(32)),
+    )
+    term, _ = execute(k, tx)
 
     assert term.success is True
     assert term.storage is not None
@@ -114,8 +122,12 @@ def test_delegation() -> None:
     )
     k.contracts[ADDRESS].storage[Uint256(1)] = Uint256(0x8001)
     k.balances[Uint160(ADDRESS)] = Uint256(10**10)
-    calldata = abiencode("pwn()")
-    term, _ = execute(k, ADDRESS, calldata)
+
+    tx = Transaction(
+        address=Uint160(ADDRESS),
+        calldata=Bytes(abiencode("pwn()")),
+    )
+    term, _ = execute(k, tx)
 
     assert term.success is True
     assert term.returndata.reveal() == b""
@@ -170,8 +182,11 @@ def test_elevator() -> None:
     )
     k.balances[Uint160(ADDRESS)] = Uint256(10**10)
 
-    calldata = abiencode("goTo(uint256)") + (1).to_bytes(32)
-    term, _ = execute(k, ADDRESS, calldata)
+    tx = Transaction(
+        address=Uint160(ADDRESS),
+        calldata=Bytes(abiencode("goTo(uint256)") + (1).to_bytes(32)),
+    )
+    term, _ = execute(k, tx)
 
     assert term.success is True
     assert term.returndata.reveal() == b""
@@ -182,8 +197,11 @@ def test_privacy() -> None:
     k = Blockchain(contracts={ADDRESS: Contract(program)})
     k.contracts[ADDRESS].storage[Uint256(5)] = Uint256(0x4321 << 128)
 
-    calldata = abiencode("unlock(bytes16)") + (0x4321 << 128).to_bytes(32)
-    term, _ = execute(k, ADDRESS, calldata)
+    tx = Transaction(
+        address=Uint160(ADDRESS),
+        calldata=Bytes(abiencode("unlock(bytes16)") + (0x4321 << 128).to_bytes(32)),
+    )
+    term, _ = execute(k, tx)
 
     assert term.success is True
     assert term.returndata.reveal() == b""
@@ -223,8 +241,11 @@ def test_preservation() -> None:
     k.contracts[ADDRESS].storage[Uint256(1)] = Uint256(library)
     k.balances[Uint160(ADDRESS)] = Uint256(10**10)
 
-    calldata = abiencode("setFirstTime(uint256)") + (0x5050).to_bytes(32)
-    term, _ = execute(k, ADDRESS, calldata)
+    tx = Transaction(
+        address=Uint160(ADDRESS),
+        calldata=Bytes(abiencode("setFirstTime(uint256)") + (0x5050).to_bytes(32)),
+    )
+    term, _ = execute(k, tx)
 
     assert term.success is True
     assert term.returndata.reveal() == b""

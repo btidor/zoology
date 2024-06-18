@@ -143,7 +143,7 @@ class ByteSlice(Bytes):
         self.data = None
 
     def __substitutions__(self) -> tuple[Expression, ...]:
-        raise NotImplementedError
+        raise NotImplementedError  # only Bytes is supported
 
     def __getitem__(self, i: Uint256) -> Uint8:
         item = self.inner[self.offset + i]
@@ -198,9 +198,6 @@ class Memory:
         self.wordcache = dict[int, Uint256]()
         for i, b in enumerate(data):
             self[Uint256(i)] = BYTES[b]
-
-    def __substitutions__(self) -> tuple[Expression, ...]:
-        raise NotImplementedError
 
     def __getitem__(self, i: Uint256) -> Uint8:
         if (i < self.length).reveal() is False:

@@ -29,53 +29,36 @@ from state import (
 
 
 def execute(
-    blockchain: Blockchain,
-    address: Address,
-    calldata: bytes = b"",
-    callvalue: int = 0,
-    program: Program | None = None,
+    ki: Blockchain, tx: Transaction, program: Program | None = None
 ) -> tuple[Terminus, Blockchain]:
     """Execute a program with concrete inputs."""
-    block, input, value = Block(), Bytes(calldata), Uint256(callvalue)
-    transaction = Transaction(
-        address=Uint160(address),
-        callvalue=value,
-        calldata=input,
-    )
+    block, address = Block(), Address.unwrap(tx.address, "execute")
     if program is None:
-        program = blockchain.contracts[address].program
-    subs = substitutions(symbolic_block(), block) + substitutions(
-        symbolic_transaction(),
-        transaction,
-    )
+        program = ki.contracts[address].program
+
+    subs = [
+        *substitutions(symbolic_block(), block),
+        *substitutions(symbolic_transaction(), tx),
+        (Array[Uint256, Uint256]("STORAGE"), ki.contracts[address].storage),
+        (Array[Uint160, Uint256]("BALANCE"), Array[Uint160, Uint256](Uint256(0))),
+    ]
 
     for term in compile(program):
-        k = copy.deepcopy(blockchain)
+        k = copy.deepcopy(ki)
         term = rsubstitute(term, subs)
-        extra: Substitutions = [
-            (Array[Uint256, Uint256]("STORAGE"), blockchain.contracts[address].storage),
-            (Array[Uint160, Uint256]("BALANCE"), Array[Uint160, Uint256](Uint256(0))),
-        ]
-        term = rsubstitute(term, extra)
         for i in range(len(term.hyper)):
             hyper = term.hyper[i]
             match hyper:
                 case HyperGlobal():
-                    k, term = hyperglobal(hyper, k, term)
+                    k, term = hyperglobal(hyper, k, tx, term)
                 case HyperCreate():
-                    k, term = hypercreate(hyper, k, term)
+                    k, term = hypercreate(hyper, k, tx, term)
                 case HyperCall():
-                    k, term = hypercall(hyper, k, term, address, program)
+                    k, term = hypercall(hyper, k, tx, term)
 
-        match term.path.constraint.reveal():
-            case True:
-                return term, k
-            case False:
-                pass
-            case None:
-                raise ValueError(
-                    f"expected concrete constraint: {term.path.constraint}"
-                )
+        assert (ok := term.path.constraint.reveal()) is not None
+        if ok:
+            return term, k
 
     raise RuntimeError("no termination matched")
 
@@ -89,7 +72,7 @@ def rsubstitute(term: Terminus, subs: Substitutions) -> Terminus:
 
 
 def hyperglobal(
-    h: HyperGlobal[Any, Any], k: Blockchain, term: Terminus
+    h: HyperGlobal[Any, Any], k: Blockchain, _tx: Transaction, term: Terminus
 ) -> tuple[Blockchain, Terminus]:
     """Simulate a concrete global-state hypercall."""
     input = [k if arg is None else arg for arg in h.input]
@@ -99,10 +82,10 @@ def hyperglobal(
 
 
 def hypercreate(
-    h: HyperCreate, k: Blockchain, term: Terminus
+    h: HyperCreate, k: Blockchain, txi: Transaction, term: Terminus
 ) -> tuple[Blockchain, Terminus]:
     """Simulate a concrete CREATE hypercall."""
-    sender = Address.unwrap(h.sender, "CREATE/CREATE2")
+    sender = Address.unwrap(txi.address, "CREATE/CREATE2")
     if h.salt is None:
         # https://ethereum.stackexchange.com/a/761
         nonce = k.contracts[sender].nonce
@@ -115,15 +98,23 @@ def hypercreate(
         digest = term.path.keccak256(h.initcode)
         assert (hash := digest.reveal()) is not None
         seed = b"\xff" + sender.to_bytes(20) + salt.to_bytes(32) + hash.to_bytes(32)
-
     address = Address.unwrap(term.path.keccak256(Bytes(seed)).into(Uint160))
+
+    tx = Transaction(
+        origin=txi.origin,
+        caller=txi.address,
+        address=Uint160(address),
+        callvalue=h.callvalue,
+        calldata=Bytes(),
+        gasprice=txi.gasprice,
+    )
     k.contracts[sender].nonce += 1
     k.contracts[address] = Contract(
         program=disassemble(Bytes()),  # during init, length is zero
     )
-    # TODO: customize tx for initcode execution; transfer value
+    k.transfer(tx.caller, tx.address, tx.callvalue)
 
-    t, k = execute(k, address, program=disassemble(h.initcode))
+    t, k = execute(k, tx, program=disassemble(h.initcode))
     if t.success:
         k.contracts[address].program = disassemble(t.returndata)
     else:
@@ -134,30 +125,30 @@ def hypercreate(
 
 
 def hypercall(
-    h: HyperCall, k: Blockchain, term: Terminus, sender: Address, program: Program
+    h: HyperCall, k: Blockchain, txi: Transaction, term: Terminus
 ) -> tuple[Blockchain, Terminus]:
     """Simulate a concrete CALL, etc. hypercall."""
     address = Address.unwrap(h.address, "CALL/DELEGATECALL/STATICCALL")
-    assert (data := h.calldata.reveal()) is not None
-    assert (value := h.callvalue.reveal()) is not None
-    override = program if h.delegate else None
-
-    assert (
-        k.balances[Uint160(sender)] >= h.callvalue
-    ).reveal() is True, "insufficient balance for CALL"
-    k.balances[Uint160(sender)] -= h.callvalue
-    assert (
-        k.balances[Uint160(address)] + h.callvalue >= k.balances[Uint160(address)]
-    ).reveal() is True, "CALL overflows destination account"
-    k.balances[Uint160(address)] += h.callvalue
+    assert (calldata := h.calldata.reveal()) is not None
+    tx = Transaction(
+        origin=txi.origin,
+        caller=txi.caller if h.delegate else txi.address,
+        address=txi.address if h.delegate else h.address,
+        callvalue=h.callvalue,
+        calldata=Bytes(calldata),
+        gasprice=txi.gasprice,
+    )
+    if not h.delegate:
+        k.transfer(tx.caller, tx.address, h.callvalue)
 
     if address in k.contracts:
-        t, k = execute(k, address, data, value, override)
+        program = k.contracts[address].program if h.delegate else None
+        t, k = execute(k, tx, program)
         if h.static:
             assert t.path.static
-        assert (data := t.returndata.reveal()) is not None
+        assert (returndata := t.returndata.reveal()) is not None
         subs: Substitutions = [(h.success, Constraint(t.success))] + substitutions(
-            h.returndata, Bytes(data)
+            h.returndata, Bytes(returndata)
         )
     else:
         subs: Substitutions = [(h.success, Constraint(True))] + substitutions(
