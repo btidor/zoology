@@ -3,7 +3,7 @@
 from bytes import Bytes
 from compiler import compile, symbolic_block, symbolic_transaction
 from disassembler import Program, abiencode, disassemble
-from smt import Uint160, Uint256, substitute
+from smt import Uint160, Uint256
 from snapshot import LEVEL_FACTORIES, snapshot_contracts
 from state import Address, Block, Blockchain, Contract, Terminus, Transaction
 from vm import execute, substitutions
@@ -26,7 +26,7 @@ def test_basic() -> None:
     subs = substitutions(symbolic_block(), Block()) + substitutions(
         symbolic_transaction(), Transaction()
     )
-    term = substitute(terms[0], subs)
+    term = terms[0].substitute(subs)
     assert not term.success
     assert term.returndata.reveal() == b""
 

@@ -12,7 +12,6 @@ from smt import (
     Substitutions,
     Uint160,
     Uint256,
-    substitute,
     substitutions,
 )
 from state import (
@@ -45,7 +44,7 @@ def execute(
 
     for term in compile(program):
         k = copy.deepcopy(ki)
-        term = rsubstitute(term, subs)
+        term = term.substitute(subs)
 
         for i in range(len(term.hyper)):
             hyper = term.hyper[i]
@@ -66,21 +65,13 @@ def execute(
     raise RuntimeError("no termination matched")
 
 
-def rsubstitute(term: Terminus, subs: Substitutions) -> Terminus:
-    """Recursively perform term substitution on the given Terminus."""
-    term = substitute(term, subs)
-    while extra := term.path.update_substitutions():
-        term = substitute(term, extra)
-    return term
-
-
 def hyperglobal(
     h: HyperGlobal[Any, Any], k: Blockchain, _tx: Transaction, term: Terminus
 ) -> tuple[Blockchain, Terminus]:
     """Simulate a concrete global-state hypercall."""
     input = [k if arg is None else arg for arg in h.input]
     result = h.fn(*input)
-    term = rsubstitute(term, [(h.result, result)])
+    term = term.substitute([(h.result, result)])
     return k, term
 
 
@@ -129,7 +120,7 @@ def hypercreate(
         (h.address, Uint160(address if t.success else 0)),
     ]
     subs.append((after, k.contracts[sender].storage))
-    term = rsubstitute(term, subs)
+    term = term.substitute(subs)
     return k, term
 
 
@@ -170,4 +161,4 @@ def hypercall(
             (h.success, Constraint(True)),
             *substitutions(h.returndata, Bytes()),
         ]
-    return k, rsubstitute(term, subs)
+    return k, term.substitute(subs)

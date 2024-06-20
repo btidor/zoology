@@ -13,9 +13,11 @@ from smt import (
     Array,
     Constraint,
     Solver,
+    Substitutions,
     Uint8,
     Uint160,
     Uint256,
+    substitute,
 )
 
 
@@ -156,6 +158,18 @@ class Terminus:
     returndata: Bytes
 
     storage: Array[Uint256, Uint256] | None
+
+    def substitute(self, subs: Substitutions) -> Self:
+        """
+        Perform term substitution.
+
+        If any SHA3 hashes become concrete, term substitution will be
+        recursively re-applied until no more hashes can be resolved.
+        """
+        term = substitute(self, subs)
+        while extra := term.path.update_substitutions():
+            term = substitute(term, extra)
+        return term
 
 
 @dataclass(frozen=True)
