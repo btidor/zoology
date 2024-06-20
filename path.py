@@ -245,7 +245,7 @@ class Path:
         for input, digest in self.free:
             if (data := input.reveal()) is None:
                 free.append((input, digest))
-            else:
+            elif data:
                 concrete = concrete_hash(data)
                 subs.append((digest, concrete))
                 self.concrete[data] = (input.bigvector(), concrete)

@@ -9,13 +9,13 @@ from bytes import BYTES, Bytes, Memory
 from disassembler import Program, disassemble
 from path import Path
 from smt import (
+    STARTING_HASHES,
     Array,
     Constraint,
     Solver,
     Uint8,
     Uint160,
     Uint256,
-    concrete_hash,
 )
 
 
@@ -87,8 +87,8 @@ class Block:
     @classmethod
     def _concrete_hashes(cls) -> Array[Uint8, Uint256]:
         hashes = Array[Uint8, Uint256](Uint256(0))
-        for n in range(256):
-            hashes[BYTES[n]] = concrete_hash((n).to_bytes())
+        for n, hash in enumerate(STARTING_HASHES):
+            hashes[BYTES[n]] = hash
         return hashes
 
 
@@ -176,6 +176,11 @@ class HyperCreate:
     initcode: Bytes
     salt: Uint256 | None  # for CREATE2
 
+    storage: tuple[
+        Array[Uint256, Uint256],  # before
+        Array[Uint256, Uint256],  # after
+    ]
+
     address: Uint160  # zero on failure
 
 
@@ -183,10 +188,14 @@ class HyperCreate:
 class HyperCall:
     """A CALL/DELEGATECALL/STATICCALL hypercall."""
 
-    gas: Uint256
     address: Uint160
     callvalue: Uint256
     calldata: Bytes
+
+    storage: tuple[
+        Array[Uint256, Uint256],  # before
+        Array[Uint256, Uint256] | None,  # after
+    ]
 
     success: Constraint
     returndata: Bytes

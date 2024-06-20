@@ -123,6 +123,8 @@ def concrete_hash(data: bytes | str) -> Uint256:
 
 EMPTY_DIGEST = concrete_hash(b"")
 
+STARTING_HASHES = [concrete_hash(n.to_bytes()) for n in range(256)]
+
 # Substitution
 
 type Substitutions = list[tuple[Expression, Expression]]

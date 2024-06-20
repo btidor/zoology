@@ -10,6 +10,7 @@ from zbitvector import Solver
 from bytes import Bytes
 from compiler import compile, symbolic_transaction
 from disassembler import abiencode, decode_instruction, disassemble
+from smt import Uint160, Uint256
 from snapshot import (
     COUNT,
     LEVEL_FACTORIES,
@@ -17,7 +18,7 @@ from snapshot import (
     download_contract,
     snapshot_contracts,
 )
-from state import Address, Blockchain, Contract
+from state import Address, Blockchain, Contract, Transaction
 from vm import execute
 
 
@@ -74,7 +75,12 @@ def _execute(lc: int | bytes, calldata: bytes) -> None:
         address = Address(0x1234)
         k.contracts[address] = Contract(disassemble(Bytes(lc)))
 
-    term, k = execute(k, address, calldata)
+    tx = Transaction(
+        address=Uint160(address),
+        calldata=Bytes(calldata),
+    )
+    k, term = execute(k, tx)
+
     print("RETURN" if term.success else "REVERT", end=" ")
     solver = Solver()
     solver.add(term.path.constraint)
@@ -103,15 +109,18 @@ def _load(level: int) -> bytes:
 def __load(level: int) -> tuple[Blockchain, Address]:
     factory = LEVEL_FACTORIES[level]
     k = snapshot_contracts(factory)
-    original = set(k.contracts.keys())
+    tx = Transaction(
+        address=Uint160(factory),
+        calldata=Bytes(abiencode("createInstance(address)") + (0xB).to_bytes(32)),
+        callvalue=Uint256(10**15),
+    )
+    k.balances[tx.address] = Uint256(10**15)
 
-    input = abiencode("createInstance(address)") + (0xB).to_bytes(32)
-    term, k = execute(k, factory, input, 0)
-    assert term.success
+    k, term = execute(k, tx)
+    assert (data := term.returndata.reveal()) is not None
+    assert term.success, data
 
-    added = [k for k in k.contracts.keys() if k not in original]
-    assert len(added) == 1
-    return k, added[0]
+    return k, Address(int.from_bytes(data))
 
 
 if __name__ == "__main__":

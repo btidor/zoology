@@ -8,6 +8,7 @@ from bytes import Bytes
 from disassembler import Instruction
 from opcodes import REFERENCE, SPECIAL, UNIMPLEMENTED
 from smt import (
+    Array,
     Constraint,
     Int,
     Uint,
@@ -498,17 +499,18 @@ def LOG(ins: Instruction, r: Runtime, offset: Uint256, size: Uint256) -> None:
         r.stack.pop()  # we don't actually save the log entries anywhere
 
 
-def CREATE(
-    r: Runtime, tx: Transaction, value: Uint256, offset: Uint256, size: Uint256
-) -> Uint256:
+def CREATE(r: Runtime, value: Uint256, offset: Uint256, size: Uint256) -> Uint256:
     """F0 - Create a new account with associated code."""
     r.path.static = False
+    storage = Array[Uint256, Uint256](f"STORAGE{len(r.hyper)}")
     hyper = HyperCreate(
         callvalue=value,
         initcode=r.memory.slice(offset, size),
         salt=None,
+        storage=(r.storage, storage),
         address=Uint160(f"CREATE{len(r.hyper)}"),
     )
+    r.storage = copy.deepcopy(storage)
     r.hyper.append(hyper)
     return hyper.address.into(Uint256)
 
@@ -528,14 +530,16 @@ def CALL(
         r.path.static = False
     success = Constraint(f"CALLOK{len(r.hyper)}")
     returndata = Bytes.symbolic(f"CALLRET{len(r.hyper)}")
+    storage = Array[Uint256, Uint256](f"STORAGE{len(r.hyper)}")
     hyper = HyperCall(
-        gas,
-        address.into(Uint160),
-        value,
-        r.memory.slice(argsOffset, argsSize),
-        success,
-        returndata,
+        address=address.into(Uint160),
+        callvalue=value,
+        calldata=r.memory.slice(argsOffset, argsSize),
+        storage=(r.storage, storage),
+        success=success,
+        returndata=returndata,
     )
+    r.storage = copy.deepcopy(storage)
     r.hyper.append(hyper)
     r.latest_return = returndata
     r.memory.graft(returndata.slice(Uint256(0), retSize), retOffset)
@@ -579,15 +583,17 @@ def DELEGATECALL(
     """
     success = Constraint(f"CALLOK{len(r.hyper)}")
     returndata = Bytes.symbolic(f"CALLRET{len(r.hyper)}")
+    storage = Array[Uint256, Uint256](f"STORAGE{len(r.hyper)}")
     hyper = HyperCall(
-        gas,
-        address.into(Uint160),
-        tx.callvalue,
-        r.memory.slice(argsOffset, argsSize),
-        success,
-        returndata,
+        address=address.into(Uint160),
+        callvalue=tx.callvalue,
+        calldata=r.memory.slice(argsOffset, argsSize),
+        storage=(r.storage, storage),
+        success=success,
+        returndata=returndata,
         delegate=True,
     )
+    r.storage = copy.deepcopy(storage)
     r.hyper.append(hyper)
     r.latest_return = returndata
     r.memory.graft(returndata.slice(Uint256(0), retSize), retOffset)
@@ -595,21 +601,19 @@ def DELEGATECALL(
 
 
 def CREATE2(
-    r: Runtime,
-    tx: Transaction,
-    value: Uint256,
-    offset: Uint256,
-    size: Uint256,
-    salt: Uint256,
+    r: Runtime, value: Uint256, offset: Uint256, size: Uint256, salt: Uint256
 ) -> Uint256:
     """F5 - Create a new account with associated code at a predictable address."""
     r.path.static = False
+    storage = Array[Uint256, Uint256](f"STORAGE{len(r.hyper)}")
     hyper = HyperCreate(
         callvalue=value,
         initcode=r.memory.slice(offset, size),
         salt=salt,
+        storage=(r.storage, storage),
         address=Uint160(f"CREATE{len(r.hyper)}"),
     )
+    r.storage = copy.deepcopy(storage)
     r.hyper.append(hyper)
     return hyper.address.into(Uint256)
 
@@ -627,12 +631,12 @@ def STATICCALL(
     success = Constraint(f"CALLOK{len(r.hyper)}")
     returndata = Bytes.symbolic(f"CALLRET{len(r.hyper)}")
     hyper = HyperCall(
-        gas,
-        address.into(Uint160),
-        Uint256(0),
-        r.memory.slice(argsOffset, argsSize),
-        success,
-        returndata,
+        address=address.into(Uint160),
+        callvalue=Uint256(0),
+        calldata=r.memory.slice(argsOffset, argsSize),
+        storage=(r.storage, None),
+        success=success,
+        returndata=returndata,
         static=True,
     )
     r.hyper.append(hyper)
@@ -655,7 +659,7 @@ def INVALID(r: Runtime) -> Terminate:
     return (False, Bytes())
 
 
-def SELFDESTRUCT(r: Runtime, tx: Transaction, address: Uint256) -> None:
+def SELFDESTRUCT(r: Runtime, address: Uint256) -> None:
     """FF - Halt execution and register account for later deletion."""
     r.path.static = False
     raise NotImplementedError("SELFDESTRUCT")

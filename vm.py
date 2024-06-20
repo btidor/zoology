@@ -30,7 +30,7 @@ from state import (
 
 def execute(
     ki: Blockchain, tx: Transaction, program: Program | None = None
-) -> tuple[Terminus, Blockchain]:
+) -> tuple[Blockchain, Terminus]:
     """Execute a program with concrete inputs."""
     block, address = Block(), Address.unwrap(tx.address, "execute")
     if program is None:
@@ -46,6 +46,7 @@ def execute(
     for term in compile(program):
         k = copy.deepcopy(ki)
         term = rsubstitute(term, subs)
+
         for i in range(len(term.hyper)):
             hyper = term.hyper[i]
             match hyper:
@@ -58,7 +59,9 @@ def execute(
 
         assert (ok := term.path.constraint.reveal()) is not None
         if ok:
-            return term, k
+            if term.storage:
+                k.contracts[address].storage = term.storage
+            return k, term
 
     raise RuntimeError("no termination matched")
 
@@ -112,15 +115,21 @@ def hypercreate(
     k.contracts[address] = Contract(
         program=disassemble(Bytes()),  # during init, length is zero
     )
+    before, after = h.storage
+    k.contracts[sender].storage = before
     k.transfer(tx.caller, tx.address, tx.callvalue)
 
-    t, k = execute(k, tx, program=disassemble(h.initcode))
+    k, t = execute(k, tx, program=disassemble(h.initcode))
     if t.success:
         k.contracts[address].program = disassemble(t.returndata)
     else:
         del k.contracts[address]
 
-    term = rsubstitute(term, [(h.address, Uint160(address if t.success else 0))])
+    subs: Substitutions = [
+        (h.address, Uint160(address if t.success else 0)),
+    ]
+    subs.append((after, k.contracts[sender].storage))
+    term = rsubstitute(term, subs)
     return k, term
 
 
@@ -128,6 +137,7 @@ def hypercall(
     h: HyperCall, k: Blockchain, txi: Transaction, term: Terminus
 ) -> tuple[Blockchain, Terminus]:
     """Simulate a concrete CALL, etc. hypercall."""
+    sender = Address.unwrap(txi.address, "CALL/DELEGATECALL/STATICCALL")
     address = Address.unwrap(h.address, "CALL/DELEGATECALL/STATICCALL")
     assert (calldata := h.calldata.reveal()) is not None
     tx = Transaction(
@@ -138,20 +148,26 @@ def hypercall(
         calldata=Bytes(calldata),
         gasprice=txi.gasprice,
     )
+    before, after = h.storage
+    k.contracts[sender].storage = before
     if not h.delegate:
         k.transfer(tx.caller, tx.address, h.callvalue)
 
     if address in k.contracts:
         program = k.contracts[address].program if h.delegate else None
-        t, k = execute(k, tx, program)
+        k, t = execute(k, tx, program)
         if h.static:
-            assert t.path.static
+            assert t.path.static, "STATICCALL executed non-static op"
         assert (returndata := t.returndata.reveal()) is not None
-        subs: Substitutions = [(h.success, Constraint(t.success))] + substitutions(
-            h.returndata, Bytes(returndata)
-        )
+        subs: Substitutions = [
+            (h.success, Constraint(t.success)),
+            *substitutions(h.returndata, Bytes(returndata)),
+        ]
+        if after:
+            subs.append((after, k.contracts[sender].storage))
     else:
-        subs: Substitutions = [(h.success, Constraint(True))] + substitutions(
-            h.returndata, Bytes()
-        )
+        subs: Substitutions = [
+            (h.success, Constraint(True)),
+            *substitutions(h.returndata, Bytes()),
+        ]
     return k, rsubstitute(term, subs)
