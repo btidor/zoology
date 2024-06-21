@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Self
 
 from Crypto.Hash import keccak
 
@@ -26,7 +26,7 @@ class Program:
     def __copy__(self) -> Program:
         return self
 
-    def __deepcopy__(self, memo: Any) -> Program:
+    def __deepcopy__(self, memo: Any) -> Self:
         return self
 
 

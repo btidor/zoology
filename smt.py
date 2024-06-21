@@ -170,7 +170,10 @@ def substitute[R](item: R, subs: Substitutions) -> R:
                 return item
             result = item.__new__(item.__class__)
             for k, v in item.__dict__.items():
-                object.__setattr__(result, k, substitute(v, subs))
+                if hasattr(v, "__nosubstitute__"):
+                    object.__setattr__(result, k, v)
+                else:
+                    object.__setattr__(result, k, substitute(v, subs))
             return result
 
 

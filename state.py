@@ -172,6 +172,18 @@ class Terminus:
         return term
 
 
+@dataclass
+class _HyperCache:
+    data: tuple[Blockchain, Substitutions] | None = None
+
+    # Make `substitute()` skip this object. If we don't do this, it will end up
+    # being copied and won't act as a cache.
+    __nosubstitute__ = True
+
+    def __deepcopy__(self, memo: Any) -> Self:
+        return self  # don't copy!
+
+
 @dataclass(frozen=True)
 class HyperGlobal[*P]:
     """A hypercall for getting information from global state."""
@@ -180,6 +192,11 @@ class HyperGlobal[*P]:
     fn: Callable[[*P], Uint256]
 
     result: Uint256
+
+    cache: _HyperCache = field(default_factory=_HyperCache)
+
+    def __deepcopy__(self, memo: Any) -> Self:
+        return self
 
 
 @dataclass(frozen=True)
@@ -196,6 +213,11 @@ class HyperCreate:
     ]
 
     address: Uint160  # zero on failure
+
+    cache: _HyperCache = field(default_factory=_HyperCache)
+
+    def __deepcopy__(self, memo: Any) -> Self:
+        return self
 
 
 @dataclass(frozen=True)
@@ -216,6 +238,11 @@ class HyperCall:
 
     static: bool = False
     delegate: bool = False
+
+    cache: _HyperCache = field(default_factory=_HyperCache)
+
+    def __deepcopy__(self, memo: Any) -> Self:
+        return self
 
 
 type Hyper = HyperGlobal[Any, Any] | HyperCreate | HyperCall

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass, field
-from typing import Any, Literal, TypeAlias
+from typing import Any, Literal, Self, TypeAlias
 
 from bytes import BYTES, Bytes
 from smt import (
@@ -51,8 +51,8 @@ class Path:
     symbolic: list[tuple[Uint[Any], Uint256]] = field(default_factory=list)
     concrete: dict[bytes, tuple[Uint[Any], Uint256]] = field(default_factory=dict)
 
-    def __deepcopy__(self, memo: Any) -> Path:
-        return Path(
+    def __deepcopy__(self, memo: Any) -> Self:
+        return self.__class__(
             constraint=self.constraint,
             id=self.id,
             static=self.static,

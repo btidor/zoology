@@ -48,13 +48,18 @@ def execute(
 
         for i in range(len(term.hyper)):
             hyper = term.hyper[i]
-            match hyper:
-                case HyperGlobal():
-                    k, term = hyperglobal(hyper, k, tx, term)
-                case HyperCreate():
-                    k, term = hypercreate(hyper, k, tx, term)
-                case HyperCall():
-                    k, term = hypercall(hyper, k, tx, term)
+            if hyper.cache.data:
+                k, delta = hyper.cache.data
+            else:
+                match hyper:
+                    case HyperGlobal():
+                        k, delta = hyperglobal(hyper, k, tx, term)
+                    case HyperCreate():
+                        k, delta = hypercreate(hyper, k, tx, term)
+                    case HyperCall():
+                        k, delta = hypercall(hyper, k, tx, term)
+                hyper.cache.data = (k, delta)
+            term = term.substitute(delta)
 
         assert (ok := term.path.constraint.reveal()) is not None
         if ok:
@@ -66,20 +71,19 @@ def execute(
 
 
 def hyperglobal(
-    h: HyperGlobal[Any, Any], k: Blockchain, _tx: Transaction, term: Terminus
-) -> tuple[Blockchain, Terminus]:
+    h: HyperGlobal[Any, Any], k: Blockchain, tx: Transaction, term: Terminus
+) -> tuple[Blockchain, Substitutions]:
     """Simulate a concrete global-state hypercall."""
     input = [k if arg is None else arg for arg in h.input]
     result = h.fn(*input)
-    term = term.substitute([(h.result, result)])
-    return k, term
+    return k, [(h.result, result)]
 
 
 def hypercreate(
-    h: HyperCreate, k: Blockchain, txi: Transaction, term: Terminus
-) -> tuple[Blockchain, Terminus]:
+    h: HyperCreate, k: Blockchain, tx: Transaction, term: Terminus
+) -> tuple[Blockchain, Substitutions]:
     """Simulate a concrete CREATE hypercall."""
-    sender = Address.unwrap(txi.address, "CREATE/CREATE2")
+    sender = Address.unwrap(tx.address, "CREATE/CREATE2")
     if h.salt is None:
         # https://ethereum.stackexchange.com/a/761
         nonce = k.contracts[sender].nonce
@@ -95,12 +99,12 @@ def hypercreate(
     address = Address.unwrap(term.path.keccak256(Bytes(seed)).into(Uint160))
 
     tx = Transaction(
-        origin=txi.origin,
-        caller=txi.address,
+        origin=tx.origin,
+        caller=tx.address,
         address=Uint160(address),
         callvalue=h.callvalue,
         calldata=Bytes(),
-        gasprice=txi.gasprice,
+        gasprice=tx.gasprice,
     )
     k.contracts[sender].nonce += 1
     k.contracts[address] = Contract(
@@ -116,28 +120,26 @@ def hypercreate(
     else:
         del k.contracts[address]
 
-    subs: Substitutions = [
+    return k, [
         (h.address, Uint160(address if t.success else 0)),
+        (after, k.contracts[sender].storage),
     ]
-    subs.append((after, k.contracts[sender].storage))
-    term = term.substitute(subs)
-    return k, term
 
 
 def hypercall(
-    h: HyperCall, k: Blockchain, txi: Transaction, term: Terminus
-) -> tuple[Blockchain, Terminus]:
+    h: HyperCall, k: Blockchain, tx: Transaction, term: Terminus
+) -> tuple[Blockchain, Substitutions]:
     """Simulate a concrete CALL, etc. hypercall."""
-    sender = Address.unwrap(txi.address, "CALL/DELEGATECALL/STATICCALL")
+    sender = Address.unwrap(tx.address, "CALL/DELEGATECALL/STATICCALL")
     address = Address.unwrap(h.address, "CALL/DELEGATECALL/STATICCALL")
     assert (calldata := h.calldata.reveal()) is not None
     tx = Transaction(
-        origin=txi.origin,
-        caller=txi.caller if h.delegate else txi.address,
-        address=txi.address if h.delegate else h.address,
+        origin=tx.origin,
+        caller=tx.caller if h.delegate else tx.address,
+        address=tx.address if h.delegate else h.address,
         callvalue=h.callvalue,
         calldata=Bytes(calldata),
-        gasprice=txi.gasprice,
+        gasprice=tx.gasprice,
     )
     before, after = h.storage
     k.contracts[sender].storage = before
@@ -149,16 +151,15 @@ def hypercall(
         k, t = execute(k, tx, program)
         if h.static:
             assert t.path.static, "STATICCALL executed non-static op"
+        # HACK: to work around a bug in term substitution, we run the return
+        # data through `reveal()`.
         assert (returndata := t.returndata.reveal()) is not None
-        subs: Substitutions = [
-            (h.success, Constraint(t.success)),
-            *substitutions(h.returndata, Bytes(returndata)),
-        ]
-        if after:
-            subs.append((after, k.contracts[sender].storage))
+        constraint, returndata = Constraint(t.success), Bytes(returndata)
     else:
-        subs: Substitutions = [
-            (h.success, Constraint(True)),
-            *substitutions(h.returndata, Bytes()),
-        ]
-    return k, term.substitute(subs)
+        constraint, returndata = Constraint(True), Bytes()
+
+    return k, [
+        (h.success, constraint),
+        *substitutions(h.returndata, returndata),
+        *(((after, k.contracts[sender].storage),) if after else ()),
+    ]
