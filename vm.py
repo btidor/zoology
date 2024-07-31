@@ -49,17 +49,18 @@ def execute(
         for i in range(len(term.hyper)):
             hyper = term.hyper[i]
             if hyper.cache.data:
-                k, delta = hyper.cache.data
+                k, delta, ok = hyper.cache.data
             else:
                 match hyper:
                     case HyperGlobal():
-                        k, delta = hyperglobal(hyper, k, tx, term)
+                        k, delta, ok = hyperglobal(hyper, k, tx, term)
                     case HyperCreate():
-                        k, delta = hypercreate(hyper, k, tx, term)
+                        k, delta, ok = hypercreate(hyper, k, tx, term)
                     case HyperCall():
-                        k, delta = hypercall(hyper, k, tx, term)
-                hyper.cache.data = (k, delta)
+                        k, delta, ok = hypercall(hyper, k, tx, term)
+                hyper.cache.data = (k, delta, ok)  # TODO: is caching `ok` safe?
             term = term.substitute(delta)
+            term.path.constraint &= ok
 
         assert (ok := term.path.constraint.reveal()) is not None
         if ok:
@@ -72,16 +73,16 @@ def execute(
 
 def hyperglobal(
     h: HyperGlobal[Any, Any], k: Blockchain, tx: Transaction, term: Terminus
-) -> tuple[Blockchain, Substitutions]:
+) -> tuple[Blockchain, Substitutions, Constraint]:
     """Simulate a concrete global-state hypercall."""
     input = [k if arg is None else arg for arg in h.input]
     result = h.fn(*input)
-    return k, [(h.result, result)]
+    return k, [(h.result, result)], Constraint(True)
 
 
 def hypercreate(
     h: HyperCreate, k: Blockchain, tx: Transaction, term: Terminus
-) -> tuple[Blockchain, Substitutions]:
+) -> tuple[Blockchain, Substitutions, Constraint]:
     """Simulate a concrete CREATE hypercall."""
     sender = Address.unwrap(tx.address, "CREATE/CREATE2")
     if h.salt is None:
@@ -112,7 +113,7 @@ def hypercreate(
     )
     before, after = h.storage
     k.contracts[sender].storage = before
-    k.transfer(tx.caller, tx.address, tx.callvalue)
+    ok = k.transfer(tx.caller, tx.address, tx.callvalue)
 
     k, t = execute(k, tx, program=disassemble(h.initcode))
     if t.success:
@@ -120,15 +121,19 @@ def hypercreate(
     else:
         del k.contracts[address]
 
-    return k, [
-        (h.address, Uint160(address if t.success else 0)),
-        (after, k.contracts[sender].storage),
-    ]
+    return (
+        k,
+        [
+            (h.address, Uint160(address if t.success else 0)),
+            (after, k.contracts[sender].storage),
+        ],
+        ok,
+    )
 
 
 def hypercall(
     h: HyperCall, k: Blockchain, tx: Transaction, term: Terminus
-) -> tuple[Blockchain, Substitutions]:
+) -> tuple[Blockchain, Substitutions, Constraint]:
     """Simulate a concrete CALL, etc. hypercall."""
     sender = Address.unwrap(tx.address, "CALL/DELEGATECALL/STATICCALL")
     address = Address.unwrap(h.address, "CALL/DELEGATECALL/STATICCALL")
@@ -144,7 +149,9 @@ def hypercall(
     before, after = h.storage
     k.contracts[sender].storage = before
     if not h.delegate:
-        k.transfer(tx.caller, tx.address, h.callvalue)
+        ok = k.transfer(tx.caller, tx.address, h.callvalue)
+    else:
+        ok = Constraint(True)
 
     if address in k.contracts:
         program = k.contracts[address].program if h.delegate else None
@@ -158,8 +165,12 @@ def hypercall(
     else:
         constraint, returndata = Constraint(True), Bytes()
 
-    return k, [
-        (h.success, constraint),
-        *substitutions(h.returndata, returndata),
-        *(((after, k.contracts[sender].storage),) if after else ()),
-    ]
+    return (
+        k,
+        [
+            (h.success, constraint),
+            *substitutions(h.returndata, returndata),
+            *(((after, k.contracts[sender].storage),) if after else ()),
+        ],
+        ok,
+    )

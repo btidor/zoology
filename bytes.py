@@ -113,6 +113,8 @@ class Bytes:
             for i in range(length):
                 if prefix and i == prefix:
                     yield " "
+                elif prefix and i % 32 == prefix:
+                    yield f"\n{' '*prefix*2} "
                 yield solver.evaluate(self[Uint256(i)]).to_bytes(1).hex()
 
     def evaluate(self, solver: Solver) -> bytes:

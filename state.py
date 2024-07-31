@@ -31,15 +31,15 @@ class Blockchain:
         default_factory=lambda: Array[Uint160, Uint256](Uint256(0))
     )
 
-    def transfer(self, src: Uint160, dst: Uint160, value: Uint256) -> None:
+    def transfer(self, src: Uint160, dst: Uint160, value: Uint256) -> Constraint:
         """Transfer value between accounts (checked)."""
         ok = self.balances[src] >= value
-        assert ok.reveal() is True, "insufficient/unknown balance"
         self.balances[src] -= value
 
-        ok = self.balances[dst] + value >= self.balances[dst]
-        assert ok.reveal() is True, "balance overflows or is unknown"
+        ok &= self.balances[dst] + value >= self.balances[dst]
         self.balances[dst] += value
+
+        return ok
 
 
 @dataclass
@@ -174,7 +174,7 @@ class Terminus:
 
 @dataclass
 class _HyperCache:
-    data: tuple[Blockchain, Substitutions] | None = None
+    data: tuple[Blockchain, Substitutions, Constraint] | None = None
 
     # Make `substitute()` skip this object. If we don't do this, it will end up
     # being copied and won't act as a cache.

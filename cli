@@ -9,17 +9,17 @@ from zbitvector import Solver
 
 from bytes import Bytes
 from compiler import compile, symbolic_transaction
-from disassembler import abiencode, decode_instruction, disassemble
-from smt import Uint160, Uint256
+from disassembler import decode_instruction, disassemble
+from smt import Uint160
 from snapshot import (
     COUNT,
     LEVEL_FACTORIES,
     Snapshot,
     download_contract,
-    snapshot_contracts,
 )
 from state import Address, Blockchain, Contract, Transaction
 from vm import execute
+from zoology import load_level, search
 
 
 def _disassemble(code: bytes) -> None:
@@ -69,7 +69,7 @@ def _compile(code: bytes) -> None:
 def _execute(lc: int | bytes, calldata: bytes) -> None:
     """Execute the given bytecode."""
     if isinstance(lc, int):
-        k, address = __load(lc)
+        k, address = load_level(lc)
     else:
         k = Blockchain()
         address = Address(0x1234)
@@ -89,6 +89,12 @@ def _execute(lc: int | bytes, calldata: bytes) -> None:
     print(term.returndata.evaluate(solver).hex())
 
 
+def _analyze(level: int) -> None:
+    """Analyze the given Ethernaut contract."""
+    for line in search(level):
+        print(line, end="")
+
+
 def _snapshot() -> None:
     """Download a snapshot of the Ethernaut CTF contracts."""
     snapshot: Snapshot = {}
@@ -100,27 +106,10 @@ def _snapshot() -> None:
 
 def _load(level: int) -> bytes:
     """Simulate createInstance() to load a given level."""
-    k, address = __load(level)
+    k, address = load_level(level)
     code = k.contracts[address].program.code.reveal()
     assert code is not None
     return code
-
-
-def __load(level: int) -> tuple[Blockchain, Address]:
-    factory = LEVEL_FACTORIES[level]
-    k = snapshot_contracts(factory)
-    tx = Transaction(
-        address=Uint160(factory),
-        calldata=Bytes(abiencode("createInstance(address)") + (0xB).to_bytes(32)),
-        callvalue=Uint256(10**15),
-    )
-    k.balances[tx.address] = Uint256(10**15)
-
-    k, term = execute(k, tx)
-    assert (data := term.returndata.reveal()) is not None
-    assert term.success, data
-
-    return k, Address(int.from_bytes(data))
 
 
 if __name__ == "__main__":
@@ -143,6 +132,9 @@ if __name__ == "__main__":
     exg.add_argument("-l", "--level", type=int)
     exg.add_argument("-c", "--code", type=bytes.fromhex)
     exe.add_argument("-d", "--data", type=bytes.fromhex, required=True)
+
+    ana = cmd.add_parser("analyze")
+    ana.add_argument("-l", "--level", type=int, required=True)
 
     snp = cmd.add_parser("snapshot")
 
@@ -168,6 +160,8 @@ if __name__ == "__main__":
                 _execute(args.level, args.data)
             else:
                 _execute(args.code, args.data)
+        case "analyze":
+            _analyze(args.level)
         case "snapshot":
             _snapshot()
         case _:
