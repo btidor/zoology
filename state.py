@@ -17,6 +17,7 @@ from smt import (
     Uint8,
     Uint160,
     Uint256,
+    concrete_hash,
     substitute,
 )
 
@@ -92,6 +93,25 @@ class Block:
         for n, hash in enumerate(STARTING_HASHES):
             hashes[BYTES[n]] = hash
         return hashes
+
+    def successor(self) -> Block:
+        """Produce a plausible next block."""
+        hashes = Array[Uint8, Uint256](Uint256(0))
+        assert (start := self.hashes[Uint8(0)].reveal()) is not None
+        hashes[Uint8(0)] = concrete_hash(start.to_bytes(32))
+        for i in range(1, 256):
+            hashes[Uint8(i)] = self.hashes[Uint8(i - 1)]
+
+        return Block(
+            number=self.number + Uint256(1),
+            coinbase=self.coinbase,
+            timestamp=self.timestamp + Uint256(12),
+            prevrandao=self.prevrandao * Uint256(2147483647),
+            gaslimit=self.gaslimit,
+            chainid=self.chainid,
+            basefee=self.basefee,
+            hashes=hashes,
+        )
 
 
 @dataclass(frozen=True)
