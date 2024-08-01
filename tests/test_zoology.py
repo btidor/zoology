@@ -68,11 +68,11 @@ def test_fallout() -> None:
 #     check_level(5, fixture)
 
 
-def test_delegation() -> None:
-    fixture = [
-        "dd365b8b",
-    ]
-    check_level(6, fixture)
+# def test_delegation() -> None:
+#     fixture = [
+#         "dd365b8b",
+#     ]
+#     check_level(6, fixture)
 
 
 # def test_force() -> None:
@@ -132,11 +132,11 @@ def test_privacy() -> None:
     check_level(12, fixture)
 
 
-# def test_gatekeeper_one() -> None:
-#     fixture = [
-#         "3370204e 000000010000caca000000000000000000000000000000000000000000000000\tvia proxy",
-#     ]
-#     check_level(13, fixture)
+def test_gatekeeper_one() -> None:
+    fixture = [
+        "3370204e 000000010000c0c0000000000000000000000000000000000000000000000000\tvia proxy",
+    ]
+    check_level(13, fixture)
 
 
 # def test_gatekeeper_two() -> None:

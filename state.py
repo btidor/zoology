@@ -120,6 +120,12 @@ class Transaction:
             if solver.check(constraint):
                 solver.add(constraint)
                 break
+
+        # Prefer non-proxied calls
+        constraint = self.caller == self.origin
+        if solver.check(constraint):
+            solver.add(constraint)
+
         assert solver.check()
 
 

@@ -42,29 +42,29 @@ def load_level(level: int) -> tuple[Blockchain, Address]:
     return k, Address(int.from_bytes(data))
 
 
-def search(level: int) -> Iterable[str]:
+def search(level: int, depth: int = 10) -> Iterable[str]:
     """Symbolically execute the given level until a solution is found."""
-    factory = LEVEL_FACTORIES[level]
-    k, _ = load_level(level)
+    FACTORY = LEVEL_FACTORIES[level]
+    k, LEVEL = load_level(level)
 
     block = Block()  # TODO
     vx = Transaction(
-        address=Uint160(factory),
+        address=Uint160(FACTORY),
         calldata=Bytes(
             abiencode("validateInstance(address,address)")
-            + factory.to_bytes(32)
+            + FACTORY.to_bytes(32)
             + PLAYER.to_bytes(32)
         ),
     )
     subs = [
         *substitutions(symbolic_block(), block),
         *substitutions(symbolic_transaction(), vx),
-        (Array[Uint256, Uint256]("STORAGE"), k.contracts[factory].storage),
+        (Array[Uint256, Uint256]("STORAGE"), k.contracts[FACTORY].storage),
     ]
 
     solver = Solver()
     validators = list[Terminus]()
-    for term in compile(k.contracts[factory].program):
+    for term in compile(k.contracts[FACTORY].program):
         if not term.success:
             continue
 
@@ -76,76 +76,80 @@ def search(level: int) -> Iterable[str]:
     assert len(validators) == 1
     validator = validators[0]
 
-    mutations = dict[Address, list[Terminus]]()
+    mutations = list[tuple[Address, Terminus]]()
     for address, contract in k.contracts.items():
-        if address == factory:
+        if address == FACTORY:
             continue
-        else:
-            mutations[address] = [t for t in compile(contract.program) if t.storage]
+        mutations.extend((address, t) for t in compile(contract.program) if t.storage)
 
-    for address, mutations in mutations.items():
-        for mutation in mutations:
-            val = validator
-            k = copy.deepcopy(k)
-            tx = Transaction(
-                origin=Uint160(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0),
-                caller=Constraint("CALLERAB").ite(
-                    Uint160(0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0),
-                    Uint160(0xCACACACACACACACACACACACACACACACACACACACA),
+    for address, mutation in mutations:
+        val = validator
+        k = copy.deepcopy(k)
+        tx = Transaction(
+            origin=Uint160(PLAYER),
+            caller=Constraint("CALLERAB").ite(Uint160(PLAYER), Uint160(PROXY)),
+            address=Uint160(address),
+            callvalue=Uint256("CALLVALUE"),
+            calldata=Bytes.symbolic("CALLDATA"),
+            gasprice=Uint256(0x12),
+        )
+        mutation = mutation.substitute(
+            [
+                *substitutions(symbolic_transaction(), tx),
+                *substitutions(symbolic_block(), block),  # TODO: increment
+                (
+                    Array[Uint256, Uint256]("STORAGE"),
+                    k.contracts[address].storage,
                 ),
-                address=Uint160(0xADADADADADADADADADADADADADADADADADADADAD),
-                callvalue=Uint256("CALLVALUE"),
-                calldata=Bytes.symbolic("CALLDATA"),
-                gasprice=Uint256(0x12),
-            )
-            mutation = mutation.substitute(
-                [
-                    *substitutions(symbolic_transaction(), tx),
-                    *substitutions(symbolic_block(), block),  # TODO: increment
-                    (Array[Uint256, Uint256]("STORAGE"), k.contracts[address].storage),
-                ]
-            )
-            for i in range(len(mutation.hyper)):
-                hyper = mutation.hyper[i]
-                match hyper:
-                    case HyperGlobal():
-                        k, delta, ok = hyperglobal(hyper, k, tx, mutation)
-                    case HyperCreate():
-                        k, delta, ok = hypercreate(hyper, k, tx, mutation)
-                    case HyperCall():
-                        k, delta, ok = hypercall(hyper, k, tx, mutation)
-                mutation.path.constraint &= ok
-                mutation = mutation.substitute(delta)
+            ]
+        )
+        for i in range(len(mutation.hyper)):
+            hyper = mutation.hyper[i]
+            match hyper:
+                case HyperGlobal():
+                    k, delta, ok = hyperglobal(hyper, k, tx, mutation)
+                case HyperCreate():
+                    k, delta, ok = hypercreate(hyper, k, tx, mutation)
+                case HyperCall():
+                    k, delta, ok = hypercall(hyper, k, tx, mutation)
+            mutation.path.constraint &= ok
+            mutation = mutation.substitute(delta)
 
-            for i in range(len(val.hyper)):
-                hyper = val.hyper[i]
-                match hyper:
-                    case HyperGlobal():
-                        k, delta, ok = hyperglobal(hyper, k, vx, validator)
-                    case HyperCreate():
-                        k, delta, ok = hypercreate(hyper, k, vx, validator)
-                    case HyperCall():
-                        k, delta, ok = hypercall(hyper, k, vx, validator)
-                val.path.constraint &= ok
+        for i in range(len(val.hyper)):
+            hyper = val.hyper[i]
+            match hyper:
+                case HyperGlobal():
+                    k, delta, ok = hyperglobal(hyper, k, vx, validator)
+                case HyperCreate():
+                    k, delta, ok = hypercreate(hyper, k, vx, validator)
+                case HyperCall():
+                    k, delta, ok = hypercall(hyper, k, vx, validator)
+            val.path.constraint &= ok
 
-            final = mutation.path.constraint & val.path.constraint
-            if solver.check(final):
-                solver.add(final)
-                for i in range(256):
-                    c = tx.calldata.length == Uint256(i)
-                    if solver.check(c):
-                        solver.add(c)
-                        assert solver.check()
-                        break
+        final = mutation.path.constraint & val.path.constraint
+        if solver.check(final):
+            solver.add(final)
+            for i in range(256):
+                c = tx.calldata.length == Uint256(i)
+                if solver.check(c):
+                    solver.add(c)
+                    assert solver.check()
+                    break
 
-                # TODO: `mutation.path` and `val.path` are not properly merged,
-                # which may cause SHA3 narrowing errors.
-                mutation.path.narrow(solver)
-                val.path.narrow(solver)
-                tx.narrow(solver)
+            # TODO: `mutation.path` and `val.path` are not properly merged,
+            # which may cause SHA3 narrowing errors.
+            tx.narrow(solver)  # must do this first if CALLER is hashed
+            mutation.path.narrow(solver)
+            val.path.narrow(solver)
 
-                yield from tx.calldata.describe(solver)
-                yield "\n"
-                return
+            if address != LEVEL:
+                yield f"To {hex(address)}:\n"
+
+            yield from tx.calldata.describe(solver)
+            if solver.evaluate(tx.caller) != PLAYER:
+                yield "\tvia proxy"
+
+            yield "\n"
+            return
 
     raise RuntimeError("solution not found")
