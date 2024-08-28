@@ -68,7 +68,7 @@ def compile(program: Program) -> Iterable[Terminus]:
                 r.hyper.append(HyperGlobal(cast(Any, args), fn, result))
                 r.stack.append(result)
             else:
-                result: OpResult = fn(*args)
+                result = cast(OpResult, fn(*args))
                 match result:
                     case None:
                         pass

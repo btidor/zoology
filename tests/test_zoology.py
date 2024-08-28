@@ -49,23 +49,23 @@ def test_fallout() -> None:
 #     check_level(3, fixture)
 
 
-# def test_telephone() -> None:
-#     fixture = [
-#         "a6f9dae1 000000000000000000000000cacacacacacacacacacacacacacacacacacacaca\tvia proxy",
-#     ]
-#     check_level(4, fixture)
+def test_telephone() -> None:
+    fixture = [
+        "a6f9dae1 000000000000000000000000c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0\tvia proxy",
+    ]
+    check_level(4, fixture)
 
 
-# def test_token() -> None:
-#     # This is correct! To solve this level, the player must transfer at least 20
-#     # tokens to any other address, causing an integer underflow. The recipient
-#     # address is arbitrary, and our solver apparently produces it by adding 1 to
-#     # the player address.
-#     fixture = [
-#         "a9059cbb 000000000000000000000000cacacacacacacacacacacacacacacacacacacacb"
-#         "         4000000000000000000000000000000000000000000000000000000000000014",
-#     ]
-#     check_level(5, fixture)
+def test_token() -> None:
+    # This is correct! To solve this level, the player must transfer at least 20
+    # tokens to any other address, causing an integer underflow. The recipient
+    # address is arbitrary, and our solver apparently produces it by adding 1 to
+    # the player address.
+    fixture = [
+        "a9059cbb 000000000000000000000000c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c1",
+        "         8000000000000000000000000000000000000000000000000000000000000014",
+    ]
+    check_level(5, fixture)
 
 
 # def test_delegation() -> None:

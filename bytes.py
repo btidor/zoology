@@ -145,7 +145,10 @@ class ByteSlice(Bytes):
         self.data = None
 
     def __substitutions__(self) -> tuple[Expression, ...]:
-        raise NotImplementedError  # only Bytes is supported
+        if (n := self.length.reveal()) is None:
+            raise ValueError("__substitutions__ requires concrete length")
+        data = [self[Uint256(i)] for i in range(n)]
+        return (Uint64(n), Bytes(data).array)
 
     def __getitem__(self, i: Uint256) -> Uint8:
         item = self.inner[self.offset + i]

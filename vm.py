@@ -39,7 +39,6 @@ def execute(
         *substitutions(symbolic_block(), block),
         *substitutions(symbolic_transaction(), tx),
         (Array[Uint256, Uint256]("STORAGE"), ki.contracts[address].storage),
-        (Array[Uint160, Uint256]("BALANCE"), Array[Uint160, Uint256](Uint256(0))),
     ]
 
     for term in compile(program):
@@ -48,17 +47,14 @@ def execute(
 
         for i in range(len(term.hyper)):
             hyper = term.hyper[i]
-            if hyper.cache.data:
-                k, delta, ok = hyper.cache.data
-            else:
-                match hyper:
-                    case HyperGlobal():
-                        k, delta, ok = hyperglobal(hyper, k, tx, term)
-                    case HyperCreate():
-                        k, delta, ok = hypercreate(hyper, k, tx, term)
-                    case HyperCall():
-                        k, delta, ok = hypercall(hyper, k, tx, term)
-                hyper.cache.data = (k, delta, ok)  # TODO: is caching `ok` safe?
+            match hyper:
+                case HyperGlobal():
+                    k, delta = hyperglobal(hyper, k)
+                    ok = Constraint(True)
+                case HyperCreate():
+                    k, delta, ok = hypercreate(hyper, k, tx, term)
+                case HyperCall():
+                    k, delta, ok = hypercall(hyper, k, tx)
             term = term.substitute(delta)
             term.path.constraint &= ok
 
@@ -72,12 +68,12 @@ def execute(
 
 
 def hyperglobal(
-    h: HyperGlobal[Any, Any], k: Blockchain, tx: Transaction, term: Terminus
-) -> tuple[Blockchain, Substitutions, Constraint]:
+    h: HyperGlobal[Any, Any], k: Blockchain
+) -> tuple[Blockchain, Substitutions]:
     """Simulate a concrete global-state hypercall."""
     input = [k if arg is None else arg for arg in h.input]
     result = h.fn(*input)
-    return k, [(h.result, result)], Constraint(True)
+    return k, [(h.result, result)]
 
 
 def hypercreate(
@@ -132,7 +128,7 @@ def hypercreate(
 
 
 def hypercall(
-    h: HyperCall, k: Blockchain, tx: Transaction, term: Terminus
+    h: HyperCall, k: Blockchain, tx: Transaction
 ) -> tuple[Blockchain, Substitutions, Constraint]:
     """Simulate a concrete CALL, etc. hypercall."""
     sender = Address.unwrap(tx.address, "CALL/DELEGATECALL/STATICCALL")
@@ -158,10 +154,7 @@ def hypercall(
         k, t = execute(k, tx, program)
         if h.static:
             assert t.path.static, "STATICCALL executed non-static op"
-        # HACK: to work around a bug in term substitution, we run the return
-        # data through `reveal()`.
-        assert (returndata := t.returndata.reveal()) is not None
-        constraint, returndata = Constraint(t.success), Bytes(returndata)
+        constraint, returndata = Constraint(t.success), t.returndata
     else:
         constraint, returndata = Constraint(True), Bytes()
 
