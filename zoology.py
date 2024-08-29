@@ -82,15 +82,10 @@ def search(level: int) -> Iterable[str]:
     assert len(validators) == 1
     validator = validators[0]
 
-    mutations = list[tuple[Address, Terminus]]()
     for address, contract in k.contracts.items():
         if address == FACTORY:
             continue
-        mutations.extend((address, t) for t in compile(contract.program) if t.storage)
 
-    for address, mutation in mutations:
-        val = validator
-        k = copy.deepcopy(k)
         tx = Transaction(
             origin=Uint160(PLAYER),
             caller=Constraint("CALLERAB0").ite(Uint160(PLAYER), Uint160(PROXY)),
@@ -99,63 +94,70 @@ def search(level: int) -> Iterable[str]:
             calldata=Bytes.symbolic("CALLDATA0"),
             gasprice=Uint256(0x12),
         )
-        mutation = mutation.substitute(
-            [
-                *substitutions(symbolic_transaction(), tx),
-                *substitutions(symbolic_block(), xblock),
-                (
-                    Array[Uint256, Uint256]("STORAGE"),
-                    k.contracts[address].storage,
-                ),
-            ]
-        )
-        for i in range(len(mutation.hyper)):
-            hyper = mutation.hyper[i]
-            match hyper:
-                case HyperGlobal():
-                    k, delta = hyperglobal(hyper, k)
-                case HyperCreate():
-                    raise NotImplementedError
-                case HyperCall():
-                    raise NotImplementedError
-            mutation = mutation.substitute(delta)
 
-        assert mutation.storage is not None
-        k.contracts[address].storage = mutation.storage
+        for mutation in compile(contract.program):
+            if mutation.storage is None:  # TODO: or balance change
+                continue
 
-        for i in range(len(val.hyper)):
-            hyper = val.hyper[i]
-            match hyper:
-                case HyperGlobal():
-                    k, delta = hyperglobal(hyper, k)
-                case HyperCreate():
-                    raise NotImplementedError
-                case HyperCall():
-                    k, delta, ok = hypercall(hyper, k, vx)
-                    val.path.constraint &= ok
-            val = val.substitute(delta)
+            val = validator
+            k = copy.deepcopy(k)
+            mutation = mutation.substitute(
+                [
+                    *substitutions(symbolic_transaction(), tx),
+                    *substitutions(symbolic_block(), xblock),
+                    (
+                        Array[Uint256, Uint256]("STORAGE"),
+                        k.contracts[address].storage,
+                    ),
+                ]
+            )
+            for i in range(len(mutation.hyper)):
+                hyper = mutation.hyper[i]
+                match hyper:
+                    case HyperGlobal():
+                        k, delta = hyperglobal(hyper, k)
+                    case HyperCreate():
+                        raise NotImplementedError
+                    case HyperCall():
+                        raise NotImplementedError
+                mutation = mutation.substitute(delta)
 
-        solver = Solver()
-        solver.add(mutation.path.constraint)
-        solver.add(val.path.constraint)
-        if not solver.check():
-            continue
+            assert mutation.storage is not None
+            k.contracts[address].storage = mutation.storage
 
-        tx.narrow(solver)  # must do this first if CALLER is hashed
+            for i in range(len(val.hyper)):
+                hyper = val.hyper[i]
+                match hyper:
+                    case HyperGlobal():
+                        k, delta = hyperglobal(hyper, k)
+                    case HyperCreate():
+                        raise NotImplementedError
+                    case HyperCall():
+                        k, delta, ok = hypercall(hyper, k, vx)
+                        val.path.constraint &= ok
+                val = val.substitute(delta)
 
-        # TODO: `mutation.path` and `val.path` are not properly merged, which
-        # may cause SHA3 narrowing errors.
-        mutation.path.narrow(solver)
-        val.path.narrow(solver)
+            solver = Solver()
+            solver.add(mutation.path.constraint)
+            solver.add(val.path.constraint)
+            if not solver.check():
+                continue
 
-        if address != LEVEL:
-            yield f"To {hex(address)}:\n"
+            tx.narrow(solver)  # must do this first if CALLER is hashed
 
-        yield from tx.calldata.describe(solver)
-        if solver.evaluate(tx.caller) != PLAYER:
-            yield "\tvia proxy"
+            # TODO: `mutation.path` and `val.path` are not properly merged, which
+            # may cause SHA3 narrowing errors.
+            mutation.path.narrow(solver)
+            val.path.narrow(solver)
 
-        yield "\n"
-        return
+            if address != LEVEL:
+                yield f"To {hex(address)}:\n"
+
+            yield from tx.calldata.describe(solver)
+            if solver.evaluate(tx.caller) != PLAYER:
+                yield "\tvia proxy"
+
+            yield "\n"
+            return
 
     raise RuntimeError("solution not found")
