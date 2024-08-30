@@ -96,7 +96,7 @@ def search(level: int) -> Iterable[str]:
         )
 
         for mutation in compile(contract.program):
-            if mutation.storage is None:  # TODO: or balance change
+            if mutation.path.static:  # TODO: or balance change
                 continue
 
             val = validator
@@ -115,7 +115,7 @@ def search(level: int) -> Iterable[str]:
                 hyper = mutation.hyper[i]
                 match hyper:
                     case HyperGlobal():
-                        k, delta = hyperglobal(hyper, k)
+                        delta = hyperglobal(hyper, k)
                     case HyperCreate():
                         raise NotImplementedError
                     case HyperCall():
@@ -129,7 +129,7 @@ def search(level: int) -> Iterable[str]:
                 hyper = val.hyper[i]
                 match hyper:
                     case HyperGlobal():
-                        k, delta = hyperglobal(hyper, k)
+                        delta = hyperglobal(hyper, k)
                     case HyperCreate():
                         raise NotImplementedError
                     case HyperCall():

@@ -581,6 +581,7 @@ def DELEGATECALL(
     Message-call into this account with an alternative account's code, but
     persisting the current values for sender and value.
     """
+    r.path.static = False  # HACK: actually depends on which operations execute
     success = Constraint(f"CALLOK{len(r.hyper)}")
     returndata = Bytes.symbolic(f"CALLRET{len(r.hyper)}")
     storage = Array[Uint256, Uint256](f"STORAGE{len(r.hyper)}")

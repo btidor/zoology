@@ -49,8 +49,7 @@ def execute(
             hyper = term.hyper[i]
             match hyper:
                 case HyperGlobal():
-                    k, delta = hyperglobal(hyper, k)
-                    ok = Constraint(True)
+                    delta, ok = hyperglobal(hyper, k), Constraint(True)
                 case HyperCreate():
                     k, delta, ok = hypercreate(hyper, k, tx, term)
                 case HyperCall():
@@ -67,13 +66,11 @@ def execute(
     raise RuntimeError("no termination matched")
 
 
-def hyperglobal(
-    h: HyperGlobal[Any, Any], k: Blockchain
-) -> tuple[Blockchain, Substitutions]:
+def hyperglobal(h: HyperGlobal[Any, Any], k: Blockchain) -> Substitutions:
     """Simulate a concrete global-state hypercall."""
     input = [k if arg is None else arg for arg in h.input]
     result = h.fn(*input)
-    return k, [(h.result, result)]
+    return [(h.result, result)]
 
 
 def hypercreate(
