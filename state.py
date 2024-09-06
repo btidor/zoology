@@ -253,4 +253,4 @@ class HyperCall:
         return self
 
 
-type Hyper = HyperGlobal[Any, Any] | HyperCreate | HyperCall
+type Hyper = HyperGlobal[Any] | HyperCreate | HyperCall

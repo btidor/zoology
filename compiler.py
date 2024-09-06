@@ -5,7 +5,7 @@ from typing import Any, Iterable, cast
 
 from bytes import Bytes
 from disassembler import Instruction, Program
-from ops import OPS, OpResult
+from ops import OPS
 from smt import (
     Array,
     Uint,
@@ -34,7 +34,7 @@ def compile(program: Program) -> Iterable[Terminus]:
                 raise ValueError(f"unimplemented opcode: {ins.name}")
 
             fn, sig = OPS[ins.name]
-            args = list[object]()
+            args = list[Any]()
             defer = False
             for name in sig.parameters:
                 kls = sig.parameters[name].annotation
@@ -65,22 +65,21 @@ def compile(program: Program) -> Iterable[Terminus]:
                 # be automatically deferred.
                 assert not any(isinstance(a, Runtime) for a in args)
                 result = Uint256(f"GLOBAL{len(r.hyper)}")
-                r.hyper.append(HyperGlobal(cast(Any, args), fn, result))
+                r.hyper.append(HyperGlobal(tuple(args), cast(Any, fn), result))
                 r.stack.append(result)
             else:
-                result = cast(OpResult, fn(*args))
-                match result:
+                match fn(*args):
                     case None:
                         pass
-                    case Uint():
+                    case Uint() as result:
                         r.stack.append(result)
                         if len(r.stack) > 1024:
                             raise RuntimeError("evm stack overflow")
-                    case (Runtime(), Runtime()):
-                        for r in result:
-                            heappush(queue, r)
+                    case (Runtime() as r0, Runtime() as r1):
+                        heappush(queue, r0)
+                        heappush(queue, r1)
                         break
-                    case (success, returndata):
+                    case (bool() as success, Bytes() as returndata):
                         storage = r.storage if success and not r.path.static else None
                         yield Terminus(
                             r.path, tuple(r.hyper), success, returndata, storage

@@ -2,7 +2,7 @@
 
 import copy
 from inspect import Signature, signature
-from typing import Any, Literal
+from typing import Any, Callable, Literal
 
 from bytes import Bytes
 from disassembler import Instruction
@@ -35,6 +35,8 @@ Uint512 = Uint[Literal[512]]
 type Fork = tuple[Runtime, Runtime]
 type Terminate = tuple[bool, Bytes]
 type OpResult = None | Uint256 | Fork | Terminate
+
+type Op = Callable[..., OpResult]
 
 
 def STOP() -> Terminate:
@@ -666,7 +668,7 @@ def SELFDESTRUCT(r: Runtime, address: Uint256) -> None:
     raise NotImplementedError("SELFDESTRUCT")
 
 
-def _load_ops() -> dict[str, tuple[Any, Signature]]:
+def _load_ops() -> dict[str, tuple[Op, Signature]]:
     opcodes = SPECIAL.union([c.name for c in REFERENCE.values()])
     ops = dict[str, tuple[Any, Signature]]()
     for name in opcodes:
