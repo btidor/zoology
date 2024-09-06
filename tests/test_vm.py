@@ -8,7 +8,7 @@ from disassembler import Program, abiencode, disassemble
 from smt import Uint160, Uint256
 from snapshot import LEVEL_FACTORIES, snapshot_contracts
 from state import Address, Block, Blockchain, Contract, Terminus, Transaction
-from vm import execute, substitutions
+from vm import execute, interpret, substitutions
 
 from .solidity import load_binary, load_solidity, loads_solidity
 
@@ -42,7 +42,7 @@ def test_snapshot(i: int, factory: Address) -> None:
         callvalue=Uint256(10**15),
     )
     k.balances[tx.address] = Uint256(10**15)
-    k, term = execute(k, tx)
+    k, term = interpret(k, tx)
     assert term.success, f"Level {i}: {term.returndata.reveal()}"
 
 

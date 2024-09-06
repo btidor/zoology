@@ -3,15 +3,17 @@
 import copy
 
 from bytes import Bytes
-from compiler import compile, symbolic_block, symbolic_transaction
+from compiler import compile, execute_op, symbolic_block, symbolic_transaction
 from disassembler import Program, disassemble
 from path import Path
 from smt import (
     Array,
     Constraint,
     Substitutions,
+    Uint,
     Uint160,
     Uint256,
+    substitute,
     substitutions,
 )
 from state import (
@@ -22,16 +24,69 @@ from state import (
     HyperCall,
     HyperCreate,
     HyperGlobal,
+    Runtime,
     Terminus,
     Transaction,
 )
 
 
+def interpret(
+    k: Blockchain, tx: Transaction, program: Program | None = None
+) -> tuple[Blockchain, Terminus]:
+    """Interpret a program with concrete inputs."""
+    block, address = Block(), Address.unwrap(tx.address, "interpret")
+    if program is None:
+        program = k.contracts[address].program
+
+    r = Runtime(program=program, storage=k.contracts[address].storage)
+    while True:
+        result = execute_op(r, k, tx, block)
+        if r.hyper:
+            assert len(r.hyper) == 1
+            match hyper := r.hyper[0]:
+                case HyperGlobal():
+                    raise NotImplementedError("this branch should be unreachable")
+                case HyperCreate():
+                    k, delta, _ = hypercreate(hyper, k, tx, r.path)
+                case HyperCall():
+                    k, delta, _ = hypercall(hyper, k, tx)
+            r = r.substitute(delta)
+            result = substitute(result, delta)
+            r.hyper.clear()
+
+        match result:
+            case None:
+                pass
+            case Uint() as result:
+                r.stack.append(result)
+                if len(r.stack) > 1024:
+                    raise RuntimeError("evm stack overflow")
+            case (Runtime() as r0, Runtime() as r1):
+                a = r0.path.constraint.reveal()
+                b = r1.path.constraint.reveal()
+                match (a, b):
+                    case (True, False):
+                        r = r0
+                    case (False, True):
+                        r = r1
+                    case _:
+                        raise ValueError(f"expected one concrete path, got {(a, b)}")
+            case (bool() as success, Bytes() as returndata):
+                storage = r.storage if success and not r.path.static else None
+                terminus = Terminus(
+                    r.path, tuple(r.hyper), success, returndata, storage
+                )
+                return k, terminus
+
+
 def execute(
     ki: Blockchain, tx: Transaction, program: Program | None = None
 ) -> tuple[Blockchain, Terminus]:
-    """Execute a program with concrete inputs."""
-    block, address = Block(), Address.unwrap(tx.address, "execute")
+    """Compile and execute a program with concrete inputs."""
+    # TODO: `execute` will always be slower than `interpret` until
+    # compile-sharing is implemented.
+
+    block, address = Block(), Address.unwrap(tx.address, "apply")
     if program is None:
         program = ki.contracts[address].program
 
@@ -108,7 +163,7 @@ def hypercreate(
     k.contracts[sender].storage = before
     ok = k.transfer(tx.caller, tx.address, tx.callvalue)
 
-    k, t = execute(k, tx, program=disassemble(h.initcode))
+    k, t = interpret(k, tx, program=disassemble(h.initcode))
     if t.success:
         k.contracts[address].program = disassemble(t.returndata)
     else:
@@ -148,7 +203,7 @@ def hypercall(
 
     if address in k.contracts:
         program = k.contracts[address].program if h.delegate else None
-        k, t = execute(k, tx, program)
+        k, t = interpret(k, tx, program)
         if h.static:
             assert t.path.static, "STATICCALL executed non-static op"
         constraint, returndata = Constraint(t.success), t.returndata

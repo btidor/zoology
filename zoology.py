@@ -18,7 +18,7 @@ from state import (
     Terminus,
     Transaction,
 )
-from vm import execute, hypercall, hyperglobal
+from vm import hypercall, hyperglobal, interpret
 
 PLAYER = 0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0
 PROXY = 0xCACACACACACACACACACACACACACACACACACACACA
@@ -37,7 +37,7 @@ def load_level(level: int) -> tuple[Blockchain, Address]:
     )
     k.balances[tx.address] = Uint256(10**15)
 
-    k, term = execute(k, tx)
+    k, term = interpret(k, tx)
     assert (data := term.returndata.reveal()) is not None
     assert term.success, data
 
