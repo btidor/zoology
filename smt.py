@@ -25,7 +25,7 @@ type Expression = "Symbolic | Array[Any, Any]"
 type Bitvec = Uint[Any] | Int[Any]
 
 
-def _make_symbolic[S: Expression](cls: type[S], term: Any) -> S:
+def _make_symbolic[S: Expression](cls: type[S], term: BitwuzlaTerm) -> S:
     instance = cls.__new__(cls)
     instance._term = term  # type: ignore
     return instance

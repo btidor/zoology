@@ -2,7 +2,7 @@
 
 import copy
 from inspect import Signature, signature
-from typing import Any, Callable, Literal
+from typing import Callable, Literal
 
 from bytes import Bytes
 from disassembler import Instruction
@@ -670,7 +670,7 @@ def SELFDESTRUCT(r: Runtime, address: Uint256) -> None:
 
 def _load_ops() -> dict[str, tuple[Op, Signature]]:
     opcodes = SPECIAL.union([c.name for c in REFERENCE.values()])
-    ops = dict[str, tuple[Any, Signature]]()
+    ops = dict[str, tuple[Op, Signature]]()
     for name in opcodes:
         if name in UNIMPLEMENTED:
             continue

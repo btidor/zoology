@@ -1,7 +1,6 @@
 """A machine to execute compiled symbolic programs."""
 
 import copy
-from typing import Any
 
 from bytes import Bytes
 from compiler import compile, symbolic_block, symbolic_transaction
@@ -67,7 +66,7 @@ def execute(
     raise RuntimeError("no termination matched")
 
 
-def hyperglobal(h: HyperGlobal[Any], k: Blockchain) -> Substitutions:
+def hyperglobal(h: HyperGlobal, k: Blockchain) -> Substitutions:
     """Simulate a concrete global-state hypercall."""
     input = [k if arg is None else arg for arg in h.input]
     result = h.fn(*input)

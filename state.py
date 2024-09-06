@@ -199,11 +199,11 @@ class Terminus:
 
 
 @dataclass(frozen=True)
-class HyperGlobal[*P]:
+class HyperGlobal:
     """A hypercall for getting information from global state."""
 
-    input: tuple[*P]
-    fn: Callable[[*P], Uint256]
+    input: tuple[Any]
+    fn: Callable[..., Uint256]
 
     result: Uint256
 
@@ -253,4 +253,4 @@ class HyperCall:
         return self
 
 
-type Hyper = HyperGlobal[Any] | HyperCreate | HyperCall
+type Hyper = HyperGlobal | HyperCreate | HyperCall

@@ -1,12 +1,13 @@
 #!/usr/bin/env pytest
 
-from typing import Any
 
 from compiler import compile, symbolic_transaction
 from disassembler import Program, abiencode
 from smt import Solver, Uint256
 
 from .solidity import load_binary, load_solidity, loads_solidity
+
+type Branch = tuple[str, str, str] | tuple[str, str, str, int]
 
 Fallback = (
     ("Px19", "SAVE", "", 1),
@@ -117,7 +118,7 @@ Preservation = (
 )
 
 
-def check_transitions(program: Program, branches: tuple[Any, ...]) -> None:
+def check_transitions(program: Program, branches: tuple[Branch, ...]) -> None:
     expected = dict[str, tuple[str, str, int]]()
     for line in branches:
         if len(line) == 3:
