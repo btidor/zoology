@@ -1,5 +1,7 @@
 #!/usr/bin/env pytest
 
+import pytest
+
 from bytes import Bytes
 from compiler import compile, symbolic_block, symbolic_transaction
 from disassembler import Program, abiencode, disassemble
@@ -31,17 +33,17 @@ def test_basic() -> None:
     assert term.returndata.reveal() == b""
 
 
-def test_snapshot() -> None:
-    for i, factory in enumerate(LEVEL_FACTORIES):
-        k = snapshot_contracts(factory)
-        tx = Transaction(
-            address=Uint160(factory),
-            calldata=Bytes(abiencode("createInstance(address)") + (0xB).to_bytes(32)),
-            callvalue=Uint256(10**15),
-        )
-        k.balances[tx.address] = Uint256(10**15)
-        k, term = execute(k, tx)
-        assert term.success, f"Level {i}: {term.returndata.reveal()}"
+@pytest.mark.parametrize("i,factory", list(enumerate(LEVEL_FACTORIES)))
+def test_snapshot(i: int, factory: Address) -> None:
+    k = snapshot_contracts(factory)
+    tx = Transaction(
+        address=Uint160(factory),
+        calldata=Bytes(abiencode("createInstance(address)") + (0xB).to_bytes(32)),
+        callvalue=Uint256(10**15),
+    )
+    k.balances[tx.address] = Uint256(10**15)
+    k, term = execute(k, tx)
+    assert term.success, f"Level {i}: {term.returndata.reveal()}"
 
 
 def _execute(program: Program, calldata: bytes = b"", callvalue: int = 0) -> Terminus:
@@ -145,7 +147,7 @@ def test_delegation() -> None:
 
     assert term.success is True
     assert term.returndata.reveal() == b""
-    assert term.storage is None
+    assert term.storage is not None
 
 
 def test_force() -> None:

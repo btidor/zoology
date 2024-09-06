@@ -50,10 +50,10 @@ Token = (
 
 Delegation = (
     ("PxD", "VIEW", "owner()"),
-    ("PxE", "VIEW", ""),
-    ("PxF", "VIEW", ""),
-    ("Px18", "VIEW", "00000000"),
-    ("Px19", "VIEW", "00000000"),
+    ("PxE", "SAVE", ""),
+    ("PxF", "SAVE", ""),
+    ("Px18", "SAVE", "00000000"),
+    ("Px19", "SAVE", "00000000"),
     # NOTE: if DELEGATECALL reverts, the parent contract continues executing.
 )
 
@@ -110,10 +110,10 @@ Preservation = (
     ("PxD", "VIEW", "timeZone2Library()"),
     ("Px19", "VIEW", "timeZone1Library()"),
     ("Px61", "VIEW", "owner()"),
-    ("PxC72", "VIEW", "setSecondTime(uint256)"),
-    ("PxC73", "VIEW", "setSecondTime(uint256)"),
-    ("Px3072", "VIEW", "setFirstTime(uint256)"),
-    ("Px3073", "VIEW", "setFirstTime(uint256)"),
+    ("PxC72", "SAVE", "setSecondTime(uint256)"),
+    ("PxC73", "SAVE", "setSecondTime(uint256)"),
+    ("Px3072", "SAVE", "setFirstTime(uint256)"),
+    ("Px3073", "SAVE", "setFirstTime(uint256)"),
     # NOTE: if DELEGATECALL reverts, the parent contract continues executing.
 )
 
