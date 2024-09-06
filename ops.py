@@ -2,7 +2,7 @@
 
 import copy
 from inspect import Signature, signature
-from typing import Callable, Literal
+from typing import Any, Callable, Literal, cast
 
 from bytes import Bytes
 from disassembler import Instruction
@@ -24,6 +24,7 @@ from state import (
     Blockchain,
     HyperCall,
     HyperCreate,
+    HyperGlobal,
     Runtime,
     Transaction,
 )
@@ -683,3 +684,58 @@ def _load_ops() -> dict[str, tuple[Op, Signature]]:
 
 
 OPS = _load_ops()
+
+
+def step(r: Runtime, k: Blockchain | None, tx: Transaction, block: Block) -> OpResult:
+    """
+    Execute the current instruction and increment the program counter.
+
+    If `k` is None, ops that depend on global state will be deferred as a
+    hypercall.
+
+    Returns the result of executing the current instruction, or None if the op
+    is deferred.
+    """
+    ins = r.program.instructions[r.pc]
+    if ins.name not in OPS:
+        raise ValueError(f"unimplemented opcode: {ins.name}")
+
+    fn, sig = OPS[ins.name]
+    args = list[Any]()
+    defer = False
+    for name in sig.parameters:
+        kls = sig.parameters[name].annotation
+        if kls == Uint256:
+            val = r.stack.pop()
+            args.append(val)
+        elif kls == Runtime:
+            args.append(r)
+        elif kls == Transaction:
+            args.append(tx)
+        elif kls == Block:
+            args.append(block)
+        elif kls == Instruction:
+            args.append(ins)
+        elif kls == Blockchain:
+            args.append(k)
+            if k is None:
+                defer = True
+        else:
+            raise TypeError(f"unknown arg class: {kls}")
+
+    # NOTE: we increment the program counter *before* executing the instruction
+    # because instructions may overwrite it (e.g. in the case of a JUMP).
+    r.pc += 1
+
+    if defer:
+        # NOTE: operations with side effects (i.e. memory writes) cannot be
+        # automatically deferred.
+        assert not any(isinstance(a, Runtime) for a in args)
+        result = Uint256(f"GLOBAL{len(r.hyper)}")
+        r.hyper.append(
+            HyperGlobal(tuple(args), cast(Callable[..., Uint256], fn), result)
+        )
+        r.stack.append(result)
+        return None
+    else:
+        return fn(*args)

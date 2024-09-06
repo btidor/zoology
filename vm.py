@@ -3,8 +3,9 @@
 import copy
 
 from bytes import Bytes
-from compiler import compile, execute_op, symbolic_block, symbolic_transaction
+from compiler import compile, symbolic_block, symbolic_transaction
 from disassembler import Program, disassemble
+from ops import step
 from path import Path
 from smt import (
     Array,
@@ -40,7 +41,7 @@ def interpret(
 
     r = Runtime(program=program, storage=k.contracts[address].storage)
     while True:
-        result = execute_op(r, k, tx, block)
+        result = step(r, k, tx, block)
         if r.hyper:
             assert len(r.hyper) == 1
             match hyper := r.hyper[0]:

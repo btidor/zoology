@@ -1,11 +1,11 @@
 """A compiler from bytecode to symbolic representation."""
 
 from heapq import heappop, heappush
-from typing import Any, Callable, Iterable, cast
+from typing import Iterable
 
 from bytes import Bytes
-from disassembler import Instruction, Program
-from ops import OPS, OpResult
+from disassembler import Program
+from ops import step
 from smt import (
     Array,
     Uint,
@@ -13,7 +13,7 @@ from smt import (
     Uint160,
     Uint256,
 )
-from state import Block, Blockchain, HyperGlobal, Runtime, Terminus, Transaction
+from state import Block, Runtime, Terminus, Transaction
 
 
 def compile(program: Program) -> Iterable[Terminus]:
@@ -29,7 +29,7 @@ def compile(program: Program) -> Iterable[Terminus]:
     while queue:
         r = heappop(queue)
         while True:
-            match execute_op(r, None, transaction, block):
+            match step(r, None, transaction, block):
                 case None:
                     pass
                 case Uint() as result:
@@ -44,63 +44,6 @@ def compile(program: Program) -> Iterable[Terminus]:
                     storage = r.storage if success and not r.path.static else None
                     yield Terminus(r.path, tuple(r.hyper), success, returndata, storage)
                     break
-
-
-def execute_op(
-    r: Runtime, k: Blockchain | None, tx: Transaction, block: Block
-) -> OpResult:
-    """
-    Execute the current instruction and increment the program counter.
-
-    If `k` is None, ops that depend on global state will be deferred as a
-    hypercall.
-
-    Returns the result of executing the current instruction, or None if the op
-    is deferred.
-    """
-    ins = r.program.instructions[r.pc]
-    if ins.name not in OPS:
-        raise ValueError(f"unimplemented opcode: {ins.name}")
-
-    fn, sig = OPS[ins.name]
-    args = list[Any]()
-    defer = False
-    for name in sig.parameters:
-        kls = sig.parameters[name].annotation
-        if kls == Uint256:
-            val = r.stack.pop()
-            args.append(val)
-        elif kls == Runtime:
-            args.append(r)
-        elif kls == Transaction:
-            args.append(tx)
-        elif kls == Block:
-            args.append(block)
-        elif kls == Instruction:
-            args.append(ins)
-        elif kls == Blockchain:
-            args.append(k)
-            if k is None:
-                defer = True
-        else:
-            raise TypeError(f"unknown arg class: {kls}")
-
-    # NOTE: we increment the program counter *before* executing the instruction
-    # because instructions may overwrite it (e.g. in the case of a JUMP).
-    r.pc += 1
-
-    if defer:
-        # NOTE: operations with side effects (i.e. memory writes) cannot be
-        # automatically deferred.
-        assert not any(isinstance(a, Runtime) for a in args)
-        result = Uint256(f"GLOBAL{len(r.hyper)}")
-        r.hyper.append(
-            HyperGlobal(tuple(args), cast(Callable[..., Uint256], fn), result)
-        )
-        r.stack.append(result)
-        return None
-    else:
-        return fn(*args)
 
 
 def symbolic_block() -> Block:
