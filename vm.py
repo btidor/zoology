@@ -6,6 +6,7 @@ from typing import Any
 from bytes import Bytes
 from compiler import compile, symbolic_block, symbolic_transaction
 from disassembler import Program, disassemble
+from path import Path
 from smt import (
     Array,
     Constraint,
@@ -51,7 +52,7 @@ def execute(
                 case HyperGlobal():
                     delta, ok = hyperglobal(hyper, k), Constraint(True)
                 case HyperCreate():
-                    k, delta, ok = hypercreate(hyper, k, tx, term)
+                    k, delta, ok = hypercreate(hyper, k, tx, term.path)
                 case HyperCall():
                     k, delta, ok = hypercall(hyper, k, tx)
             term = term.substitute(delta)
@@ -74,7 +75,7 @@ def hyperglobal(h: HyperGlobal[Any, Any], k: Blockchain) -> Substitutions:
 
 
 def hypercreate(
-    h: HyperCreate, k: Blockchain, tx: Transaction, term: Terminus
+    h: HyperCreate, k: Blockchain, tx: Transaction, path: Path
 ) -> tuple[Blockchain, Substitutions, Constraint]:
     """Simulate a concrete CREATE hypercall."""
     sender = Address.unwrap(tx.address, "CREATE/CREATE2")
@@ -87,10 +88,10 @@ def hypercreate(
     else:
         salt = h.salt.reveal()
         assert salt is not None, "CREATE2 requires concrete salt"
-        digest = term.path.keccak256(h.initcode)
+        digest = path.keccak256(h.initcode)
         assert (hash := digest.reveal()) is not None
         seed = b"\xff" + sender.to_bytes(20) + salt.to_bytes(32) + hash.to_bytes(32)
-    address = Address.unwrap(term.path.keccak256(Bytes(seed)).into(Uint160))
+    address = Address.unwrap(path.keccak256(Bytes(seed)).into(Uint160))
 
     tx = Transaction(
         origin=tx.origin,
