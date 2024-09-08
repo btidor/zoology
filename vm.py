@@ -115,17 +115,19 @@ def handle_hypercalls(
                     input = [k if arg is None else arg for arg in op.input]
                     result = op.fn(*input)
                     assert isinstance(result, Uint)
-                    next.append((k, term.substitute([(placeholder, result)])))
+
+                    delta: Substitutions = [(placeholder, result)]
+                    next.append((k, copy.deepcopy(term).substitute(delta)))
                 case HyperInvoke(op, storage, placeholder):
                     before, after = storage
                     k.contracts[sender].storage = before
-
                     address, subtx, override = op.before(k, tx, term.path)
+
                     for k, delta in _invoke(
                         op, placeholder, k, address, subtx, override, block
                     ):
                         delta.append((after, k.contracts[sender].storage))
-                        next.append((k, term.substitute(delta)))
+                        next.append((k, copy.deepcopy(term).substitute(delta)))
         terms = next
     return terms
 
