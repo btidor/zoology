@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Self
+from typing import Any, Self
 
 from bytes import BYTES, Bytes, Memory
 from disassembler import Program, disassemble
@@ -20,9 +20,6 @@ from smt import (
     concrete_hash,
     substitute,
 )
-
-if TYPE_CHECKING:
-    from ops import Hyper  # TODO
 
 
 @dataclass
@@ -169,43 +166,19 @@ class Runtime:
     memory: Memory = field(default_factory=Memory)
     latest_return: Bytes = Bytes()
 
-    hyper: list[Hyper] = field(default_factory=list)
-
     def __lt__(self, other: Any) -> bool:
         if not isinstance(other, Runtime):
             return NotImplemented
         return self.path.id < other.path.id
+
+    def __eq__(self, other: Any) -> bool:
+        return id(self) == id(other)
 
     def push(self, value: Uint256) -> None:
         """Push a value onto the stack, checking for overflow."""
         self.stack.append(value)
         if len(self.stack) > 1024:
             raise RuntimeError("evm stack overflow")
-
-    def substitute(self, subs: Substitutions) -> Self:
-        """
-        Perform term substitution.
-
-        If any SHA3 hashes become concrete, term substitution will be
-        recursively re-applied until no more hashes can be resolved.
-        """
-        term = substitute(self, subs)
-        while extra := term.path.update_substitutions():
-            term = substitute(term, extra)
-        return term
-
-
-@dataclass(frozen=True)
-class Terminus:
-    """The result of running a contract to completion."""
-
-    path: Path
-    hyper: tuple[Hyper, ...]
-
-    success: bool
-    returndata: Bytes
-
-    storage: Array[Uint256, Uint256] | None
 
     def substitute(self, subs: Substitutions) -> Self:
         """

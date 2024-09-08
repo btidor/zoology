@@ -3,15 +3,20 @@
 import copy
 
 from bytes import Bytes
-from compiler import compile, symbolic_block, symbolic_transaction
+from compiler import (
+    HyperCall,
+    HyperCreate,
+    HyperGlobal,
+    Terminus,
+    compile,
+    symbolic_block,
+    symbolic_transaction,
+)
 from disassembler import Program, disassemble
 from ops import (
     CallOp,
     CreateOp,
     ForkOp,
-    HyperCall,
-    HyperCreate,
-    HyperGlobal,
     TerminateOp,
     step,
 )
@@ -30,7 +35,6 @@ from state import (
     Block,
     Blockchain,
     Runtime,
-    Terminus,
     Transaction,
 )
 
@@ -60,9 +64,7 @@ def interpret(
                         raise ValueError(f"expected one concrete path, got {(a, b)}")
             case TerminateOp(success, returndata):
                 storage = r.storage if success and not r.path.static else None
-                terminus = Terminus(
-                    r.path, tuple(r.hyper), success, returndata, storage
-                )
+                terminus = Terminus(r.path, (), success, returndata, storage)
                 return k, terminus
             case CreateOp() as op:
                 address, subtx, override = op.before(k, tx, r.path)

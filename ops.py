@@ -5,14 +5,13 @@ from __future__ import annotations
 import copy
 from dataclasses import dataclass
 from inspect import Signature, signature
-from typing import Any, Callable, Literal, Self, cast, overload
+from typing import Any, Callable, Literal, cast, overload
 
 from bytes import Bytes
 from disassembler import Instruction, Program, disassemble
 from opcodes import REFERENCE, SPECIAL, UNIMPLEMENTED
 from path import Path
 from smt import (
-    Array,
     Constraint,
     Int,
     Uint,
@@ -851,53 +850,3 @@ def step(
             r.push(result)
             return None
         return result
-
-
-### TODO
-
-
-@dataclass(frozen=True)
-class HyperGlobal:
-    """A hypercall for getting information from global state."""
-
-    op: DeferOp
-    result: Uint256
-
-    def __deepcopy__(self, memo: Any) -> Self:
-        return self
-
-
-@dataclass(frozen=True)
-class HyperCreate:
-    """A CREATE/CREATE2 hypercall."""
-
-    op: CreateOp
-
-    storage: tuple[
-        Array[Uint256, Uint256],  # before
-        Array[Uint256, Uint256],  # after
-    ]
-    address: Uint160  # zero on failure
-
-    def __deepcopy__(self, memo: Any) -> Self:
-        return self
-
-
-@dataclass(frozen=True)
-class HyperCall:
-    """A CALL/DELEGATECALL/STATICCALL hypercall."""
-
-    op: CallOp
-
-    storage: tuple[
-        Array[Uint256, Uint256],  # before
-        Array[Uint256, Uint256] | None,  # after
-    ]
-    success: Constraint
-    returndata: Bytes
-
-    def __deepcopy__(self, memo: Any) -> Self:
-        return self
-
-
-type Hyper = HyperGlobal | HyperCreate | HyperCall

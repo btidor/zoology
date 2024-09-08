@@ -3,11 +3,11 @@
 import pytest
 
 from bytes import Bytes
-from compiler import compile, symbolic_block, symbolic_transaction
+from compiler import Terminus, compile, symbolic_block, symbolic_transaction
 from disassembler import Program, abiencode, disassemble
 from smt import Uint160, Uint256
 from snapshot import LEVEL_FACTORIES, snapshot_contracts
-from state import Address, Block, Blockchain, Contract, Terminus, Transaction
+from state import Address, Block, Blockchain, Contract, Transaction
 from vm import execute, interpret, substitutions
 
 from .solidity import load_binary, load_solidity, loads_solidity

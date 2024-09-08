@@ -4,16 +4,22 @@ import copy
 from typing import Iterable
 
 from bytes import Bytes
-from compiler import compile, symbolic_block, symbolic_transaction
+from compiler import (
+    HyperCall,
+    HyperCreate,
+    HyperGlobal,
+    Terminus,
+    compile,
+    symbolic_block,
+    symbolic_transaction,
+)
 from disassembler import abiencode
-from ops import HyperCall, HyperCreate, HyperGlobal
 from smt import Array, Constraint, Solver, Uint8, Uint160, Uint256, substitutions
 from snapshot import LEVEL_FACTORIES, snapshot_contracts
 from state import (
     Address,
     Block,
     Blockchain,
-    Terminus,
     Transaction,
 )
 from vm import hypercall, hyperglobal, interpret
