@@ -6,7 +6,17 @@ from typing import Iterable
 
 from bytes import Bytes
 from disassembler import Program
-from ops import CallOp, CreateOp, ForkOp, HyperCall, HyperCreate, TerminateOp, step
+from ops import (
+    CallOp,
+    CreateOp,
+    DeferOp,
+    ForkOp,
+    HyperCall,
+    HyperCreate,
+    HyperGlobal,
+    TerminateOp,
+    step,
+)
 from smt import (
     Array,
     Constraint,
@@ -62,6 +72,10 @@ def compile(program: Program) -> Iterable[Terminus]:
                     r.storage = copy.deepcopy(storage)
                     r.hyper.append(hyper)
                     op.after(r, hyper.success, hyper.returndata)
+                case DeferOp() as op:
+                    result = Uint256(f"GLOBAL{len(r.hyper)}")
+                    r.hyper.append(HyperGlobal(op, result))
+                    op.after(r, result)
 
 
 def symbolic_block() -> Block:

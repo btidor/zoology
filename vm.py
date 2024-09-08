@@ -20,6 +20,7 @@ from smt import (
     Array,
     Constraint,
     Substitutions,
+    Uint,
     Uint160,
     Uint256,
     substitutions,
@@ -127,8 +128,9 @@ def execute(
 
 def hyperglobal(h: HyperGlobal, k: Blockchain) -> Substitutions:
     """Simulate a concrete global-state hypercall."""
-    input = [k if arg is None else arg for arg in h.input]
-    result = h.fn(*input)
+    input = [k if arg is None else arg for arg in h.op.input]
+    result = h.op.fn(*input)
+    assert isinstance(result, Uint)
     return [(h.result, result)]
 
 

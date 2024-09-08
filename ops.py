@@ -5,7 +5,7 @@ from __future__ import annotations
 import copy
 from dataclasses import dataclass
 from inspect import Signature, signature
-from typing import Any, Callable, Literal, Self, cast
+from typing import Any, Callable, Literal, Self, cast, overload
 
 from bytes import Bytes
 from disassembler import Instruction, Program, disassemble
@@ -775,16 +775,31 @@ type BasicOp = ForkOp | TerminateOp | CreateOp | CallOp
 class DeferOp:
     """Special operation for operations deferred by `step`."""
 
-    fn: Callable[[Blockchain], Uint256]
+    # The arguments to `fn` must be stored here, rather than captured in a
+    # closure, so that term substitution can be performed on them.
+    input: tuple[Any]
+    fn: Operation
 
     def after(self, r: Runtime, result: Uint256) -> None:
         """Push the result of the deferred operation to the stack."""
         return r.push(result)
 
 
+@overload
+def step(
+    r: Runtime, k: Blockchain, tx: Transaction, block: Block
+) -> None | BasicOp: ...
+
+
+@overload
+def step(
+    r: Runtime, k: None, tx: Transaction, block: Block
+) -> None | BasicOp | DeferOp: ...
+
+
 def step(
     r: Runtime, k: Blockchain | None, tx: Transaction, block: Block
-) -> None | BasicOp:
+) -> None | BasicOp | DeferOp:
     """
     Execute the current instruction and increment the program counter.
 
@@ -829,12 +844,7 @@ def step(
         # NOTE: operations with side effects (i.e. memory writes) cannot be
         # automatically deferred.
         assert not any(isinstance(a, Runtime) for a in args)
-        result = Uint256(f"GLOBAL{len(r.hyper)}")
-        r.hyper.append(
-            HyperGlobal(tuple(args), cast(Callable[..., Uint256], fn), result)
-        )
-        r.stack.append(result)
-        return None
+        return DeferOp(tuple(args), cast(Callable[..., Uint256], fn))
     else:
         result = fn(*args)
         if isinstance(result, Uint):
@@ -850,9 +860,7 @@ def step(
 class HyperGlobal:
     """A hypercall for getting information from global state."""
 
-    input: tuple[Any]
-    fn: Callable[..., Uint256]
-
+    op: DeferOp
     result: Uint256
 
     def __deepcopy__(self, memo: Any) -> Self:
