@@ -5,12 +5,10 @@ import argparse
 import json
 import sys
 
-from zbitvector import Solver
-
 from bytes import Bytes
 from compiler import compile, symbolic_transaction
 from disassembler import decode_instruction, disassemble
-from smt import Uint160
+from smt import Solver, Uint160
 from snapshot import (
     COUNT,
     LEVEL_FACTORIES,

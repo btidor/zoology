@@ -1,5 +1,7 @@
 """A library of EVM instruction implementations."""
 
+from __future__ import annotations
+
 import copy
 from inspect import Signature, signature
 from typing import Any, Callable, Literal, cast
@@ -32,12 +34,6 @@ from state import (
 Int256 = Int[Literal[256]]
 Uint257 = Uint[Literal[257]]
 Uint512 = Uint[Literal[512]]
-
-type Fork = tuple[Runtime, Runtime]
-type Terminate = tuple[bool, Bytes]
-type OpResult = None | Uint256 | Fork | Terminate
-
-type Op = Callable[..., OpResult]
 
 
 def STOP() -> Terminate:
@@ -669,9 +665,12 @@ def SELFDESTRUCT(r: Runtime, address: Uint256) -> None:
     raise NotImplementedError("SELFDESTRUCT")
 
 
-def _load_ops() -> dict[str, tuple[Op, Signature]]:
+type Operation = Callable[..., None | Uint256 | BasicOp]
+
+
+def _load_ops() -> dict[str, tuple[Operation, Signature]]:
     opcodes = SPECIAL.union([c.name for c in REFERENCE.values()])
-    ops = dict[str, tuple[Op, Signature]]()
+    ops = dict[str, tuple[Operation, Signature]]()
     for name in opcodes:
         if name in UNIMPLEMENTED:
             continue
@@ -686,7 +685,14 @@ def _load_ops() -> dict[str, tuple[Op, Signature]]:
 OPS = _load_ops()
 
 
-def step(r: Runtime, k: Blockchain | None, tx: Transaction, block: Block) -> OpResult:
+type Fork = tuple[Runtime, Runtime]
+type Terminate = tuple[bool, Bytes]
+type BasicOp = Fork | Terminate
+
+
+def step(
+    r: Runtime, k: Blockchain | None, tx: Transaction, block: Block
+) -> None | BasicOp:
     """
     Execute the current instruction and increment the program counter.
 
@@ -704,24 +710,24 @@ def step(r: Runtime, k: Blockchain | None, tx: Transaction, block: Block) -> OpR
     args = list[Any]()
     defer = False
     for name in sig.parameters:
-        kls = sig.parameters[name].annotation
-        if kls == Uint256:
-            val = r.stack.pop()
-            args.append(val)
-        elif kls == Runtime:
-            args.append(r)
-        elif kls == Transaction:
-            args.append(tx)
-        elif kls == Block:
-            args.append(block)
-        elif kls == Instruction:
-            args.append(ins)
-        elif kls == Blockchain:
-            args.append(k)
-            if k is None:
-                defer = True
-        else:
-            raise TypeError(f"unknown arg class: {kls}")
+        match sig.parameters[name].annotation:
+            case "Uint256":
+                val = r.stack.pop()
+                args.append(val)
+            case "Runtime":
+                args.append(r)
+            case "Transaction":
+                args.append(tx)
+            case "Block":
+                args.append(block)
+            case "Instruction":
+                args.append(ins)
+            case "Blockchain":
+                args.append(k)
+                if k is None:
+                    defer = True
+            case _ as kls:
+                raise TypeError(f"unknown arg class: {kls}")
 
     # NOTE: we increment the program counter *before* executing the instruction
     # because instructions may overwrite it (e.g. in the case of a JUMP).
@@ -738,4 +744,8 @@ def step(r: Runtime, k: Blockchain | None, tx: Transaction, block: Block) -> OpR
         r.stack.append(result)
         return None
     else:
-        return fn(*args)
+        result = fn(*args)
+        if isinstance(result, Uint):
+            r.push(result)
+            return None
+        return result

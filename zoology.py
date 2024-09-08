@@ -145,8 +145,8 @@ def search(level: int) -> Iterable[str]:
 
             tx.narrow(solver)  # must do this first if CALLER is hashed
 
-            # TODO: `mutation.path` and `val.path` are not properly merged, which
-            # may cause SHA3 narrowing errors.
+            # TODO: `mutation.path` and `val.path` are not properly merged,
+            # which may cause SHA3 narrowing errors.
             mutation.path.narrow(solver)
             val.path.narrow(solver)
 

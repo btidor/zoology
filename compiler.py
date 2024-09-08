@@ -8,7 +8,6 @@ from disassembler import Program
 from ops import step
 from smt import (
     Array,
-    Uint,
     Uint8,
     Uint160,
     Uint256,
@@ -32,10 +31,6 @@ def compile(program: Program) -> Iterable[Terminus]:
             match step(r, None, transaction, block):
                 case None:
                     pass
-                case Uint() as result:
-                    r.stack.append(result)
-                    if len(r.stack) > 1024:
-                        raise RuntimeError("evm stack overflow")
                 case (Runtime() as r0, Runtime() as r1):
                     heappush(queue, r0)
                     heappush(queue, r1)

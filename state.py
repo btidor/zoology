@@ -172,6 +172,12 @@ class Runtime:
             return NotImplemented
         return self.path.id < other.path.id
 
+    def push(self, value: Uint256) -> None:
+        """Push a value onto the stack, checking for overflow."""
+        self.stack.append(value)
+        if len(self.stack) > 1024:
+            raise RuntimeError("evm stack overflow")
+
     def substitute(self, subs: Substitutions) -> Self:
         """
         Perform term substitution.
