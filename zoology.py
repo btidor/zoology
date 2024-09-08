@@ -1,13 +1,9 @@
 """A solver for the Ethernaut CTF."""
 
-import copy
 from typing import Iterable
 
 from bytes import Bytes
 from compiler import (
-    HyperCall,
-    HyperCreate,
-    HyperGlobal,
     Terminus,
     compile,
     symbolic_block,
@@ -22,7 +18,7 @@ from state import (
     Blockchain,
     Transaction,
 )
-from vm import hypercall, hyperglobal, interpret
+from vm import handle_hypercalls, interpret
 
 PLAYER = 0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0
 PROXY = 0xCACACACACACACACACACACACACACACACACACACACA
@@ -56,7 +52,7 @@ def search(level: int) -> Iterable[str]:
     cblock = Block()
     xblock = cblock.successor()
     vblock = xblock.successor()
-    # TODO: when recursing into `execute`, default block is used
+    # TODO: when recursing into `interpret`, default block is used
 
     vx = Transaction(
         origin=Uint160(PLAYER),
@@ -103,8 +99,6 @@ def search(level: int) -> Iterable[str]:
             if mutation.path.static:  # TODO: or balance change
                 continue
 
-            val = validator
-            k = copy.deepcopy(k)
             mutation = mutation.substitute(
                 [
                     *substitutions(symbolic_transaction(), tx),
@@ -115,34 +109,14 @@ def search(level: int) -> Iterable[str]:
                     ),
                 ]
             )
-            for i in range(len(mutation.hyper)):
-                hyper = mutation.hyper[i]
-                match hyper:
-                    case HyperGlobal():
-                        delta = hyperglobal(hyper, k)
-                    case HyperCreate():
-                        raise NotImplementedError
-                    case HyperCall():
-                        raise NotImplementedError
-                mutation = mutation.substitute(delta)
-
+            kn, mutation = handle_hypercalls(k, tx, mutation)
             assert mutation.storage is not None
-            k.contracts[address].storage = mutation.storage
+            kn.contracts[address].storage = mutation.storage
 
-            for i in range(len(val.hyper)):
-                hyper = val.hyper[i]
-                match hyper:
-                    case HyperGlobal():
-                        delta = hyperglobal(hyper, k)
-                    case HyperCreate():
-                        raise NotImplementedError
-                    case HyperCall():
-                        k, delta = hypercall(hyper, k, vx, val.path)
-                val = val.substitute(delta)
-
+            kn, valn = handle_hypercalls(kn, vx, validator)
             solver = Solver()
             solver.add(mutation.path.constraint)
-            solver.add(val.path.constraint)
+            solver.add(valn.path.constraint)
             if not solver.check():
                 continue
 
@@ -151,7 +125,7 @@ def search(level: int) -> Iterable[str]:
             # TODO: `mutation.path` and `val.path` are not properly merged,
             # which may cause SHA3 narrowing errors.
             mutation.path.narrow(solver)
-            val.path.narrow(solver)
+            valn.path.narrow(solver)
 
             if address != LEVEL:
                 yield f"To {hex(address)}:\n"

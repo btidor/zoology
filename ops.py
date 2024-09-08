@@ -736,14 +736,13 @@ class CallOp:
     ) -> tuple[Address, Transaction, Program | None]:
         """Set up the CALL operation."""
         address = Address.unwrap(self.address, "CALL/DELEGATECALL/STATICCALL")
-        assert (calldata := self.calldata.reveal()) is not None
         if self.callvalue is None:  # DELEGATECALL
             subtx = Transaction(
                 origin=tx.origin,
                 caller=tx.caller,
                 address=tx.address,
                 callvalue=tx.callvalue,
-                calldata=Bytes(calldata),
+                calldata=self.calldata,
                 gasprice=tx.gasprice,
             )
             override = k.contracts[address].program
@@ -753,7 +752,7 @@ class CallOp:
                 caller=tx.address,
                 address=self.address,
                 callvalue=self.callvalue,
-                calldata=Bytes(calldata),
+                calldata=self.calldata,
                 gasprice=tx.gasprice,
             )
             path.constraint &= k.transfer(subtx)

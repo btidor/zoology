@@ -1,7 +1,5 @@
 """A machine to execute compiled symbolic programs."""
 
-import copy
-
 from bytes import Bytes
 from compiler import (
     HyperCall,
@@ -90,10 +88,12 @@ def interpret(
 def execute(
     ki: Blockchain, tx: Transaction, program: Program | None = None
 ) -> tuple[Blockchain, Terminus]:
-    """Compile and execute a program with concrete inputs."""
-    # TODO: `execute` will always be slower than `interpret` until
-    # compile-sharing is implemented.
+    """
+    Compile and execute a program with concrete inputs.
 
+    This function is generally slower than `interpret`. It exists to exercise
+    Hypercall-related logic, since those functions are also used in zoology.py.
+    """
     block, address = Block(), Address.unwrap(tx.address, "apply")
     if program is None:
         program = ki.contracts[address].program
@@ -105,19 +105,8 @@ def execute(
     ]
 
     for term in compile(program):
-        k = copy.deepcopy(ki)
         term = term.substitute(subs)
-
-        for i in range(len(term.hyper)):
-            hyper = term.hyper[i]
-            match hyper:
-                case HyperGlobal():
-                    delta, ok = hyperglobal(hyper, k), Constraint(True)
-                case HyperCreate():
-                    k, delta = hypercreate(hyper, k, tx, term.path)
-                case HyperCall():
-                    k, delta = hypercall(hyper, k, tx, term.path)
-            term = term.substitute(delta)
+        k, term = handle_hypercalls(ki, tx, term)
 
         assert (ok := term.path.constraint.reveal()) is not None
         if ok:
@@ -126,6 +115,23 @@ def execute(
             return k, term
 
     raise RuntimeError("no termination matched")
+
+
+def handle_hypercalls(
+    k: Blockchain, tx: Transaction, term: Terminus
+) -> tuple[Blockchain, Terminus]:
+    """Concretize hypercalls using the current global state."""
+    for i in range(len(term.hyper)):
+        hyper = term.hyper[i]
+        match hyper:
+            case HyperGlobal():
+                delta = hyperglobal(hyper, k)
+            case HyperCreate():
+                k, delta = hypercreate(hyper, k, tx, term.path)
+            case HyperCall():
+                k, delta = hypercall(hyper, k, tx, term.path)
+        term = term.substitute(delta)
+    return k, term
 
 
 def hyperglobal(h: HyperGlobal, k: Blockchain) -> Substitutions:
