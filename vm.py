@@ -104,57 +104,58 @@ def handle_hypercalls(
     k: Blockchain, tx: Transaction, block: Block, term: Terminus
 ) -> Iterable[tuple[Blockchain, Terminus]]:
     """Simulate hypercalls using the current global state."""
+    sender = Address.unwrap(tx.address)
     n = len(term.hyper)
     terms = [(k, term)]
     for i in range(n):
         next = list[tuple[Blockchain, Terminus]]()
         for k, term in terms:
-            hyper = term.hyper[i]
-            match hyper:
-                case HyperGlobal():
-                    delta = _global(hyper, k)
-                    next.append((k, term.substitute(delta)))
-                case HyperInvoke():
-                    for k, delta in _invoke(hyper, k, tx, block, term.path):
+            match term.hyper[i]:
+                case HyperGlobal(op, placeholder):
+                    input = [k if arg is None else arg for arg in op.input]
+                    result = op.fn(*input)
+                    assert isinstance(result, Uint)
+                    next.append((k, term.substitute([(placeholder, result)])))
+                case HyperInvoke(op, storage, placeholder):
+                    before, after = storage
+                    k.contracts[sender].storage = before
+
+                    address, subtx, override = op.before(k, tx, term.path)
+                    for k, delta in _invoke(
+                        op, placeholder, k, address, subtx, override, block
+                    ):
+                        delta.append((after, k.contracts[sender].storage))
                         next.append((k, term.substitute(delta)))
         terms = next
     return terms
 
 
-def _global(h: HyperGlobal, k: Blockchain) -> Substitutions:
-    input = [k if arg is None else arg for arg in h.op.input]
-    result = h.op.fn(*input)
-    assert isinstance(result, Uint)
-    return [(h.placeholder, result)]
-
-
 def _invoke(
-    h: HyperInvoke, k: Blockchain, tx: Transaction, block: Block, path: Path
+    op: CallOp | CreateOp,
+    placeholder: Uint160 | tuple[Constraint, Bytes],
+    k: Blockchain,
+    address: Address,
+    subtx: Transaction,
+    override: Program | None,
+    block: Block,
 ) -> Iterable[tuple[Blockchain, Substitutions]]:
-    sender = Address.unwrap(tx.address)
-    before, after = h.storage
-    k.contracts[sender].storage = before
-
-    address, subtx, override = h.op.before(k, tx, path)
     for k, term in execute(k, subtx, block, override):
-        if isinstance(h.op, CreateOp):
+        if isinstance(op, CreateOp):
             if term.success:
                 k.contracts[address].program = disassemble(term.returndata)
             else:
                 del k.contracts[address]
-            assert isinstance(h.placeholder, Uint)
+            assert isinstance(placeholder, Uint)
             delta: Substitutions = [
-                (h.placeholder, Uint160(address if term.success else 0))
+                (placeholder, Uint160(address if term.success else 0))
             ]
         else:
-            if h.op.static:
+            if op.static:
                 assert term.path.static, "STATICCALL executed non-static op"
-            assert isinstance(h.placeholder, tuple)
-            success, returndata = h.placeholder
+            assert isinstance(placeholder, tuple)
+            success, returndata = placeholder
             delta: Substitutions = [
                 (success, Constraint(term.success)),
                 *substitutions(returndata, term.returndata),
             ]
-
-        delta.append((after, k.contracts[sender].storage))
         yield k, delta
