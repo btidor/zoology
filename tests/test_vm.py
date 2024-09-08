@@ -46,19 +46,24 @@ def test_snapshot(i: int, factory: Address) -> None:
     assert term.success, f"Level {i}: {term.returndata.reveal()}"
 
 
-def _execute_compiled(
+def _execute_simple(
     program: Program, calldata: bytes = b"", callvalue: int = 0
 ) -> Terminus:
     k = Blockchain()
     k.contracts = {ADDRESS: Contract(program)}
     k.balances[Uint160(ADDRESS)] = Uint256(10**15)
-    block = Block()
     tx = Transaction(
         address=Uint160(ADDRESS),
         callvalue=Uint256(callvalue),
         calldata=Bytes(calldata),
     )
+    return _execute_compiled(k, tx)
 
+
+def _execute_compiled(k: Blockchain, tx: Transaction) -> Terminus:
+    # It would be faster to use `execute`, but this way exercises `compile` and
+    # `handle_hypercalls`, which we'll need for the solver.
+    block = Block()
     address = Address.unwrap(tx.address, "execute")
     program = k.contracts[address].program
     subs = [
@@ -76,13 +81,14 @@ def _execute_compiled(
             if term.storage:
                 k.contracts[address].storage = term.storage
             return term
+
     raise RuntimeError("no termination matched")
 
 
 def test_fallback() -> None:
     program = load_solidity("fixtures/01_Fallback.sol")
     calldata = abiencode("owner()")
-    term = _execute_compiled(program, calldata)
+    term = _execute_simple(program, calldata)
 
     assert term.success is True
     assert term.returndata.reveal() == (0).to_bytes(32)
@@ -92,7 +98,7 @@ def test_fallback() -> None:
 def test_fallout() -> None:
     program = load_solidity("fixtures/02_Fallout.sol")
     calldata = abiencode("Fal1out()")
-    term = _execute_compiled(program, calldata)
+    term = _execute_simple(program, calldata)
 
     assert term.success is True
     assert term.storage is not None
@@ -112,7 +118,7 @@ def test_coinflip() -> None:
         address=Uint160(ADDRESS),
         calldata=Bytes(abiencode("flip(bool)") + (0).to_bytes(32)),
     )
-    _, term = execute(k, tx)
+    term = _execute_compiled(k, tx)
 
     assert term.success is True
     assert term.storage is not None
@@ -127,7 +133,7 @@ def test_telephone() -> None:
     calldata = abiencode("changeOwner(address)") + (
         0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
     ).to_bytes(32)
-    term = _execute_compiled(program, calldata)
+    term = _execute_simple(program, calldata)
 
     assert term.success is True
     assert term.returndata.reveal() == b""
@@ -141,7 +147,7 @@ def test_token() -> None:
         + (0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF).to_bytes(32)
         + (0xEEEE).to_bytes(32)
     )
-    term = _execute_compiled(program, calldata)
+    term = _execute_simple(program, calldata)
 
     assert term.success is True
     assert term.returndata.reveal() == (1).to_bytes(32)
@@ -163,7 +169,7 @@ def test_delegation() -> None:
         address=Uint160(ADDRESS),
         calldata=Bytes(abiencode("pwn()")),
     )
-    _, term = execute(k, tx)
+    term = _execute_compiled(k, tx)
 
     assert term.success is True
     assert term.returndata.reveal() == b""
@@ -172,7 +178,7 @@ def test_delegation() -> None:
 
 def test_force() -> None:
     program = load_binary("fixtures/07_Force.bin")
-    term = _execute_compiled(program, callvalue=0x1234)
+    term = _execute_simple(program, callvalue=0x1234)
 
     assert term.success is False
     assert term.returndata.reveal() == b""
@@ -182,7 +188,7 @@ def test_force() -> None:
 def test_vault() -> None:
     program = load_solidity("fixtures/08_Vault.sol")
     calldata = abiencode("unlock(bytes32)") + (0).to_bytes(32)
-    term = _execute_compiled(program, calldata)
+    term = _execute_simple(program, calldata)
 
     assert term.success is True
     assert term.returndata.reveal() == b""
@@ -191,7 +197,7 @@ def test_vault() -> None:
 
 def test_king() -> None:
     program = load_solidity("fixtures/09_King.sol")
-    term = _execute_compiled(program, callvalue=0x1234)
+    term = _execute_simple(program, callvalue=0x1234)
 
     assert term.success is True
     assert term.returndata.reveal() == b""
@@ -201,7 +207,7 @@ def test_king() -> None:
 def test_reentrancy() -> None:
     program = load_solidity("fixtures/10_Reentrancy.sol")
     calldata = abiencode("donate(address)") + (1).to_bytes(32)
-    term = _execute_compiled(program, calldata, callvalue=0x1234)
+    term = _execute_simple(program, calldata, callvalue=0x1234)
 
     assert term.success is True
     assert term.returndata.reveal() == b""
@@ -222,7 +228,7 @@ def test_elevator() -> None:
         address=Uint160(ADDRESS),
         calldata=Bytes(abiencode("goTo(uint256)") + (1).to_bytes(32)),
     )
-    _, term = execute(k, tx)
+    term = _execute_compiled(k, tx)
 
     assert term.success is True
     assert term.returndata.reveal() == b""
@@ -237,11 +243,11 @@ def test_privacy() -> None:
         address=Uint160(ADDRESS),
         calldata=Bytes(abiencode("unlock(bytes16)") + (0x4321 << 128).to_bytes(32)),
     )
-    _, term = execute(k, tx)
+    term = _execute_compiled(k, tx)
 
     assert term.success is True
     assert term.returndata.reveal() == b""
-    term = _execute_compiled(program, callvalue=0x1234)
+    term = _execute_simple(program, callvalue=0x1234)
 
 
 def test_gatekeeper_one() -> None:
@@ -257,11 +263,11 @@ def test_gatekeeper_two() -> None:
     calldata = abiencode("enter(bytes8)") + bytes.fromhex(
         "65d5bd2c953ab27b000000000000000000000000000000000000000000000000"
     )
-    term = _execute_compiled(program, calldata)
+    term = _execute_simple(program, calldata)
 
     assert term.success is True
     assert term.returndata.reveal() == (1).to_bytes(32)
-    term = _execute_compiled(program, callvalue=0x1234)
+    term = _execute_simple(program, callvalue=0x1234)
 
 
 def test_preservation() -> None:
@@ -281,7 +287,7 @@ def test_preservation() -> None:
         address=Uint160(ADDRESS),
         calldata=Bytes(abiencode("setFirstTime(uint256)") + (0x5050).to_bytes(32)),
     )
-    _, term = execute(k, tx)
+    term = _execute_compiled(k, tx)
 
     assert term.success is True
     assert term.returndata.reveal() == b""
