@@ -42,7 +42,9 @@ def test_snapshot(i: int, factory: Address) -> None:
         callvalue=Uint256(10**15),
     )
     k.balances[tx.address] = Uint256(10**15)
-    k, term = execute(k, tx)
+    results = list(execute(k, tx))
+    assert len(results) == 1
+    k, term = results[0]
     assert term.success, f"Level {i}: {term.returndata.reveal()}"
 
 
@@ -74,13 +76,12 @@ def _execute_compiled(k: Blockchain, tx: Transaction) -> Terminus:
 
     for term in compile(program):
         term = term.substitute(subs)
-        k, term = handle_hypercalls(k, tx, block, term)
-
-        assert (ok := term.path.constraint.reveal()) is not None
-        if ok:
-            if term.storage:
-                k.contracts[address].storage = term.storage
-            return term
+        for k, term in handle_hypercalls(k, tx, block, term):
+            assert (ok := term.path.constraint.reveal()) is not None
+            if ok:
+                if term.storage:
+                    k.contracts[address].storage = term.storage
+                return term
 
     raise RuntimeError("no termination matched")
 

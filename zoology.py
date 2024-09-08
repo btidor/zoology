@@ -39,7 +39,9 @@ def load_level(level: int) -> tuple[Blockchain, Address]:
     )
     k.balances[tx.address] = Uint256(10**15)
 
-    k, term = execute(k, tx)
+    results = list(execute(k, tx))
+    assert len(results) == 1
+    k, term = results[0]
     assert (data := term.returndata.reveal()) is not None
     assert term.success, data
 
@@ -110,32 +112,32 @@ def search(level: int) -> Iterable[str]:
                     ),
                 ]
             )
-            kn, mutation = handle_hypercalls(k, tx, mblock, mutation)
-            assert mutation.storage is not None
-            kn.contracts[address].storage = mutation.storage
+            for kn, mutation in handle_hypercalls(k, tx, mblock, mutation):
+                assert mutation.storage is not None
+                kn.contracts[address].storage = mutation.storage
 
-            kn, valn = handle_hypercalls(kn, vx, vblock, validator)
-            solver = Solver()
-            solver.add(mutation.path.constraint)
-            solver.add(valn.path.constraint)
-            if not solver.check():
-                continue
+                for kn, valn in handle_hypercalls(kn, vx, vblock, validator):
+                    solver = Solver()
+                    solver.add(mutation.path.constraint)
+                    solver.add(valn.path.constraint)
+                    if not solver.check():
+                        continue
 
-            tx.narrow(solver)  # must do this first if CALLER is hashed
+                    tx.narrow(solver)  # must do this first if CALLER is hashed
 
-            # TODO: `mutation.path` and `val.path` are not properly merged,
-            # which may cause SHA3 narrowing errors.
-            mutation.path.narrow(solver)
-            valn.path.narrow(solver)
+                    # TODO: `mutation.path` and `val.path` are not properly merged,
+                    # which may cause SHA3 narrowing errors.
+                    mutation.path.narrow(solver)
+                    valn.path.narrow(solver)
 
-            if address != LEVEL:
-                yield f"To {hex(address)}:\n"
+                    if address != LEVEL:
+                        yield f"To {hex(address)}:\n"
 
-            yield from tx.calldata.describe(solver)
-            if solver.evaluate(tx.caller) != PLAYER:
-                yield "\tvia proxy"
+                    yield from tx.calldata.describe(solver)
+                    if solver.evaluate(tx.caller) != PLAYER:
+                        yield "\tvia proxy"
 
-            yield "\n"
-            return
+                    yield "\n"
+                    return
 
     raise RuntimeError("solution not found")
