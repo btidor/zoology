@@ -47,6 +47,10 @@ def execute(
     """Interpret a program with concrete inputs."""
     block = block or Block()
     address = Address.unwrap(tx.address, "execute")
+    if address not in k.contracts:
+        # CALLing an EOA always returns success. This includes DELEGATECALL!
+        yield k, Terminus(Path(), (), True, Bytes(), None)
+        return
     program = override or k.contracts[address].program
     r = Runtime(program=program, storage=k.contracts[address].storage)
 
@@ -156,21 +160,13 @@ def _call(
     before, after = h.storage
     k.contracts[sender].storage = before
 
-    address, subtx, override = h.op.before(k, tx, path)
-    if address in k.contracts:
-        for k, term in execute(k, subtx, block, override):
-            if h.op.static:
-                assert term.path.static, "STATICCALL executed non-static op"
-            subs: Substitutions = [
-                (h.success, Constraint(term.success)),
-                *substitutions(h.returndata, term.returndata),
-                *(((after, k.contracts[sender].storage),) if after else ()),
-            ]
-            yield k, subs
-    else:
+    _, subtx, override = h.op.before(k, tx, path)
+    for k, term in execute(k, subtx, block, override):
+        if h.op.static:
+            assert term.path.static, "STATICCALL executed non-static op"
         subs: Substitutions = [
-            (h.success, Constraint(True)),
-            *substitutions(h.returndata, Bytes()),
+            (h.success, Constraint(term.success)),
+            *substitutions(h.returndata, term.returndata),
             *(((after, k.contracts[sender].storage),) if after else ()),
         ]
         yield k, subs
