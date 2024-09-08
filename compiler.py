@@ -1,18 +1,19 @@
 """A compiler from bytecode to symbolic representation."""
 
+import copy
 from heapq import heappop, heappush
 from typing import Iterable
 
 from bytes import Bytes
 from disassembler import Program
-from ops import step
+from ops import CreateOp, ForkOp, TerminateOp, step
 from smt import (
     Array,
     Uint8,
     Uint160,
     Uint256,
 )
-from state import Block, Runtime, Terminus, Transaction
+from state import Block, HyperCreate, Runtime, Terminus, Transaction
 
 
 def compile(program: Program) -> Iterable[Terminus]:
@@ -31,14 +32,28 @@ def compile(program: Program) -> Iterable[Terminus]:
             match step(r, None, transaction, block):
                 case None:
                     pass
-                case (Runtime() as r0, Runtime() as r1):
+                case ForkOp(r0, r1):
                     heappush(queue, r0)
                     heappush(queue, r1)
                     break
-                case (bool() as success, Bytes() as returndata):
+                case TerminateOp(success, returndata):
                     storage = r.storage if success and not r.path.static else None
                     yield Terminus(r.path, tuple(r.hyper), success, returndata, storage)
                     break
+                case CreateOp() as op:
+                    storage = Array[Uint256, Uint256](f"STORAGE{len(r.hyper)}")
+                    hyper = HyperCreate(
+                        callvalue=op.callvalue,
+                        initcode=op.initcode,
+                        salt=op.salt,
+                        storage=(r.storage, storage),
+                        address=Uint160(f"CREATE{len(r.hyper)}"),
+                    )
+                    r.storage = copy.deepcopy(storage)
+                    r.hyper.append(hyper)
+                    op.after(r, hyper.address)
+                case _:
+                    raise NotImplementedError
 
 
 def symbolic_block() -> Block:

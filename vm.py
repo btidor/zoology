@@ -5,7 +5,7 @@ import copy
 from bytes import Bytes
 from compiler import compile, symbolic_block, symbolic_transaction
 from disassembler import Program, disassemble
-from ops import step
+from ops import CreateOp, ForkOp, TerminateOp, step
 from path import Path
 from smt import (
     Array,
@@ -45,9 +45,9 @@ def interpret(
             assert len(r.hyper) == 1
             match hyper := r.hyper[0]:
                 case HyperGlobal():
-                    raise NotImplementedError("this branch should be unreachable")
+                    raise NotImplementedError
                 case HyperCreate():
-                    k, delta, _ = hypercreate(hyper, k, tx, r.path)
+                    raise NotImplementedError
                 case HyperCall():
                     k, delta, _ = hypercall(hyper, k, tx)
             r = r.substitute(delta)
@@ -57,7 +57,7 @@ def interpret(
         match result:
             case None:
                 pass
-            case (Runtime() as r0, Runtime() as r1):
+            case ForkOp(r0, r1):
                 a = r0.path.constraint.reveal()
                 b = r1.path.constraint.reveal()
                 match (a, b):
@@ -67,12 +67,29 @@ def interpret(
                         r = r1
                     case _:
                         raise ValueError(f"expected one concrete path, got {(a, b)}")
-            case (bool() as success, Bytes() as returndata):
+            case TerminateOp(success, returndata):
                 storage = r.storage if success and not r.path.static else None
                 terminus = Terminus(
                     r.path, tuple(r.hyper), success, returndata, storage
                 )
                 return k, terminus
+            case CreateOp() as op:
+                address, subtx, override = op.before(k, tx, r.path)
+
+                ok = k.transfer(subtx.caller, subtx.address, subtx.callvalue)
+                assert ok.reveal() is True
+
+                k, term = interpret(k, subtx, override)
+                assert term.path.constraint.reveal() is True
+
+                if term.success:
+                    k.contracts[address].program = disassemble(term.returndata)
+                    op.after(r, Uint160(address))
+                else:
+                    del k.contracts[address]
+                    op.after(r, Uint160(address))
+            case _:
+                raise NotImplementedError
 
 
 def execute(

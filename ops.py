@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import copy
+from dataclasses import dataclass
 from inspect import Signature, signature
 from typing import Any, Callable, Literal, cast
 
 from bytes import Bytes
-from disassembler import Instruction
+from disassembler import Instruction, Program, disassemble
 from opcodes import REFERENCE, SPECIAL, UNIMPLEMENTED
+from path import Path
 from smt import (
     Array,
     Constraint,
@@ -24,8 +26,8 @@ from state import (
     Address,
     Block,
     Blockchain,
+    Contract,
     HyperCall,
-    HyperCreate,
     HyperGlobal,
     Runtime,
     Transaction,
@@ -36,9 +38,9 @@ Uint257 = Uint[Literal[257]]
 Uint512 = Uint[Literal[512]]
 
 
-def STOP() -> Terminate:
+def STOP() -> TerminateOp:
     """00 - Halts execution."""
-    return (True, Bytes())
+    return TerminateOp(True, Bytes())
 
 
 def ADD(a: Uint256, b: Uint256) -> Uint256:
@@ -410,7 +412,7 @@ def JUMP(r: Runtime, counter: Uint256) -> None:
     r.pc = r.program.jumps[j]
 
 
-def JUMPI(r: Runtime, ins: Instruction, counter: Uint256, b: Uint256) -> Fork | None:
+def JUMPI(r: Runtime, ins: Instruction, counter: Uint256, b: Uint256) -> ForkOp | None:
     """57 - Conditionally alter the program counter."""
     j = counter.reveal()
     assert j is not None, "JUMPI requires concrete counter"
@@ -425,7 +427,7 @@ def JUMPI(r: Runtime, ins: Instruction, counter: Uint256, b: Uint256) -> Fork | 
             r1.pc = r.program.jumps[j]
             r1.path.id |= 1
             r1.path.constraint &= ~c
-            return (r0, r1)
+            return ForkOp(r0, r1)
         case True:  # branch never taken, fall through
             return None
         case False:  # branch always taken
@@ -498,20 +500,14 @@ def LOG(ins: Instruction, r: Runtime, offset: Uint256, size: Uint256) -> None:
         r.stack.pop()  # we don't actually save the log entries anywhere
 
 
-def CREATE(r: Runtime, value: Uint256, offset: Uint256, size: Uint256) -> Uint256:
+def CREATE(r: Runtime, value: Uint256, offset: Uint256, size: Uint256) -> CreateOp:
     """F0 - Create a new account with associated code."""
     r.path.static = False
-    storage = Array[Uint256, Uint256](f"STORAGE{len(r.hyper)}")
-    hyper = HyperCreate(
+    return CreateOp(
         callvalue=value,
         initcode=r.memory.slice(offset, size),
         salt=None,
-        storage=(r.storage, storage),
-        address=Uint160(f"CREATE{len(r.hyper)}"),
     )
-    r.storage = copy.deepcopy(storage)
-    r.hyper.append(hyper)
-    return hyper.address.into(Uint256)
 
 
 def CALL(
@@ -559,9 +555,9 @@ def CALLCODE(
     raise NotImplementedError("CALLCODE")
 
 
-def RETURN(r: Runtime, offset: Uint256, size: Uint256) -> Terminate:
+def RETURN(r: Runtime, offset: Uint256, size: Uint256) -> TerminateOp:
     """F3 - Halts execution returning output data."""
-    return (True, r.memory.slice(offset, size))
+    return TerminateOp(True, r.memory.slice(offset, size))
 
 
 def DELEGATECALL(
@@ -602,20 +598,14 @@ def DELEGATECALL(
 
 def CREATE2(
     r: Runtime, value: Uint256, offset: Uint256, size: Uint256, salt: Uint256
-) -> Uint256:
+) -> CreateOp:
     """F5 - Create a new account with associated code at a predictable address."""
     r.path.static = False
-    storage = Array[Uint256, Uint256](f"STORAGE{len(r.hyper)}")
-    hyper = HyperCreate(
+    return CreateOp(
         callvalue=value,
         initcode=r.memory.slice(offset, size),
         salt=salt,
-        storage=(r.storage, storage),
-        address=Uint160(f"CREATE{len(r.hyper)}"),
     )
-    r.storage = copy.deepcopy(storage)
-    r.hyper.append(hyper)
-    return hyper.address.into(Uint256)
 
 
 def STATICCALL(
@@ -645,18 +635,18 @@ def STATICCALL(
     return success.ite(Uint256(1), Uint256(0))
 
 
-def REVERT(r: Runtime, offset: Uint256, size: Uint256) -> Terminate:
+def REVERT(r: Runtime, offset: Uint256, size: Uint256) -> TerminateOp:
     """
     FD.
 
     Halt execution reverting state changes but returning data and remaining gas.
     """
-    return (False, r.memory.slice(offset, size))
+    return TerminateOp(False, r.memory.slice(offset, size))
 
 
-def INVALID(r: Runtime) -> Terminate:
+def INVALID(r: Runtime) -> TerminateOp:
     """FE - Designated invalid instruction."""
-    return (False, Bytes())
+    return TerminateOp(False, Bytes())
 
 
 def SELFDESTRUCT(r: Runtime, address: Uint256) -> None:
@@ -685,9 +675,125 @@ def _load_ops() -> dict[str, tuple[Operation, Signature]]:
 OPS = _load_ops()
 
 
-type Fork = tuple[Runtime, Runtime]
-type Terminate = tuple[bool, Bytes]
-type BasicOp = Fork | Terminate
+@dataclass(frozen=True)
+class ForkOp:
+    """Control flow operation for JUMPI."""
+
+    r0: Runtime
+    r1: Runtime
+
+
+@dataclass(frozen=True)
+class TerminateOp:
+    """Control flow operation for STOP, RETURN, etc."""
+
+    success: bool
+    returndata: Bytes
+
+
+@dataclass(frozen=True)
+class CreateOp:
+    """Recursing operation for CREATE and CREATE2."""
+
+    callvalue: Uint256
+    initcode: Bytes
+    salt: Uint256 | None  # for CREATE2
+
+    def before(
+        self, k: Blockchain, tx: Transaction, path: Path
+    ) -> tuple[Address, Transaction, Program | None]:
+        """Execute the CREATE operation up to the point of running initcode."""
+        sender = Address.unwrap(tx.address, "CREATE/CREATE2")
+        if self.salt is None:
+            # https://ethereum.stackexchange.com/a/761
+            nonce = k.contracts[sender].nonce
+            if nonce >= 0x80:
+                raise NotImplementedError  # rlp encoder
+            seed = b"\xd6\x94" + sender.to_bytes(20) + nonce.to_bytes(1)
+        else:
+            salt = self.salt.reveal()
+            assert salt is not None, "CREATE2 requires concrete salt"
+            digest = path.keccak256(self.initcode)
+            assert (hash := digest.reveal()) is not None
+            seed = b"\xff" + sender.to_bytes(20) + salt.to_bytes(32) + hash.to_bytes(32)
+        address = Address.unwrap(path.keccak256(Bytes(seed)).into(Uint160))
+
+        k.contracts[sender].nonce += 1
+        k.contracts[address] = Contract(
+            program=disassemble(Bytes()),  # during init, length is zero
+        )
+        return (
+            address,
+            Transaction(
+                origin=tx.origin,
+                caller=tx.address,
+                address=Uint160(address),
+                callvalue=self.callvalue,
+                calldata=Bytes(),
+                gasprice=tx.gasprice,
+            ),
+            disassemble(self.initcode),
+        )
+
+    def after(self, r: Runtime, address: Uint160) -> None:
+        """
+        Push the result of the CREATE operation to the stack.
+
+        Because we want to be able to defer CREATE operations, the *caller* is
+        responsible for updating `k.contracts`.
+        """
+        return r.push(address.into(Uint256))
+
+
+@dataclass(frozen=True)
+class CallOp:
+    """Recursing operation for CALL and friends."""
+
+    address: Uint160
+    callvalue: Uint256 | None  # for DELEGATECALL
+    calldata: Bytes
+
+    retOffset: Uint256
+    retSize: Uint256
+
+    static: bool = False
+
+    def before(
+        self, k: Blockchain, tx: Transaction
+    ) -> tuple[Address, Transaction, Program | None]:
+        """Set up the CALL operation."""
+        assert (calldata := self.calldata.reveal()) is not None
+        subtx = Transaction(
+            origin=tx.origin,
+            caller=tx.caller if self.callvalue is None else tx.address,
+            address=tx.address if self.callvalue is None else self.address,
+            callvalue=tx.callvalue if self.callvalue is None else self.callvalue,
+            calldata=Bytes(calldata),
+            gasprice=tx.gasprice,
+        )
+        address = Address.unwrap(subtx.address, "CALL/DELEGATECALL/STATICCALL")
+        program = k.contracts[address].program if self.callvalue is None else None
+        return address, subtx, program
+
+    def after(self, r: Runtime, success: Constraint, returndata: Bytes) -> None:
+        """Apply the result of the CALL operation to the stack and memory."""
+        r.latest_return = returndata
+        r.memory.graft(returndata.slice(Uint256(0), self.retSize), self.retOffset)
+        r.push(success.ite(Uint256(1), Uint256(0)))
+
+
+type BasicOp = ForkOp | TerminateOp | CreateOp | CallOp
+
+
+@dataclass(frozen=True)
+class DeferOp:
+    """Special operation for operations deferred by `step`."""
+
+    fn: Callable[[Blockchain], Uint256]
+
+    def after(self, r: Runtime, result: Uint256) -> None:
+        """Push the result of the deferred operation to the stack."""
+        return r.push(result)
 
 
 def step(

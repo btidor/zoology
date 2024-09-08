@@ -11,9 +11,9 @@ from state import Block, Contract, Transaction
 
 
 def test_STOP() -> None:
-    s, d = STOP()
-    assert s is True
-    assert d.reveal() == b""
+    t = STOP()
+    assert t.success is True
+    assert t.returndata.reveal() == b""
 
 
 def test_ADD() -> None:
@@ -612,9 +612,9 @@ def test_RETURN() -> None:
         memory=Memory(b"\xff\x01"),
         latest_return=Bytes(b"\x12\x34"),
     )
-    s, d = RETURN(r, Uint256(0), Uint256(2))
-    assert s is True
-    assert d.reveal() == b"\xff\x01"
+    t = RETURN(r, Uint256(0), Uint256(2))
+    assert t.success is True
+    assert t.returndata.reveal() == b"\xff\x01"
 
 
 def test_DELEGATECALL() -> None:
@@ -634,18 +634,18 @@ def test_REVERT() -> None:
         memory=Memory(b"\xff\x01"),
         latest_return=Bytes(b"\x12\x34"),
     )
-    s, d = REVERT(r, Uint256(0), Uint256(2))
-    assert s is False
-    assert d.reveal() == b"\xff\x01"
+    t = REVERT(r, Uint256(0), Uint256(2))
+    assert t.success is False
+    assert t.returndata.reveal() == b"\xff\x01"
 
 
 def test_INVALID() -> None:
     r = Runtime(
         latest_return=Bytes(b"\x12\x34"),
     )
-    s, d = INVALID(r)
-    assert s is False
-    assert d.reveal() == b""
+    t = INVALID(r)
+    assert t.success is False
+    assert t.returndata.reveal() == b""
 
 
 def test_SELFDESTRUCT() -> None:
