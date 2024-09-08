@@ -5,9 +5,9 @@ import pytest
 from bytes import Bytes
 from compiler import Terminus, compile, symbolic_block, symbolic_transaction
 from disassembler import Program, abiencode, disassemble
+from environ import Address, Block, Blockchain, Contract, Transaction
 from smt import Array, Uint160, Uint256
 from snapshot import LEVEL_FACTORIES, snapshot_contracts
-from state import Address, Block, Blockchain, Contract, Transaction
 from vm import execute, handle_hypercalls, substitutions
 
 from .solidity import load_binary, load_solidity, loads_solidity

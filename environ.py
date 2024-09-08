@@ -152,7 +152,19 @@ class Transaction:
 
 @dataclass
 class Runtime:
-    """Transient state for a transaction execution."""
+    """
+    Transient state for a transaction execution.
+
+    Runtime encapsulates state that's discarded after the contract finishes
+    executing, like the program counter, the stack, and memory. It's used by
+    `ops.py` to express how operations mutate state.
+
+    Global state like contracts and balances is kept on a separate Blockchain
+    object. This separation allows the abstract compiler to produce a compact,
+    general representation of contract behavior that can be cached and reused.
+
+    Runtimes are sortable, with shorter paths before longer ones.
+    """
 
     program: Program = field(default=disassemble(Bytes()))
     storage: Array[Uint256, Uint256] = field(

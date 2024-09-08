@@ -5,9 +5,9 @@ import pytest
 
 from bytes import Bytes, Memory
 from disassembler import Instruction, disassemble
+from environ import Block, Contract, Transaction
 from ops import *
 from smt import Array, Solver, Uint160, Uint256
-from state import Block, Contract, Transaction
 
 
 def test_STOP() -> None:

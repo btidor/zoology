@@ -10,6 +10,7 @@ import sys
 from bytes import Bytes
 from compiler import compile, symbolic_transaction
 from disassembler import decode_instruction, disassemble
+from environ import Address, Blockchain, Contract, Transaction
 from smt import Solver, Uint160
 from snapshot import (
     COUNT,
@@ -17,7 +18,6 @@ from snapshot import (
     Snapshot,
     download_contract,
 )
-from state import Address, Blockchain, Contract, Transaction
 from vm import execute
 from zoology import load_level, search
 

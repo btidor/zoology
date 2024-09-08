@@ -10,6 +10,13 @@ from compiler import (
     Terminus,
 )
 from disassembler import Program, disassemble
+from environ import (
+    Address,
+    Block,
+    Blockchain,
+    Runtime,
+    Transaction,
+)
 from ops import (
     CallOp,
     CreateOp,
@@ -24,13 +31,6 @@ from smt import (
     Uint,
     Uint160,
     substitutions,
-)
-from state import (
-    Address,
-    Block,
-    Blockchain,
-    Runtime,
-    Transaction,
 )
 
 

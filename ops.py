@@ -1,4 +1,10 @@
-"""A library of EVM instruction implementations."""
+"""
+A library of EVM operations.
+
+Each operation is a function that takes symbolic stack arguments (and
+environment state) and returns a symbolic result. Operations which affect
+control flow return a BasicOp instead, defined below.
+"""
 
 from __future__ import annotations
 
@@ -9,6 +15,14 @@ from typing import Any, Callable, Literal, cast, overload
 
 from bytes import Bytes
 from disassembler import Instruction, Program, disassemble
+from environ import (
+    Address,
+    Block,
+    Blockchain,
+    Contract,
+    Runtime,
+    Transaction,
+)
 from opcodes import REFERENCE, SPECIAL, UNIMPLEMENTED
 from path import Path
 from smt import (
@@ -20,14 +34,6 @@ from smt import (
     Uint256,
     bvlshr_harder,
     concat_bytes,
-)
-from state import (
-    Address,
-    Block,
-    Blockchain,
-    Contract,
-    Runtime,
-    Transaction,
 )
 
 Int256 = Int[Literal[256]]
@@ -799,13 +805,27 @@ def step(
     r: Runtime, k: Blockchain | None, tx: Transaction, block: Block
 ) -> None | BasicOp | DeferOp:
     """
-    Execute the current instruction and increment the program counter.
+    Execute the current instruction.
 
-    If `k` is None, ops that depend on global state will be deferred as a
-    hypercall.
+    Increments the program counter, pops arguments from the stack, and pushes
+    the result (if any) to the stack.
 
-    Returns the result of executing the current instruction, or None if the op
-    is deferred.
+    If `k` is None, any operation that depends on global state will be deferred
+    by returning a DeferOp.
+
+    If a return value is provided, it must be handled by the caller:
+
+    * ForkOp, TerminateOp (control flow operation): the current Runtime is
+      invalid and should no longer be used.
+
+    * CreateOp, CallOp (recursing operation): the caller should simulate the
+      subcontext and must call `after` before using the current Runtime again.
+
+    * DeferOp (deferred operation): the caller should simulate the instruction
+      and must call `after` before using the current Runtime again.
+
+    NOTE: in the case of CreateOp, CallOp and DeferOp, `step` does *not* push
+    the result to the stack. This is handled in the Op's `after` method.
     """
     ins = r.program.instructions[r.pc]
     if ins.name not in OPS:

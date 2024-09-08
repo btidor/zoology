@@ -9,6 +9,7 @@ from typing import Any, Iterable, Self
 
 from bytes import Bytes
 from disassembler import Program
+from environ import Block, Runtime, Transaction
 from ops import (
     CallOp,
     CreateOp,
@@ -27,7 +28,6 @@ from smt import (
     Uint256,
     substitute,
 )
-from state import Block, Runtime, Transaction
 
 
 def compile(program: Program) -> Iterable[Terminus]:

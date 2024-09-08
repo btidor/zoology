@@ -1,4 +1,8 @@
-"""A client for the Ethereum JSON-RPC API."""
+"""
+A client for the Ethereum JSON-RPC API.
+
+Used to download the Ethernaut CTF to `snapshot.json`.
+"""
 
 from __future__ import annotations
 
@@ -11,8 +15,8 @@ import requests
 
 from bytes import Bytes
 from disassembler import Program, disassemble
+from environ import Address, Blockchain, Contract
 from smt import Uint256
-from state import Address, Blockchain, Contract
 
 # For consistency, make requests at a fixed block offset
 TAG = "0x574800"

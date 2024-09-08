@@ -1,4 +1,8 @@
-"""A library for representing the path constraint."""
+"""
+A library for representing the path constraint.
+
+Includes special logic for handling Keccak-256 hashing.
+"""
 
 from __future__ import annotations
 

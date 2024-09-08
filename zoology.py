@@ -12,14 +12,14 @@ from compiler import (
     symbolic_transaction,
 )
 from disassembler import abiencode
-from smt import Array, Constraint, Solver, Uint8, Uint160, Uint256, substitutions
-from snapshot import LEVEL_FACTORIES, snapshot_contracts
-from state import (
+from environ import (
     Address,
     Block,
     Blockchain,
     Transaction,
 )
+from smt import Array, Constraint, Solver, Uint8, Uint160, Uint256, substitutions
+from snapshot import LEVEL_FACTORIES, snapshot_contracts
 from vm import execute, handle_hypercalls
 
 PLAYER = 0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0
