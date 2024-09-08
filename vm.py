@@ -1,14 +1,13 @@
 """A machine to execute compiled symbolic programs."""
 
+from __future__ import annotations
+
 from bytes import Bytes
 from compiler import (
     HyperCall,
     HyperCreate,
     HyperGlobal,
     Terminus,
-    compile,
-    symbolic_block,
-    symbolic_transaction,
 )
 from disassembler import Program, disassemble
 from ops import (
@@ -20,12 +19,10 @@ from ops import (
 )
 from path import Path
 from smt import (
-    Array,
     Constraint,
     Substitutions,
     Uint,
     Uint160,
-    Uint256,
     substitutions,
 )
 from state import (
@@ -37,13 +34,16 @@ from state import (
 )
 
 
-def interpret(
-    k: Blockchain, tx: Transaction, program: Program | None = None
+def execute(
+    k: Blockchain,
+    tx: Transaction,
+    block: Block | None = None,
+    override: Program | None = None,
 ) -> tuple[Blockchain, Terminus]:
     """Interpret a program with concrete inputs."""
-    block, address = Block(), Address.unwrap(tx.address, "interpret")
-    if program is None:
-        program = k.contracts[address].program
+    block = block or Block()
+    address = Address.unwrap(tx.address, "interpret")
+    program = override or k.contracts[address].program
 
     r = Runtime(program=program, storage=k.contracts[address].storage)
     while True:
@@ -66,7 +66,7 @@ def interpret(
                 return k, terminus
             case CreateOp() as op:
                 address, subtx, override = op.before(k, tx, r.path)
-                k, term = interpret(k, subtx, override)
+                k, term = execute(k, subtx, block, override)
                 assert term.path.constraint.reveal() is True
 
                 if term.success:
@@ -77,7 +77,7 @@ def interpret(
                     op.after(r, Uint160(address))
             case CallOp() as op:
                 address, subtx, override = op.before(k, tx, r.path)
-                k, term = interpret(k, subtx, override)
+                k, term = execute(k, subtx, block, override)
                 assert term.path.constraint.reveal() is True
 
                 if op.static:
@@ -85,73 +85,39 @@ def interpret(
                 op.after(r, Constraint(term.success), term.returndata)
 
 
-def execute(
-    ki: Blockchain, tx: Transaction, program: Program | None = None
-) -> tuple[Blockchain, Terminus]:
-    """
-    Compile and execute a program with concrete inputs.
-
-    This function is generally slower than `interpret`. It exists to exercise
-    Hypercall-related logic, since those functions are also used in zoology.py.
-    """
-    block, address = Block(), Address.unwrap(tx.address, "apply")
-    if program is None:
-        program = ki.contracts[address].program
-
-    subs = [
-        *substitutions(symbolic_block(), block),
-        *substitutions(symbolic_transaction(), tx),
-        (Array[Uint256, Uint256]("STORAGE"), ki.contracts[address].storage),
-    ]
-
-    for term in compile(program):
-        term = term.substitute(subs)
-        k, term = handle_hypercalls(ki, tx, term)
-
-        assert (ok := term.path.constraint.reveal()) is not None
-        if ok:
-            if term.storage:
-                k.contracts[address].storage = term.storage
-            return k, term
-
-    raise RuntimeError("no termination matched")
-
-
 def handle_hypercalls(
-    k: Blockchain, tx: Transaction, term: Terminus
+    k: Blockchain, tx: Transaction, block: Block, term: Terminus
 ) -> tuple[Blockchain, Terminus]:
-    """Concretize hypercalls using the current global state."""
+    """Simulate hypercalls using the current global state."""
     for i in range(len(term.hyper)):
         hyper = term.hyper[i]
         match hyper:
             case HyperGlobal():
-                delta = hyperglobal(hyper, k)
+                delta = _global(hyper, k)
             case HyperCreate():
-                k, delta = hypercreate(hyper, k, tx, term.path)
+                k, delta = _create(hyper, k, tx, block, term.path)
             case HyperCall():
-                k, delta = hypercall(hyper, k, tx, term.path)
+                k, delta = _call(hyper, k, tx, block, term.path)
         term = term.substitute(delta)
     return k, term
 
 
-def hyperglobal(h: HyperGlobal, k: Blockchain) -> Substitutions:
-    """Simulate a concrete global-state hypercall."""
+def _global(h: HyperGlobal, k: Blockchain) -> Substitutions:
     input = [k if arg is None else arg for arg in h.op.input]
     result = h.op.fn(*input)
     assert isinstance(result, Uint)
     return [(h.result, result)]
 
 
-def hypercreate(
-    h: HyperCreate, k: Blockchain, tx: Transaction, path: Path
+def _create(
+    h: HyperCreate, k: Blockchain, tx: Transaction, block: Block, path: Path
 ) -> tuple[Blockchain, Substitutions]:
-    """Simulate a concrete CREATE hypercall."""
     sender = Address.unwrap(tx.address, "CREATE/CREATE2")
     before, after = h.storage
     k.contracts[sender].storage = before
 
     address, subtx, override = h.op.before(k, tx, path)
-    k, t = interpret(k, subtx, override)
+    k, t = execute(k, subtx, block, override)
     if t.success:
         k.contracts[address].program = disassemble(t.returndata)
     else:
@@ -164,17 +130,16 @@ def hypercreate(
     return k, subs
 
 
-def hypercall(
-    h: HyperCall, k: Blockchain, tx: Transaction, path: Path
+def _call(
+    h: HyperCall, k: Blockchain, tx: Transaction, block: Block, path: Path
 ) -> tuple[Blockchain, Substitutions]:
-    """Simulate a concrete CALL, etc. hypercall."""
     sender = Address.unwrap(tx.address, "CALL/DELEGATECALL/STATICCALL")
     before, after = h.storage
     k.contracts[sender].storage = before
 
     address, subtx, override = h.op.before(k, tx, path)
     if address in k.contracts:
-        k, t = interpret(k, subtx, override)
+        k, t = execute(k, subtx, block, override)
         if h.op.static:
             assert t.path.static, "STATICCALL executed non-static op"
         constraint, returndata = Constraint(t.success), t.returndata

@@ -1,5 +1,7 @@
 """A client for the Ethereum JSON-RPC API."""
 
+from __future__ import annotations
+
 import json
 from pathlib import Path
 from time import sleep

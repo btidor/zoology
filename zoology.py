@@ -1,5 +1,7 @@
 """A solver for the Ethernaut CTF."""
 
+from __future__ import annotations
+
 from typing import Iterable
 
 from bytes import Bytes
@@ -18,7 +20,7 @@ from state import (
     Blockchain,
     Transaction,
 )
-from vm import handle_hypercalls, interpret
+from vm import execute, handle_hypercalls
 
 PLAYER = 0xC0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0C0
 PROXY = 0xCACACACACACACACACACACACACACACACACACACACA
@@ -37,7 +39,7 @@ def load_level(level: int) -> tuple[Blockchain, Address]:
     )
     k.balances[tx.address] = Uint256(10**15)
 
-    k, term = interpret(k, tx)
+    k, term = execute(k, tx)
     assert (data := term.returndata.reveal()) is not None
     assert term.success, data
 
@@ -50,9 +52,8 @@ def search(level: int) -> Iterable[str]:
     k, LEVEL = load_level(level)
 
     cblock = Block()
-    xblock = cblock.successor()
-    vblock = xblock.successor()
-    # TODO: when recursing into `interpret`, default block is used
+    mblock = cblock.successor()
+    vblock = mblock.successor()
 
     vx = Transaction(
         origin=Uint160(PLAYER),
@@ -102,18 +103,18 @@ def search(level: int) -> Iterable[str]:
             mutation = mutation.substitute(
                 [
                     *substitutions(symbolic_transaction(), tx),
-                    *substitutions(symbolic_block(), xblock),
+                    *substitutions(symbolic_block(), mblock),
                     (
                         Array[Uint256, Uint256]("STORAGE"),
                         k.contracts[address].storage,
                     ),
                 ]
             )
-            kn, mutation = handle_hypercalls(k, tx, mutation)
+            kn, mutation = handle_hypercalls(k, tx, mblock, mutation)
             assert mutation.storage is not None
             kn.contracts[address].storage = mutation.storage
 
-            kn, valn = handle_hypercalls(kn, vx, validator)
+            kn, valn = handle_hypercalls(kn, vx, vblock, validator)
             solver = Solver()
             solver.add(mutation.path.constraint)
             solver.add(valn.path.constraint)

@@ -5,10 +5,10 @@ import pytest
 from bytes import Bytes
 from compiler import Terminus, compile, symbolic_block, symbolic_transaction
 from disassembler import Program, abiencode, disassemble
-from smt import Uint160, Uint256
+from smt import Array, Uint160, Uint256
 from snapshot import LEVEL_FACTORIES, snapshot_contracts
 from state import Address, Block, Blockchain, Contract, Transaction
-from vm import execute, interpret, substitutions
+from vm import execute, handle_hypercalls, substitutions
 
 from .solidity import load_binary, load_solidity, loads_solidity
 
@@ -42,27 +42,47 @@ def test_snapshot(i: int, factory: Address) -> None:
         callvalue=Uint256(10**15),
     )
     k.balances[tx.address] = Uint256(10**15)
-    k, term = interpret(k, tx)
+    k, term = execute(k, tx)
     assert term.success, f"Level {i}: {term.returndata.reveal()}"
 
 
-def _execute(program: Program, calldata: bytes = b"", callvalue: int = 0) -> Terminus:
+def _execute_compiled(
+    program: Program, calldata: bytes = b"", callvalue: int = 0
+) -> Terminus:
     k = Blockchain()
     k.contracts = {ADDRESS: Contract(program)}
     k.balances[Uint160(ADDRESS)] = Uint256(10**15)
+    block = Block()
     tx = Transaction(
         address=Uint160(ADDRESS),
         callvalue=Uint256(callvalue),
         calldata=Bytes(calldata),
     )
-    k, term = execute(k, tx)
-    return term
+
+    address = Address.unwrap(tx.address, "execute")
+    program = k.contracts[address].program
+    subs = [
+        *substitutions(symbolic_block(), block),
+        *substitutions(symbolic_transaction(), tx),
+        (Array[Uint256, Uint256]("STORAGE"), k.contracts[address].storage),
+    ]
+
+    for term in compile(program):
+        term = term.substitute(subs)
+        k, term = handle_hypercalls(k, tx, block, term)
+
+        assert (ok := term.path.constraint.reveal()) is not None
+        if ok:
+            if term.storage:
+                k.contracts[address].storage = term.storage
+            return term
+    raise RuntimeError("no termination matched")
 
 
 def test_fallback() -> None:
     program = load_solidity("fixtures/01_Fallback.sol")
     calldata = abiencode("owner()")
-    term = _execute(program, calldata)
+    term = _execute_compiled(program, calldata)
 
     assert term.success is True
     assert term.returndata.reveal() == (0).to_bytes(32)
@@ -72,7 +92,7 @@ def test_fallback() -> None:
 def test_fallout() -> None:
     program = load_solidity("fixtures/02_Fallout.sol")
     calldata = abiencode("Fal1out()")
-    term = _execute(program, calldata)
+    term = _execute_compiled(program, calldata)
 
     assert term.success is True
     assert term.storage is not None
@@ -107,7 +127,7 @@ def test_telephone() -> None:
     calldata = abiencode("changeOwner(address)") + (
         0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
     ).to_bytes(32)
-    term = _execute(program, calldata)
+    term = _execute_compiled(program, calldata)
 
     assert term.success is True
     assert term.returndata.reveal() == b""
@@ -121,7 +141,7 @@ def test_token() -> None:
         + (0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF).to_bytes(32)
         + (0xEEEE).to_bytes(32)
     )
-    term = _execute(program, calldata)
+    term = _execute_compiled(program, calldata)
 
     assert term.success is True
     assert term.returndata.reveal() == (1).to_bytes(32)
@@ -152,7 +172,7 @@ def test_delegation() -> None:
 
 def test_force() -> None:
     program = load_binary("fixtures/07_Force.bin")
-    term = _execute(program, callvalue=0x1234)
+    term = _execute_compiled(program, callvalue=0x1234)
 
     assert term.success is False
     assert term.returndata.reveal() == b""
@@ -162,7 +182,7 @@ def test_force() -> None:
 def test_vault() -> None:
     program = load_solidity("fixtures/08_Vault.sol")
     calldata = abiencode("unlock(bytes32)") + (0).to_bytes(32)
-    term = _execute(program, calldata)
+    term = _execute_compiled(program, calldata)
 
     assert term.success is True
     assert term.returndata.reveal() == b""
@@ -171,7 +191,7 @@ def test_vault() -> None:
 
 def test_king() -> None:
     program = load_solidity("fixtures/09_King.sol")
-    term = _execute(program, callvalue=0x1234)
+    term = _execute_compiled(program, callvalue=0x1234)
 
     assert term.success is True
     assert term.returndata.reveal() == b""
@@ -181,7 +201,7 @@ def test_king() -> None:
 def test_reentrancy() -> None:
     program = load_solidity("fixtures/10_Reentrancy.sol")
     calldata = abiencode("donate(address)") + (1).to_bytes(32)
-    term = _execute(program, calldata, callvalue=0x1234)
+    term = _execute_compiled(program, calldata, callvalue=0x1234)
 
     assert term.success is True
     assert term.returndata.reveal() == b""
@@ -221,7 +241,7 @@ def test_privacy() -> None:
 
     assert term.success is True
     assert term.returndata.reveal() == b""
-    term = _execute(program, callvalue=0x1234)
+    term = _execute_compiled(program, callvalue=0x1234)
 
 
 def test_gatekeeper_one() -> None:
@@ -237,11 +257,11 @@ def test_gatekeeper_two() -> None:
     calldata = abiencode("enter(bytes8)") + bytes.fromhex(
         "65d5bd2c953ab27b000000000000000000000000000000000000000000000000"
     )
-    term = _execute(program, calldata)
+    term = _execute_compiled(program, calldata)
 
     assert term.success is True
     assert term.returndata.reveal() == (1).to_bytes(32)
-    term = _execute(program, callvalue=0x1234)
+    term = _execute_compiled(program, callvalue=0x1234)
 
 
 def test_preservation() -> None:
