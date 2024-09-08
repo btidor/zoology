@@ -20,7 +20,6 @@ from state import (
     Address,
     Block,
     Blockchain,
-    Contract,
     Runtime,
     Terminus,
     Transaction,
@@ -72,10 +71,6 @@ def interpret(
                 return k, terminus
             case CreateOp() as op:
                 address, subtx, override = op.before(k, tx, r.path)
-
-                ok = k.transfer(subtx.caller, subtx.address, subtx.callvalue)
-                assert ok.reveal() is True
-
                 k, term = interpret(k, subtx, override)
                 assert term.path.constraint.reveal() is True
 
@@ -143,37 +138,11 @@ def hypercreate(
 ) -> tuple[Blockchain, Substitutions, Constraint]:
     """Simulate a concrete CREATE hypercall."""
     sender = Address.unwrap(tx.address, "CREATE/CREATE2")
-    if h.salt is None:
-        # https://ethereum.stackexchange.com/a/761
-        nonce = k.contracts[sender].nonce
-        if nonce >= 0x80:
-            raise NotImplementedError  # rlp encoder
-        seed = b"\xd6\x94" + sender.to_bytes(20) + nonce.to_bytes(1)
-    else:
-        salt = h.salt.reveal()
-        assert salt is not None, "CREATE2 requires concrete salt"
-        digest = path.keccak256(h.initcode)
-        assert (hash := digest.reveal()) is not None
-        seed = b"\xff" + sender.to_bytes(20) + salt.to_bytes(32) + hash.to_bytes(32)
-    address = Address.unwrap(path.keccak256(Bytes(seed)).into(Uint160))
-
-    tx = Transaction(
-        origin=tx.origin,
-        caller=tx.address,
-        address=Uint160(address),
-        callvalue=h.callvalue,
-        calldata=Bytes(),
-        gasprice=tx.gasprice,
-    )
-    k.contracts[sender].nonce += 1
-    k.contracts[address] = Contract(
-        program=disassemble(Bytes()),  # during init, length is zero
-    )
     before, after = h.storage
     k.contracts[sender].storage = before
-    ok = k.transfer(tx.caller, tx.address, tx.callvalue)
 
-    k, t = interpret(k, tx, program=disassemble(h.initcode))
+    address, subtx, override = h.op.before(k, tx, path)
+    k, t = interpret(k, subtx, override)
     if t.success:
         k.contracts[address].program = disassemble(t.returndata)
     else:
@@ -185,7 +154,7 @@ def hypercreate(
             (h.address, Uint160(address if t.success else 0)),
             (after, k.contracts[sender].storage),
         ],
-        ok,
+        Constraint(True),
     )
 
 

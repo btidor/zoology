@@ -720,6 +720,8 @@ class CreateOp:
         k.contracts[address] = Contract(
             program=disassemble(Bytes()),  # during init, length is zero
         )
+        path.constraint &= k.transfer(tx.caller, tx.address, tx.callvalue)
+
         return (
             address,
             Transaction(
@@ -875,15 +877,12 @@ class HyperGlobal:
 class HyperCreate:
     """A CREATE/CREATE2 hypercall."""
 
-    callvalue: Uint256
-    initcode: Bytes
-    salt: Uint256 | None  # for CREATE2
+    op: CreateOp
 
     storage: tuple[
         Array[Uint256, Uint256],  # before
         Array[Uint256, Uint256],  # after
     ]
-
     address: Uint160  # zero on failure
 
     def __deepcopy__(self, memo: Any) -> Self:

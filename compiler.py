@@ -43,9 +43,7 @@ def compile(program: Program) -> Iterable[Terminus]:
                 case CreateOp() as op:
                     storage = Array[Uint256, Uint256](f"STORAGE{len(r.hyper)}")
                     hyper = HyperCreate(
-                        callvalue=op.callvalue,
-                        initcode=op.initcode,
-                        salt=op.salt,
+                        op=op,
                         storage=(r.storage, storage),
                         address=Uint160(f"CREATE{len(r.hyper)}"),
                     )
