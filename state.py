@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Callable, Self
+from typing import TYPE_CHECKING, Any, Self
 
 from bytes import BYTES, Bytes, Memory
 from disassembler import Program, disassemble
@@ -20,6 +20,9 @@ from smt import (
     concrete_hash,
     substitute,
 )
+
+if TYPE_CHECKING:
+    from ops import Hyper  # TODO
 
 
 @dataclass
@@ -214,61 +217,3 @@ class Terminus:
         while extra := term.path.update_substitutions():
             term = substitute(term, extra)
         return term
-
-
-@dataclass(frozen=True)
-class HyperGlobal:
-    """A hypercall for getting information from global state."""
-
-    input: tuple[Any]
-    fn: Callable[..., Uint256]
-
-    result: Uint256
-
-    def __deepcopy__(self, memo: Any) -> Self:
-        return self
-
-
-@dataclass(frozen=True)
-class HyperCreate:
-    """A CREATE/CREATE2 hypercall."""
-
-    callvalue: Uint256
-    initcode: Bytes
-    salt: Uint256 | None  # for CREATE2
-
-    storage: tuple[
-        Array[Uint256, Uint256],  # before
-        Array[Uint256, Uint256],  # after
-    ]
-
-    address: Uint160  # zero on failure
-
-    def __deepcopy__(self, memo: Any) -> Self:
-        return self
-
-
-@dataclass(frozen=True)
-class HyperCall:
-    """A CALL/DELEGATECALL/STATICCALL hypercall."""
-
-    address: Uint160
-    callvalue: Uint256
-    calldata: Bytes
-
-    storage: tuple[
-        Array[Uint256, Uint256],  # before
-        Array[Uint256, Uint256] | None,  # after
-    ]
-
-    success: Constraint
-    returndata: Bytes
-
-    static: bool = False
-    delegate: bool = False
-
-    def __deepcopy__(self, memo: Any) -> Self:
-        return self
-
-
-type Hyper = HyperGlobal | HyperCreate | HyperCall

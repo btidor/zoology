@@ -5,7 +5,7 @@ import copy
 from bytes import Bytes
 from compiler import compile, symbolic_block, symbolic_transaction
 from disassembler import Program, disassemble
-from ops import CreateOp, ForkOp, TerminateOp, step
+from ops import CreateOp, ForkOp, HyperCall, HyperCreate, HyperGlobal, TerminateOp, step
 from path import Path
 from smt import (
     Array,
@@ -21,9 +21,6 @@ from state import (
     Block,
     Blockchain,
     Contract,
-    HyperCall,
-    HyperCreate,
-    HyperGlobal,
     Runtime,
     Terminus,
     Transaction,

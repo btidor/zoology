@@ -6,14 +6,14 @@ from typing import Iterable
 
 from bytes import Bytes
 from disassembler import Program
-from ops import CreateOp, ForkOp, TerminateOp, step
+from ops import CreateOp, ForkOp, HyperCreate, TerminateOp, step
 from smt import (
     Array,
     Uint8,
     Uint160,
     Uint256,
 )
-from state import Block, HyperCreate, Runtime, Terminus, Transaction
+from state import Block, Runtime, Terminus, Transaction
 
 
 def compile(program: Program) -> Iterable[Terminus]:
