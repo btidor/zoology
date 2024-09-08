@@ -8,9 +8,8 @@ from typing import Iterable
 
 from bytes import Bytes
 from compiler import (
-    HyperCall,
-    HyperCreate,
     HyperGlobal,
+    HyperInvoke,
     Terminus,
 )
 from disassembler import Program, disassemble
@@ -83,7 +82,7 @@ def execute(
                             op.after(r, Uint160(created))
                         else:
                             del k.contracts[created]
-                            op.after(r, Uint160(created))
+                            op.after(r, Uint160(0))
                         # That invariant again...
                         r.storage = k.contracts[address].storage
                         heappush(queue, (r, k))
@@ -115,11 +114,8 @@ def handle_hypercalls(
                 case HyperGlobal():
                     delta = _global(hyper, k)
                     next.append((k, term.substitute(delta)))
-                case HyperCreate():
-                    for k, delta in _create(hyper, k, tx, block, term.path):
-                        next.append((k, term.substitute(delta)))
-                case HyperCall():
-                    for k, delta in _call(hyper, k, tx, block, term.path):
+                case HyperInvoke():
+                    for k, delta in _invoke(hyper, k, tx, block, term.path):
                         next.append((k, term.substitute(delta)))
         terms = next
     return terms
@@ -129,44 +125,36 @@ def _global(h: HyperGlobal, k: Blockchain) -> Substitutions:
     input = [k if arg is None else arg for arg in h.op.input]
     result = h.op.fn(*input)
     assert isinstance(result, Uint)
-    return [(h.result, result)]
+    return [(h.placeholder, result)]
 
 
-def _create(
-    h: HyperCreate, k: Blockchain, tx: Transaction, block: Block, path: Path
+def _invoke(
+    h: HyperInvoke, k: Blockchain, tx: Transaction, block: Block, path: Path
 ) -> Iterable[tuple[Blockchain, Substitutions]]:
-    sender = Address.unwrap(tx.address, "CREATE/CREATE2")
+    sender = Address.unwrap(tx.address)
     before, after = h.storage
     k.contracts[sender].storage = before
 
     address, subtx, override = h.op.before(k, tx, path)
     for k, term in execute(k, subtx, block, override):
-        if term.success:
-            k.contracts[address].program = disassemble(term.returndata)
+        if isinstance(h.op, CreateOp):
+            if term.success:
+                k.contracts[address].program = disassemble(term.returndata)
+            else:
+                del k.contracts[address]
+            assert isinstance(h.placeholder, Uint)
+            delta: Substitutions = [
+                (h.placeholder, Uint160(address if term.success else 0))
+            ]
         else:
-            del k.contracts[address]
+            if h.op.static:
+                assert term.path.static, "STATICCALL executed non-static op"
+            assert isinstance(h.placeholder, tuple)
+            success, returndata = h.placeholder
+            delta: Substitutions = [
+                (success, Constraint(term.success)),
+                *substitutions(returndata, term.returndata),
+            ]
 
-        subs: Substitutions = [
-            (h.address, Uint160(address if term.success else 0)),
-            (after, k.contracts[sender].storage),
-        ]
-        yield k, subs
-
-
-def _call(
-    h: HyperCall, k: Blockchain, tx: Transaction, block: Block, path: Path
-) -> Iterable[tuple[Blockchain, Substitutions]]:
-    sender = Address.unwrap(tx.address, "CALL/DELEGATECALL/STATICCALL")
-    before, after = h.storage
-    k.contracts[sender].storage = before
-
-    _, subtx, override = h.op.before(k, tx, path)
-    for k, term in execute(k, subtx, block, override):
-        if h.op.static:
-            assert term.path.static, "STATICCALL executed non-static op"
-        subs: Substitutions = [
-            (h.success, Constraint(term.success)),
-            *substitutions(h.returndata, term.returndata),
-            *(((after, k.contracts[sender].storage),) if after else ()),
-        ]
-        yield k, subs
+        delta.append((after, k.contracts[sender].storage))
+        yield k, delta

@@ -54,27 +54,19 @@ def compile(program: Program) -> Iterable[Terminus]:
                     storage = r.storage if success and not r.path.static else None
                     yield Terminus(r.path, tuple(hyper), success, returndata, storage)
                     break
-                case CreateOp() as op:
+                case CreateOp() | CallOp() as op:
+                    if isinstance(op, CreateOp):
+                        placeholder = Uint160(f"CREATE{len(hyper)}")
+                        op.after(r, placeholder)
+                    else:
+                        placeholder = (
+                            Constraint(f"CALLOK{len(hyper)}"),
+                            Bytes.symbolic(f"CALLRET{len(hyper)}"),
+                        )
+                        op.after(r, *placeholder)
                     storage = Array[Uint256, Uint256](f"STORAGE{len(hyper)}")
-                    h = HyperCreate(
-                        op=op,
-                        storage=(r.storage, storage),
-                        address=Uint160(f"CREATE{len(hyper)}"),
-                    )
+                    hyper.append(HyperInvoke(op, (r.storage, storage), placeholder))
                     r.storage = copy.deepcopy(storage)
-                    hyper.append(h)
-                    op.after(r, h.address)
-                case CallOp() as op:
-                    storage = Array[Uint256, Uint256](f"STORAGE{len(hyper)}")
-                    h = HyperCall(
-                        op=op,
-                        storage=(r.storage, storage),
-                        success=Constraint(f"CALLOK{len(hyper)}"),
-                        returndata=Bytes.symbolic(f"CALLRET{len(hyper)}"),
-                    )
-                    r.storage = copy.deepcopy(storage)
-                    hyper.append(h)
-                    op.after(r, h.success, h.returndata)
                 case DeferOp() as op:
                     result = Uint256(f"GLOBAL{len(hyper)}")
                     hyper.append(HyperGlobal(op, result))
@@ -134,46 +126,29 @@ class Terminus:
 
 @dataclass(frozen=True)
 class HyperGlobal:
-    """A hypercall for getting information from global state."""
+    """A hypercall for reading information from global state."""
 
     op: DeferOp
-    result: Uint256
+    placeholder: Uint256
 
     def __deepcopy__(self, memo: Any) -> Self:
         return self
 
 
 @dataclass(frozen=True)
-class HyperCreate:
-    """A CREATE/CREATE2 hypercall."""
+class HyperInvoke:
+    """A hypercall for running code, e.g. via CALL or CREATE."""
 
-    op: CreateOp
+    op: CreateOp | CallOp
 
     storage: tuple[
         Array[Uint256, Uint256],  # before
         Array[Uint256, Uint256],  # after
     ]
-    address: Uint160  # zero on failure
+    placeholder: Uint160 | tuple[Constraint, Bytes]
 
     def __deepcopy__(self, memo: Any) -> Self:
         return self
 
 
-@dataclass(frozen=True)
-class HyperCall:
-    """A CALL/DELEGATECALL/STATICCALL hypercall."""
-
-    op: CallOp
-
-    storage: tuple[
-        Array[Uint256, Uint256],  # before
-        Array[Uint256, Uint256] | None,  # after
-    ]
-    success: Constraint
-    returndata: Bytes
-
-    def __deepcopy__(self, memo: Any) -> Self:
-        return self
-
-
-type Hyper = HyperGlobal | HyperCreate | HyperCall
+type Hyper = HyperGlobal | HyperInvoke
