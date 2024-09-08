@@ -52,12 +52,9 @@ def compile(program: Program) -> Iterable[Terminus]:
                     r.hyper.append(hyper)
                     op.after(r, hyper.address)
                 case CallOp() as op:
-                    assert op.callvalue is not None
                     storage = Array[Uint256, Uint256](f"STORAGE{len(r.hyper)}")
                     hyper = HyperCall(
-                        address=op.address,
-                        callvalue=op.callvalue,
-                        calldata=op.calldata,
+                        op=op,
                         storage=(r.storage, storage),
                         success=Constraint(f"CALLOK{len(r.hyper)}"),
                         returndata=Bytes.symbolic(f"CALLRET{len(r.hyper)}"),

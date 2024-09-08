@@ -22,7 +22,6 @@ from smt import (
     Substitutions,
     Uint160,
     Uint256,
-    substitute,
     substitutions,
 )
 from state import (
@@ -45,21 +44,7 @@ def interpret(
 
     r = Runtime(program=program, storage=k.contracts[address].storage)
     while True:
-        result = step(r, k, tx, block)
-        if r.hyper:
-            assert len(r.hyper) == 1
-            match hyper := r.hyper[0]:
-                case HyperGlobal():
-                    raise NotImplementedError
-                case HyperCreate():
-                    raise NotImplementedError
-                case HyperCall():
-                    k, delta, _ = hypercall(hyper, k, tx)
-            r = r.substitute(delta)
-            result = substitute(result, delta)
-            r.hyper.clear()
-
-        match result:
+        match step(r, k, tx, block):
             case None:
                 pass
             case ForkOp(r0, r1):
@@ -126,11 +111,10 @@ def execute(
                 case HyperGlobal():
                     delta, ok = hyperglobal(hyper, k), Constraint(True)
                 case HyperCreate():
-                    k, delta, ok = hypercreate(hyper, k, tx, term.path)
+                    k, delta = hypercreate(hyper, k, tx, term.path)
                 case HyperCall():
-                    k, delta, ok = hypercall(hyper, k, tx)
+                    k, delta = hypercall(hyper, k, tx, term.path)
             term = term.substitute(delta)
-            term.path.constraint &= ok
 
         assert (ok := term.path.constraint.reveal()) is not None
         if ok:
@@ -150,7 +134,7 @@ def hyperglobal(h: HyperGlobal, k: Blockchain) -> Substitutions:
 
 def hypercreate(
     h: HyperCreate, k: Blockchain, tx: Transaction, path: Path
-) -> tuple[Blockchain, Substitutions, Constraint]:
+) -> tuple[Blockchain, Substitutions]:
     """Simulate a concrete CREATE hypercall."""
     sender = Address.unwrap(tx.address, "CREATE/CREATE2")
     before, after = h.storage
@@ -163,53 +147,33 @@ def hypercreate(
     else:
         del k.contracts[address]
 
-    return (
-        k,
-        [
-            (h.address, Uint160(address if t.success else 0)),
-            (after, k.contracts[sender].storage),
-        ],
-        Constraint(True),
-    )
+    subs: Substitutions = [
+        (h.address, Uint160(address if t.success else 0)),
+        (after, k.contracts[sender].storage),
+    ]
+    return k, subs
 
 
 def hypercall(
-    h: HyperCall, k: Blockchain, tx: Transaction
-) -> tuple[Blockchain, Substitutions, Constraint]:
+    h: HyperCall, k: Blockchain, tx: Transaction, path: Path
+) -> tuple[Blockchain, Substitutions]:
     """Simulate a concrete CALL, etc. hypercall."""
     sender = Address.unwrap(tx.address, "CALL/DELEGATECALL/STATICCALL")
-    address = Address.unwrap(h.address, "CALL/DELEGATECALL/STATICCALL")
-    assert (calldata := h.calldata.reveal()) is not None
-    tx = Transaction(
-        origin=tx.origin,
-        caller=tx.caller if h.delegate else tx.address,
-        address=tx.address if h.delegate else h.address,
-        callvalue=h.callvalue,
-        calldata=Bytes(calldata),
-        gasprice=tx.gasprice,
-    )
     before, after = h.storage
     k.contracts[sender].storage = before
-    if not h.delegate:
-        ok = k.transfer(tx)
-    else:
-        ok = Constraint(True)
 
+    address, subtx, override = h.op.before(k, tx, path)
     if address in k.contracts:
-        program = k.contracts[address].program if h.delegate else None
-        k, t = interpret(k, tx, program)
-        if h.static:
+        k, t = interpret(k, subtx, override)
+        if h.op.static:
             assert t.path.static, "STATICCALL executed non-static op"
         constraint, returndata = Constraint(t.success), t.returndata
     else:
         constraint, returndata = Constraint(True), Bytes()
 
-    return (
-        k,
-        [
-            (h.success, constraint),
-            *substitutions(h.returndata, returndata),
-            *(((after, k.contracts[sender].storage),) if after else ()),
-        ],
-        ok,
-    )
+    subs: Substitutions = [
+        (h.success, constraint),
+        *substitutions(h.returndata, returndata),
+        *(((after, k.contracts[sender].storage),) if after else ()),
+    ]
+    return k, subs

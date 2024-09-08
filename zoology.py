@@ -131,8 +131,7 @@ def search(level: int) -> Iterable[str]:
                     case HyperCreate():
                         raise NotImplementedError
                     case HyperCall():
-                        k, delta, ok = hypercall(hyper, k, vx)
-                        val.path.constraint &= ok
+                        k, delta = hypercall(hyper, k, vx, val.path)
                 val = val.substitute(delta)
 
             solver = Solver()

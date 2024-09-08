@@ -558,7 +558,7 @@ def DELEGATECALL(
     argsSize: Uint256,
     retOffset: Uint256,
     retSize: Uint256,
-) -> Uint256:
+) -> CallOp:
     """
     F4.
 
@@ -566,23 +566,13 @@ def DELEGATECALL(
     persisting the current values for sender and value.
     """
     r.path.static = False  # HACK: actually depends on which operations execute
-    success = Constraint(f"CALLOK{len(r.hyper)}")
-    returndata = Bytes.symbolic(f"CALLRET{len(r.hyper)}")
-    storage = Array[Uint256, Uint256](f"STORAGE{len(r.hyper)}")
-    hyper = HyperCall(
+    return CallOp(
         address=address.into(Uint160),
-        callvalue=tx.callvalue,
+        callvalue=None,
         calldata=r.memory.slice(argsOffset, argsSize),
-        storage=(r.storage, storage),
-        success=success,
-        returndata=returndata,
-        delegate=True,
+        retOffset=retOffset,
+        retSize=retSize,
     )
-    r.storage = copy.deepcopy(storage)
-    r.hyper.append(hyper)
-    r.latest_return = returndata
-    r.memory.graft(returndata.slice(Uint256(0), retSize), retOffset)
-    return success.ite(Uint256(1), Uint256(0))
 
 
 def CREATE2(
@@ -605,23 +595,16 @@ def STATICCALL(
     argsSize: Uint256,
     retOffset: Uint256,
     retSize: Uint256,
-) -> Uint256:
+) -> CallOp:
     """FA - Static message-call into an account."""
-    success = Constraint(f"CALLOK{len(r.hyper)}")
-    returndata = Bytes.symbolic(f"CALLRET{len(r.hyper)}")
-    hyper = HyperCall(
+    return CallOp(
         address=address.into(Uint160),
         callvalue=Uint256(0),
         calldata=r.memory.slice(argsOffset, argsSize),
-        storage=(r.storage, None),
-        success=success,
-        returndata=returndata,
+        retOffset=retOffset,
+        retSize=retSize,
         static=True,
     )
-    r.hyper.append(hyper)
-    r.latest_return = returndata
-    r.memory.graft(returndata.slice(Uint256(0), retSize), retOffset)
-    return success.ite(Uint256(1), Uint256(0))
 
 
 def REVERT(r: Runtime, offset: Uint256, size: Uint256) -> TerminateOp:
@@ -754,18 +737,29 @@ class CallOp:
     ) -> tuple[Address, Transaction, Program | None]:
         """Set up the CALL operation."""
         address = Address.unwrap(self.address, "CALL/DELEGATECALL/STATICCALL")
-        assert self.callvalue is not None, "TODO: support DELEGATECALL"
         assert (calldata := self.calldata.reveal()) is not None
-        subtx = Transaction(
-            origin=tx.origin,
-            caller=tx.address,
-            address=self.address,
-            callvalue=self.callvalue,
-            calldata=Bytes(calldata),
-            gasprice=tx.gasprice,
-        )
-        path.constraint &= k.transfer(subtx)
-        return address, subtx, None
+        if self.callvalue is None:  # DELEGATECALL
+            subtx = Transaction(
+                origin=tx.origin,
+                caller=tx.caller,
+                address=tx.address,
+                callvalue=tx.callvalue,
+                calldata=Bytes(calldata),
+                gasprice=tx.gasprice,
+            )
+            override = k.contracts[address].program
+        else:  # normal CALLs
+            subtx = Transaction(
+                origin=tx.origin,
+                caller=tx.address,
+                address=self.address,
+                callvalue=self.callvalue,
+                calldata=Bytes(calldata),
+                gasprice=tx.gasprice,
+            )
+            path.constraint &= k.transfer(subtx)
+            override = None
+        return address, subtx, override
 
     def after(self, r: Runtime, success: Constraint, returndata: Bytes) -> None:
         """Apply the result of the CALL operation to the stack and memory."""
@@ -885,20 +879,14 @@ class HyperCreate:
 class HyperCall:
     """A CALL/DELEGATECALL/STATICCALL hypercall."""
 
-    address: Uint160
-    callvalue: Uint256
-    calldata: Bytes
+    op: CallOp
 
     storage: tuple[
         Array[Uint256, Uint256],  # before
         Array[Uint256, Uint256] | None,  # after
     ]
-
     success: Constraint
     returndata: Bytes
-
-    static: bool = False
-    delegate: bool = False
 
     def __deepcopy__(self, memo: Any) -> Self:
         return self
