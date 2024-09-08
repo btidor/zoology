@@ -6,9 +6,10 @@ from typing import Iterable
 
 from bytes import Bytes
 from disassembler import Program
-from ops import CreateOp, ForkOp, HyperCreate, TerminateOp, step
+from ops import CallOp, CreateOp, ForkOp, HyperCall, HyperCreate, TerminateOp, step
 from smt import (
     Array,
+    Constraint,
     Uint8,
     Uint160,
     Uint256,
@@ -50,8 +51,20 @@ def compile(program: Program) -> Iterable[Terminus]:
                     r.storage = copy.deepcopy(storage)
                     r.hyper.append(hyper)
                     op.after(r, hyper.address)
-                case _:
-                    raise NotImplementedError
+                case CallOp() as op:
+                    assert op.callvalue is not None
+                    storage = Array[Uint256, Uint256](f"STORAGE{len(r.hyper)}")
+                    hyper = HyperCall(
+                        address=op.address,
+                        callvalue=op.callvalue,
+                        calldata=op.calldata,
+                        storage=(r.storage, storage),
+                        success=Constraint(f"CALLOK{len(r.hyper)}"),
+                        returndata=Bytes.symbolic(f"CALLRET{len(r.hyper)}"),
+                    )
+                    r.storage = copy.deepcopy(storage)
+                    r.hyper.append(hyper)
+                    op.after(r, hyper.success, hyper.returndata)
 
 
 def symbolic_block() -> Block:

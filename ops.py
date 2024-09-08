@@ -517,26 +517,17 @@ def CALL(
     argsSize: Uint256,
     retOffset: Uint256,
     retSize: Uint256,
-) -> Uint256:
+) -> CallOp:
     """F1 - Message-call into an account."""
     if value.reveal() != 0:  # TODO: this is a big hack
         r.path.static = False
-    success = Constraint(f"CALLOK{len(r.hyper)}")
-    returndata = Bytes.symbolic(f"CALLRET{len(r.hyper)}")
-    storage = Array[Uint256, Uint256](f"STORAGE{len(r.hyper)}")
-    hyper = HyperCall(
+    return CallOp(
         address=address.into(Uint160),
         callvalue=value,
         calldata=r.memory.slice(argsOffset, argsSize),
-        storage=(r.storage, storage),
-        success=success,
-        returndata=returndata,
+        retOffset=retOffset,
+        retSize=retSize,
     )
-    r.storage = copy.deepcopy(storage)
-    r.hyper.append(hyper)
-    r.latest_return = returndata
-    r.memory.graft(returndata.slice(Uint256(0), retSize), retOffset)
-    return success.ite(Uint256(1), Uint256(0))
 
 
 def CALLCODE(
@@ -720,7 +711,7 @@ class CreateOp:
         k.contracts[address] = Contract(
             program=disassemble(Bytes()),  # during init, length is zero
         )
-        path.constraint &= k.transfer(tx.caller, tx.address, tx.callvalue)
+        path.constraint &= k.transfer(tx)
 
         return (
             address,
@@ -759,21 +750,22 @@ class CallOp:
     static: bool = False
 
     def before(
-        self, k: Blockchain, tx: Transaction
+        self, k: Blockchain, tx: Transaction, path: Path
     ) -> tuple[Address, Transaction, Program | None]:
         """Set up the CALL operation."""
+        address = Address.unwrap(self.address, "CALL/DELEGATECALL/STATICCALL")
+        assert self.callvalue is not None, "TODO: support DELEGATECALL"
         assert (calldata := self.calldata.reveal()) is not None
         subtx = Transaction(
             origin=tx.origin,
-            caller=tx.caller if self.callvalue is None else tx.address,
-            address=tx.address if self.callvalue is None else self.address,
-            callvalue=tx.callvalue if self.callvalue is None else self.callvalue,
+            caller=tx.address,
+            address=self.address,
+            callvalue=self.callvalue,
             calldata=Bytes(calldata),
             gasprice=tx.gasprice,
         )
-        address = Address.unwrap(subtx.address, "CALL/DELEGATECALL/STATICCALL")
-        program = k.contracts[address].program if self.callvalue is None else None
-        return address, subtx, program
+        path.constraint &= k.transfer(subtx)
+        return address, subtx, None
 
     def after(self, r: Runtime, success: Constraint, returndata: Bytes) -> None:
         """Apply the result of the CALL operation to the stack and memory."""

@@ -5,7 +5,16 @@ import copy
 from bytes import Bytes
 from compiler import compile, symbolic_block, symbolic_transaction
 from disassembler import Program, disassemble
-from ops import CreateOp, ForkOp, HyperCall, HyperCreate, HyperGlobal, TerminateOp, step
+from ops import (
+    CallOp,
+    CreateOp,
+    ForkOp,
+    HyperCall,
+    HyperCreate,
+    HyperGlobal,
+    TerminateOp,
+    step,
+)
 from path import Path
 from smt import (
     Array,
@@ -80,8 +89,14 @@ def interpret(
                 else:
                     del k.contracts[address]
                     op.after(r, Uint160(address))
-            case _:
-                raise NotImplementedError
+            case CallOp() as op:
+                address, subtx, override = op.before(k, tx, r.path)
+                k, term = interpret(k, subtx, override)
+                assert term.path.constraint.reveal() is True
+
+                if op.static:
+                    assert term.path.static, "STATICCALL executed non-static op"
+                op.after(r, Constraint(term.success), term.returndata)
 
 
 def execute(
@@ -176,7 +191,7 @@ def hypercall(
     before, after = h.storage
     k.contracts[sender].storage = before
     if not h.delegate:
-        ok = k.transfer(tx.caller, tx.address, h.callvalue)
+        ok = k.transfer(tx)
     else:
         ok = Constraint(True)
 

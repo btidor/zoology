@@ -35,14 +35,15 @@ class Blockchain:
         default_factory=lambda: Array[Uint160, Uint256](Uint256(0))
     )
 
-    def transfer(self, src: Uint160, dst: Uint160, value: Uint256) -> Constraint:
+    def transfer(self, tx: Transaction) -> Constraint:
         """Transfer value between accounts (checked)."""
+        src, dst, value = tx.caller, tx.address, tx.callvalue
+
         ok = self.balances[src] >= value
         self.balances[src] -= value
 
         ok &= self.balances[dst] + value >= self.balances[dst]
         self.balances[dst] += value
-
         return ok
 
 
