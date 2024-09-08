@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 from heapq import heappop, heappush
 from typing import Iterable
 
@@ -45,7 +46,7 @@ def execute(
 ) -> Iterable[tuple[Blockchain, Terminus]]:
     """Interpret a program with concrete inputs."""
     block = block or Block()
-    address = Address.unwrap(tx.address, "interpret")
+    address = Address.unwrap(tx.address, "execute")
     program = override or k.contracts[address].program
     r = Runtime(program=program, storage=k.contracts[address].storage)
 
@@ -57,41 +58,41 @@ def execute(
                 case None:
                     pass
                 case ForkOp(r0, r1):
-                    a = r0.path.constraint.reveal()
-                    b = r1.path.constraint.reveal()
-                    match (a, b):
-                        case (True, False):
-                            r = r0
-                        case (False, True):
-                            r = r1
-                        case _:
-                            raise ValueError(
-                                f"expected one concrete path, got {(a, b)}"
-                            )
+                    heappush(queue, (r0, k))
+                    # We have to maintain this invariant so that modifications
+                    # to r.storage are reflected in k.contracts.
+                    k = copy.deepcopy(k)
+                    k.contracts[address].storage = r1.storage
+                    heappush(queue, (r1, k))
+                    break
                 case TerminateOp(success, returndata):
                     storage = r.storage if success and not r.path.static else None
                     terminus = Terminus(r.path, (), success, returndata, storage)
                     yield k, terminus
                     break
                 case CreateOp() as op:
-                    address, subtx, override = op.before(k, tx, r.path)
+                    created, subtx, override = op.before(k, tx, r.path)
                     for k, term in execute(k, subtx, block, override):
                         assert term.path.constraint.reveal() is True
                         if term.success:
-                            k.contracts[address].program = disassemble(term.returndata)
-                            op.after(r, Uint160(address))
+                            k.contracts[created].program = disassemble(term.returndata)
+                            op.after(r, Uint160(created))
                         else:
-                            del k.contracts[address]
-                            op.after(r, Uint160(address))
+                            del k.contracts[created]
+                            op.after(r, Uint160(created))
+                        # That invariant again...
+                        r.storage = k.contracts[address].storage
                         heappush(queue, (r, k))
                     break
                 case CallOp() as op:
-                    address, subtx, override = op.before(k, tx, r.path)
+                    _, subtx, override = op.before(k, tx, r.path)
                     for k, term in execute(k, subtx, block, override):
                         assert term.path.constraint.reveal() is True
                         if op.static:
                             assert term.path.static, "STATICCALL executed non-static op"
                         op.after(r, Constraint(term.success), term.returndata)
+                        # That invariant again...
+                        r.storage = k.contracts[address].storage
                         heappush(queue, (r, k))
                     break
 
@@ -135,14 +136,14 @@ def _create(
     k.contracts[sender].storage = before
 
     address, subtx, override = h.op.before(k, tx, path)
-    for k, t in execute(k, subtx, block, override):
-        if t.success:
-            k.contracts[address].program = disassemble(t.returndata)
+    for k, term in execute(k, subtx, block, override):
+        if term.success:
+            k.contracts[address].program = disassemble(term.returndata)
         else:
             del k.contracts[address]
 
         subs: Substitutions = [
-            (h.address, Uint160(address if t.success else 0)),
+            (h.address, Uint160(address if term.success else 0)),
             (after, k.contracts[sender].storage),
         ]
         yield k, subs
@@ -157,12 +158,12 @@ def _call(
 
     address, subtx, override = h.op.before(k, tx, path)
     if address in k.contracts:
-        for k, t in execute(k, subtx, block, override):
+        for k, term in execute(k, subtx, block, override):
             if h.op.static:
-                assert t.path.static, "STATICCALL executed non-static op"
+                assert term.path.static, "STATICCALL executed non-static op"
             subs: Substitutions = [
-                (h.success, Constraint(t.success)),
-                *substitutions(h.returndata, t.returndata),
+                (h.success, Constraint(term.success)),
+                *substitutions(h.returndata, term.returndata),
                 *(((after, k.contracts[sender].storage),) if after else ()),
             ]
             yield k, subs
