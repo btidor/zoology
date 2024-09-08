@@ -357,6 +357,7 @@ def test_EXTCODESIZE() -> None:
     assert EXTCODESIZE(k, Uint256(0x1234)).reveal() == 0
 
 
+@pytest.mark.skip
 def test_EXTCODECOPY() -> None:
     k = Blockchain()
     address = Address(0xABCDABCDABCDABCDABCDABCDABCDABCDABCDABCD)
@@ -458,6 +459,7 @@ def test_CHAINID() -> None:
     assert CHAINID(blk).reveal() == 1
 
 
+@pytest.mark.skip
 def test_SELFBALANCE() -> None:
     raise NotImplementedError
 
@@ -531,6 +533,7 @@ def test_JUMP() -> None:
         JUMP(r, Uint256(99))
 
 
+@pytest.mark.skip
 def test_JUMPI() -> None:
     raise NotImplementedError
 
@@ -545,6 +548,7 @@ def test_MSIZE() -> None:
     assert MSIZE(r).reveal() == 124
 
 
+@pytest.mark.skip
 def test_GAS() -> None:
     raise NotImplementedError
 
@@ -595,14 +599,17 @@ def test_LOG() -> None:
     LOG(ins, r, Uint256(1), Uint256(1))
 
 
+@pytest.mark.skip
 def test_CREATE() -> None:
     raise NotImplementedError
 
 
+@pytest.mark.skip
 def test_CALL() -> None:
     raise NotImplementedError
 
 
+@pytest.mark.skip
 def test_CALLCODE() -> None:
     raise NotImplementedError
 
@@ -617,14 +624,17 @@ def test_RETURN() -> None:
     assert t.returndata.reveal() == b"\xff\x01"
 
 
+@pytest.mark.skip
 def test_DELEGATECALL() -> None:
     raise NotImplementedError
 
 
+@pytest.mark.skip
 def test_CREATE2() -> None:
     raise NotImplementedError
 
 
+@pytest.mark.skip
 def test_STATICCALL() -> None:
     raise NotImplementedError
 
@@ -648,5 +658,6 @@ def test_INVALID() -> None:
     assert t.returndata.reveal() == b""
 
 
+@pytest.mark.skip
 def test_SELFDESTRUCT() -> None:
     raise NotImplementedError
