@@ -2,7 +2,7 @@
 
 import copy
 from inspect import Signature, signature
-from typing import Any, Callable, Literal
+from typing import Callable, Literal
 
 from bytes import Bytes
 from disassembler import Instruction, LoopCopy, Program, disassemble
@@ -1135,9 +1135,12 @@ def CUSTOM(s: State, ins: Instruction) -> None:
             raise ValueError("CUSTOM requires a descriptor object")
 
 
-def _load_ops() -> dict[str, tuple[Any, Signature]]:
+Operation = Callable[..., None | Uint256 | ControlFlow]
+
+
+def _load_ops() -> dict[str, tuple[Operation, Signature]]:
     opcodes = SPECIAL.union([c.name for c in REFERENCE.values()])
-    ops = dict[str, tuple[Any, Signature]]()
+    ops = dict[str, tuple[Operation, Signature]]()
     for name in opcodes:
         if name in UNIMPLEMENTED:
             continue

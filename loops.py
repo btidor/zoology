@@ -7,7 +7,7 @@ from typing import Any
 from bytes import Bytes
 from disassembler import Instruction, LoopCopy, Program, disassemble
 from ops import OPS
-from smt import Uint256
+from smt import Uint, Uint256
 from state import State
 
 
@@ -100,8 +100,9 @@ def analyze_block(program: Program, start: int) -> LoopCopy:
                     else:
                         raise TypeError(f"unknown arg class: {kls}")
 
-                result: Uint256 | None = fn(*args)
+                result = fn(*args)
                 if result is not None:
+                    assert isinstance(result, Uint)
                     stack.append(result)
 
 
