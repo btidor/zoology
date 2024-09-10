@@ -67,11 +67,11 @@ def test_token() -> None:
     check_level(5, fixture)
 
 
-# def test_delegation() -> None:
-#     fixture = [
-#         "dd365b8b",
-#     ]
-#     check_level(6, fixture)
+def test_delegation() -> None:
+    fixture = [
+        "dd365b8b",
+    ]
+    check_level(6, fixture)
 
 
 # def test_force() -> None:

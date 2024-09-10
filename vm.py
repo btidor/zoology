@@ -123,11 +123,13 @@ def handle_hypercalls(
                     k.contracts[sender].storage = before
                     address, subtx, override = op.before(k, tx, term.path)
 
-                    for k, delta in _invoke(
+                    for k, delta, constraint in _invoke(
                         op, placeholder, k, address, subtx, override, block
                     ):
+                        subterm = copy.deepcopy(term)
+                        subterm.path.constraint &= constraint
                         delta.append((after, k.contracts[sender].storage))
-                        next.append((k, copy.deepcopy(term).substitute(delta)))
+                        next.append((k, subterm.substitute(delta)))
         terms = next
     return terms
 
@@ -140,7 +142,7 @@ def _invoke(
     subtx: Transaction,
     override: Program | None,
     block: Block,
-) -> Iterable[tuple[Blockchain, Substitutions]]:
+) -> Iterable[tuple[Blockchain, Substitutions, Constraint]]:
     for k, term in execute(k, subtx, block, override):
         if isinstance(op, CreateOp):
             if term.success:
@@ -160,4 +162,4 @@ def _invoke(
                 (success, Constraint(term.success)),
                 *substitutions(returndata, term.returndata),
             ]
-        yield k, delta
+        yield k, delta, term.path.constraint

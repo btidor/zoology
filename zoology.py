@@ -99,6 +99,8 @@ def search(level: int) -> Iterable[str]:
         )
 
         for mutation in compile(contract.program):
+            if not mutation.success:
+                continue
             if mutation.path.static:  # TODO: or balance change
                 continue
 
