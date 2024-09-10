@@ -76,7 +76,7 @@ def _execute_compiled(k: Blockchain, tx: Transaction) -> Terminus:
 
     for term in compile(program):
         term = term.substitute(subs)
-        for k, term in handle_hypercalls(k, tx, block, term):
+        for k, term in handle_hypercalls(k, tx, address, block, term):
             assert (ok := term.path.constraint.reveal()) is not None
             if ok:
                 if term.storage:

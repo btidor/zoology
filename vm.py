@@ -101,12 +101,11 @@ def execute(
 
 
 def handle_hypercalls(
-    k: Blockchain, tx: Transaction, block: Block, term: Terminus
+    k: Blockchain, tx: Transaction, sender: Address, block: Block, term: Terminus
 ) -> Iterable[tuple[Blockchain, Terminus]]:
     """Simulate hypercalls using the current global state."""
-    sender = Address.unwrap(tx.address)
     n = len(term.hyper)
-    terms = [(k, term)]
+    terms = [(copy.deepcopy(k), term)]
     for i in range(n):
         next = list[tuple[Blockchain, Terminus]]()
         for k, term in terms:

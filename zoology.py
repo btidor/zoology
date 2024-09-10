@@ -58,14 +58,17 @@ def load_level(level: int) -> tuple[Blockchain, Address]:
     return k, Address(int.from_bytes(data))
 
 
-def search(level: int) -> Iterable[str]:
+def search(level: int, depth: int = 10) -> Iterable[str]:
     """Symbolically execute the given level until a solution is found."""
     FACTORY = LEVEL_FACTORIES[level]
     ki, LEVEL = load_level(level)
 
-    cblock = Block()
-    mblock = cblock.successor()
-    vblock = mblock.successor()
+    block = Block()
+    blocks = list[Block]()
+    for _ in range(depth):
+        block = block.successor()
+        blocks.append(block)
+    vblock = blocks[-1].successor()
 
     vx = Transaction(
         origin=Uint160(PLAYER),
@@ -77,6 +80,7 @@ def search(level: int) -> Iterable[str]:
             + PLAYER.to_bytes(32)
         ),
     )
+    vsender = Address.unwrap(vx.address)
     subs: Substitutions = [
         *substitutions(symbolic_block(), vblock),
         *substitutions(symbolic_transaction(), vx),
@@ -95,62 +99,100 @@ def search(level: int) -> Iterable[str]:
     assert len(validators) == 1
     validator = validators[0]
 
+    mutations = list[tuple[Address, Terminus]]()
     for address, contract in ki.contracts.items():
         if address == FACTORY:
             continue
 
-        tx = Transaction(
-            origin=Uint160(PLAYER),
-            caller=Constraint("CALLERAB0").ite(Uint160(PLAYER), Uint160(PROXY)),
-            address=Uint160(address),
-            callvalue=Uint256("CALLVALUE0"),
-            calldata=Bytes.symbolic("CALLDATA0"),
-            gasprice=Uint256(0x12),
-        )
-
         for mutation in compile(contract.program):
             if not mutation.success:
                 continue
-            if mutation.path.static:  # TODO: or balance change
+            if mutation.path.static:
+                # TODO: fix definition of `static` (calls, balance changes)
                 continue
+            mutations.append((address, mutation))
 
-            mutation = mutation.substitute(
-                [
-                    *substitutions(symbolic_transaction(), tx),
-                    *substitutions(symbolic_block(), mblock),
-                    (
-                        Array[Uint256, Uint256]("STORAGE"),
-                        ki.contracts[address].storage,
+    paths = list[tuple[Blockchain, list[tuple[Address, Transaction, Terminus]]]]()
+    paths.append((ki, []))
+    for i in range(depth):
+        next = list[tuple[Blockchain, list[tuple[Address, Transaction, Terminus]]]]()
+        for kj, hj in paths:
+            for address, mutation in mutations:
+                tx = Transaction(
+                    origin=Uint160(PLAYER),
+                    caller=Constraint(f"CALLERAB{i}").ite(
+                        Uint160(PLAYER), Uint160(PROXY)
                     ),
-                ]
-            )
-            k = copy.deepcopy(ki)
-            for k, mutation in handle_hypercalls(k, tx, mblock, mutation):
-                assert mutation.storage is not None
-                k.contracts[address].storage = mutation.storage
+                    address=Uint160(address),
+                    callvalue=Uint256(f"CALLVALUE{i}"),
+                    calldata=Bytes.symbolic(f"CALLDATA{i}"),
+                    gasprice=Uint256(0x12),
+                )
+                k, mutation = copy.deepcopy((kj, mutation))
+                mutation = mutation.substitute(
+                    [
+                        *substitutions(symbolic_transaction(), tx),
+                        *substitutions(symbolic_block(), blocks[i]),
+                        (
+                            Array[Uint256, Uint256]("STORAGE"),
+                            k.contracts[address].storage,
+                        ),
+                    ]
+                )
+                if mutation.path.constraint.reveal() is False:
+                    continue
 
-                for k, valn in handle_hypercalls(k, vx, vblock, validator):
-                    solver = Solver()
-                    solver.add(mutation.path.constraint)
-                    solver.add(valn.path.constraint)
-                    if not solver.check():
+                for k, mutation in handle_hypercalls(
+                    k, tx, address, blocks[i], mutation
+                ):
+                    assert mutation.storage is not None
+                    k.contracts[address].storage = mutation.storage
+
+                    history = hj + [(address, tx, mutation)]
+                    next.append((copy.deepcopy(k), history))
+
+                    result = _validate(k, vx, vsender, vblock, validator, history)
+                    if result is None:
                         continue
+                    valn, solver = result
 
-                    tx.narrow(solver)  # must do this first if CALLER is hashed
+                    for _, tx, _ in history:
+                        tx.narrow(solver)  # must do this first if CALLER is hashed
 
-                    # TODO: `mutation.path` and `val.path` are not properly merged,
-                    # which may cause SHA3 narrowing errors.
-                    mutation.path.narrow(solver)
+                    # TODO: `mutation.path` and `val.path` are not properly
+                    # merged, which may cause SHA3 narrowing errors.
+                    for _, _, mutation in history:
+                        mutation.path.narrow(solver)
                     valn.path.narrow(solver)
 
-                    if address != LEVEL:
-                        yield f"To {hex(address)}:\n"
-
-                    yield from tx.calldata.describe(solver)
-                    if solver.evaluate(tx.caller) != PLAYER:
-                        yield "\tvia proxy"
-
-                    yield "\n"
+                    for address, tx, _ in history:
+                        if address != LEVEL:
+                            yield f"To {hex(address)}:\n"
+                        yield from tx.calldata.describe(solver)
+                        if solver.evaluate(tx.caller) != PLAYER:
+                            yield "\tvia proxy"
+                        yield "\n"
                     return
 
+        paths = next
+
     raise RuntimeError("solution not found")
+
+
+def _validate(
+    k: Blockchain,
+    tx: Transaction,
+    sender: Address,
+    block: Block,
+    term: Terminus,
+    history: list[tuple[Address, Transaction, Terminus]],
+) -> tuple[Terminus, Solver] | None:
+    for k, term in handle_hypercalls(k, tx, sender, block, term):
+        solver = Solver()
+        for _, _, mutation in history:
+            solver.add(mutation.path.constraint)
+        solver.add(term.path.constraint)
+        if not solver.check():
+            continue
+        return term, solver
+    return None
