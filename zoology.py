@@ -18,7 +18,16 @@ from environ import (
     Blockchain,
     Transaction,
 )
-from smt import Array, Constraint, Solver, Uint8, Uint160, Uint256, substitutions
+from smt import (
+    Array,
+    Constraint,
+    Solver,
+    Substitutions,
+    Uint8,
+    Uint160,
+    Uint256,
+    substitutions,
+)
 from snapshot import LEVEL_FACTORIES, snapshot_contracts
 from vm import execute, handle_hypercalls
 
@@ -67,7 +76,7 @@ def search(level: int) -> Iterable[str]:
             + PLAYER.to_bytes(32)
         ),
     )
-    subs = [
+    subs: Substitutions = [
         *substitutions(symbolic_block(), vblock),
         *substitutions(symbolic_transaction(), vx),
         (Array[Uint256, Uint256]("STORAGE"), k.contracts[FACTORY].storage),

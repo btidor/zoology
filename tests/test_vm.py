@@ -6,7 +6,7 @@ from bytes import Bytes
 from compiler import Terminus, compile, symbolic_block, symbolic_transaction
 from disassembler import Program, abiencode, disassemble
 from environ import Address, Block, Blockchain, Contract, Transaction
-from smt import Array, Uint160, Uint256
+from smt import Array, Substitutions, Uint160, Uint256
 from snapshot import LEVEL_FACTORIES, snapshot_contracts
 from vm import execute, handle_hypercalls, substitutions
 
@@ -68,7 +68,7 @@ def _execute_compiled(k: Blockchain, tx: Transaction) -> Terminus:
     block = Block()
     address = Address.unwrap(tx.address, "execute")
     program = k.contracts[address].program
-    subs = [
+    subs: Substitutions = [
         *substitutions(symbolic_block(), block),
         *substitutions(symbolic_transaction(), tx),
         (Array[Uint256, Uint256]("STORAGE"), k.contracts[address].storage),
