@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 from typing import Iterable
 
 from bytes import Bytes
@@ -60,7 +61,7 @@ def load_level(level: int) -> tuple[Blockchain, Address]:
 def search(level: int) -> Iterable[str]:
     """Symbolically execute the given level until a solution is found."""
     FACTORY = LEVEL_FACTORIES[level]
-    k, LEVEL = load_level(level)
+    ki, LEVEL = load_level(level)
 
     cblock = Block()
     mblock = cblock.successor()
@@ -79,12 +80,12 @@ def search(level: int) -> Iterable[str]:
     subs: Substitutions = [
         *substitutions(symbolic_block(), vblock),
         *substitutions(symbolic_transaction(), vx),
-        (Array[Uint256, Uint256]("STORAGE"), k.contracts[FACTORY].storage),
+        (Array[Uint256, Uint256]("STORAGE"), ki.contracts[FACTORY].storage),
     ]
 
     solver = Solver()
     validators = list[Terminus]()
-    for term in compile(k.contracts[FACTORY].program):
+    for term in compile(ki.contracts[FACTORY].program):
         if not term.success:
             continue
         term = term.substitute(subs)
@@ -94,7 +95,7 @@ def search(level: int) -> Iterable[str]:
     assert len(validators) == 1
     validator = validators[0]
 
-    for address, contract in k.contracts.items():
+    for address, contract in ki.contracts.items():
         if address == FACTORY:
             continue
 
@@ -119,15 +120,16 @@ def search(level: int) -> Iterable[str]:
                     *substitutions(symbolic_block(), mblock),
                     (
                         Array[Uint256, Uint256]("STORAGE"),
-                        k.contracts[address].storage,
+                        ki.contracts[address].storage,
                     ),
                 ]
             )
-            for kn, mutation in handle_hypercalls(k, tx, mblock, mutation):
+            k = copy.deepcopy(ki)
+            for k, mutation in handle_hypercalls(k, tx, mblock, mutation):
                 assert mutation.storage is not None
-                kn.contracts[address].storage = mutation.storage
+                k.contracts[address].storage = mutation.storage
 
-                for kn, valn in handle_hypercalls(kn, vx, vblock, validator):
+                for k, valn in handle_hypercalls(k, vx, vblock, validator):
                     solver = Solver()
                     solver.add(mutation.path.constraint)
                     solver.add(valn.path.constraint)
