@@ -1,0 +1,24 @@
+* consider making hypercalls into a tree, avoid copying
+  (if we substitute down the tree, is this legal?)
+
+* path merging (pass everything through `keccak256`)
+
+* add mystery proxy, preferably in `Blockchain`
+
+* unimplemented opcodes
+
+  - EXTCODECOPY
+  - CALLCODE
+  - SELFDESTRUCT
+  - GAS
+  - (finish tests)
+
+* better debugging
+
+  - print subcalls, etc.
+  - print state at end of each transaction
+  - ???
+
+* fix definition of `static`
+
+* issues with infinite loops? have JUMP go back through min-heap
