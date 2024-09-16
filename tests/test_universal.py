@@ -1,7 +1,6 @@
 #!/usr/bin/env pytest
 
 import copy
-from typing import Any
 
 import pytest
 
@@ -16,7 +15,7 @@ from . import helpers as cases
 from .solidity import load_binary, load_solidity, loads_solidity
 
 
-def check_transitions(start: Program | State, branches: tuple[Any, ...]) -> None:
+def check_transitions(start: Program | State, branches: cases.Branches) -> None:
     if isinstance(start, Program):
         start = symbolic_start(start, SHA3(), "")
     start.skip_self_calls = True
@@ -27,7 +26,12 @@ def check_transitions(start: Program | State, branches: tuple[Any, ...]) -> None
         assert isinstance(end.pc, Termination)
         assert end.pc.success is True
 
-        kind, method, value = (expected[end.px()] + (None,))[:3]
+        entry = expected[end.px()]
+        if len(entry) == 2:
+            kind, method = entry
+            value = None
+        else:
+            kind, method, value = entry
 
         solver = Solver()
         solver.add(end.constraint)
@@ -40,10 +44,6 @@ def check_transitions(start: Program | State, branches: tuple[Any, ...]) -> None
         actual = bytes.fromhex(transaction.get("Data", "")[2:10])
         if method is None:
             assert actual == b"", f"unexpected data: {actual.hex()}"
-        elif method.startswith("0x"):
-            assert actual == bytes.fromhex(
-                method[2:]
-            ), f"unexpected data: {actual.hex()}"
         elif method == "$any4":
             assert len(actual) == 4, f"unexpected data: {actual.hex()}"
         else:

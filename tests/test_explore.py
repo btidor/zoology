@@ -1,6 +1,5 @@
 #!/usr/bin/env pytest
 
-from typing import Any
 
 from disassembler import Program
 from sha3 import SHA3
@@ -11,7 +10,7 @@ from . import helpers as cases
 from .solidity import load_binary, load_solidity, loads_solidity
 
 
-def check_paths(input: Program | State, branches: tuple[Any, ...]) -> None:
+def check_paths(input: Program | State, branches: cases.Branches) -> None:
     expected = set(b[0] for b in branches)
     if isinstance(input, Program):
         input = symbolic_start(input, SHA3(), "")

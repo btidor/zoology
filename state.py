@@ -248,7 +248,7 @@ class State:
             return data  # length may be arbitrarily large
         assert solver.check()
 
-        result: list[Uint8] = []
+        result = list[Uint8]()
         for i in range(4):
             v = data[Uint256(i)]
             e = BYTES[solver.evaluate(v)]

@@ -19,7 +19,7 @@ from pyinstrument.session import Session
 
 PROFILE_ROOT = Path.cwd() / ".profiles"
 
-RENDER_OPTS: Any = {
+RENDER_OPTS: dict[str, dict[str, str | int]] = {
     "processor_options": {
         "filter_threshold": 0,
         "show_regex": r".*",

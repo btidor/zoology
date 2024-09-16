@@ -1135,7 +1135,7 @@ def CUSTOM(s: State, ins: Instruction) -> None:
             raise ValueError("CUSTOM requires a descriptor object")
 
 
-Operation = Callable[..., None | Uint256 | ControlFlow]
+type Operation = Callable[..., None | Uint256 | ControlFlow]
 
 
 def _load_ops() -> dict[str, tuple[Operation, Signature]]:

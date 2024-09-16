@@ -7,7 +7,10 @@ from smt import Uint160, Uint256
 from state import State
 from universal import symbolic_start
 
-Fallback = (
+type Branch = tuple[str, str, str | None] | tuple[str, str, str | None, int | None]
+type Branches = tuple[Branch, ...]
+
+Fallback: Branches = (
     ("Px19", "SAVE", None, 1),
     ("PxB9", "SAVE", "withdraw()"),
     ("Px23", "VIEW", "owner()"),
@@ -18,7 +21,7 @@ Fallback = (
     ("Px10F", "SAVE", "contribute()"),
 )
 
-Fallout = (
+Fallout: Branches = (
     ("Px5", "SAVE", "Fal1out()"),
     ("Px23", "VIEW", "owner()"),
     ("Px139", "SAVE", "collectAllocations()"),
@@ -29,7 +32,7 @@ Fallout = (
     ("Px40F", "VIEW", "allocatorBalance(address)"),
 )
 
-CoinFlip = (
+CoinFlip: Branches = (
     ("Px6FF", "SAVE", "flip(bool)"),
     ("PxDFD", "SAVE", "flip(bool)"),
     ("Px6FD", "SAVE", "flip(bool)"),
@@ -38,19 +41,19 @@ CoinFlip = (
     ("Px19", "VIEW", "consecutiveWins()"),
 )
 
-Telephone = (
+Telephone: Branches = (
     ("PxD", "VIEW", "owner()"),
     ("PxCF", "VIEW", "changeOwner(address)"),
     ("PxCE", "SAVE", "changeOwner(address)"),
 )
 
-Token = (
+Token: Branches = (
     ("PxD", "VIEW", "totalSupply()"),
     ("Px33", "VIEW", "balanceOf(address)"),
     ("PxC7", "SAVE", "transfer(address,uint256)"),
 )
 
-Delegation = (
+Delegation: Branches = (
     ("Px331", "VIEW", "$any4"),  # *
     ("Px333", "SAVE", "pwn()"),
     ("PxD", "VIEW", "owner()"),
@@ -58,15 +61,15 @@ Delegation = (
     # * if Delegate reverts, Delegation will still return successfully
 )
 
-Force = ()
+Force: Branches = ()
 
-Vault = (
+Vault: Branches = (
     ("PxD", "VIEW", "locked()"),
     ("PxCF", "VIEW", "unlock(bytes32)"),
     ("PxCE", "SAVE", "unlock(bytes32)"),
 )
 
-King = (
+King: Branches = (
     ("PxB", "VIEW", "_king()"),
     ("Px13", "VIEW", "owner()"),
     ("PxC9", "SAVE", None, None),
@@ -76,7 +79,7 @@ King = (
     ("Px67", "SAVE", None, None),
 )
 
-Reentrancy = (
+Reentrancy: Branches = (
     ("Px6", "VIEW", None),
     ("Px2F", "SAVE", "donate(address)"),
     ("Px4F", "VIEW", "balances(address)"),
@@ -88,30 +91,30 @@ Reentrancy = (
     ("Px11E7", "SAVE", "withdraw(uint256)"),
 )
 
-Elevator = (
+Elevator: Branches = (
     ("PxD", "VIEW", "floor()"),
     ("Px31", "VIEW", "top()"),
     ("PxCFF", "VIEW", "goTo(uint256)"),
     ("PxCFEF", "SAVE", "goTo(uint256)"),
 )
 
-Privacy = (
+Privacy: Branches = (
     ("PxD", "VIEW", "ID()"),
     ("Px19", "VIEW", "locked()"),
     ("Px18F", "SAVE", "unlock(bytes16)"),
 )
 
-GatekeeperOne = (
+GatekeeperOne: Branches = (
     ("PxDFF", "SAVE", "enter(bytes8)"),
     ("Px19", "VIEW", "entrant()"),
 )
 
-GatekeeperTwo = (
+GatekeeperTwo: Branches = (
     ("Px1BF", "SAVE", "enter(bytes8)"),
     ("Px19", "VIEW", "entrant()"),
 )
 
-Preservation = (
+Preservation: Branches = (
     ("PxC1CEF", "SAVE", "setFirstTime(uint256)"),
     ("Px61", "VIEW", "owner()"),
     ("Px31CEF", "SAVE", "setSecondTime(uint256)"),

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import copy
 from functools import reduce
-from typing import Any, Iterable
+from typing import Iterable
 
 from bytes import Bytes
 from disassembler import abiencode
@@ -131,7 +131,7 @@ class Validator:
             return None
         assert self.constants is not None
 
-        substitutions = dict[Any, Expression]()
+        substitutions = dict[BitwuzlaTerm, Expression]()
         for name, term in self.constants.items():
             if name.startswith("STORAGE@"):
                 addr = int(name[8:], 16)

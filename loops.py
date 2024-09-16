@@ -2,12 +2,12 @@
 """A helper to extract and flatten common copy-loops."""
 
 from itertools import chain
-from typing import Any
+from typing import Literal
 
 from bytes import Bytes
 from disassembler import Instruction, LoopCopy, Program, disassemble
 from ops import OPS
-from smt import Uint, Uint256
+from smt import Constraint, Uint, Uint256
 from state import State
 
 
@@ -31,11 +31,19 @@ class AnalysisError(Exception):
     pass
 
 
+type AnalysisAction = (
+    tuple[Literal["DUP"], Uint256]
+    | tuple[Literal["JUMPI"], int, Constraint]
+    | tuple[Literal["MLOAD"], Uint256]
+    | tuple[Literal["MSTORE"], Uint256, Uint256]
+)
+
+
 def analyze_block(program: Program, start: int) -> LoopCopy:
     """Determine if a given basic block represents a supported write pattern."""
     stack = [Uint256(f"STACK{n}") for n in reversed(range(8))]
     pc = start
-    actions: list[tuple[Any, ...]] = []
+    actions = list[AnalysisAction]()
     count = 0
 
     while True:
@@ -106,13 +114,14 @@ def analyze_block(program: Program, start: int) -> LoopCopy:
                     stack.append(result)
 
 
-def check_candidate(ops: list[tuple[Any, ...]], stack: list[Uint256]) -> LoopCopy:
+def check_candidate(ops: list[AnalysisAction], stack: list[Uint256]) -> LoopCopy:
     """Check a given write pattern is supported."""
     # For now, only the JUMP-LOAD-STORE ordering is supported.
     sequence = [x[0] for x in ops]
     if sequence != ["JUMPI", "MLOAD", "MSTORE"]:
         raise AnalysisError(f"unsupported sequence: {sequence}")
     jump, load, store = ops
+    assert jump[0] == "JUMPI" and load[0] == "MLOAD" and store[0] == "MSTORE"
 
     # The stack must not grow or shrink. Otherwise, after many iterations it
     # will overflow or empty.

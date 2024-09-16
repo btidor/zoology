@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass, field
-from typing import Any, Iterable, Literal, TypeAlias
+from typing import Any, Iterable, Literal
 
 from Crypto.Hash import keccak
 
@@ -23,7 +23,7 @@ from smt import (
     prequal,
 )
 
-Uint128: TypeAlias = Uint[Literal[128]]
+Uint128 = Uint[Literal[128]]
 
 
 def concrete_hash(data: bytes | str) -> Uint256:

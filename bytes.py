@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import copy
-from typing import Any, Iterable, Self, TypeVar
+from typing import Any, Iterable, Self
 
 from smt import (
     Constraint,
@@ -20,9 +20,7 @@ from smt import (
     zArray,
 )
 
-T = TypeVar("T", bound="Bytes")
-
-BytesWrite = tuple[Uint256, "Uint8 | ByteSlice"]
+type BytesWrite = tuple[Uint256, Uint8 | ByteSlice]
 
 DESCRIBE_LIMIT = 256
 

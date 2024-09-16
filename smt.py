@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import copy
 from itertools import batched
-from typing import Any, Iterable, Literal, Self, TypeAlias, TypeVar, Union, overload
+from typing import Any, Iterable, Literal, Self, TypeVar, Union, overload
 
 from Crypto.Hash import keccak
 from zbitvector import Array as zArray
@@ -19,22 +19,23 @@ Uint64 = Uint[Literal[64]]
 Uint160 = Uint[Literal[160]]
 Uint256 = Uint[Literal[256]]
 
-Expression: TypeAlias = "Symbolic | zArray[Any, Any]"
-
-N = TypeVar("N", bound=int)
-S = TypeVar("S", bound=Expression)
+type Expression = Symbolic | zArray[Any, Any]
 
 K = TypeVar("K", bound=Union[Uint[Any], Int[Any]])
 V = TypeVar("V", bound=Union[Uint[Any], Int[Any]])
 
 
-def _make_symbolic(cls: type[S], term: Any) -> S:
+def _make_symbolic[S: Symbolic](
+    cls: type[S], term: BitwuzlaTerm | list[BitwuzlaTerm]
+) -> S:
+    # TODO: it's not actually possible for `term` to be a list[BitwuzlaTerm];
+    # that's due to a bug in the zbitvector types.
     instance = cls.__new__(cls)
     instance._term = term  # type: ignore
     return instance
 
 
-def _from_expr(cls: type[S], kind: Kind, *args: Expression) -> S:
+def _from_expr[S: Symbolic](cls: type[S], kind: Kind, *args: Expression) -> S:
     return cls._from_expr(kind, *args)  # type: ignore
 
 
@@ -99,7 +100,7 @@ def prequal(a: Uint[Any], b: Uint[Any]) -> bool:
     return (a == b).reveal() or False
 
 
-def bvlshr_harder(value: Uint[N], shift: Uint[N]) -> Uint[N]:
+def bvlshr_harder[N: int](value: Uint[N], shift: Uint[N]) -> Uint[N]:
     """Return `(bvlshr value shift)` with better preprocessing."""
     default = value >> shift
     if default.reveal() is not None or (n := shift.reveal()) is None or n == 0:
@@ -141,7 +142,7 @@ def get_constants(s: Symbolic) -> dict[str, BitwuzlaTerm]:
     return constants
 
 
-def substitute(s: S, replacements: dict[BitwuzlaTerm, Expression]) -> S:
+def substitute[S: Symbolic](s: S, replacements: dict[BitwuzlaTerm, Expression]) -> S:
     """Perform term substitution according to the given map."""
     if len(replacements) == 0:
         return s
@@ -151,7 +152,7 @@ def substitute(s: S, replacements: dict[BitwuzlaTerm, Expression]) -> S:
     )
 
 
-def substitute2(s: S, replacements: dict[Uint[N], Uint[N]]) -> S:
+def substitute2[S: Symbolic, N: int](s: S, replacements: dict[Uint[N], Uint[N]]) -> S:
     """Perform term substitution according to the given map."""
     if len(replacements) == 0:
         return s
@@ -193,7 +194,7 @@ def compact_zarray(
     return constraint
 
 
-def compact_helper(
+def compact_helper[N: int](
     solver: Solver, constraint: Constraint, term: Uint[N], concrete: Uint[N]
 ) -> tuple[Constraint, Uint[N]]:
     """Select between original and concretized versions of a term."""
