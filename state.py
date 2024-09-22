@@ -155,6 +155,16 @@ class State:
             return NotImplemented
         return self.cost < other.cost
 
+    def hash(self, input: Bytes) -> Uint256:
+        """
+        Compute the SHA3 hash of a given key.
+
+        Automatically adds hash constraints to the current constraint.
+        """
+        digest, constraint = self.sha3.hash(input)
+        self.constraint &= constraint
+        return digest
+
     def transfer(self, src: Uint160, dst: Uint160, val: Uint256) -> None:
         """Transfer value from one account to another."""
         if val.reveal() == 0:

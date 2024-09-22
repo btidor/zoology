@@ -210,9 +210,7 @@ def SAR(shift: Uint256, value: Uint256) -> Uint256:
 
 def KECCAK256(s: State, offset: Uint256, size: Uint256) -> Uint256:
     """20 - Compute Keccak-256 (SHA3) hash."""
-    digest, constraint = s.sha3.hash(s.memory.slice(offset, size))
-    s.constraint &= constraint
-    return digest
+    return s.hash(s.memory.slice(offset, size))
 
 
 def ADDRESS(s: State) -> Uint256:
@@ -330,9 +328,7 @@ def EXTCODEHASH(s: State, _address: Uint256) -> Uint256:
         # or is empty, and the empty hash otherwise. See: EIP-1052.
         raise NotImplementedError("EXTCODEHASH of non-contract address")
 
-    digest, constraint = s.sha3.hash(contract.program.code)
-    s.constraint &= constraint
-    return digest
+    return s.hash(contract.program.code)
 
 
 def BLOCKHASH(s: State, blockNumber: Uint256) -> Uint256:
@@ -639,11 +635,9 @@ def CREATE2(
     assert sender_address is not None, "CREATE2 requires concrete sender address"
 
     # https://ethereum.stackexchange.com/a/761
-    digest, constraint = s.sha3.hash(initcode)
-    s.constraint &= constraint
-    assert (h := digest.reveal()) is not None
+    assert (hash := s.hash(initcode).reveal()) is not None
     seed = Bytes(
-        b"\xff" + sender_address.to_bytes(20) + salt.to_bytes(32) + h.to_bytes(32)
+        b"\xff" + sender_address.to_bytes(20) + salt.to_bytes(32) + hash.to_bytes(32)
     )
     return _create_common(s, value, initcode, seed)
 
@@ -711,9 +705,7 @@ def SELFDESTRUCT(s: State, address: Uint256) -> None:
 def _create_common(
     s: State, value: Uint256, initcode: Bytes, seed: Bytes
 ) -> ControlFlow:
-    digest, constraint = s.sha3.hash(seed)
-    s.constraint &= constraint
-    address = digest.into(Uint160)
+    address = s.hash(seed).into(Uint160)
     assert (destination := address.reveal()) is not None
 
     sender = s.transaction.address.reveal()
