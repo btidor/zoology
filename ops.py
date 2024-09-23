@@ -12,6 +12,7 @@ from smt import (
     Array,
     Constraint,
     Int,
+    Solver,
     Uint,
     Uint8,
     Uint64,
@@ -208,9 +209,9 @@ def SAR(shift: Uint256, value: Uint256) -> Uint256:
     return (value.into(Int256) >> shift).into(Uint256)
 
 
-def KECCAK256(s: State, offset: Uint256, size: Uint256) -> Uint256 | ControlFlow:
+def KECCAK256(s: State, offset: Uint256, size: Uint256) -> Uint256:
     """20 - Compute Keccak-256 (SHA3) hash."""
-    return s.hash(s.memory.slice(offset, size)) or Unreachable()
+    return s.hash(s.memory.slice(offset, size))
 
 
 def ADDRESS(s: State) -> Uint256:
@@ -317,7 +318,7 @@ def RETURNDATACOPY(
     s.memory.graft(s.latest_return.slice(offset, size), destOffset)
 
 
-def EXTCODEHASH(s: State, _address: Uint256) -> Uint256 | ControlFlow:
+def EXTCODEHASH(s: State, _address: Uint256) -> Uint256:
     """3F - Get hash of an account's code."""
     address = _address.reveal()
     assert address is not None, "EXTCODEHASH requires concrete address"
@@ -328,7 +329,7 @@ def EXTCODEHASH(s: State, _address: Uint256) -> Uint256 | ControlFlow:
         # or is empty, and the empty hash otherwise. See: EIP-1052.
         raise NotImplementedError("EXTCODEHASH of non-contract address")
 
-    return s.hash(contract.program.code) or Unreachable()
+    return s.hash(contract.program.code)
 
 
 def BLOCKHASH(s: State, blockNumber: Uint256) -> Uint256:
@@ -428,6 +429,16 @@ def JUMPI(
     """57 - Conditionally alter the program counter."""
     counter = _counter.reveal()
     assert counter is not None, "JUMPI requires concrete counter"
+
+    # Calling into the SMT solver is expensive; instead, we rely on
+    # simplification as much as possible. This doesn't do a great job with SHA3
+    # constraints, so we invoke the solver after hashing data (at the next JUMPI
+    # instruction, for batching).
+    if s.dirty:
+        solver = Solver()
+        if not solver.check(s.constraint):
+            return Unreachable()
+        s.dirty = False
 
     s.path <<= 1
     s.cost += 2 ** (s.branching[ins.offset])
@@ -635,9 +646,7 @@ def CREATE2(
     assert sender_address is not None, "CREATE2 requires concrete sender address"
 
     # https://ethereum.stackexchange.com/a/761
-    if (hash := s.hash(initcode)) is None:
-        return Unreachable()
-    assert (h := hash.reveal()) is not None
+    assert (h := s.hash(initcode).reveal()) is not None
     seed = Bytes(
         b"\xff" + sender_address.to_bytes(20) + salt.to_bytes(32) + h.to_bytes(32)
     )
@@ -707,10 +716,14 @@ def SELFDESTRUCT(s: State, address: Uint256) -> None:
 def _create_common(
     s: State, value: Uint256, initcode: Bytes, seed: Bytes
 ) -> ControlFlow:
-    if (hash := s.hash(seed)) is None:
-        return Unreachable()
-    address = hash.into(Uint160)
+    address = s.hash(seed).into(Uint160)
     assert (destination := address.reveal()) is not None
+
+    if s.dirty:
+        solver = Solver()
+        if not solver.check(s.constraint):
+            return Unreachable()
+        s.dirty = False
 
     sender = s.transaction.address.reveal()
     assert sender is not None, "CREATE requires concrete sender address"
@@ -764,6 +777,12 @@ def _call_common(
     calldata = s.compact_calldata(calldata)
     if calldata is None:
         return Unreachable()
+
+    if s.dirty:
+        solver = Solver()
+        if not solver.check(s.constraint):
+            return Unreachable()
+        s.dirty = False
 
     substates = list[State]()
     eoa = Constraint(True)

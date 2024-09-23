@@ -102,6 +102,10 @@ class State:
     # transfers raise an exception.
     changed: bool | None = False
 
+    # Whether we've generated a SHA3 hash since the last time this bit was
+    # reset.
+    dirty: bool = False
+
     # We want to raise an exception if a contract tries to call itself during
     # the validate function (i.e. with fully symbolic state), since this usually
     # indicates that the solver is entering an infinite loop.
@@ -220,7 +224,7 @@ class State:
             r["Return"] = "0x" + returndata.hex()
         return r
 
-    def hash(self, input: Bytes) -> Uint256 | None:
+    def hash(self, input: Bytes) -> Uint256:
         """
         Compute the SHA3 hash of a given key.
 
@@ -228,8 +232,7 @@ class State:
         """
         digest, constraint = self.sha3.hash(input)
         self.constraint &= constraint
-        if not Solver().check(self.constraint):
-            return None
+        self.dirty = True
         return digest
 
     def compact_bytes(self, bytes: Bytes) -> Bytes | None:
@@ -241,6 +244,7 @@ class State:
         solver.add(self.constraint)
         if not solver.check():
             return None  # this path is unreachable
+        self.dirty = False
         self.constraint &= bytes.compact(solver, Constraint(True))
         return bytes
 
@@ -253,6 +257,7 @@ class State:
         solver.add(self.constraint)
         if not solver.check():
             return None  # this path is unreachable
+        self.dirty = False
 
         length = solver.evaluate(data.length)
         constraint = data.length == Uint256(length)

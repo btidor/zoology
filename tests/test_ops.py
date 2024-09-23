@@ -242,7 +242,6 @@ def test_KECCAK256() -> None:
     solver = Solver()
     solver.add(s.constraint)
     assert solver.check()
-    assert isinstance(digest, Uint)
     assert (
         solver.evaluate(digest)
         == 0x29045A592007D0C246EF02C2223570DA9522D0CF0F73282C79A1BC8F0BB2C238
@@ -422,10 +421,8 @@ def test_EXTCODEHASH() -> None:
         )
     )
 
-    digest = EXTCODEHASH(s, Uint256(address))
-    assert isinstance(digest, Uint)
     assert (
-        digest.reveal()
+        EXTCODEHASH(s, Uint256(address)).reveal()
         == 0xD579742AEE22A336CAC42EFE05B2CF1281DB892E213257B929C2338EA0675B00
     )
     with pytest.raises(NotImplementedError):

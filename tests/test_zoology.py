@@ -111,11 +111,11 @@ def test_king() -> None:
 def test_reentrance() -> None:
     fixture = [
         "00362a95 ffffffffffffffffffffffffc0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0\tvalue: 1125899906842623",
-        "2e1a7d4d 0000000000000000000000000000000000000000000000000003c00000000000\tvia proxy",
-        " -> Proxy CALL -       \tvalue: 1055531162664960",
+        "2e1a7d4d 0000000000000000000000000000000000000000000000000003cd7ea4c67fff\tvia proxy",
+        " -> Proxy CALL -       \tvalue: 1070368744177663",
         "     -> To 0x79cf5bd9e06f09ace1ade01aedeac5c979b77d6c:",
-        "        CALL 2e1a7d4d 0000000000000000000000000000000000000000000000000003cd7ea4c67fff",
-        "         -> Proxy CALL -       \tvalue: 1070368744177663",
+        "        CALL 2e1a7d4d 0000000000000000000000000000000000000000000000000003c00000000000",
+        "         -> Proxy CALL -       \tvalue: 1055531162664960",
         "            RETURN 00",
         "        RETURN -       ",
         "    RETURN -",
@@ -264,7 +264,7 @@ def test_double_entry_point() -> None:
     # https://github.com/ethereum/solidity/issues/12725
     fixture = [
         "To 0x01a11621db21dd3eb323ada87bbb1d0d8a099544:",
-        "    9e927c68 000000000000000000000000c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c7",
+        "    9e927c68 0000000000000000000000000000000000000000000000000000000000000001",
     ]
     check_level(26, fixture)
 
