@@ -208,9 +208,9 @@ def SAR(shift: Uint256, value: Uint256) -> Uint256:
     return (value.into(Int256) >> shift).into(Uint256)
 
 
-def KECCAK256(s: State, offset: Uint256, size: Uint256) -> Uint256:
+def KECCAK256(s: State, offset: Uint256, size: Uint256) -> Uint256 | ControlFlow:
     """20 - Compute Keccak-256 (SHA3) hash."""
-    return s.hash(s.memory.slice(offset, size))
+    return s.hash(s.memory.slice(offset, size)) or Unreachable()
 
 
 def ADDRESS(s: State) -> Uint256:
@@ -317,7 +317,7 @@ def RETURNDATACOPY(
     s.memory.graft(s.latest_return.slice(offset, size), destOffset)
 
 
-def EXTCODEHASH(s: State, _address: Uint256) -> Uint256:
+def EXTCODEHASH(s: State, _address: Uint256) -> Uint256 | ControlFlow:
     """3F - Get hash of an account's code."""
     address = _address.reveal()
     assert address is not None, "EXTCODEHASH requires concrete address"
@@ -328,7 +328,7 @@ def EXTCODEHASH(s: State, _address: Uint256) -> Uint256:
         # or is empty, and the empty hash otherwise. See: EIP-1052.
         raise NotImplementedError("EXTCODEHASH of non-contract address")
 
-    return s.hash(contract.program.code)
+    return s.hash(contract.program.code) or Unreachable()
 
 
 def BLOCKHASH(s: State, blockNumber: Uint256) -> Uint256:
@@ -635,9 +635,11 @@ def CREATE2(
     assert sender_address is not None, "CREATE2 requires concrete sender address"
 
     # https://ethereum.stackexchange.com/a/761
-    assert (hash := s.hash(initcode).reveal()) is not None
+    if (hash := s.hash(initcode)) is None:
+        return Unreachable()
+    assert (h := hash.reveal()) is not None
     seed = Bytes(
-        b"\xff" + sender_address.to_bytes(20) + salt.to_bytes(32) + hash.to_bytes(32)
+        b"\xff" + sender_address.to_bytes(20) + salt.to_bytes(32) + h.to_bytes(32)
     )
     return _create_common(s, value, initcode, seed)
 
@@ -705,7 +707,9 @@ def SELFDESTRUCT(s: State, address: Uint256) -> None:
 def _create_common(
     s: State, value: Uint256, initcode: Bytes, seed: Bytes
 ) -> ControlFlow:
-    address = s.hash(seed).into(Uint160)
+    if (hash := s.hash(seed)) is None:
+        return Unreachable()
+    address = hash.into(Uint160)
     assert (destination := address.reveal()) is not None
 
     sender = s.transaction.address.reveal()

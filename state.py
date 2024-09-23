@@ -155,16 +155,6 @@ class State:
             return NotImplemented
         return self.cost < other.cost
 
-    def hash(self, input: Bytes) -> Uint256:
-        """
-        Compute the SHA3 hash of a given key.
-
-        Automatically adds hash constraints to the current constraint.
-        """
-        digest, constraint = self.sha3.hash(input)
-        self.constraint &= constraint
-        return digest
-
     def transfer(self, src: Uint160, dst: Uint160, val: Uint256) -> None:
         """Transfer value from one account to another."""
         if val.reveal() == 0:
@@ -229,6 +219,18 @@ class State:
         if returndata:
             r["Return"] = "0x" + returndata.hex()
         return r
+
+    def hash(self, input: Bytes) -> Uint256 | None:
+        """
+        Compute the SHA3 hash of a given key.
+
+        Automatically adds hash constraints to the current constraint.
+        """
+        digest, constraint = self.sha3.hash(input)
+        self.constraint &= constraint
+        if not Solver().check(self.constraint):
+            return None
+        return digest
 
     def compact_bytes(self, bytes: Bytes) -> Bytes | None:
         """Simplify the given bytes using the current constraints."""
