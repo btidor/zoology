@@ -161,7 +161,7 @@ def test_naughtcoin() -> None:
         "095ea7b3 000000000000000000000000cacacacacacacacacacacacacacacacacacacaca"
         + "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
         "23b872dd 000000000000000000000000cacacacacacacacacacacacacacacacacacacaca"
-        + "000000000000000000000000ffffffffffffffffffffffffffffffffffffffff"
+        + "000000000000000000000000eacacacacacacacacacacacacacacacacacacacb"
         + "00000000000000000000000000000000000000000000d3c21bcecceda1000000",
     ]
     check_level(15, fixture)
@@ -297,7 +297,7 @@ def test_switch() -> None:
     fixture = [
         "30c13ade "
         + "0000000000000000000000000000000000000000000000000000000000000044"
-        + "7622ff1500000000000000000000000000000000000000000000000000000044"
+        + "76227e1500000000000000000000000000000000000000000000000000000044"
         + "20606e1500000000000000000000000000000000000000000000000000000000"
         + "0000000476227e12"
     ]

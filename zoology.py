@@ -228,16 +228,13 @@ def check_candidate(
     # SELFDESTRUCT -- it's more general than a `receve()` method because it
     # always succeeds.
     if not candidate.states[-1].changed:
-        if verbose:
-            vprint("  > read-only\n")
-        else:
-            vprint(".")
+        vprint("  > read-only\n" if verbose else ".")
         return False
 
-    if verbose:
-        try:
-            solver = Solver()
-            candidate.constrain(solver)
+    try:
+        solver = Solver()
+        candidate.constrain(solver)
+        if verbose:
             candidate.narrow(solver)
             newline = True
             for part in candidate.describe(solver):
@@ -247,30 +244,16 @@ def check_candidate(
                 vprint(part)
                 if part.endswith("\n"):
                     newline = True
-        except ConstrainingError:
-            vprint("  ! constraining error\n")
-            return False
+    except ConstrainingError:
+        vprint("  ! constraining error\n" if verbose else "!")
+        return False
 
     if solution := validator.check(candidate):
-        if verbose:
-            vprint("  > found solution!\n")
-        else:
-            vprint("#")
+        vprint("  > found solution!\n" if verbose else "#")
         return solution
-
-    if not verbose:
-        try:
-            solver = Solver()
-            candidate.constrain(solver)
-        except ConstrainingError:
-            vprint("!")
-            return False
-
-    if verbose:
-        vprint("  > candidate\n")
     else:
-        vprint("*")
-    return True
+        vprint("  > candidate\n" if verbose else "*")
+        return True
 
 
 def vprint(part: str) -> None:
