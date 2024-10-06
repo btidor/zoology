@@ -2,7 +2,7 @@
 
 import copy
 from inspect import Signature, signature
-from typing import Callable, Literal
+from typing import Callable
 
 from bytes import Bytes
 from disassembler import Instruction, LoopCopy, Program, disassemble
@@ -11,13 +11,14 @@ from opcodes import REFERENCE, SPECIAL, UNIMPLEMENTED
 from smt import (
     Array,
     Constraint,
-    Int,
+    Int256,
     Solver,
-    Uint,
     Uint8,
     Uint64,
     Uint160,
     Uint256,
+    Uint257,
+    Uint512,
     bvlshr_harder,
     concat_bytes,
     overflow_safe,
@@ -35,10 +36,6 @@ from state import (
     Termination,
     Unreachable,
 )
-
-Int256 = Int[Literal[256]]
-Uint257 = Uint[Literal[257]]
-Uint512 = Uint[Literal[512]]
 
 
 def STOP(s: State) -> None:

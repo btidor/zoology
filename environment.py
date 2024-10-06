@@ -10,7 +10,7 @@ from typing import Any, Self
 from bytes import Bytes
 from disassembler import Program, disassemble
 from sha3 import concrete_hash
-from smt import Array, Int, Solver, Uint, Uint8, Uint160, Uint256
+from smt import Array, Solver, Uint, Uint8, Uint160, Uint256
 
 
 @dataclass(frozen=True)
@@ -123,7 +123,7 @@ class Transaction:
 
         Only attributes present in the model will be included.
         """
-        r: OrderedDict[str, Uint[Any] | Int[Any] | str | None] = OrderedDict()
+        r: OrderedDict[str, Uint[Any] | str | None] = OrderedDict()
         calldata = self.calldata.evaluate(solver).hex()
         r["Data"] = f"0x{calldata[:8]} {calldata[8:]}".strip() if calldata else None
         r["Value"] = self.callvalue
@@ -135,7 +135,7 @@ class Transaction:
             match v := r[k]:
                 case None:
                     pass
-                case Uint() | Int():
+                case Uint():
                     b = solver.evaluate(v)
                     if b > 0:
                         s[k] = "0x" + b.to_bytes(v.width // 8).hex()

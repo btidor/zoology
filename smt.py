@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import copy
 from itertools import batched
-from typing import Any, Iterable, Literal, Self, TypeVar, Union, overload
+from typing import Any, Iterable, Literal, Self, TypeVar, overload
 
 from Crypto.Hash import keccak
 from zbitvector import Array as zArray
@@ -14,15 +14,21 @@ from zbitvector import Constraint, Int, Solver, Symbolic, Uint, _bitwuzla
 from zbitvector._bitwuzla import BZLA, BitwuzlaTerm, Kind
 
 Uint8 = Uint[Literal[8]]
-Uint52 = Uint[Literal[52]]
 Uint64 = Uint[Literal[64]]
 Uint160 = Uint[Literal[160]]
 Uint256 = Uint[Literal[256]]
 
+Uint52 = Uint[Literal[52]]
+Uint128 = Uint[Literal[128]]
+Uint257 = Uint[Literal[257]]
+Uint512 = Uint[Literal[512]]
+
+Int256 = Int[Literal[256]]
+
 type Expression = Symbolic | zArray[Any, Any]
 
-K = TypeVar("K", bound=Union[Uint[Any], Int[Any]])
-V = TypeVar("V", bound=Union[Uint[Any], Int[Any]])
+K = TypeVar("K", bound=Uint[Any])
+V = TypeVar("V", bound=Uint[Any])
 
 
 def _make_symbolic[S: Symbolic](

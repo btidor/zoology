@@ -87,7 +87,7 @@ def pyinstrument_combined(pytestconfig: pytest.Config) -> Iterator[None]:
 
 import gc
 
-from zbitvector._bitwuzla import BZLA, CACHE, Constraint, Int, Option, Symbolic, Uint
+from zbitvector._bitwuzla import BZLA, CACHE, Constraint, Option, Symbolic, Uint
 from zbitvector._bitwuzla import Array as zArray
 
 from smt import Array
@@ -109,9 +109,7 @@ def reset_bitwuzla() -> Iterator[None]:
     bsort: list[tuple[type[Symbolic], int]] = []
     asort: list[tuple[type[zArray[Any, Any]], int, int]] = []
 
-    for cls in cast(
-        "list[type[Symbolic]]", Uint.__subclasses__() + Int.__subclasses__()
-    ):
+    for cls in cast("list[type[Symbolic]]", Uint.__subclasses__()):
         bsort.append((cls, cls._sort.bv_get_size()))
 
     for cls in cast(
