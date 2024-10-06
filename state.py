@@ -17,7 +17,6 @@ from smt import (
     Uint8,
     Uint160,
     Uint256,
-    evaluate,
     overflow_safe,
     underflow_safe,
 )
@@ -357,7 +356,7 @@ class Call:
                     yield line
 
         if prints:
-            ok = evaluate(solver, self.ok)
+            ok = solver.evaluate(self.ok)
             yield f"    {'RETURN' if ok else 'REVERT'} "
             yield from self.returndata.describe(solver, prefix=0)
             yield "\n"
@@ -385,13 +384,13 @@ class DelegateCall(Call):
         if self.next_storage is None:
             yield "    SELFDESTRUCT\n"
         else:
-            ok = evaluate(solver, self.ok)
+            ok = solver.evaluate(self.ok)
             yield f"    {'RETURN' if ok else 'REVERT'} "
             yield from self.returndata.describe(solver, prefix=0)
             yield "\n"
             if ok:
-                prev = evaluate(solver, self.previous_storage)
-                for k, v in evaluate(solver, self.next_storage).items():
+                prev = solver.evaluate(self.previous_storage)
+                for k, v in solver.evaluate(self.next_storage).items():
                     if prev[k] != v:
                         yield f"      {hex(k)} -> {hex(v)}\n"
 

@@ -6,11 +6,12 @@ from __future__ import annotations
 
 import copy
 from itertools import batched
-from typing import Any, Iterable, Literal, Self, TypeVar, overload
+from typing import Any, Iterable, Literal, Self, cast, overload
 
 from Crypto.Hash import keccak
 from zbitvector import Array as zArray
-from zbitvector import Constraint, Int, Solver, Symbolic, Uint, _bitwuzla
+from zbitvector import Constraint, Int, Symbolic, Uint, _bitwuzla
+from zbitvector import Solver as zSolver
 from zbitvector._bitwuzla import BZLA, BitwuzlaTerm, Kind
 
 Uint8 = Uint[Literal[8]]
@@ -26,9 +27,6 @@ Uint512 = Uint[Literal[512]]
 Int256 = Int[Literal[256]]
 
 type Expression = Symbolic | zArray[Any, Any]
-
-K = TypeVar("K", bound=Uint[Any])
-V = TypeVar("V", bound=Uint[Any])
 
 
 def _make_symbolic[S: Symbolic](
@@ -211,29 +209,6 @@ def compact_helper[N: int](
         return extended, concrete
 
 
-@overload
-def evaluate(solver: Solver, s: Constraint) -> bool: ...
-
-
-@overload
-def evaluate(solver: Solver, s: Array[K, V]) -> dict[int, int]: ...
-
-
-def evaluate(solver: Solver, s: Constraint | Array[K, V]) -> bool | dict[int, int]:
-    """Backdoor method for evaluating non-bitvectors."""
-    if not solver._current or _bitwuzla.last_check is not solver:  # type: ignore
-        raise ValueError("solver is not ready for model evaluation")
-
-    match s:
-        case Constraint():
-            return s._evaluate()  # type: ignore
-        case Array():
-            return dict(
-                (int(k, 2), int(v, 2))
-                for k, v in BZLA.get_value_str(s._term).items()  # type: ignore
-            )
-
-
 def describe(bv: Uint[Any] | int) -> str:
     """
     Produce a human-readable description of the given bitvector.
@@ -284,7 +259,7 @@ class NarrowingError(Exception):
         return self.key.hex() if self.key else "unknown"
 
 
-class Array(zArray[K, V]):
+class Array[K: Uint[Any], V: Uint[Any]](zArray[K, V]):
     """A wrapper around zbitvector.Array. Supports read and write tracking."""
 
     def __init__(self, value: V | str, /) -> None:
@@ -367,3 +342,34 @@ class Array(zArray[K, V]):
 
         if line == "":
             yield ""
+
+
+class Solver(zSolver):
+    """A wrapper around zbitvector.Array. Supports evaluating additional types."""
+
+    @overload
+    def evaluate(self, s: Constraint) -> bool: ...
+
+    @overload
+    def evaluate(self, s: Uint[Any]) -> int: ...
+
+    @overload
+    def evaluate(self, s: Array[Any, Any]) -> dict[int, int]: ...
+
+    def evaluate(  # pyright: ignore[reportIncompatibleMethodOverride]
+        self, s: Constraint | Uint[Any] | Array[Any, Any]
+    ) -> bool | int | dict[int, int]:
+        """Backdoor method for evaluating non-bitvectors."""
+        if not self._current or _bitwuzla.last_check is not self:  # type: ignore
+            raise ValueError("solver is not ready for model evaluation")
+
+        match s:
+            case Constraint():
+                return cast(bool, s._evaluate())  # type: ignore
+            case Uint():
+                return super().evaluate(s)
+            case Array():
+                return dict(
+                    (int(k, 2), int(v, 2))
+                    for k, v in BZLA.get_value_str(_term(s)).items()
+                )
