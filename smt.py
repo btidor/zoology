@@ -29,9 +29,9 @@ Int256 = Int[Literal[256]]
 type Expression = Symbolic | zArray[Any, Any]
 
 
-def _make_symbolic[S: Symbolic](
-    cls: type[S], term: BitwuzlaTerm | list[BitwuzlaTerm]
-) -> S:
+def _make_symbolic[X: Expression](
+    cls: type[X], term: BitwuzlaTerm | list[BitwuzlaTerm]
+) -> X:
     # TODO: it's not actually possible for `term` to be a list[BitwuzlaTerm];
     # that's due to a bug in the zbitvector types.
     instance = cls.__new__(cls)
@@ -43,8 +43,8 @@ def _from_expr[S: Symbolic](cls: type[S], kind: Kind, *args: Expression) -> S:
     return cls._from_expr(kind, *args)  # type: ignore
 
 
-def _term(expr: Expression) -> BitwuzlaTerm:
-    return expr._term  # type: ignore
+def _term(x: Expression) -> BitwuzlaTerm:
+    return x._term  # type: ignore
 
 
 def make_uint(n: int) -> type[Uint[Any]]:
@@ -129,11 +129,11 @@ def bvlshr_harder[N: int](value: Uint[N], shift: Uint[N]) -> Uint[N]:
     return _make_symbolic(value.__class__, BZLA.mk_term(Kind.BV_CONCAT, (prefix, term)))
 
 
-def get_constants(s: Symbolic) -> dict[str, BitwuzlaTerm]:
+def get_constants(s: Symbolic | BitwuzlaTerm) -> dict[str, BitwuzlaTerm]:
     """Recursively search the term for constants."""
     constants = dict[str, BitwuzlaTerm]()
     visited = set[BitwuzlaTerm]()
-    queue = set([_term(s)])
+    queue = set([_term(s) if isinstance(s, Symbolic) else s])
     while queue:
         item = queue.pop()
         if item in visited:
