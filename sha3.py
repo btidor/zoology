@@ -63,7 +63,7 @@ class SHA3:
         """
         if (size := input.length.reveal()) is None:
             # Case I: Free Digest (symbolic length, symbolic data).
-            digest = Uint256(f"DIGEST:F{len(self.free)}")
+            digest = Uint256(f"DIGEST@F{len(self.free)}")
             self.free.append((input, digest))
 
             # ASSUMPTION: no hash may have more than 128 leading zero bits. This
@@ -101,7 +101,7 @@ class SHA3:
             for other, digest in self.symbolic:
                 if prequal(vector, other):
                     return (digest, Constraint(True))
-            digest = Uint256(f"DIGEST:S{len(self.symbolic)}")
+            digest = Uint256(f"DIGEST@S{len(self.symbolic)}")
             self.symbolic.append((vector, digest))
 
             constraint = (digest >> Uint256(128)).into(Uint128) != Uint128(0)
