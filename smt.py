@@ -359,8 +359,7 @@ class Solver:
         """Assert the given constraint."""
         self._last_check = False
         self._constraint &= assertion
-        id = self._client.add_term(_term(assertion))
-        self._client.assert_term(id)
+        self._client.assert_term(_term(assertion))
 
     def check(self, *assumptions: Constraint, force: bool = True) -> bool:
         """Check whether the constraints are satifiable."""
@@ -372,8 +371,7 @@ class Solver:
             self._last_check = q
             return r
 
-        id = self._client.add_term(_term(q))
-        self._last_check = self._client.check(id)
+        self._last_check = self._client.check(_term(q))
         return self._last_check
 
     @overload
@@ -399,5 +397,4 @@ class Solver:
             case Constraint() | Array():
                 raise NotImplementedError
             case Uint():
-                id = self._client.add_term(_term(s))
-                return self._client.evaluate(id, _term(s).get_sort())
+                return self._client.evaluate(_term(s))

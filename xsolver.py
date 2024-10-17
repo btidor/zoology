@@ -9,12 +9,22 @@ import sys
 from enum import Enum
 from io import BytesIO
 from tempfile import gettempdir
-from typing import IO, Any, NewType, Self
+from typing import IO, Any, Self
 
 from zbitvector import _bitwuzla
 from zbitvector._bitwuzla import BZLA, BitwuzlaSort, BitwuzlaTerm, Kind, Result
 
-ID = NewType("ID", int)
+
+class Special(Enum):
+    """A supplement to pybitwuzla.Kind."""
+
+    ASSERT = 255
+    CHECK = 254
+    EVALUATE = 253
+    FORK = 252
+
+    ARRAY_SORT = 249
+    BV_SORT = 248
 
 
 class Client:
@@ -22,13 +32,14 @@ class Client:
 
     def __init__(self) -> None:
         """Create a new Client."""
-        self._terms = dict[BitwuzlaTerm, ID]()
-        self._sorts = dict[int | tuple[int, int], ID]()
-        self._counter = ID(1)
+        self._terms = dict[BitwuzlaTerm, int]()
+        self._sorts = dict[int | tuple[int, int], int]()
+        self._counter = 1
 
         pa, pb = self._setup()
         subprocess.Popen([__file__, self._prefix])
-        self._out, self._in = open(pa, "wb"), open(pb, "rb")
+        self._out = open(pa, "wb")
+        self._in = open(pb, "rb")
 
     def __deepcopy__(self, memo: Any) -> Self:
         result = self.__new__(self.__class__)
@@ -40,7 +51,8 @@ class Client:
         _write_kind(self._out, Special.FORK)
         _write_str(self._out, result._prefix)
         self._out.flush()
-        result._out, result._in = open(pa, "wb"), open(pb, "rb")
+        result._out = open(pa, "wb")
+        result._in = open(pb, "rb")
         return result
 
     def _setup(self) -> tuple[str, str]:
@@ -50,7 +62,7 @@ class Client:
             os.mkfifo(p)
         return paths
 
-    def add_term(self, term: BitwuzlaTerm) -> ID:
+    def add_term(self, term: BitwuzlaTerm) -> int:
         """Register a term with the server and return its ID."""
         if term in self._terms:
             return self._terms[term]
@@ -92,7 +104,7 @@ class Client:
         self._counter += 1
         return self._terms[term]
 
-    def add_sort(self, sort: BitwuzlaSort) -> ID:
+    def add_sort(self, sort: BitwuzlaSort) -> int:
         """Register a sort with the server and return its ID."""
         if sort.is_array():
             k = self.add_sort(sort.array_get_index())
@@ -119,24 +131,27 @@ class Client:
         else:
             raise NotImplementedError(f"unsupported sort: {sort}")
 
-    def assert_term(self, id: ID) -> None:
+    def assert_term(self, term: BitwuzlaTerm) -> None:
         """Permanently assert the given expression."""
+        id = self.add_term(term)
         _write_kind(self._out, Special.ASSERT)
         _write_id(self._out, id)
 
-    def check(self, id: ID) -> bool:
+    def check(self, term: BitwuzlaTerm) -> bool:
         """Check whether the given boolean term is satisfiable."""
+        id = self.add_term(term)
         _write_kind(self._out, Special.CHECK)
         _write_id(self._out, id)
         self._out.flush()
         return bool(_read_index(self._in))
 
-    def evaluate(self, id: ID, sort: BitwuzlaSort) -> int:
+    def evaluate(self, term: BitwuzlaTerm) -> int:
         """Return a value for the given term."""
+        id = self.add_term(term)
         _write_kind(self._out, Special.EVALUATE)
         _write_id(self._out, id)
         self._out.flush()
-        return _read_bv(self._in, sort)
+        return _read_bv(self._in, term.get_sort())
 
     def close(self) -> None:
         """Terminate the solver."""
@@ -219,7 +234,8 @@ class Server:
     def _open(self, prefix: str) -> None:
         self._prefix = prefix
         pa, pb = _paths_for(self._prefix)
-        self._in, self._out = open(pa, "rb"), open(pb, "wb")
+        self._in = open(pa, "rb")
+        self._out = open(pb, "wb")
 
     def close(self):
         """Terminate the solver."""
@@ -227,18 +243,6 @@ class Server:
             p.close()
         for p in _paths_for(self._prefix):
             os.remove(p)
-
-
-class Special(Enum):
-    """A supplement to pybitwuzla.Kind."""
-
-    ASSERT = 255
-    CHECK = 254
-    EVALUATE = 253
-    FORK = 252
-
-    ARRAY_SORT = 249
-    BV_SORT = 248
 
 
 def _read(pipe: IO[bytes], size: int) -> bytes:
@@ -265,7 +269,7 @@ def _read_index(pipe: IO[bytes]) -> int:
     return int.from_bytes(_read(pipe, 2))
 
 
-def _write_id(pipe: IO[bytes], id: ID) -> None:
+def _write_id(pipe: IO[bytes], id: int) -> None:
     pipe.write(id.to_bytes(2))
 
 
