@@ -5,14 +5,16 @@
 from __future__ import annotations
 
 import copy
+from functools import reduce
 from itertools import batched
-from typing import Any, Iterable, Literal, Self, cast, overload
+from typing import Any, Iterable, Literal, Self, overload
 
 from Crypto.Hash import keccak
 from zbitvector import Array as zArray
-from zbitvector import Constraint, Int, Symbolic, Uint, _bitwuzla
-from zbitvector import Solver as zSolver
+from zbitvector import Constraint, Int, Symbolic, Uint
 from zbitvector._bitwuzla import BZLA, BitwuzlaTerm, Kind
+
+from xsolver import Client
 
 Uint8 = Uint[Literal[8]]
 Uint64 = Uint[Literal[64]]
@@ -344,8 +346,35 @@ class Array[K: Uint[Any], V: Uint[Any]](zArray[K, V]):
             yield ""
 
 
-class Solver(zSolver):
-    """A wrapper around zbitvector.Array. Supports evaluating additional types."""
+class Solver:
+    """A custom replacement for zbitvector.Solver."""
+
+    def __init__(self) -> None:
+        """Create a new Solver."""
+        self._client = Client()
+        self._constraint = Constraint(True)
+        self._last_check = False
+
+    def add(self, assertion: Constraint) -> None:
+        """Assert the given constraint."""
+        self._last_check = False
+        self._constraint &= assertion
+        id = self._client.add_term(_term(assertion))
+        self._client.assert_term(id)
+
+    def check(self, *assumptions: Constraint, force: bool = True) -> bool:
+        """Check whether the constraints are satifiable."""
+        q = reduce(Constraint.__and__, assumptions, Constraint(True))
+        if (r := (self._constraint & q).reveal()) is not None and not force:
+            # HACK: with the solver in an external process, it's slow to call
+            # check(). So we defer calling the solver for trivial cases, but
+            # save the constraint in case the caller later calls evaluate().
+            self._last_check = q
+            return r
+
+        id = self._client.add_term(_term(q))
+        self._last_check = self._client.check(id)
+        return self._last_check
 
     @overload
     def evaluate(self, s: Constraint) -> bool: ...
@@ -356,20 +385,19 @@ class Solver(zSolver):
     @overload
     def evaluate(self, s: Array[Any, Any]) -> dict[int, int]: ...
 
-    def evaluate(  # pyright: ignore[reportIncompatibleMethodOverride]
+    def evaluate(
         self, s: Constraint | Uint[Any] | Array[Any, Any]
     ) -> bool | int | dict[int, int]:
         """Backdoor method for evaluating non-bitvectors."""
-        if not self._current or _bitwuzla.last_check is not self:  # type: ignore
+        if isinstance(self._last_check, Constraint):
+            self.check(self._last_check, force=True)
+            assert isinstance(self._last_check, bool)
+        if not self._last_check:
             raise ValueError("solver is not ready for model evaluation")
 
         match s:
-            case Constraint():
-                return cast(bool, s._evaluate())  # type: ignore
+            case Constraint() | Array():
+                raise NotImplementedError
             case Uint():
-                return super().evaluate(s)
-            case Array():
-                return dict(
-                    (int(k, 2), int(v, 2))
-                    for k, v in BZLA.get_value_str(_term(s)).items()
-                )
+                id = self._client.add_term(_term(s))
+                return self._client.evaluate(id, _term(s).get_sort())
