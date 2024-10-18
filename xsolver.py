@@ -63,56 +63,54 @@ class Client:
 
     def add_term(self, parent: BitwuzlaTerm) -> int:
         """Register a term with the server and return its ID."""
-        if parent in self._terms:
-            return self._terms[parent]
-
-        i = 0
         queue = [parent]
-        while i < len(queue):
-            for c in queue[i].get_children():
-                if c not in self._terms:
-                    queue.append(c)
-            i += 1
-
-        for term in reversed(queue):
+        while queue:
+            term = queue.pop()
             if term in self._terms:
                 continue
-            sid = self.add_sort(term.get_sort())
-            kind = term.get_kind()
-            _write_kind(self._out, kind)
-            match kind:
-                case Kind.VAL:
-                    if _bitwuzla.last_check is False:
-                        assert BZLA.check_sat() == Result.SAT
-                        _bitwuzla.last_check = True
-                    _write_id(self._out, sid)
-                    _write_bv(
-                        self._out, term.get_sort(), int(BZLA.get_value_str(term), 2)
-                    )
-                case Kind.CONST:
-                    _write_id(self._out, sid)
-                    assert (sym := term.get_symbol()) is not None
-                    _write_str(self._out, sym)
-                case Kind.CONST_ARRAY:
-                    _write_id(self._out, sid)
-                    default = term.get_children()[0]
-                    _write_id(self._out, self._terms[default])
-                case _:
-                    terms = term.get_children()
-                    _write_size(self._out, len(terms))
-                    for t in terms:
-                        _write_id(self._out, self._terms[t])
-                    if term.is_indexed():
-                        indices = term.get_indices()
-                        _write_size(self._out, len(indices))
-                        for i in indices:
-                            _write_index(self._out, i)
-                    else:
-                        _write_size(self._out, 0)
-            self._terms[term] = self._counter
-            self._counter += 1
 
+            next = [c for c in term.get_children() if c not in self._terms]
+            if next:
+                queue.append(term)
+                queue.extend(next)
+            else:
+                self._add_term(term)
         return self._terms[parent]
+
+    def _add_term(self, term: BitwuzlaTerm) -> None:
+        # Requires all children to have been added already.
+        sid = self.add_sort(term.get_sort())
+        kind = term.get_kind()
+        _write_kind(self._out, kind)
+        match kind:
+            case Kind.VAL:
+                if _bitwuzla.last_check is False:
+                    assert BZLA.check_sat() == Result.SAT
+                    _bitwuzla.last_check = True
+                _write_id(self._out, sid)
+                _write_bv(self._out, term.get_sort(), int(BZLA.get_value_str(term), 2))
+            case Kind.CONST:
+                _write_id(self._out, sid)
+                assert (sym := term.get_symbol()) is not None
+                _write_str(self._out, sym)
+            case Kind.CONST_ARRAY:
+                _write_id(self._out, sid)
+                default = term.get_children()[0]
+                _write_id(self._out, self._terms[default])
+            case _:
+                terms = term.get_children()
+                _write_size(self._out, len(terms))
+                for t in terms:
+                    _write_id(self._out, self._terms[t])
+                if term.is_indexed():
+                    indices = term.get_indices()
+                    _write_size(self._out, len(indices))
+                    for i in indices:
+                        _write_index(self._out, i)
+                else:
+                    _write_size(self._out, 0)
+        self._terms[term] = self._counter
+        self._counter += 1
 
     def add_sort(self, sort: BitwuzlaSort) -> int:
         """Register a sort with the server and return its ID."""
