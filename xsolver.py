@@ -7,7 +7,6 @@ import os
 import subprocess
 import sys
 from enum import Enum
-from io import BytesIO
 from tempfile import gettempdir
 from typing import IO, Any, Self
 
@@ -62,47 +61,58 @@ class Client:
             os.mkfifo(p)
         return paths
 
-    def add_term(self, term: BitwuzlaTerm) -> int:
+    def add_term(self, parent: BitwuzlaTerm) -> int:
         """Register a term with the server and return its ID."""
-        if term in self._terms:
-            return self._terms[term]
+        if parent in self._terms:
+            return self._terms[parent]
 
-        with BytesIO() as buf:
+        i = 0
+        queue = [parent]
+        while i < len(queue):
+            for c in queue[i].get_children():
+                if c not in self._terms:
+                    queue.append(c)
+            i += 1
+
+        for term in reversed(queue):
+            if term in self._terms:
+                continue
+            sid = self.add_sort(term.get_sort())
             kind = term.get_kind()
-            _write_kind(buf, kind)
+            _write_kind(self._out, kind)
             match kind:
                 case Kind.VAL:
                     if _bitwuzla.last_check is False:
                         assert BZLA.check_sat() == Result.SAT
                         _bitwuzla.last_check = True
-                    sort = term.get_sort()
-                    _write_id(buf, self.add_sort(sort))
-                    _write_bv(buf, sort, int(BZLA.get_value_str(term), 2))
+                    _write_id(self._out, sid)
+                    _write_bv(
+                        self._out, term.get_sort(), int(BZLA.get_value_str(term), 2)
+                    )
                 case Kind.CONST:
-                    _write_id(buf, self.add_sort(term.get_sort()))
+                    _write_id(self._out, sid)
                     assert (sym := term.get_symbol()) is not None
-                    _write_str(buf, sym)
+                    _write_str(self._out, sym)
                 case Kind.CONST_ARRAY:
-                    _write_id(buf, self.add_sort(term.get_sort()))
+                    _write_id(self._out, sid)
                     default = term.get_children()[0]
-                    _write_id(buf, self.add_term(default))
+                    _write_id(self._out, self._terms[default])
                 case _:
                     terms = term.get_children()
-                    _write_size(buf, len(terms))
+                    _write_size(self._out, len(terms))
                     for t in terms:
-                        _write_id(buf, self.add_term(t))
+                        _write_id(self._out, self._terms[t])
                     if term.is_indexed():
                         indices = term.get_indices()
-                        _write_size(buf, len(indices))
+                        _write_size(self._out, len(indices))
                         for i in indices:
-                            _write_index(buf, i)
+                            _write_index(self._out, i)
                     else:
-                        _write_size(buf, 0)
-            self._out.write(buf.getbuffer())
+                        _write_size(self._out, 0)
+            self._terms[term] = self._counter
+            self._counter += 1
 
-        self._terms[term] = self._counter
-        self._counter += 1
-        return self._terms[term]
+        return self._terms[parent]
 
     def add_sort(self, sort: BitwuzlaSort) -> int:
         """Register a sort with the server and return its ID."""
