@@ -6,6 +6,7 @@ import math
 import os
 import subprocess
 import sys
+import weakref
 from enum import Enum
 from tempfile import gettempdir
 from typing import IO, Any, Self
@@ -39,6 +40,7 @@ class Client:
         subprocess.Popen([__file__, self._prefix])
         self._out = open(pa, "wb")
         self._in = open(pb, "rb")
+        weakref.finalize(self, _cleanup, self._out, self._in)
 
     def __deepcopy__(self, memo: Any) -> Self:
         result = self.__new__(self.__class__)
@@ -46,12 +48,13 @@ class Client:
         result._sorts = copy.copy(self._sorts)
         result._counter = self._counter
 
-        pa, pb = self._setup()
+        pa, pb = result._setup()
         _write_kind(self._out, Special.FORK)
         _write_str(self._out, result._prefix)
         self._out.flush()
         result._out = open(pa, "wb")
         result._in = open(pb, "rb")
+        weakref.finalize(result, _cleanup, result._out, result._in)
         return result
 
     def _setup(self) -> tuple[str, str]:
@@ -160,11 +163,6 @@ class Client:
         _write_id(self._out, id)
         self._out.flush()
         return _read_bv(self._in, term.get_sort())
-
-    def close(self) -> None:
-        """Terminate the solver."""
-        for p in (self._out, self._in):
-            p.close()
 
 
 class Server:
@@ -332,6 +330,14 @@ def _paths_for(prefix: str) -> tuple[str, str]:
     c2s = os.path.join(gettempdir(), f"zoology-{prefix}-c2s")
     s2c = os.path.join(gettempdir(), f"zoology-{prefix}-s2c")
     return c2s, s2c
+
+
+def _cleanup(a: IO[bytes], b: IO[bytes]) -> None:
+    for p in (a, b):
+        try:
+            p.close()
+        except BrokenPipeError:
+            pass
 
 
 if __name__ == "__main__":
