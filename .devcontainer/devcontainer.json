@@ -6,6 +6,9 @@
 	"capAdd": [
 		"SYS_PTRACE"
 	],
+	"containerEnv": {
+		"LD_PRELOAD": "libjemalloc.so.2"
+	},
 	"customizations": {
 		"vscode": {
 			"extensions": [
