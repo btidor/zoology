@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 from collections import OrderedDict, defaultdict
 from dataclasses import dataclass, field
 from typing import Any, Callable, Iterable
@@ -76,10 +77,10 @@ class State:
     gas_count: int | None = None
     gas_hogged: Uint256 = Uint256(0)
 
-    # Symbolic constraint that must be satisfied in order for the program to
-    # reach this state. Largely based on the JUMPI instructions (if statements)
-    # encountered in the execution.
-    constraint: Constraint = field(default=Constraint(True))
+    # Tracks the symbolic constraints that must be satisfied in order for the
+    # program to reach this state. Largely based on the JUMPI instructions (if
+    # statements) encountered in the execution.
+    solver: Solver = field(default_factory=Solver)
 
     # Tracks the path of the program's execution. Each JUMPI is a bit, 1 if
     # taken, 0 if not. MSB-first with a leading 1 prepended.
@@ -117,7 +118,7 @@ class State:
     def __post_init__(self) -> None:
         # ASSUMPTION: the current block number is at least 256. This prevents
         # the BLOCKHASH instruction from overflowing.
-        self.constraint &= self.block.number >= Uint256(256)
+        self.solver.add(self.block.number >= Uint256(256))
         if self.mystery_proxy is not None:
             assert (
                 self.mystery_proxy.reveal() is not None
@@ -167,10 +168,10 @@ class State:
 
         # ASSUMPTION: if `balances[src]` drops below zero, execution will
         # revert. Therefore, `balances[src] >= val`.
-        self.constraint &= underflow_safe(self.balances[src], val)
+        self.solver.add(underflow_safe(self.balances[src], val))
         # ASSUMPTION: there isn't enough ETH in existence to overflow an
         # account's balance; all balances are less than 2^255 wei.
-        self.constraint &= overflow_safe(self.balances[dst], val)
+        self.solver.add(overflow_safe(self.balances[dst], val))
 
         self.balances[src] -= val
         self.balances[dst] += val
@@ -230,7 +231,7 @@ class State:
         Automatically adds hash constraints to the current constraint.
         """
         digest, constraint = self.sha3.hash(input)
-        self.constraint &= constraint
+        self.solver.add(constraint)
         self.dirty = True
         return digest
 
@@ -239,12 +240,11 @@ class State:
         if bytes.reveal() is not None:
             return bytes
 
-        solver = Solver()
-        solver.add(self.constraint)
-        if not solver.check():
+        if not self.solver.check():
             return None  # this path is unreachable
+        solver = copy.deepcopy(self.solver)
         self.dirty = False
-        self.constraint &= bytes.compact(solver, Constraint(True))
+        self.solver.add(bytes.compact(solver, Constraint(True)))
         return bytes
 
     def compact_calldata(self, data: Bytes) -> Bytes | None:
@@ -252,10 +252,9 @@ class State:
         if data.slice(Uint256(0), Uint256(4)).reveal():
             return data
 
-        solver = Solver()
-        solver.add(self.constraint)
-        if not solver.check():
+        if not self.solver.check():
             return None  # this path is unreachable
+        solver = copy.deepcopy(self.solver)
         self.dirty = False
 
         length = solver.evaluate(data.length)

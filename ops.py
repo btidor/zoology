@@ -12,7 +12,6 @@ from smt import (
     Array,
     Constraint,
     Int256,
-    Solver,
     Uint8,
     Uint64,
     Uint160,
@@ -432,8 +431,7 @@ def JUMPI(
     # constraints, so we invoke the solver after hashing data (at the next JUMPI
     # instruction, for batching).
     if s.dirty:
-        solver = Solver()
-        if not solver.check(s.constraint):
+        if not s.solver.check():
             return Unreachable()
         s.dirty = False
 
@@ -444,11 +442,11 @@ def JUMPI(
     match c.reveal():
         case None:  # unknown, must prepare both branches :(
             s0, s1 = copy.deepcopy(s), s
-            s0.constraint &= c
+            s0.solver.add(c)
 
             s1.pc = s.program.jumps[counter]
             s1.path |= 1
-            s1.constraint &= ~c
+            s1.solver.add(~c)
             return Jump(targets=(s0, s1))
         case True:  # branch never taken, fall through
             return None
@@ -700,7 +698,7 @@ def SELFDESTRUCT(s: State, address: Uint256) -> None:
 
     # Note: if `current` and `recipient` are equal, the value disappears.
     s.balances[recipient] += value
-    s.constraint &= overflow_safe(s.balances[recipient], value)
+    s.solver.add(overflow_safe(s.balances[recipient], value))
     s.balances[contract] = Uint256(0)
     s.changed = True
 
@@ -717,8 +715,7 @@ def _create_common(
     assert (destination := address.reveal()) is not None
 
     if s.dirty:
-        solver = Solver()
-        if not solver.check(s.constraint):
+        if not s.solver.check():
             return Unreachable()
         s.dirty = False
 
@@ -774,10 +771,8 @@ def _call_common(
     calldata = s.compact_calldata(calldata)
     if calldata is None:
         return Unreachable()
-
     if s.dirty:
-        solver = Solver()
-        if not solver.check(s.constraint):
+        if not s.solver.check():
             return Unreachable()
         s.dirty = False
 
@@ -800,7 +795,7 @@ def _call_common(
         s.path <<= 1
         state = copy.deepcopy(s)
         state.path |= 1
-        state.constraint &= cond
+        state.solver.add(cond)
         if delegate:
             transaction = Transaction(
                 origin=state.transaction.origin,
@@ -853,7 +848,7 @@ def _call_common(
                 s.path <<= 1
                 state = copy.deepcopy(s)
                 state.path |= 1
-                state.constraint &= cond
+                state.solver.add(cond)
                 dc = DelegateCall(
                     transaction,
                     Constraint(False),
@@ -870,7 +865,7 @@ def _call_common(
                 s.path <<= 1
                 state = copy.deepcopy(s)
                 state.path |= 1
-                state.constraint &= cond
+                state.solver.add(cond)
                 dc = DelegateCall(
                     transaction,
                     Constraint(True),
@@ -891,7 +886,7 @@ def _call_common(
                 s.path <<= 1
                 state = copy.deepcopy(s)
                 state.path |= 1
-                state.constraint &= cond
+                state.solver.add(cond)
 
                 state.balances[state.transaction.address] = Uint256(0)
                 state.changed = True
@@ -925,7 +920,7 @@ def _call_common(
                 s.path <<= 1
                 state = copy.deepcopy(s)
                 state.path |= 1
-                state.constraint &= cond
+                state.solver.add(cond)
                 ok = Constraint(f"RETURNOK{suffix}")
                 state.transfer(
                     transaction.caller, transaction.address, ok.ite(value, Uint256(0))
@@ -940,7 +935,7 @@ def _call_common(
                 state = copy.deepcopy(s)
                 state.path |= 1
                 state.cost *= 2
-                state.constraint &= cond
+                state.solver.add(cond)
                 state.gas_hogged += gas
                 call = GasHogCall(transaction, Constraint(False), Bytes(), (), gas)
                 _apply_call(state, call, retSize, retOffset)
@@ -961,7 +956,7 @@ def _call_common(
                     s.path <<= 1
                     state = copy.deepcopy(s)
                     state.path |= 1
-                    state.constraint &= cond
+                    state.solver.add(cond)
                     state.transfer(transaction.caller, transaction.address, value)
                     state.suffix += "R"
                     original, state.calls = state.calls, ()
@@ -985,7 +980,7 @@ def _call_common(
                         state.calls = original
                         _apply_call(state, call, retSize, retOffset)
                         if not substate.pc.success:  # skip REVERTs
-                            state.constraint = Constraint(False)
+                            state.solver.add(Constraint(False))
                         return state
 
                     substates.append(
@@ -1001,7 +996,7 @@ def _call_common(
                     )
 
     if eoa.reveal() is not False:
-        s.constraint &= eoa
+        s.solver.add(eoa)
         if delegate:
             transaction = Transaction(
                 origin=s.transaction.origin,
@@ -1057,7 +1052,7 @@ def _descend_substate(
         mystery_size=state.mystery_size,
         logs=state.logs,
         gas_count=state.gas_count,
-        constraint=state.constraint,
+        solver=copy.deepcopy(state.solver),
         path=state.path,
         cost=state.cost,
         changed=state.changed if not static else None,
@@ -1093,7 +1088,7 @@ def _descend_substate(
         next.latest_return = call.returndata
         next.gas_count = substate.gas_count
         next.calls = (*next.calls, call)
-        next.constraint = substate.constraint
+        next.solver = substate.solver
         next.path = substate.path
         next.cost = substate.cost
         if static:

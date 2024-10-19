@@ -7,7 +7,6 @@ from typing import Any, Iterable
 
 from environment import Block
 from smt import (
-    ConstrainingError,
     Solver,
     Uint52,
     Uint160,
@@ -74,11 +73,10 @@ class Sequence:
             raise OverflowError("sequence is limited to 15 states")
         return result
 
-    def constrain(self, solver: Solver, check: bool = True) -> None:
-        """Apply hard constraints to the given solver instance."""
-        solver.add(self.states[-1].constraint)
-        if check and not solver.check():
-            raise ConstrainingError
+    @property
+    def solver(self) -> Solver:
+        """Return a reference to the current (mutable!) solver."""
+        return self.states[-1].solver
 
     def narrow(self, solver: Solver) -> None:
         """Apply soft and deferred constraints to a given solver instance."""

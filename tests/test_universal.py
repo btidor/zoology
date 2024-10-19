@@ -7,7 +7,7 @@ import pytest
 from bytes import Bytes
 from disassembler import Program, abiencode, disassemble
 from sha3 import SHA3
-from smt import Solver, Uint160, Uint256
+from smt import Uint160, Uint256
 from state import State, Termination
 from universal import printable_transition, symbolic_start, universal_transaction
 
@@ -33,8 +33,7 @@ def check_transitions(start: Program | State, branches: cases.Branches) -> None:
         else:
             kind, method, value = entry
 
-        solver = Solver()
-        solver.add(end.constraint)
+        solver = end.solver
         assert end.changed == (kind == "SAVE")
 
         assert solver.check()
@@ -78,15 +77,16 @@ def test_basic() -> None:
     assert end.pc.success is True
 
     # These extra constraints makes the test deterministic
-    end.constraint &= start.balances[
-        Uint160(0xADADADADADADADADADADADADADADADADADADADAD)
-    ] == Uint256(0x8000000000001)
-    end.constraint &= start.balances[
-        Uint160(0xCACACACACACACACACACACACACACACACACACACACA)
-    ] == Uint256(0xAAAAAAAAAAAAA)
+    end.solver.add(
+        start.balances[Uint160(0xADADADADADADADADADADADADADADADADADADADAD)]
+        == Uint256(0x8000000000001)
+    )
+    end.solver.add(
+        start.balances[Uint160(0xCACACACACACACACACACACACACACACACACACACACA)]
+        == Uint256(0xAAAAAAAAAAAAA)
+    )
 
-    solver = Solver()
-    solver.add(end.constraint)
+    solver = end.solver
     assert solver.check()
 
     raw = """
@@ -120,8 +120,7 @@ def test_sudoku() -> None:
     assert isinstance(end.pc, Termination)
     assert end.pc.success is True
 
-    solver = Solver()
-    solver.add(end.constraint)
+    solver = end.solver
     assert solver.check()
 
     calldata = end.transaction.calldata

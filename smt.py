@@ -351,20 +351,20 @@ class Solver:
 
     def __init__(self) -> None:
         """Create a new Solver."""
+        self.constraint = Constraint(True)
         self._client = Client()
-        self._constraint = Constraint(True)
         self._last_check = False
 
     def add(self, assertion: Constraint) -> None:
         """Assert the given constraint."""
         self._last_check = False
-        self._constraint &= assertion
+        self.constraint &= assertion
         self._client.assert_term(_term(assertion))
 
     def check(self, *assumptions: Constraint, force: bool = True) -> bool:
         """Check whether the constraints are satifiable."""
         q = reduce(Constraint.__and__, assumptions, Constraint(True))
-        if (r := (self._constraint & q).reveal()) is not None and not force:
+        if (r := (self.constraint & q).reveal()) is not None and not force:
             # HACK: with the solver in an external process, it's slow to call
             # check(). So we defer calling the solver for trivial cases, but
             # save the constraint in case the caller later calls evaluate().

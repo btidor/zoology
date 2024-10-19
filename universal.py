@@ -9,7 +9,7 @@ from bytes import Bytes
 from disassembler import Program
 from environment import Block, Contract, Transaction
 from sha3 import SHA3
-from smt import Array, Solver, Uint160, Uint256, describe
+from smt import Array, Uint160, Uint256, describe
 from state import Descend, GasHogCall, Jump, State, Termination, Unreachable
 from tests.solidity import load_solidity
 from vm import step
@@ -65,9 +65,7 @@ def universal_transaction(
                 continue
             state.cleanup()
             if check:
-                solver = Solver()
-                solver.add(state.constraint)
-                if not solver.check():
+                if not state.solver.check():
                     continue
             yield state
 
@@ -104,31 +102,15 @@ def symbolic_start(program: Contract | Program, sha3: SHA3, suffix: str) -> Stat
 
 def printable_transition(start: State, end: State) -> Iterable[str]:
     """Produce a human-readable description of a given state transition."""
-    solver = Solver()
-    solver.add(end.constraint)
-    assert solver.check()
-
-    if end.changed:
-        kind = "📒 SAVE"
-    else:
-        kind = "  VIEW"
-
-    # Reset so we can extract the model
-    assert solver.check()
-
-    for line in _printable_transition(solver, start, end, kind):
-        yield line
-
-
-def _printable_transition(
-    solver: Solver, start: State, end: State, kind: str
-) -> Iterable[str]:
     assert isinstance(end.pc, Termination)
+    kind = "📒 SAVE" if end.changed else "  VIEW"
     result = "RETURN" if end.pc.success else "REVERT"
 
     yield f"---  {kind}\t{result}\t{end.px()}\t".ljust(80, "-")
     yield ""
 
+    solver = end.solver
+    assert solver.check()
     end.narrow(solver)
 
     values = end.transaction.describe(solver)

@@ -7,7 +7,7 @@ from bytes import Bytes, Memory
 from disassembler import Instruction, disassemble
 from environment import Block
 from ops import *
-from smt import Array, Solver, Uint160, Uint256
+from smt import Array, Uint160, Uint256
 from state import Termination
 
 
@@ -239,8 +239,7 @@ def test_KECCAK256() -> None:
     s = State(memory=Memory(b"\xff\xff\xff\xff"))
     digest = KECCAK256(s, Uint256(0), Uint256(4))
 
-    solver = Solver()
-    solver.add(s.constraint)
+    solver = s.solver
     assert solver.check()
     assert (
         solver.evaluate(digest)

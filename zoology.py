@@ -17,9 +17,7 @@ from environment import Contract, Transaction
 from loops import flatten_loops
 from sequence import Sequence
 from smt import (
-    ConstrainingError,
     Constraint,
-    Solver,
     Uint52,
     Uint160,
     Uint256,
@@ -189,7 +187,7 @@ def make_heads(prefix: Sequence) -> list[State]:
             sha3=copy.deepcopy(previous.sha3),
             contracts={k: v.clone_and_reset() for (k, v) in previous.contracts.items()},
             balances=previous.balances.clone_and_reset(),
-            constraint=previous.constraint,
+            solver=copy.deepcopy(previous.solver),
             mystery_proxy=PROXY,
             mystery_size=previous.mystery_size,
             gas_count=0,
@@ -231,22 +229,21 @@ def check_candidate(
         vprint("  > read-only\n" if verbose else ".")
         return False
 
-    try:
-        solver = Solver()
-        candidate.constrain(solver)
-        if verbose:
-            candidate.narrow(solver)
-            newline = True
-            for part in candidate.describe(solver):
-                if newline:
-                    vprint("  : ")
-                    newline = False
-                vprint(part)
-                if part.endswith("\n"):
-                    newline = True
-    except ConstrainingError:
+    solver = candidate.solver
+    if not candidate.solver.check():
         vprint("  ! constraining error\n" if verbose else "!")
         return False
+
+    if verbose:
+        candidate.narrow(solver)
+        newline = True
+        for part in candidate.describe(solver):
+            if newline:
+                vprint("  : ")
+                newline = False
+            vprint(part)
+            if part.endswith("\n"):
+                newline = True
 
     if solution := validator.check(candidate):
         vprint("  > found solution!\n" if verbose else "#")

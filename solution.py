@@ -65,7 +65,7 @@ class Validator:
             sha3=SHA3(),  # validator optimization requires this SHA3 go unused
             contracts={},
             balances=Array[Uint160, Uint256]("BALANCE"),
-            constraint=previous.constraint,
+            solver=copy.deepcopy(previous.solver),
             mystery_proxy=PROXY,
             mystery_size=previous.mystery_size,
             gas_count=0,
@@ -95,7 +95,7 @@ class Validator:
             # worry about narrowing because SHA3 is not invoked (see check
             # below).
             b: Uint256 = end.pc.returndata.slice(Uint256(0), Uint256(32)).bigvector()
-            predicates.append(end.constraint & (b != Uint256(0)))
+            predicates.append(end.solver.constraint & (b != Uint256(0)))
 
             if len(end.contracts) > len(previous.contracts):
                 # We can't handle validators that create contracts. That would
@@ -154,8 +154,7 @@ class Validator:
         """Simulate the execution of validateInstance on the given sequence."""
         translated = self._translate(sequence)
         if translated is not None:
-            solver = Solver()
-            sequence.constrain(solver, check=False)
+            solver = copy.deepcopy(sequence.solver)
             solver.add(translated)
             if solver.check():
                 sequence.narrow(solver)
@@ -170,7 +169,7 @@ class Validator:
             sha3=copy.deepcopy(previous.sha3),
             contracts={k: v.clone_and_reset() for (k, v) in previous.contracts.items()},
             balances=previous.balances.clone_and_reset(),
-            constraint=previous.constraint,
+            solver=copy.deepcopy(previous.solver),
             mystery_proxy=PROXY,
             mystery_size=previous.mystery_size,
             gas_count=0,
@@ -184,9 +183,8 @@ class Validator:
 
         for end in universal_transaction(start, check=False, prints=prints):
             assert isinstance(end.pc, Termination)
-            solver = Solver()
+            solver = end.solver
             candidate = sequence.extend(end)
-            candidate.constrain(solver, check=False)
             ok = end.pc.returndata.slice(
                 Uint256(0), Uint256(32)
             ).bigvector() != Uint256(0)
