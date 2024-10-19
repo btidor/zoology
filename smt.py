@@ -393,8 +393,14 @@ class Solver:
         if not self._last_check:
             raise ValueError("solver is not ready for model evaluation")
 
+        val = self._client.evaluate(_term(s))
         match s:
-            case Constraint() | Array():
-                raise NotImplementedError
+            case Constraint():
+                assert val == 0 or val == 1, f"not boolean: {val}"
+                return bool(val)
             case Uint():
-                return self._client.evaluate(_term(s))
+                assert isinstance(val, int)
+                return val
+            case Array():
+                assert isinstance(val, dict)
+                return val

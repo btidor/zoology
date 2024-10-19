@@ -7,6 +7,7 @@ import os
 import subprocess
 import sys
 import weakref
+from collections import defaultdict
 from enum import Enum
 from tempfile import gettempdir
 from typing import IO, Any, Self
@@ -156,13 +157,25 @@ class Client:
         self._out.flush()
         return bool(_read_index(self._in))
 
-    def evaluate(self, term: BitwuzlaTerm) -> int:
+    def evaluate(self, term: BitwuzlaTerm) -> int | dict[int, int]:
         """Return a value for the given term."""
         id = self.add_term(term)
         _write_kind(self._out, Special.EVALUATE)
         _write_id(self._out, id)
         self._out.flush()
-        return _read_bv(self._in, term.get_sort())
+        if term.is_bv():
+            return _read_bv(self._in, term.get_sort())
+        elif term.is_array():
+            k = term.get_sort().array_get_index()
+            v = term.get_sort().array_get_element()
+            default = _read_bv(self._in, v)
+            result = defaultdict[int, int](lambda: default)
+            for _ in range(_read_size(self._in)):
+                p = _read_bv(self._in, k)
+                q = _read_bv(self._in, v)
+                result[p] = q
+            return result
+        raise NotImplementedError(f"unsupported sort: {term.dump()}")
 
 
 class Server:
@@ -197,8 +210,26 @@ class Server:
                 return
             case Special.EVALUATE:
                 term = _read_term(self._in, self._items)
-                assert term.is_bv()
-                _write_bv(self._out, term.get_sort(), int(BZLA.get_value_str(term), 2))
+                if term.is_bv():
+                    _write_bv(
+                        self._out, term.get_sort(), int(BZLA.get_value_str(term), 2)
+                    )
+                elif term.is_array():
+                    k = term.get_sort().array_get_index()
+                    v = term.get_sort().array_get_element()
+                    raw = BZLA.get_value_str(term)
+                    values = list((int(k, 2), int(v, 2)) for k, v in raw.items())
+                    try:
+                        default = int(raw["_TODO"], 2)  # FYI: mutates `raw`
+                    except KeyError:  # some aren't defaultdicts?
+                        default = 0
+                    _write_bv(self._out, v, default)
+                    _write_size(self._out, len(values))
+                    for p, q in values:
+                        _write_bv(self._out, k, p)
+                        _write_bv(self._out, v, q)
+                else:
+                    raise NotImplementedError(f"unsupported sort: {term.dump()}")
                 self._out.flush()
                 return
             case Special.FORK:
