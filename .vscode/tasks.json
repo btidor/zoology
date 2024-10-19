@@ -1,0 +1,39 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Speedscope",
+            "type": "shell",
+            "command": "tests/speedscope.py",
+            "group": "none",
+            "isBackground": true,
+            "presentation": {
+                "reveal": "silent"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Simple Browser",
+            "command": "${input:openSimpleBrowser}"
+        },
+        {
+            "label": "Profile",
+            "dependsOn": [
+                "Speedscope",
+                "Simple Browser"
+            ],
+            "dependsOrder": "parallel",
+            "problemMatcher": [],
+        }
+    ],
+    "inputs": [
+        {
+            "id": "openSimpleBrowser",
+            "type": "command",
+            "command": "simpleBrowser.show",
+            "args": [
+                "https://www.speedscope.app/#profileURL=http://localhost:8000/combined.json"
+            ],
+        }
+    ]
+}
