@@ -354,12 +354,24 @@ class Solver:
         self.constraint = Constraint(True)
         self._client = Client()
         self._last_check = False
+        self._pending = Constraint(True)
+        self._dirty = False
+
+    def __deepcopy__(self, memo: Any) -> Self:
+        result = self.__new__(self.__class__)
+        result.constraint = self.constraint
+        result._client = self._client
+        result._last_check = self._last_check
+        result._pending = self._pending
+        result._dirty = True
+        self._dirty = True
+        return result
 
     def add(self, assertion: Constraint) -> None:
         """Assert the given constraint."""
-        self._last_check = False
         self.constraint &= assertion
-        self._client.assert_term(_term(assertion))
+        self._last_check = False
+        self._pending &= assertion
 
     def check(self, *assumptions: Constraint, force: bool = True) -> bool:
         """Check whether the constraints are satifiable."""
@@ -370,6 +382,13 @@ class Solver:
             # save the constraint in case the caller later calls evaluate().
             self._last_check = q
             return r
+
+        if self._dirty:
+            self._client = copy.deepcopy(self._client)
+            self._dirty = False
+
+        self._client.assert_term(_term(self._pending))
+        self._pending = Constraint(True)
 
         self._last_check = self._client.check(_term(q))
         return self._last_check
