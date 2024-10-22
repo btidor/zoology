@@ -41,6 +41,10 @@ class Client:
         subprocess.Popen([__file__, self._prefix])
         self._out = open(pa, "wb")
         self._in = open(pb, "rb")
+
+        # Closes the named pipe (triggering the subprocess to exit) when Python
+        # garbage-collects this object. This turns out to be much more reliable
+        # than manually inserting calls to `cleanup()`.
         weakref.finalize(self, _cleanup, self._out, self._in)
 
     def __deepcopy__(self, memo: Any) -> Self:
@@ -220,7 +224,7 @@ class Server:
                     raw = BZLA.get_value_str(term)
                     values = list((int(k, 2), int(v, 2)) for k, v in raw.items())
                     try:
-                        default = int(raw["_TODO"], 2)  # FYI: mutates `raw`
+                        default = int(raw["__default__"], 2)  # FYI: mutates `raw`
                     except KeyError:  # some aren't defaultdicts?
                         default = 0
                     _write_bv(self._out, v, default)
