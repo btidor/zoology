@@ -1045,6 +1045,9 @@ def _descend_substate(
         block=state.block,
         transaction=transaction,
         sha3=state.sha3,
+        # FYI, we're allowed to consume `state` and mutate all of its values.
+        # These fields are only copied so that we can restore them if the
+        # subcontract reverts.
         contracts=copy.deepcopy(state.contracts),
         balances=copy.deepcopy(state.balances),
         program_override=program_override,
@@ -1052,7 +1055,7 @@ def _descend_substate(
         mystery_size=state.mystery_size,
         logs=state.logs,
         gas_count=state.gas_count,
-        solver=copy.deepcopy(state.solver),
+        solver=state.solver,
         path=state.path,
         cost=state.cost,
         changed=state.changed if not static else None,
