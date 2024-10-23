@@ -124,6 +124,11 @@ class State:
                 self.mystery_proxy.reveal() is not None
             ), "State requires concrete mystery proxy address, if present"
 
+    def __lt__(self, other: Any) -> bool:
+        if not isinstance(other, State):
+            return NotImplemented
+        return self.cost < other.cost
+
     @property
     def program(self) -> Program:
         """Return the currently-executing program."""
@@ -154,11 +159,6 @@ class State:
         self.contracts[address] = contract
         return self
 
-    def __lt__(self, other: Any) -> bool:
-        if not isinstance(other, State):
-            return NotImplemented
-        return self.cost < other.cost
-
     def transfer(self, src: Uint160, dst: Uint160, val: Uint256) -> None:
         """Transfer value from one account to another."""
         if val.reveal() == 0:
@@ -176,6 +176,17 @@ class State:
         self.balances[src] -= val
         self.balances[dst] += val
         self.changed = True
+
+    def hash(self, input: Bytes) -> Uint256:
+        """
+        Compute the SHA3 hash of a given key.
+
+        Automatically adds hash constraints to the current constraint.
+        """
+        digest, constraint = self.sha3.hash(input)
+        self.solver.add(constraint)
+        self.dirty = True
+        return digest
 
     def cleanup(self) -> None:
         """Perform deferred cleanup from SELFDESTRUCT operations."""
@@ -223,17 +234,6 @@ class State:
         if returndata:
             r["Return"] = "0x" + returndata.hex()
         return r
-
-    def hash(self, input: Bytes) -> Uint256:
-        """
-        Compute the SHA3 hash of a given key.
-
-        Automatically adds hash constraints to the current constraint.
-        """
-        digest, constraint = self.sha3.hash(input)
-        self.solver.add(constraint)
-        self.dirty = True
-        return digest
 
     def compact_bytes(self, bytes: Bytes) -> Bytes | None:
         """Simplify the given bytes using the current constraints."""
