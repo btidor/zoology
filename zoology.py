@@ -44,11 +44,11 @@ def search(
         node = heappop(queue)
         prefix, state = node.prefix, node.state
         while isinstance(state.pc, int):
-            if verbose > 1:
+            if verbose > 2:
                 print(state.program.instructions[state.pc])
             match step(state):
                 case None:
-                    if verbose > 1:
+                    if verbose > 2:
                         for x in reversed(state.stack):
                             print(" ", describe(x))
                     continue
@@ -264,15 +264,24 @@ def handle_level(factory: Uint160, args: argparse.Namespace) -> None:
     """Solve an Ethernaut level (from the cli)."""
     contracts = snapshot_contracts(factory)
     vprint("C")
-    beginning = starting_sequence(contracts, factory, prints=(args.verbose > 1))
+    beginning = starting_sequence(contracts, factory, prints=(args.verbose > 2))
     vprint("V")
-    validator = Validator(beginning, prints=(args.verbose > 1))
+    validator = Validator(beginning, prints=(args.verbose > 2))
     vprint("a" if validator.constraint is None else "A")
 
     if solution := validator.check(beginning):
         pass  # simple SELFDESTRUCT, or a bug
     else:
         vprint("*\n")
+
+    if args.verbose > 1:
+        for address, contract in beginning.states[-1].contracts.items():
+            vprint("- 0x" + address.to_bytes(20).hex())
+            vprint(" (*)\n" if address == beginning.instance.reveal() else "\n")
+            assert (code := contract.program.code.reveal()) is not None
+            vprint(": " + code.hex() + "\n")
+
+    if solution is None:
         solution = search(beginning, validator, args.depth, verbose=args.verbose)
         if not solution:
             vprint("\tno solution\n")
