@@ -5,7 +5,7 @@ from __future__ import annotations
 import copy
 from collections import OrderedDict, defaultdict
 from dataclasses import dataclass, field
-from typing import Any, Callable, Iterable
+from typing import Any, Callable, Iterable, Self
 
 from bytes import BYTES, Bytes, Memory
 from disassembler import Program
@@ -23,7 +23,7 @@ from smt import (
 )
 
 
-@dataclass
+@dataclass(slots=True)
 class State:
     """Transient context state associated with a contract invocation."""
 
@@ -277,23 +277,35 @@ class State:
         return Bytes(result[:length])  # remember, length can be < 4
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Termination:
     """The result of running a contract to completion."""
 
     success: bool
     returndata: Bytes
 
+    def __copy__(self) -> Self:
+        return self
 
-@dataclass(frozen=True)
+    def __deepcopy__(self, memo: Any) -> Self:
+        return self
+
+
+@dataclass(frozen=True, slots=True)
 class Log:
     """A log entry emitted by the LOG* instruction."""
 
     data: Bytes
     topics: tuple[Uint256, ...]
 
+    def __copy__(self) -> Self:
+        return self
 
-@dataclass(frozen=True)
+    def __deepcopy__(self, memo: Any) -> Self:
+        return self
+
+
+@dataclass(frozen=True, slots=True)
 class Call:
     """Information about a CALL instruction."""
 
@@ -301,6 +313,12 @@ class Call:
     ok: Constraint
     returndata: Bytes
     subcalls: tuple[Call, ...]
+
+    def __copy__(self) -> Self:
+        return self
+
+    def __deepcopy__(self, memo: Any) -> Self:
+        return self
 
     def narrow(self, solver: Solver) -> None:
         """Apply soft constraints to a given solver instance."""
@@ -361,12 +379,18 @@ class Call:
             yield "\n"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DelegateCall(Call):
     """Information about a symbolic DELEGATECALL instruction."""
 
     previous_storage: Array[Uint256, Uint256]
     next_storage: Array[Uint256, Uint256] | None  # None if SELFDESTRUCTed
+
+    def __copy__(self) -> Self:
+        return self
+
+    def __deepcopy__(self, memo: Any) -> Self:
+        return self
 
     def describe(
         self, solver: Solver, select_: Uint160, /, *, prints: bool = False
@@ -394,11 +418,17 @@ class DelegateCall(Call):
                         yield f"      {hex(k)} -> {hex(v)}\n"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class GasHogCall(Call):
     """Represents a CALL to a proxy that consumes all available gas."""
 
     gas: Uint256
+
+    def __copy__(self) -> Self:
+        return self
+
+    def __deepcopy__(self, memo: Any) -> Self:
+        return self
 
     def describe(
         self, solver: Solver, select_: Uint160, /, *, prints: bool = False
@@ -414,28 +444,41 @@ class GasHogCall(Call):
         yield "    CONSUME ALL GAS\n"
 
 
-class ControlFlow:
-    """A superclass for control-flow actions."""
-
-    pass
+type ControlFlow = Jump | Descend | Unreachable
 
 
-@dataclass(frozen=True)
-class Jump(ControlFlow):
+@dataclass(frozen=True, slots=True)
+class Jump:
     """A JUMPI instruction that branches the control flow."""
 
     targets: tuple[State, ...]
 
+    def __copy__(self) -> Self:
+        return self
 
-@dataclass(frozen=True)
-class Descend(ControlFlow):
+    def __deepcopy__(self, memo: Any) -> Self:
+        return self
+
+
+@dataclass(frozen=True, slots=True)
+class Descend:
     """A CALL, DELEGATECALL, etc. instruction."""
 
     states: tuple[State, ...]
 
+    def __copy__(self) -> Self:
+        return self
 
-@dataclass(frozen=True)
-class Unreachable(ControlFlow):
+    def __deepcopy__(self, memo: Any) -> Self:
+        return self
+
+
+@dataclass(frozen=True, slots=True)
+class Unreachable:
     """Represents a state that is discovered to be unreachable."""
 
-    pass
+    def __copy__(self) -> Self:
+        return self
+
+    def __deepcopy__(self, memo: Any) -> Self:
+        return self

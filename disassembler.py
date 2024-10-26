@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Iterable
+from typing import Any, Iterable, Self
 
 from Crypto.Hash import keccak
 
@@ -13,7 +13,7 @@ from opcodes import REFERENCE, UNIMPLEMENTED
 from smt import Uint256
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Program:
     """The disassembled code of an EVM contract."""
 
@@ -24,14 +24,14 @@ class Program:
     # `instructions`.
     jumps: dict[int, int]
 
-    def __copy__(self) -> Program:
+    def __copy__(self) -> Self:
         return self
 
-    def __deepcopy__(self, memo: Any) -> Program:
+    def __deepcopy__(self, memo: Any) -> Self:
         return self
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Instruction:
     """A single disassembled EVM instruction."""
 
@@ -51,6 +51,12 @@ class Instruction:
     operand: Uint256 | None = None
 
     custom: LoopCopy | None = None
+
+    def __copy__(self) -> Self:
+        return self
+
+    def __deepcopy__(self, memo: Any) -> Self:
+        return self
 
     def __str__(self) -> str:
         msg = f"{self.offset:04x}  {self.name}"
@@ -180,7 +186,7 @@ def abiencode(signature: str) -> bytes:
     return keccak.new(data=signature.encode(), digest_bits=256).digest()[:4]
 
 
-@dataclass
+@dataclass(slots=True)
 class LoopCopy:
     """An custom instruction to copy data between memory addresses."""
 

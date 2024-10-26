@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import copy
-from typing import Any, Iterable
+from typing import Any, Iterable, Self
 
 from environment import Block
 from smt import (
@@ -54,7 +54,7 @@ class Sequence:
         self.states = [start]
         self.selfdestructs = [_selfdestruct(start, 0)]
 
-    def __deepcopy__(self, memo: Any) -> Sequence:
+    def __deepcopy__(self, memo: Any) -> Self:
         result = copy.copy(self)
         result.states = copy.copy(result.states)
         result.selfdestructs = copy.copy(result.selfdestructs)

@@ -51,8 +51,6 @@ def universal_transaction(
                     break
                 case Unreachable():
                     break
-                case unknown:
-                    raise ValueError(f"unknown action: {unknown}")
 
         if isinstance(state.pc, Termination):
             if state.recursion is not None:

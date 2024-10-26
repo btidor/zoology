@@ -54,7 +54,7 @@ def step(state: State) -> ControlFlow | None:
             if len(state.stack) > 1024:
                 raise Exception("evm stack overflow")
             return None
-        case ControlFlow():
+        case Jump() | Descend() | Unreachable():
             return result
 
 
@@ -86,8 +86,6 @@ def execute(state: State, /, *, prints: bool = False) -> Generator[str, None, St
                     state = substate.recursion(substate)
             case Unreachable():
                 raise ValueError("control flow reached invalid state")
-            case unknown:
-                raise ValueError(f"unknown action: {unknown}")
 
         if prints:  # print stack
             for x in state.stack:

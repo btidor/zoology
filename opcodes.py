@@ -3,9 +3,10 @@
 import json
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, Self
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Opcode:
     """An EVM operation."""
 
@@ -15,6 +16,12 @@ class Opcode:
     fee: int
     isAsync: bool
     dynamicGas: bool
+
+    def __copy__(self) -> Self:
+        return self
+
+    def __deepcopy__(self, memo: Any) -> Self:
+        return self
 
 
 # We autogenerate the list of opcodes from the @ethereumjs node package. To

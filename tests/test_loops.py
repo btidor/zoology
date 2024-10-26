@@ -28,8 +28,6 @@ def check_level(i: int) -> None:
                     break  # don't analyze cross-contract calls
                 case Unreachable():
                     break
-                case unknown:
-                    raise ValueError(f"unknown action: {unknown}")
 
         if isinstance(state.pc, Termination):
             assert state.recursion is None

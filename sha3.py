@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass, field
-from typing import Any, Iterable
+from typing import Any, Iterable, Self
 
 from Crypto.Hash import keccak
 
@@ -35,7 +35,7 @@ def concrete_hash(data: bytes | str) -> Uint256:
 EMPTY_DIGEST = concrete_hash(b"")
 
 
-@dataclass
+@dataclass(slots=True)
 class SHA3:
     """
     Tracks SHA3 (Keccak) hashes.
@@ -48,12 +48,12 @@ class SHA3:
     symbolic: list[tuple[Uint[Any], Uint256]] = field(default_factory=list)
     concrete: dict[bytes, tuple[Uint[Any], Uint256]] = field(default_factory=dict)
 
-    def __deepcopy__(self, memo: Any) -> SHA3:
-        return SHA3(
-            free=copy.copy(self.free),
-            symbolic=copy.copy(self.symbolic),
-            concrete=copy.copy(self.concrete),
-        )
+    def __deepcopy__(self, memo: Any) -> Self:
+        result = copy.copy(self)
+        result.free = copy.copy(self.free)
+        result.symbolic = copy.copy(self.symbolic)
+        result.concrete = copy.copy(self.concrete)
+        return result
 
     def hash(self, input: Bytes) -> tuple[Uint256, Constraint]:
         """

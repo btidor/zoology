@@ -9,7 +9,7 @@ import sys
 import time
 from dataclasses import dataclass
 from heapq import heappop, heappush
-from typing import Any
+from typing import Any, Self
 
 from bytes import Bytes
 from disassembler import abiencode
@@ -62,8 +62,6 @@ def search(
                     break
                 case Unreachable():
                     break
-                case unknown:
-                    raise ValueError(f"unknown action: {unknown}")
 
         if not isinstance(state.pc, Termination):
             continue
@@ -90,14 +88,18 @@ def search(
     return None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Node:
     """A state on the search heap, with its history."""
 
-    __slots__ = ("prefix", "state")
-
     prefix: Sequence
     state: State
+
+    def __copy__(self) -> Self:
+        return self
+
+    def __deepcopy__(self, memo: Any) -> Self:
+        return self
 
     def __lt__(self, other: Any) -> bool:
         if not isinstance(other, Node):

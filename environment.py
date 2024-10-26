@@ -13,7 +13,7 @@ from sha3 import concrete_hash
 from smt import Array, Solver, Uint, Uint8, Uint160, Uint256
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Block:
     """A block in the blockchain."""
 
@@ -32,6 +32,12 @@ class Block:
     hashes: Array[Uint8, Uint256] = field(
         default_factory=lambda: Block.__concrete_hashes()
     )
+
+    def __copy__(self) -> Self:
+        return self
+
+    def __deepcopy__(self, memo: Any) -> Self:
+        return self
 
     @classmethod
     def symbolic(cls, suffix: str) -> Block:
@@ -78,7 +84,7 @@ class Block:
         )
 
 
-@dataclass
+@dataclass(slots=True)
 class Contract:
     """A deployed contract account."""
 
@@ -106,7 +112,7 @@ class Contract:
         assert self.address.reveal() is not None, "Contract requires concrete address"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Transaction:
     """The inputs to a contract call."""
 
@@ -116,6 +122,12 @@ class Transaction:
     callvalue: Uint256 = Uint256(0)
     calldata: Bytes = Bytes()
     gasprice: Uint256 = Uint256(0x12)
+
+    def __copy__(self) -> Self:
+        return self
+
+    def __deepcopy__(self, memo: Any) -> Self:
+        return self
 
     def describe(self, solver: Solver) -> OrderedDict[str, str]:
         """
