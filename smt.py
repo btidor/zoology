@@ -31,11 +31,7 @@ Int256 = Int[Literal[256]]
 type Expression = Symbolic | zArray[Any, Any]
 
 
-def _make_symbolic[X: Expression](
-    cls: type[X], term: BitwuzlaTerm | list[BitwuzlaTerm]
-) -> X:
-    # TODO: it's not actually possible for `term` to be a list[BitwuzlaTerm];
-    # that's due to a bug in the zbitvector types.
+def _make_symbolic[X: Expression](cls: type[X], term: BitwuzlaTerm) -> X:
     instance = cls.__new__(cls)
     instance._term = term  # type: ignore
     return instance
