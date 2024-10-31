@@ -231,12 +231,12 @@ def check_candidate(
         vprint("  > read-only\n" if verbose else ".")
         return False
 
-    solver = candidate.solver
     if not candidate.solver.check():
         vprint("  ! constraining error\n" if verbose else "!")
         return False
 
     if verbose:
+        solver = copy.deepcopy(candidate.solver)
         candidate.narrow(solver)
         newline = True
         for part in candidate.describe(solver):
