@@ -102,10 +102,6 @@ class State:
     # transfers raise an exception.
     changed: bool | None = False
 
-    # Whether we've generated a SHA3 hash since the last time this bit was
-    # reset.
-    dirty: bool = False
-
     # We want to raise an exception if a contract tries to call itself during
     # the validate function (i.e. with fully symbolic state), since this usually
     # indicates that the solver is entering an infinite loop.
@@ -185,7 +181,6 @@ class State:
         """
         digest, constraint = self.sha3.hash(input)
         self.solver.add(constraint)
-        self.dirty = True
         return digest
 
     def cleanup(self) -> None:
@@ -243,7 +238,6 @@ class State:
         if not self.solver.check():
             return None  # this path is unreachable
         solver = copy.deepcopy(self.solver)
-        self.dirty = False
         self.solver.add(bytes.compact(solver, Constraint(True)))
         return bytes
 
@@ -254,9 +248,8 @@ class State:
 
         if not self.solver.check():
             return None  # this path is unreachable
-        solver = copy.deepcopy(self.solver)
-        self.dirty = False
 
+        solver = copy.deepcopy(self.solver)
         length = solver.evaluate(data.length)
         constraint = data.length == Uint256(length)
         if solver.check(~constraint):

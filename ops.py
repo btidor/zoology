@@ -426,15 +426,6 @@ def JUMPI(
     counter = _counter.reveal()
     assert counter is not None, "JUMPI requires concrete counter"
 
-    # Calling into the SMT solver is expensive; instead, we rely on
-    # simplification as much as possible. This doesn't do a great job with SHA3
-    # constraints, so we invoke the solver after hashing data (at the next JUMPI
-    # instruction, for batching).
-    if s.dirty:
-        if not s.solver.check():
-            return Unreachable()
-        s.dirty = False
-
     s.path <<= 1
     s.cost += 2 ** (s.branching[ins.offset])
     s.branching[ins.offset] += 1
@@ -714,11 +705,6 @@ def _create_common(
     address = s.hash(seed).into(Uint160)
     assert (destination := address.reveal()) is not None
 
-    if s.dirty:
-        if not s.solver.check():
-            return Unreachable()
-        s.dirty = False
-
     sender = s.transaction.address.reveal()
     assert sender is not None, "CREATE requires concrete sender address"
     s.contracts[sender].nonce += Uint256(1)
@@ -771,10 +757,6 @@ def _call_common(
     calldata = s.compact_calldata(calldata)
     if calldata is None:
         return Unreachable()
-    if s.dirty:
-        if not s.solver.check():
-            return Unreachable()
-        s.dirty = False
 
     substates = list[State]()
     eoa = Constraint(True)

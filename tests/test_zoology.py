@@ -111,11 +111,11 @@ def test_king() -> None:
 def test_reentrance() -> None:
     fixture = [
         "00362a95 000000000000000000000000c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0\tvalue: 1125899906842623",
-        "2e1a7d4d 0000000000000000000000000000000000000000000000000003ffffffffffff\tvia proxy",
-        " -> Proxy CALL -       \tvalue: 1125899906842623",
+        "2e1a7d4d 00000000000000000000000000000000000000000000000000038d7ea4c68000\tvia proxy",
+        " -> Proxy CALL -       \tvalue: 1000000000000000",
         "     -> To 0x79cf5bd9e06f09ace1ade01aedeac5c979b77d6c:",
-        "        CALL 2e1a7d4d 00000000000000000000000000000000000000000000000000038d7ea4c68000",
-        "         -> Proxy CALL -       \tvalue: 1000000000000000",
+        "        CALL 2e1a7d4d 0000000000000000000000000000000000000000000000000003ffffffffffff",
+        "         -> Proxy CALL -       \tvalue: 1125899906842623",
         "            RETURN 00",
         "        RETURN -       ",
         "    RETURN -",
