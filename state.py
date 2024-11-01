@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import copy
-from collections import OrderedDict, defaultdict
+from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any, Callable, Iterable, Self
 
@@ -216,19 +216,6 @@ class State:
             call.narrow(solver)
 
         assert solver.check()
-
-    def describe(self, solver: Solver) -> OrderedDict[str, str]:
-        """
-        Use a model to evaluate this instance as a dictionary of attributes.
-
-        Only attributes present in the model will be included.
-        """
-        assert isinstance(self.pc, Termination)
-        r: OrderedDict[str, str] = OrderedDict()
-        returndata = self.pc.returndata.evaluate(solver)
-        if returndata:
-            r["Return"] = "0x" + returndata.hex()
-        return r
 
     def compact_bytes(self, bytes: Bytes) -> Bytes | None:
         """Simplify the given bytes using the current constraints."""

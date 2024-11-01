@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass, field
-from typing import Any, Iterable, Self
+from typing import Any, Self
 
 from Crypto.Hash import keccak
 
@@ -18,7 +18,6 @@ from smt import (
     Uint128,
     Uint256,
     concat_bytes,
-    describe,
     iff,
     implies,
     prequal,
@@ -211,26 +210,3 @@ class SHA3:
             concretized.append((vector1, digest1))
 
         return concretized
-
-    def printable(self, solver: Solver) -> Iterable[str]:
-        """Yield a human-readable evaluation using the given model."""
-        line = "SHA3"
-        seen = set[str]()
-        hashes = list(self.concrete.values()) + self.narrow(solver)
-        for vector, digest in hashes:
-            assert (scalar := vector.reveal()) is not None
-            k = "0x" + scalar.to_bytes(vector.width // 8).hex()
-            if k in seen:
-                continue
-            line += f"\t{k} "
-            if len(k) > 34:
-                yield line
-                line = "\t"
-            v = describe(digest)
-            line += f"-> {v}"
-            yield line
-            line = ""
-            seen.add(k)
-
-        if line == "":
-            yield ""

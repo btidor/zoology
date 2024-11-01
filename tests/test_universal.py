@@ -93,13 +93,6 @@ def test_basic() -> None:
         ---  📒 SAVE\tRETURN\tPx2\t---------------------------------------------------------
 
         Caller\t0xcacacacacacacacacacacacacacacacacacacaca
-
-        Balance\tR: 0xadadadadadadadadadadadadadadadadadadadad
-        \t-> 0x8000000000001
-        \tR: 0xcacacacacacacacacacacacacacacacacacacaca
-        \t-> 0xaaaaaaaaaaaaa
-
-        Storage\tW: 0xee -> 0xff (from 0x0)
     """.splitlines()
     fixture = map(lambda x: x[8:], raw[1:])
 

@@ -117,21 +117,6 @@ def printable_transition(start: State, end: State) -> Iterable[str]:
     if len(values) > 0:
         yield ""
 
-    values = end.describe(solver)
-    for k, v in values.items():
-        yield f"{k}\t{v}"
-    if len(values) > 0:
-        yield ""
-
-    for line in end.balances.printable_diff("Balance", solver, start.balances):
-        yield line
-
-    for line in end.storage.printable_diff("Storage", solver, start.storage):
-        yield line
-
-    for line in end.sha3.printable(solver):
-        yield line
-
     for call in end.calls:
         a = solver.evaluate(call.transaction.address)
         k = solver.evaluate(call.ok.ite(Uint256(1), Uint256(0)))

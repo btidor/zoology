@@ -7,7 +7,7 @@ from __future__ import annotations
 import copy
 from functools import reduce
 from itertools import batched
-from typing import Any, Iterable, Literal, Self, overload
+from typing import Any, Literal, Self, overload
 
 from Crypto.Hash import keccak
 from zbitvector import Array as zArray
@@ -296,50 +296,6 @@ class Array[K: Uint[Any], V: Uint[Any]](zArray[K, V]):
     def poke(self, key: K, value: V) -> None:
         """Set the given symbolic key, but don't track the write."""
         super().__setitem__(key, value)
-
-    def printable_diff(
-        self, name: str, solver: Solver, original: Array[K, V]
-    ) -> Iterable[str]:
-        """
-        Evaluate a diff of this array against another.
-
-        Yields a human-readable description of the differences.
-        """
-        diffs: list[tuple[str, list[tuple[K, V, V | None]]]] = [
-            ("R", [(key, original.peek(key), None) for key in self.accessed]),
-            (
-                "W",
-                [(key, self.peek(key), original.peek(key)) for key in self.written],
-            ),
-        ]
-        line = name
-
-        for prefix, rows in diffs:
-            concrete = dict[str, tuple[str, str | None]]()
-            for key, value, prior in rows:
-                k = describe(solver.evaluate(key))
-                v = describe(solver.evaluate(value))
-                p = describe(solver.evaluate(prior)) if prior is not None else None
-                if v != p:
-                    concrete[k] = (v, p)
-
-            for k in sorted(concrete.keys()):
-                line += f"\t{prefix}: {k} "
-                if len(k) > 34:
-                    yield line
-                    line = "\t"
-                v, p = concrete[k]
-                line += f"-> {v}"
-                if p is not None:
-                    if len(v) > 34:
-                        yield line
-                        line = "\t  "
-                    line += f" (from {p})"
-                yield line
-                line = ""
-
-        if line == "":
-            yield ""
 
 
 class Solver:
