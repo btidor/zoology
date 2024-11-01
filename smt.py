@@ -10,8 +10,7 @@ from itertools import batched
 from typing import Any, Literal, Self, overload
 
 from Crypto.Hash import keccak
-from zbitvector import Array as zArray
-from zbitvector import Constraint, Int, Symbolic, Uint
+from zbitvector import Array, Constraint, Int, Symbolic, Uint
 from zbitvector._bitwuzla import BZLA, BitwuzlaTerm, Kind
 
 from xsolver import Client
@@ -28,7 +27,7 @@ Uint512 = Uint[Literal[512]]
 
 Int256 = Int[Literal[256]]
 
-type Expression = Symbolic | zArray[Any, Any]
+type Expression = Symbolic | Array[Any, Any]
 
 
 def _make_symbolic[X: Expression](cls: type[X], term: BitwuzlaTerm) -> X:
@@ -166,8 +165,8 @@ def substitute2[S: Symbolic, N: int](s: S, replacements: dict[Uint[N], Uint[N]])
     )
 
 
-def compact_zarray(
-    solver: Solver, constraint: Constraint, array: zArray[Uint256, Uint8]
+def compact_array(
+    solver: Solver, constraint: Constraint, array: Array[Uint256, Uint8]
 ) -> Constraint:
     """Simplify array keys using the given solver's contraints."""
     assert solver.check()
@@ -255,47 +254,6 @@ class NarrowingError(Exception):
 
     def __str__(self) -> str:
         return self.key.hex() if self.key else "unknown"
-
-
-class Array[K: Uint[Any], V: Uint[Any]](zArray[K, V]):
-    """A wrapper around zbitvector.Array. Supports read and write tracking."""
-
-    def __init__(self, value: V | str, /) -> None:
-        """Create a new Array."""
-        super().__init__(value)
-        self.accessed = list[K]()
-        self.written = list[K]()
-
-    def __deepcopy__(self, memo: Any) -> Self:
-        result = super().__deepcopy__(memo)
-        result.accessed = copy.copy(self.accessed)
-        result.written = copy.copy(self.written)
-        return result
-
-    def clone_and_reset(self) -> Self:
-        """Clone this Array and reset access tracking."""
-        result = super().__deepcopy__(None)
-        result.accessed = []
-        result.written = []
-        return result
-
-    def __getitem__(self, key: K) -> V:
-        """Look up the given symbolic key."""
-        self.accessed.append(key)
-        return self.peek(key)
-
-    def __setitem__(self, key: K, value: V) -> None:
-        """Set the given symbolic key to the given symbolic value."""
-        self.written.append(key)
-        self.poke(key, value)
-
-    def peek(self, key: K) -> V:
-        """Look up the given symbolic key, but don't track the lookup."""
-        return super().__getitem__(key)
-
-    def poke(self, key: K, value: V) -> None:
-        """Set the given symbolic key, but don't track the write."""
-        super().__setitem__(key, value)
 
 
 class Solver:

@@ -522,8 +522,6 @@ def test_SLOAD() -> None:
     s = State().with_contract(Contract())
     s.storage[Uint256(0)] = Uint256(46)
     assert SLOAD(s, Uint256(0)).reveal() == 46
-    assert len(s.storage.accessed) == 1
-    assert s.storage.accessed[0].reveal() == 0
 
 
 def test_SSTORE() -> None:

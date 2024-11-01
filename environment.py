@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import copy
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Any, Self
@@ -96,12 +95,6 @@ class Contract:
     nonce: Uint256 = Uint256(1)  # starts at 1, see EIP-161
     invisible: bool = False  # can't be CALLed during analysis
     destructed: bool = False  # SELFDESTRUCTed, to be cleaned up
-
-    def clone_and_reset(self) -> Self:
-        """Clone this Contract and reset array access tracking."""
-        result = copy.copy(self)
-        result.storage = result.storage.clone_and_reset()
-        return result
 
     @property
     def codesize(self) -> Uint256:

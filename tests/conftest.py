@@ -87,10 +87,7 @@ def pyinstrument_combined(pytestconfig: pytest.Config) -> Iterator[None]:
 
 import gc
 
-from zbitvector._bitwuzla import BZLA, CACHE, Constraint, Option, Symbolic, Uint
-from zbitvector._bitwuzla import Array as zArray
-
-from smt import Array
+from zbitvector._bitwuzla import BZLA, CACHE, Array, Constraint, Option, Symbolic, Uint
 
 # pyright: reportPrivateUsage=false
 
@@ -107,13 +104,13 @@ def reset_bitwuzla() -> Iterator[None]:
     gc.collect()
 
     bsort: list[tuple[type[Symbolic], int]] = []
-    asort: list[tuple[type[zArray[Any, Any]], int, int]] = []
+    asort: list[tuple[type[Array[Any, Any]], int, int]] = []
 
     for cls in cast("list[type[Symbolic]]", Uint.__subclasses__()):
         bsort.append((cls, cls._sort.bv_get_size()))
 
     for cls in cast(
-        "list[type[zArray[Any, Any]]]", zArray.__subclasses__() + Array.__subclasses__()
+        "list[type[Array[Any, Any]]]", Array.__subclasses__() + Array.__subclasses__()
     ):
         if not hasattr(cls, "_sort"):
             continue
@@ -123,15 +120,15 @@ def reset_bitwuzla() -> Iterator[None]:
 
     BZLA.check_sat()
     bitem: list[tuple[Symbolic, int]] = []
-    aitem: list[tuple[zArray[Any, Any], int]] = []
+    aitem: list[tuple[Array[Any, Any], int]] = []
     for obj in gc.get_objects():
         if isinstance(obj, Symbolic):
             if not obj._term.is_bv_value():
                 continue
             s = BZLA.get_value_str(obj._term)
             bitem.append((obj, int(s, 2)))
-        elif isinstance(obj, zArray):
-            obj = cast("zArray[Any, Any]", obj)
+        elif isinstance(obj, Array):
+            obj = cast("Array[Any, Any]", obj)
             if not obj._term.is_const_array():
                 continue
             s = BZLA.get_value_str(obj._term.get_children()[0])

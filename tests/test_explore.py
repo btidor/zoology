@@ -1,6 +1,5 @@
 #!/usr/bin/env pytest
 
-
 from disassembler import Program
 from sha3 import SHA3
 from state import State

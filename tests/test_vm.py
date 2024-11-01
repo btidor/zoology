@@ -312,7 +312,7 @@ def test_delegation() -> None:
         ),
         contracts=contracts,
     )
-    state.storage.poke(Uint256(1), addresses["Delegate"].into(Uint256))
+    state.storage[Uint256(1)] = addresses["Delegate"].into(Uint256)
 
     state = complete(state)
 
@@ -398,7 +398,7 @@ def test_privacy() -> None:
             calldata=Bytes(abiencode("unlock(bytes16)") + (0x4321 << 128).to_bytes(32)),
         ),
     ).with_contract(load_binary("fixtures/12_Privacy.bin"))
-    state.storage.poke(Uint256(5), Uint256(0x4321 << 128))
+    state.storage[Uint256(5)] = Uint256(0x4321 << 128)
 
     state = complete(state)
 
@@ -441,8 +441,8 @@ def test_preservation() -> None:
         ),
         contracts=contracts,
     )
-    state.storage.poke(Uint256(0), addresses["LibraryContract"].into(Uint256))
-    state.storage.poke(Uint256(1), addresses["LibraryContract"].into(Uint256))
+    state.storage[Uint256(0)] = addresses["LibraryContract"].into(Uint256)
+    state.storage[Uint256(1)] = addresses["LibraryContract"].into(Uint256)
 
     state = complete(state)
 

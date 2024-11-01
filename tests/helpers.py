@@ -128,7 +128,7 @@ def delegation_start(programs: dict[str, Program]) -> State:
     other = Contract(address=Uint160(0xABCDEF), program=programs["Delegate"])
     start = symbolic_start(programs["Delegation"], SHA3(), "").with_contract(other)
     start.balances[start.transaction.address] = start.transaction.callvalue
-    start.storage.poke(Uint256(1), other.address.into(Uint256))
+    start.storage[Uint256(1)] = other.address.into(Uint256)
     return start
 
 
@@ -142,6 +142,6 @@ def preservation_start(programs: dict[str, Program]) -> State:
 
     start = symbolic_start(preservation.program, SHA3(), "").with_contract(library)
     start.balances[start.transaction.address] = start.transaction.callvalue
-    start.storage.poke(Uint256(0), library.address.into(Uint256))
-    start.storage.poke(Uint256(1), library.address.into(Uint256))
+    start.storage[Uint256(0)] = library.address.into(Uint256)
+    start.storage[Uint256(1)] = library.address.into(Uint256)
     return start

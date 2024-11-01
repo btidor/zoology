@@ -1,6 +1,5 @@
 #!/usr/bin/env pytest
 
-
 from bytes import Bytes
 from smt import (
     Array,

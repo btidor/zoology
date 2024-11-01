@@ -55,7 +55,7 @@ def snapshot_contracts(address: Uint160, invisible: bool = True) -> dict[int, Co
     for k, v in saved.items():
         if k == "code":
             continue
-        contract.storage.poke(Uint256(int(k)), Uint256(int(v, 16)))
+        contract.storage[Uint256(int(k))] = Uint256(int(v, 16))
         if is_sibling_contract(int(k), int(v, 16)):
             # Warning! Levels like Delegation include global non-factory
             # contracts that *do* need to be interacted with.

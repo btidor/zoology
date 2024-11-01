@@ -6,18 +6,18 @@ import copy
 from typing import Any, Iterable, Self
 
 from smt import (
+    Array,
     Constraint,
     Solver,
     Uint,
     Uint8,
     Uint64,
     Uint256,
+    compact_array,
     compact_helper,
-    compact_zarray,
     concat_bytes,
     concat_words,
     explode_bytes,
-    zArray,
 )
 
 type BytesWrite = tuple[Uint256, Uint8 | ByteSlice]
@@ -36,7 +36,7 @@ class Bytes:
         self.data = data if isinstance(data, bytes) else None
         self.length = Uint256(len(data))
         self.check_length = False
-        self.array = zArray[Uint256, Uint8](BYTES[0])
+        self.array = Array[Uint256, Uint8](BYTES[0])
         if isinstance(data, bytes):
             for i in range(len(INTEGERS), len(data)):
                 INTEGERS.append(Uint256(i))
@@ -59,11 +59,11 @@ class Bytes:
         # should be a reasonable upper limit.
         return cls.custom(
             Uint64(length if length is not None else f"{name}.length").into(Uint256),
-            zArray[Uint256, Uint8](name),
+            Array[Uint256, Uint8](name),
         )
 
     @classmethod
-    def custom(cls, length: Uint256, array: zArray[Uint256, Uint8]) -> Bytes:
+    def custom(cls, length: Uint256, array: Array[Uint256, Uint8]) -> Bytes:
         """Create a new Bytes with custom properties."""
         result = cls.__new__(cls)
         result.data, result.length, result.array = None, length, array
@@ -184,7 +184,7 @@ class Memory:
     def __init__(self, data: bytes = b"") -> None:
         """Create a new, empty Memory."""
         self.length = Uint256(0)
-        self.array = zArray[Uint256, Uint8](BYTES[0])
+        self.array = Array[Uint256, Uint8](BYTES[0])
         self.writes = list[BytesWrite]()  # writes to apply *on top of* array
         # When hashing mapping keys, Solidity programs put the values to be
         # hashed in the reserved range [0x0, 0x40). Splitting up the key into
@@ -285,7 +285,7 @@ class Memory:
             self.writes.pop(0)
 
         assert solver.check()
-        return compact_zarray(solver, constraint, self.array)
+        return compact_array(solver, constraint, self.array)
 
     def reveal(self) -> bytes | None:
         """Unwrap this instance to bytes."""
