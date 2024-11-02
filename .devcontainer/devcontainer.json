@@ -20,7 +20,7 @@
 	"postCreateCommand": "pip3 install --break-system-packages -r requirements.txt",
 	"remoteUser": "vscode",
 	"runArgs": [
-		"--memory=15g",
-		"--memory-swap=20g"
+		"--memory=12g",
+		"--memory-swap=12g"
 	]
 }
