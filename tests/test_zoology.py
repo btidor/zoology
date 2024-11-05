@@ -69,7 +69,7 @@ def test_telephone() -> None:
 def test_token() -> None:
     # This is correct! To solve this level, the player must transfer at least 20
     # tokens to any other address, causing an integer underflow. The recipient
-    # address is arbitrary, and our solver apparently produces it by adding 1 to
+    # address is arbitrary, and our solver sometimes produces it by adding 1 to
     # the player address.
     fixture = [
         "a9059cbb 000000000000000000000000ffffffffffffffffffffffffffffffffffffffff0000000000000000000000000000000000000000000000000000000000000015",
@@ -103,7 +103,7 @@ def test_king() -> None:
         "-       \tvalue: 1125899906842623\tvia proxy",
         "validateInstance(...)",
         " -> Proxy CALL -       ",
-        "    REVERT -",
+        "    REVERT 00",
     ]
     check_level(9, fixture)
 
@@ -111,11 +111,11 @@ def test_king() -> None:
 def test_reentrance() -> None:
     fixture = [
         "00362a95 000000000000000000000000c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0\tvalue: 1125899906842623",
-        "2e1a7d4d 00000000000000000000000000000000000000000000000000038d7ea4c68000\tvia proxy",
-        " -> Proxy CALL -       \tvalue: 1000000000000000",
+        "2e1a7d4d 0000000000000000000000000000000000000000000000000003ffffffffffff\tvia proxy",
+        " -> Proxy CALL -       \tvalue: 1125899906842623",
         "     -> To 0x79cf5bd9e06f09ace1ade01aedeac5c979b77d6c:",
-        "        CALL 2e1a7d4d 0000000000000000000000000000000000000000000000000003ffffffffffff",
-        "         -> Proxy CALL -       \tvalue: 1125899906842623",
+        "        CALL 2e1a7d4d 00000000000000000000000000000000000000000000000000038d7ea4c68000",
+        "         -> Proxy CALL -       \tvalue: 1000000000000000",
         "            RETURN 00",
         "        RETURN -       ",
         "    RETURN -",
@@ -282,9 +282,9 @@ def test_good_samaritan() -> None:
 
 def test_gatekeeper_three() -> None:
     fixture = [
-        "b9966e56\tvia proxy",
         "f7edf099",
-        "c960174e 00000000000000000000000000000000000000000000000000000000637e3113",
+        "b9966e56\tvia proxy",
+        "c960174e 00000000000000000000000000000000000000000000000000000000637e3107",
         "SELFDESTRUCT\tvalue: 1125899906842623",
         "e97dcb62\tvia proxy",
         " -> Proxy CALL -       \tvalue: 1000000000000000",

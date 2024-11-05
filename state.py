@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import copy
-from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any, Callable, Iterable, Self
 
@@ -86,11 +85,10 @@ class State:
     # taken, 0 if not. MSB-first with a leading 1 prepended.
     path: int = 1
 
-    # Tracks the number of times each JUMPI instruction has been reached. States
-    # are prioritized by their cost, which is computed as the sum of the branch
-    # counts, exponentially weighted to penalize long or infinite loops.
-    branching: dict[int, int] = field(default_factory=lambda: defaultdict(lambda: 0))
+    # These variables help the search avoid getting stuck in infinite loops by
+    # prioritizing states according to a cost function.
     cost: int = 0
+    last_jumpi: int = -1
 
     # If this State represents a subcontext, this callback should be called upon
     # termination. It takes a copy of this State as an argument and returns the

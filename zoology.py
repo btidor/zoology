@@ -193,8 +193,11 @@ def make_heads(prefix: Sequence) -> list[State]:
             mystery_proxy=PROXY,
             mystery_size=previous.mystery_size,
             gas_count=0,
-            cost=previous.cost * 2,
-            branching=copy.deepcopy(previous.branching),
+            # Search strategy: each transaction pushes the sequence into the
+            # subsequent search stage. We apply a greater penalty than with
+            # CALL, etc. since transactions have greater fanout (they create
+            # more subsequent states).
+            cost=previous.cost + 16 if len(prefix.states) > 1 else 0,
         )
         # Because the callvalue of each head is about 16 times less than the
         # player's starting balance, we can guarantee that the transfer always
@@ -212,7 +215,7 @@ def check_candidate(
 ) -> bool | Solution:
     """Check whether a sequence ."""
     if verbose:
-        vprint(f"- {candidate.pz()}\n")
+        vprint(f"- {candidate.pz()} ({candidate.states[-1].cost})\n")
     else:
         global count
         if count > 0:

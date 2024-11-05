@@ -427,11 +427,16 @@ def JUMPI(
     assert counter is not None, "JUMPI requires concrete counter"
 
     s.path <<= 1
-    s.cost += 2 ** (s.branching[ins.offset])
-    s.branching[ins.offset] += 1
     c = b == Uint256(0)
     match c.reveal():
         case None:  # unknown, must prepare both branches :(
+            # Search strategy: no preference between branches except to deprioritize
+            # infinite loops. Big hack: in our sample, these loops consist of a single
+            # JUMPI instruction (or a JUMP and a JUMPI), so they're easy to identify...
+            if s.last_jumpi == ins.offset:
+                s.cost += 1
+            s.last_jumpi = ins.offset
+
             s0, s1 = copy.deepcopy(s), s
             s0.solver.add(c)
 
@@ -916,8 +921,9 @@ def _call_common(
                 s.path <<= 1
                 state = copy.deepcopy(s)
                 state.path |= 1
-                state.cost *= 2
                 state.solver.add(cond)
+                # This case is kind of weird, so penalize it in favor of Case I.
+                state.cost += 1
                 state.gas_hogged += gas
                 call = GasHogCall(transaction, Constraint(False), Bytes(), (), gas)
                 _apply_call(state, call, retSize, retOffset)
@@ -1039,7 +1045,9 @@ def _descend_substate(
         gas_count=state.gas_count,
         solver=state.solver,
         path=state.path,
-        cost=state.cost,
+        # Search strategy: every time we descend into a subcontext (CALL,
+        # CREATE, etc.), push that branch into a later search stage.
+        cost=state.cost + 2,
         changed=state.changed if not static else None,
         skip_self_calls=state.skip_self_calls,
     )
