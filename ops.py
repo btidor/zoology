@@ -417,6 +417,7 @@ def JUMP(s: State, _counter: Uint256) -> None:
     # that all jump targets are valid and within the body of the code, which is
     # why it's safe to strip the metadata trailer.
     s.pc = s.program.jumps[counter]
+    s.trace.append(f"{counter:04X}")
 
 
 def JUMPI(
@@ -439,16 +440,20 @@ def JUMPI(
 
             s0, s1 = copy.deepcopy(s), s
             s0.solver.add(c)
+            s0.trace.append(f"{ins.offset+1:04X}")
 
             s1.pc = s.program.jumps[counter]
             s1.path |= 1
             s1.solver.add(~c)
+            s1.trace.append(f"{counter:04X}")
             return Jump(targets=(s0, s1))
         case True:  # branch never taken, fall through
+            s.trace.append(f"{ins.offset+1:04X}")
             return None
         case False:  # branch always taken
             s.pc = s.program.jumps[counter]
             s.path |= 1
+            s.trace.append(f"{counter:04X}")
             return None
 
 
@@ -1028,6 +1033,7 @@ def _descend_substate(
     transfer_value: Uint256,
     static: bool = False,
 ) -> State:
+    assert (address := transaction.address.reveal()) is not None
     substate = State(
         suffix=f"{state.suffix}-{len(state.calls)}",
         block=state.block,
@@ -1048,6 +1054,7 @@ def _descend_substate(
         # Search strategy: every time we descend into a subcontext (CALL,
         # CREATE, etc.), push that branch into a later search stage.
         cost=state.cost + 2,
+        trace=state.trace + ["0x" + address.to_bytes(20).hex()],
         changed=state.changed if not static else None,
         skip_self_calls=state.skip_self_calls,
     )
@@ -1084,6 +1091,7 @@ def _descend_substate(
         next.solver = substate.solver
         next.path = substate.path
         next.cost = substate.cost
+        next.trace = substate.trace
         if static:
             assert substate.changed is not True
         else:

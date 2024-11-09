@@ -89,6 +89,7 @@ class State:
     # prioritizing states according to a cost function.
     cost: int = 0
     last_jumpi: int = -1
+    trace: list[str] = field(default_factory=list)
 
     # If this State represents a subcontext, this callback should be called upon
     # termination. It takes a copy of this State as an argument and returns the
