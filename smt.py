@@ -20,6 +20,9 @@ Uint64 = Uint[Literal[64]]
 Uint160 = Uint[Literal[160]]
 Uint256 = Uint[Literal[256]]
 
+Uint5 = Uint[Literal[5]]
+Uint52 = Uint[Literal[52]]
+Uint59 = Uint[Literal[59]]
 Uint128 = Uint[Literal[128]]
 Uint257 = Uint[Literal[257]]
 Uint512 = Uint[Literal[512]]
@@ -259,6 +262,102 @@ def _quick_prefix(term: BitwuzlaTerm) -> str | None:
                 return BZLA.get_value_str(term)
         case _:
             pass
+
+
+def bvadd_harder[N: int](a: Uint[N], b: Uint[N]) -> Uint[N]:
+    """Return `(bvadd a b)` with better preprocessing."""
+    return a + b
+
+    if (const := a.reveal()) is None:
+        if (const := b.reveal()) is None:
+            return a + b
+        term = _term(a)
+    else:
+        term = _term(b)
+
+    if term.get_kind() != Kind.BV_CONCAT:
+        return a + b
+
+    assert a.width == b.width
+    pre, post = term.get_children()
+    if not pre.is_bv_value() or int(BZLA.get_value_str(pre), 2) != 0:
+        return a + b
+    elif int.bit_length(const) > post.get_sort().bv_get_size():
+        return a + b
+
+    prefix = BZLA.mk_bv_value(BZLA.mk_bv_sort(pre.get_sort().bv_get_size() - 1), 0)
+    suffix = BZLA.mk_term(
+        Kind.BV_ADD,
+        (
+            BZLA.mk_term(Kind.BV_ZERO_EXTEND, (post,), (1,)),
+            BZLA.mk_bv_value(BZLA.mk_bv_sort(post.get_sort().bv_get_size() + 1), const),
+        ),
+    )
+    return _make_symbolic(a.__class__, BZLA.mk_term(Kind.BV_CONCAT, (prefix, suffix)))
+
+
+def bvand_harder[N: int](a: Uint[N], b: Uint[N]) -> tuple[Uint[N], Constraint | None]:
+    """TODO."""
+    # When making a CALL, Solidity always copies the returndata to memory[0]. In
+    # doing so, it reserves a 32-byte aligned region using the following
+    # equation:
+    #
+    #     freeptr += (RETURNDATA.length + 0x1F) & ~0x1F
+    #
+    # Unfortunately, Bitwuzla doesn't handle this formula very well: we make
+    # RETURNDATA.length a Uint64 so that index math doesn't overflow, but that
+    # logic isn't propagated through the rounding formula.
+    #
+    # Instead, we'd like to detect the equation above and replace it with a new
+    # variable, RETURNDATA.length2, that has the relevant properties.
+    #
+    # [0] https://github.com/ethereum/solidity/issues/12306 [1]
+    # https://github.com/ethereum/solidity/blob/7893614a/libsolidity/codegen/ExpressionCompiler.cpp#L2969-L2971
+    #
+    default = a & b
+    if _term(default).is_bv_value():
+        return default, None
+
+    if (c := a.reveal()) is not None:
+        result = _term(b)
+    elif (c := b.reveal()) is not None:
+        result = _term(a)
+    else:
+        return default, None
+
+    if c != 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE0:
+        return default, None
+    elif result.get_kind() != Kind.BV_ADD:
+        return default, None
+
+    d, e = result.get_children()
+    if d.is_bv_value():
+        pass
+    elif e.is_bv_value():
+        d, e = e, d
+    else:
+        return default, None
+
+    if int(BZLA.get_value_str(d), 2) != 0x1F or e.get_kind() != Kind.BV_CONCAT:
+        return default, None
+
+    f, g = e.get_children()
+    if f.is_bv_value():
+        pass
+    elif g.is_bv_value():
+        f, g = g, f
+    else:
+        return default, None
+
+    if int(BZLA.get_value_str(f), 2) != 0 or (sym := g.get_symbol()) is None:
+        return default, None
+
+    assert g.get_sort().bv_get_size() == 64
+    result = BZLA.mk_term(
+        Kind.BV_CONCAT, (f, _term(Uint59(sym + "2")), _term(Uint5(0)))
+    )
+    constraint = BZLA.mk_term(Kind.EQUAL, (_term(default), result))
+    return _make_symbolic(a.__class__, result), _make_symbolic(Constraint, constraint)
 
 
 def get_constants(s: Symbolic | BitwuzlaTerm) -> dict[str, BitwuzlaTerm]:

@@ -18,6 +18,8 @@ from smt import (
     Uint256,
     Uint257,
     Uint512,
+    bvadd_harder,
+    bvand_harder,
     bvlshr_harder,
     concat_bytes,
     overflow_safe,
@@ -44,7 +46,7 @@ def STOP(s: State) -> None:
 
 def ADD(a: Uint256, b: Uint256) -> Uint256:
     """01 - Addition operation."""
-    return a + b
+    return bvadd_harder(a, b)
 
 
 def MUL(a: Uint256, b: Uint256) -> Uint256:
@@ -158,9 +160,12 @@ def ISZERO(a: Uint256) -> Uint256:
     return (a == Uint256(0)).ite(Uint256(1), Uint256(0))
 
 
-def AND(a: Uint256, b: Uint256) -> Uint256:
+def AND(s: State, a: Uint256, b: Uint256) -> Uint256:
     """16 - Bitwise AND operation."""
-    return a & b
+    result, constraint = bvand_harder(a, b)
+    if constraint is not None:
+        s.solver.add(constraint)
+    return result
 
 
 def OR(a: Uint256, b: Uint256) -> Uint256:
