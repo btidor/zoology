@@ -18,7 +18,7 @@ from loops import flatten_loops
 from sequence import Sequence
 from smt import (
     Constraint,
-    Uint52,
+    Uint64,
     Uint160,
     Uint256,
     describe,
@@ -181,8 +181,8 @@ def make_heads(prefix: Sequence) -> list[State]:
                 # ASSUMPTION: all transactions are originated by the player, but
                 # may (or may not!) be bounced through a "proxy" contract.
                 caller=Constraint(f"CALLERAB{suffix}").ite(PLAYER, PROXY),
-                # ASSUMPTION: each transaction sends less than ~0.0045 ETH.
-                callvalue=Uint52(f"CALLVALUE{suffix}").into(Uint256),
+                # ASSUMPTION: each transaction sends less than ~18 ETH.
+                callvalue=Uint64(f"CALLVALUE{suffix}").into(Uint256),
                 calldata=Bytes.symbolic(f"CALLDATA{suffix}"),
                 gasprice=Uint256(f"GASPRICE{suffix}"),
             ),

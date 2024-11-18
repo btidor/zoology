@@ -20,7 +20,6 @@ Uint64 = Uint[Literal[64]]
 Uint160 = Uint[Literal[160]]
 Uint256 = Uint[Literal[256]]
 
-Uint52 = Uint[Literal[52]]
 Uint128 = Uint[Literal[128]]
 Uint257 = Uint[Literal[257]]
 Uint512 = Uint[Literal[512]]

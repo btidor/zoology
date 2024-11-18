@@ -8,7 +8,7 @@ from typing import Any, Iterable, Self
 from environment import Block
 from smt import (
     Solver,
-    Uint52,
+    Uint64,
     Uint160,
     Uint256,
 )
@@ -148,7 +148,8 @@ def _selfdestruct(state: State, i: int) -> dict[int, Uint256]:
     for address, contract in state.contracts.items():
         if contract.invisible:
             continue
-        d = Uint52(f"SELFDESTRUCT@{address.to_bytes(20).hex()}-{i}").into(Uint256)
+        # ASSUMPTION: each transaction sends less than ~18 ETH.
+        d = Uint64(f"SELFDESTRUCT@{address.to_bytes(20).hex()}-{i}").into(Uint256)
         state.balances[PLAYER] -= d
         state.balances[Uint160(address)] += d
         deltas[address] = d
