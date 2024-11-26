@@ -195,8 +195,6 @@ class Memory:
             self[Uint256(i)] = BYTES[b]
 
     def __getitem__(self, i: Uint256) -> Uint8:
-        if (i < self.length).reveal() is False:
-            return BYTES[0]
         item = self.array[i]
         for k, v in self.writes:
             if isinstance(v, ByteSlice):
