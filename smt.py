@@ -5,13 +5,15 @@
 from __future__ import annotations
 
 import copy
+import re
+from collections import defaultdict
 from functools import reduce
-from itertools import batched
+from itertools import batched, repeat
 from typing import Any, Literal, Self, overload
 
 from Crypto.Hash import keccak
 from zbitvector import Array, Constraint, Int, Symbolic, Uint
-from zbitvector._bitwuzla import BZLA, BitwuzlaTerm, Kind
+from zbitvector._bitwuzla import BZLA, BitwuzlaSort, BitwuzlaTerm, Kind
 
 from xsolver import Client
 
@@ -28,6 +30,9 @@ Int256 = Int[Literal[256]]
 
 type Expression = Symbolic | Array[Any, Any]
 
+Leading0s = re.compile(r"\A0{64}")
+Leading1s = re.compile(r"\A1{64}")
+
 
 def _make_symbolic[X: Expression](cls: type[X], term: BitwuzlaTerm) -> X:
     instance = cls.__new__(cls)
@@ -41,6 +46,10 @@ def _from_expr[S: Symbolic](cls: type[S], kind: Kind, *args: Expression) -> S:
 
 def _term(x: Expression) -> BitwuzlaTerm:
     return x._term  # type: ignore
+
+
+def _sort(cls: type[Symbolic]) -> BitwuzlaSort:
+    return cls._sort  # type: ignore
 
 
 def make_uint(n: int) -> type[Uint[Any]]:
@@ -101,7 +110,12 @@ def prequal(a: Uint[Any], b: Uint[Any]) -> bool:
 
 
 def bvlshr_harder[N: int](value: Uint[N], shift: Uint[N]) -> Uint[N]:
-    """Return `(bvlshr value shift)` with better preprocessing."""
+    """
+    Return `(bvlshr value shift)` with better preprocessing.
+
+    This (best-effort!) helper breaks open `concat`s, inserts leading zeroes on
+    the left, and discards terms that are shifted out on the right.
+    """
     default = value >> shift
     if default.reveal() is not None or (n := shift.reveal()) is None or n == 0:
         return default
@@ -123,6 +137,130 @@ def bvlshr_harder[N: int](value: Uint[N], shift: Uint[N]) -> Uint[N]:
         else:
             return default
     return _make_symbolic(value.__class__, BZLA.mk_term(Kind.BV_CONCAT, (prefix, term)))
+
+
+def smart_arith(value: Uint256) -> tuple[Uint256, int | None]:
+    """
+    Aggressively simplify an addition or subtraction operation.
+
+    Intended for index arithmetic where a fixed term (memory offset) is
+    subtracted out of an expression containing itself.
+    """
+    constant = 0
+    terms = defaultdict[BitwuzlaTerm, int](lambda: 0)
+    queue = [(_term(value), True)]
+    while queue:
+        term, msb = queue.pop()
+        match term.get_kind():
+            case Kind.VAL:
+                v = int(BZLA.get_value_str(term), 2)
+                constant += v if msb else -v
+            case Kind.BV_ADD:
+                queue.extend((t, msb) for t in term.get_children())
+            case Kind.BV_NOT:
+                term = term.get_children()[0]
+                constant += -1 if msb else 1
+                queue.append((term, not msb))
+            case _:
+                terms[term] += 1 if msb else -1
+
+    additions, removals = list[BitwuzlaTerm](), list[BitwuzlaTerm]()
+    constant %= 2**value.width
+    term = BZLA.mk_bv_value(_term(value).get_sort(), constant)
+    additions.append(term)
+    if constant == 0:
+        zeroes, ones = True, True
+    elif constant < 2 ** (value.width - 1):
+        zeroes, ones = True, False
+    else:
+        zeroes, ones = False, True
+
+    for term, count in terms.items():
+        if count == 0:
+            continue
+
+        prefix = _quick_prefix(term)
+        if prefix is None:
+            zeroes, ones = False, False
+        else:
+            if not Leading0s.match(prefix):
+                if count > 0:
+                    zeroes = False
+                else:
+                    ones = False
+            if not Leading1s.match(prefix):
+                if count > 0:
+                    ones = False
+                else:
+                    zeroes = False
+
+        if count > 0:
+            additions.extend(repeat(term, count))
+        else:
+            removals.extend(repeat(term, -count))
+
+    term = _bvsum256(additions)
+    if removals:
+        term = BZLA.mk_term(Kind.BV_SUB, (term, _bvsum256(removals)))
+
+    if zeroes:
+        msb = 0
+    elif ones:
+        msb = 1
+    else:
+        msb = None
+
+    return _make_symbolic(Uint256, term), msb
+
+
+def _bvsum256(values: list[BitwuzlaTerm]) -> BitwuzlaTerm:
+    """Compute the sum of a list of 256-bit bitvectors."""
+    match len(values):
+        case 0:
+            return BZLA.mk_bv_value(_sort(Uint256), 0)
+        case 1:
+            return values[0]
+        case _:
+            return BZLA.mk_term(Kind.BV_ADD, values)
+
+
+def smart_cmp(constraint: Constraint) -> bool | None:
+    """
+    Aggressively simplify an equality operation.
+
+    Uses `quick_msb()` to check if the high bits differ. Returns False if the
+    term definitively simplifies to False, otherwise None.
+    """
+    term = _term(constraint)
+    if term.get_kind() != Kind.EQUAL:
+        return None
+
+    lterm, rterm = term.get_children()
+    if (a := _quick_prefix(lterm)) is None:
+        return None
+    elif (b := _quick_prefix(rterm)) is None:
+        return None
+    elif a == b:
+        return None  # didn't compare other digits, so unknown
+    return False
+
+
+def _quick_prefix(term: BitwuzlaTerm) -> str | None:
+    """
+    Quickly extract the concrete prefix of the given term, if available.
+
+    Handles concrete values and simple `concat`s. To avoid performance issues,
+    does *not* descend into nested `concat`s.
+    """
+    match term.get_kind():
+        case Kind.VAL:
+            return BZLA.get_value_str(term)
+        case Kind.BV_CONCAT:
+            term, _ = term.get_children()
+            if term.get_kind() == Kind.VAL:
+                return BZLA.get_value_str(term)
+        case _:
+            pass
 
 
 def get_constants(s: Symbolic | BitwuzlaTerm) -> dict[str, BitwuzlaTerm]:

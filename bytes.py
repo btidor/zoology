@@ -18,6 +18,8 @@ from smt import (
     concat_bytes,
     concat_words,
     explode_bytes,
+    smart_arith,
+    smart_cmp,
 )
 
 type BytesWrite = tuple[Uint256, Uint8 | ByteSlice]
@@ -196,15 +198,34 @@ class Memory:
 
     def __getitem__(self, i: Uint256) -> Uint8:
         item = self.array[i]
-        for k, v in self.writes:
-            if isinstance(v, ByteSlice):
-                destOffset = k
-                item = ((i >= destOffset) & (i < destOffset + v.length)).ite(
-                    v[i - destOffset],
-                    item,
-                )
-            else:
-                item = (i == k).ite(v, item)
+        for at, write in self.writes:
+            match write:
+                case ByteSlice():
+                    # Compute the index relative to the grafted slice, assuming
+                    # the index falls within this write.
+                    delta, sign = smart_arith(i - at)
+                    # ASSUMPTION: all memory indexes are small (below 2^64), so
+                    # index math never underflows.
+                    if sign == 1:
+                        continue  # delta < 0; this write is not a match
+
+                    # Quickly check if the index falls outside this write, in
+                    # the other direction.
+                    _, sign = smart_arith(write.length - delta)
+                    # ASSUMPTION: all memory grafts are smaller than 2^64, so
+                    # index math never underflows.
+                    if sign == 1:
+                        continue  # delta >= write.length; not a match
+
+                    item = (delta < write.length).ite(write[delta], item)
+                case Uint():
+                    match smart_cmp(eq := (i == at)):
+                        case True:
+                            item = write
+                        case False:
+                            pass
+                        case None:
+                            item = eq.ite(write, item)
         return item
 
     def __setitem__(self, i: Uint256, v: Uint8) -> None:
