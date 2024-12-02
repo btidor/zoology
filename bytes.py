@@ -33,6 +33,8 @@ INTEGERS = list[Uint256]()
 class Bytes:
     """An immutable, symbolic-length sequence of symbolic bytes."""
 
+    __slots__ = ("data", "length", "check_length", "array")
+
     def __init__(self, data: bytes | list[Uint8] = b"") -> None:
         """Create a new Bytes from concrete data."""
         self.data = data if isinstance(data, bytes) else None
@@ -135,6 +137,8 @@ class Bytes:
 class ByteSlice(Bytes):
     """Represents an immutable slice of Bytes or Memory."""
 
+    __slots__ = ("inner", "offset")
+
     def __init__(self, inner: Bytes | Memory, offset: Uint256, size: Uint256) -> None:
         """Create a new ByteSlice."""
         self.inner = copy.deepcopy(inner)
@@ -182,6 +186,7 @@ class Memory:
     """A mutable, symbolic-length sequence of symbolic bytes."""
 
     __hash__ = None  # type: ignore
+    __slots__ = ("length", "array", "writes", "wordcache")
 
     def __init__(self, data: bytes = b"") -> None:
         """Create a new, empty Memory."""
