@@ -46,7 +46,13 @@ def search(
         while isinstance(state.pc, int):
             if verbose > 2:
                 print(state.program.instructions[state.pc])
-            match step(state):
+            try:
+                r = step(state)
+            except:
+                print(state.transaction.address)
+                print(":".join(state.trace))
+                raise
+            match r:
                 case None:
                     if verbose > 2:
                         for x in reversed(state.stack):
@@ -143,7 +149,7 @@ def starting_sequence(
         assert isinstance(end, State)
 
     assert isinstance(end.pc, Termination)
-    assert (data := end.pc.returndata.reveal()) is not None
+    assert (data := end.pc.returndata.reveal(None)) is not None
     error = data[68:].strip().decode()
     assert end.pc.success, f"createInstance() failed{': ' + error if error else ''}"
     instance = Uint160(int.from_bytes(data))
@@ -284,7 +290,7 @@ def handle_level(factory: Uint160, args: argparse.Namespace) -> None:
         for address, contract in beginning.states[-1].contracts.items():
             vprint("- 0x" + address.to_bytes(20).hex())
             vprint(" (*)\n" if address == beginning.instance.reveal() else "\n")
-            assert (code := contract.program.code.reveal()) is not None
+            assert (code := contract.program.code.reveal(None)) is not None
             vprint(": " + code.hex() + "\n")
 
     if solution is None:

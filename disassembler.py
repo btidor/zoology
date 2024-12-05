@@ -80,7 +80,7 @@ def disassemble(code: Bytes) -> Program:
     jumps = dict[int, int]()
     offset = 0
     trailer = None
-    data = code.reveal() or code
+    data = code.reveal(None) or code
     n = code.length.reveal()
     assert n is not None, "disassemble requires concrete-length code"
 
@@ -124,7 +124,7 @@ def printable_disassembly(code: Bytes) -> Iterable[str]:
 
     Yields a human-readable string for each instruction.
     """
-    assert (data := code.reveal()) is not None
+    assert (data := code.reveal(None)) is not None
     offset = 0
     while offset < len(data):
         ins = _decode_instruction(data, offset)

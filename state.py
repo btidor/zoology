@@ -218,18 +218,11 @@ class State:
 
     def compact_bytes(self, bytes: Bytes) -> Bytes | None:
         """Simplify the given bytes using the current constraints."""
-        if bytes.reveal() is not None:
-            return bytes
-
-        if not self.solver.check():
-            return None  # this path is unreachable
-        solver = copy.deepcopy(self.solver)
-        self.solver.add(bytes.compact(solver, Constraint(True)))
         return bytes
 
-    def compact_calldata(self, data: Bytes) -> Bytes | None:
+    def compact_calldata(self, data: Bytes, solver: Solver) -> Bytes | None:
         """Simplify the given bytes (optimized for calldata)."""
-        if data.slice(Uint256(0), Uint256(4)).reveal():
+        if data.slice(Uint256(0), Uint256(4)).reveal(solver):
             return data
 
         if not self.solver.check():

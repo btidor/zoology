@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import copy
-import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from functools import reduce, total_ordering
@@ -12,7 +11,7 @@ from typing import Any, Literal, Self, overload
 
 from Crypto.Hash import keccak
 from zbitvector import Array, Constraint, Int, Symbolic, Uint
-from zbitvector._bitwuzla import BZLA, BitwuzlaTerm, Kind
+from zbitvector._bitwuzla import BZLA, BitwuzlaTerm, Kind, Result
 
 from xsolver import Client
 
@@ -28,9 +27,6 @@ Uint512 = Uint[Literal[512]]
 Int256 = Int[Literal[256]]
 
 type Expression = Symbolic | Array[Any, Any]
-
-Leading0s = re.compile(r"\A0{64}")
-Leading1s = re.compile(r"\A1{64}")
 
 
 def _make_symbolic[X: Expression](cls: type[X], term: BitwuzlaTerm) -> X:
@@ -140,10 +136,16 @@ class Addend:
     """TODO."""
 
     constant: int = field(default=0)
-    terms: Counter[BitwuzlaTerm] = field(default_factory=Counter)
+    terms: frozenset[tuple[BitwuzlaTerm, int]] = field(default_factory=frozenset)
+
+    def __copy__(self) -> Self:
+        return self
+
+    def __deepcopy__(self, memo: Any) -> Self:
+        return self
 
     @classmethod
-    def from_symbolic(cls, value: Uint256) -> Self:
+    def from_symbolic(cls, value: Uint256, solver: Solver) -> Self:
         """Create a new Addend."""
         constant = 0
         terms = defaultdict[BitwuzlaTerm, int](lambda: 0)
@@ -168,13 +170,24 @@ class Addend:
 
         for term, count in terms.items():
             assert count > 0
-            prefix = _quick_prefix(term)
-            assert prefix is not None and prefix.startswith("0")
+            # TODO: need to check more digits...
+            if _quick_msb(term) is not False:
+                bad = BZLA.mk_term(
+                    Kind.BV_SLT,
+                    (
+                        term,
+                        BZLA.mk_bv_value(Uint256._sort, 0),  # type: ignore
+                    ),
+                )
+                BZLA.assume_formula(bad, _term(solver.constraint))
+                assert BZLA.check_sat() == Result.UNSAT, f"TODO: {term.dump()}"
+                assert BZLA.check_sat() == Result.SAT  # reset
 
-        return cls(constant, Counter(terms))
+        return cls(constant, frozenset(Counter(terms).items()))
 
     def __add__(self, other: Addend) -> Addend:
-        return Addend(self.constant + other.constant, self.terms + other.terms)
+        t0, t1 = Counter(dict(self.terms)), Counter(dict(other.terms))
+        return Addend(self.constant + other.constant, frozenset((t0 + t1).items()))
 
     def __sub__(self, other: Addend) -> Addend:
         assert self >= other, "TODO: document me!"
@@ -183,15 +196,17 @@ class Addend:
     def __lt__(self, other: Addend) -> bool:
         if self.terms == other.terms:
             return self.constant < other.constant
-        elif self.terms - other.terms:
-            assert self.constant >= other.constant, "TODO"
+        elif Counter(dict(self.terms)) - Counter(dict(other.terms)):
+            assert self.constant >= other.constant, f"TODO: {self} {other}"
             return False
-        elif other.terms - self.terms:
-            assert other.constant >= self.constant, "TODO"
+        elif Counter(dict(other.terms)) - Counter(dict(self.terms)):
+            print("---")
+            for term, ct in other.terms:
+                print(ct, term.dump())
+            assert other.constant >= self.constant, f"TODO: {self} {other}"
             return True
         else:
             raise NotImplementedError("uh-oh")
-
 
     def reveal(self) -> int | None:
         """TODO."""
@@ -200,22 +215,31 @@ class Addend:
         return self.constant
 
 
-def _quick_prefix(term: BitwuzlaTerm) -> str | None:
+def _quick_msb(term: BitwuzlaTerm, recurse: bool = True) -> bool | None:
     """
-    Quickly extract the concrete prefix of the given term, if available.
+    Quickly extract the most significant bit of the given term, if feasible.
 
     Handles concrete values and simple `concat`s. To avoid performance issues,
     does *not* descend into nested `concat`s.
     """
     match term.get_kind():
         case Kind.VAL:
-            return BZLA.get_value_str(term)
+            return BZLA.get_value_str(term)[0] == "1"
         case Kind.BV_CONCAT:
+            if not recurse:
+                return None
             term, _ = term.get_children()
-            if term.get_kind() == Kind.VAL:
-                return BZLA.get_value_str(term)
+            return _quick_msb(term, False)
+        case Kind.BV_AND:
+            arg0, arg1 = term.get_children()
+            return _quick_msb(arg0) and _quick_msb(arg1)
+        case Kind.BV_ADD:
+            arg0, arg1 = term.get_children()
+            if _quick_msb(arg0) is False and _quick_msb(arg1) is False:
+                return False  # TODO: need to check two digits down...
+            return None
         case _:
-            pass
+            return None
 
 
 def get_constants(s: Symbolic | BitwuzlaTerm) -> dict[str, BitwuzlaTerm]:
