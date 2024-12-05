@@ -94,7 +94,7 @@ class SHA3:
         elif size == 0:
             # Case II: Empty Digest (zero length).
             return (EMPTY_DIGEST, Constraint(True))
-        elif (data := input.reveal(None)) is None:
+        elif (data := input.reveal()) is None:
             # Case III: Symbolic Digest (concrete length, symbolic data).
             vector = input.bigvector()
             for other, digest in self.symbolic:

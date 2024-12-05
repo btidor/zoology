@@ -242,9 +242,7 @@ def CALLVALUE(s: State) -> Uint256:
 
 def CALLDATALOAD(s: State, i: Uint256) -> Uint256:
     """35 - Get input data of current environment."""
-    return concat_bytes(
-        *[s.transaction.calldata.get(i + Uint256(j), s.solver) for j in range(32)]
-    )
+    return concat_bytes(*[s.transaction.calldata[i + Uint256(j)] for j in range(32)])
 
 
 def CALLDATASIZE(s: State) -> Uint256:
@@ -254,7 +252,7 @@ def CALLDATASIZE(s: State) -> Uint256:
 
 def CALLDATACOPY(s: State, destOffset: Uint256, offset: Uint256, size: Uint256) -> None:
     """37 - Copy input data in current environment to memory."""
-    s.memory.graft(s.transaction.calldata.slice(offset, size), destOffset, s.solver)
+    s.memory.graft(s.transaction.calldata.slice(offset, size), destOffset)
 
 
 def CODESIZE(s: State) -> Uint256:
@@ -264,7 +262,7 @@ def CODESIZE(s: State) -> Uint256:
 
 def CODECOPY(s: State, destOffset: Uint256, offset: Uint256, size: Uint256) -> None:
     """39 - Copy code running in current environment to memory."""
-    s.memory.graft(s.program.code.slice(offset, size), destOffset, s.solver)
+    s.memory.graft(s.program.code.slice(offset, size), destOffset)
 
 
 def GASPRICE(s: State) -> Uint256:
@@ -297,7 +295,7 @@ def EXTCODECOPY(
 
     contract = s.contracts.get(address, None)
     code = contract.program.code if contract else Bytes()
-    s.memory.graft(code.slice(offset, size), destOffset, s.solver)
+    s.memory.graft(code.slice(offset, size), destOffset)
 
 
 def RETURNDATASIZE(s: State) -> Uint256:
@@ -313,7 +311,7 @@ def RETURNDATACOPY(
     s: State, destOffset: Uint256, offset: Uint256, size: Uint256
 ) -> None:
     """3E - Copy output data from the previous call to memory."""
-    s.memory.graft(s.latest_return.slice(offset, size), destOffset, s.solver)
+    s.memory.graft(s.latest_return.slice(offset, size), destOffset)
 
 
 def EXTCODEHASH(s: State, _address: Uint256) -> Uint256:
@@ -383,19 +381,17 @@ def POP(y: Uint256) -> None:
 
 def MLOAD(s: State, offset: Uint256) -> Uint256:
     """51 - Load word from memory."""
-    return concat_bytes(
-        *[s.memory.get(offset + Uint256(i), s.solver) for i in range(32)]
-    )
+    return concat_bytes(*[s.memory[offset + Uint256(i)] for i in range(32)])
 
 
 def MSTORE(s: State, offset: Uint256, value: Uint256) -> None:
     """52 - Save word to memory."""
-    s.memory.setword(offset, value, s.solver)
+    s.memory.setword(offset, value)
 
 
 def MSTORE8(s: State, offset: Uint256, value: Uint256) -> None:
     """53 - Save byte to memory."""
-    s.memory.setbyte(offset, value.into(Uint8), s.solver)
+    s.memory[offset] = value.into(Uint8)
 
 
 def SLOAD(s: State, key: Uint256) -> Uint256:
@@ -638,9 +634,7 @@ def CREATE2(
     initcode = s.compact_bytes(s.memory.slice(offset, size))
     if initcode is None:
         return Unreachable()
-    assert (
-        initcode.reveal(s.solver) is not None
-    ), "CREATE2 requires concrete program data"
+    assert initcode.reveal() is not None, "CREATE2 requires concrete program data"
     # ...because the code is hashed and used in the address, which must be concrete
     salt = _salt.reveal()
     assert salt is not None, "CREATE2 requires concrete salt"
@@ -770,7 +764,7 @@ def _call_common(
 ) -> ControlFlow:
     address = _address.into(Uint160)
     calldata = s.memory.slice(argsOffset, argsSize)
-    calldata = s.compact_calldata(calldata, s.solver)
+    calldata = s.compact_calldata(calldata)
     if calldata is None:
         return Unreachable()
 
@@ -1025,9 +1019,7 @@ def _call_common(
 
 def _apply_call(state: State, call: Call, retSize: Uint256, retOffset: Uint256) -> None:
     state.latest_return = call.returndata
-    state.memory.graft(
-        call.returndata.slice(Uint256(0), retSize), retOffset, state.solver
-    )
+    state.memory.graft(call.returndata.slice(Uint256(0), retSize), retOffset)
     state.stack.append(call.ok.ite(Uint256(1), Uint256(0)))
     state.calls = (*state.calls, call)
 
@@ -1111,9 +1103,7 @@ def _descend_substate(
             next.changed = state.changed
         match callback:
             case (retOffset, retSize):
-                next.memory.graft(
-                    call.returndata.slice(Uint256(0), retSize), retOffset, state.solver
-                )
+                next.memory.graft(call.returndata.slice(Uint256(0), retSize), retOffset)
                 next.stack.append(call.ok.ite(Uint256(1), Uint256(0)))
             case _:
                 next = callback(next, substate)
@@ -1145,7 +1135,6 @@ def CUSTOM(s: State, ins: Instruction) -> None:
             s.memory.graft(
                 s.memory.slice(read + start, end - start),
                 write + start,
-                s.solver,
             )
             s.stack.pop()
             s.stack.append(end)

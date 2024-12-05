@@ -5,13 +5,13 @@ from __future__ import annotations
 import copy
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
-from functools import reduce, total_ordering
+from functools import reduce
 from itertools import batched
 from typing import Any, Literal, Self, overload
 
 from Crypto.Hash import keccak
 from zbitvector import Array, Constraint, Int, Symbolic, Uint
-from zbitvector._bitwuzla import BZLA, BitwuzlaTerm, Kind, Result
+from zbitvector._bitwuzla import BZLA, BitwuzlaSort, BitwuzlaTerm, Kind
 
 from xsolver import Client
 
@@ -41,6 +41,10 @@ def _from_expr[S: Symbolic](cls: type[S], kind: Kind, *args: Expression) -> S:
 
 def _term(x: Expression) -> BitwuzlaTerm:
     return x._term  # type: ignore
+
+
+def _sort(cls: type[Symbolic]) -> BitwuzlaSort:
+    return cls._sort  # type: ignore
 
 
 def make_uint(n: int) -> type[Uint[Any]]:
@@ -130,9 +134,8 @@ def bvlshr_harder[N: int](value: Uint[N], shift: Uint[N]) -> Uint[N]:
     return _make_symbolic(value.__class__, BZLA.mk_term(Kind.BV_CONCAT, (prefix, term)))
 
 
-@total_ordering
 @dataclass(frozen=True, slots=True, eq=True)
-class Addend:
+class Offset:
     """TODO."""
 
     constant: int = field(default=0)
@@ -145,7 +148,7 @@ class Addend:
         return self
 
     @classmethod
-    def from_symbolic(cls, value: Uint256, solver: Solver) -> Self:
+    def from_symbolic(cls, value: Uint256, checkset: set[BitwuzlaTerm]) -> Self:
         """Create a new Addend."""
         constant = 0
         terms = defaultdict[BitwuzlaTerm, int](lambda: 0)
@@ -166,47 +169,78 @@ class Addend:
                     terms[term] += 1 if msb else -1
 
         constant %= 2**value.width
-        assert constant < 2 ** (value.width - 1)
+        assert constant < 2 ** (value.width - 1), f"TODO: {hex(constant)}"
 
         for term, count in terms.items():
             assert count > 0
-            # TODO: need to check more digits...
-            if _quick_msb(term) is not False:
-                bad = BZLA.mk_term(
-                    Kind.BV_SLT,
-                    (
-                        term,
-                        BZLA.mk_bv_value(Uint256._sort, 0),  # type: ignore
-                    ),
-                )
-                BZLA.assume_formula(bad, _term(solver.constraint))
-                assert BZLA.check_sat() == Result.UNSAT, f"TODO: {term.dump()}"
-                assert BZLA.check_sat() == Result.SAT  # reset
+            checkset.add(term)
 
         return cls(constant, frozenset(Counter(terms).items()))
 
-    def __add__(self, other: Addend) -> Addend:
-        t0, t1 = Counter(dict(self.terms)), Counter(dict(other.terms))
-        return Addend(self.constant + other.constant, frozenset((t0 + t1).items()))
+    def to_symbolic(self) -> Uint256:
+        """TODO."""
+        term = BZLA.mk_bv_value(_sort(Uint256), self.constant)
+        for addend, count in self.terms:
+            for _ in range(count):
+                term = BZLA.mk_term(Kind.BV_ADD, (term, addend))
+        return _make_symbolic(Uint256, term)
 
-    def __sub__(self, other: Addend) -> Addend:
-        assert self >= other, "TODO: document me!"
-        return Addend(self.constant - other.constant, self.terms - other.terms)
+    @property
+    def counter(self) -> Counter[BitwuzlaTerm]:
+        """TODO."""
+        return Counter(dict(self.terms))
 
-    def __lt__(self, other: Addend) -> bool:
-        if self.terms == other.terms:
-            return self.constant < other.constant
-        elif Counter(dict(self.terms)) - Counter(dict(other.terms)):
-            assert self.constant >= other.constant, f"TODO: {self} {other}"
-            return False
-        elif Counter(dict(other.terms)) - Counter(dict(self.terms)):
-            print("---")
-            for term, ct in other.terms:
-                print(ct, term.dump())
-            assert other.constant >= self.constant, f"TODO: {self} {other}"
-            return True
+    def __add__(self, other: Offset) -> Offset:
+        return Offset(
+            self.constant + other.constant,
+            frozenset((self.counter + other.counter).items()),
+        )
+
+    # def __sub__(self, other: Offset) -> Offset:
+    #     assert self.constant >= other.constant, f"TODO: {self}-{other}"
+    #     assert self.counter >= other.counter, f"TODO: {self}-{other}"
+    #     # assert self >= other, "TODO: document me!"
+    #     return Offset(
+    #         self.constant - other.constant,
+    #         frozenset((self.counter - other.counter).items()),
+    #     )
+
+    def safesub(self, other: Offset) -> Uint256:
+        """TODO."""
+        if self.constant >= other.constant and self.counter >= other.counter:
+            return Offset(
+                self.constant - other.constant,
+                frozenset((self.counter - other.counter).items()),
+            ).to_symbolic()
         else:
-            raise NotImplementedError("uh-oh")
+            return self.to_symbolic() - other.to_symbolic()
+
+    def __lt__(self, other: Offset) -> bool:
+        if self.constant < other.constant:
+            if self.counter <= other.counter:
+                return True
+            raise PartialOrderError(f"{self} {other}")
+        else:
+            if self.counter >= other.counter:
+                return False
+            raise PartialOrderError
+
+    def __le__(self, other: Offset) -> bool:
+        if self.constant <= other.constant:
+            if self.counter <= other.counter:
+                return True
+            raise PartialOrderError
+        else:
+            if self.counter > other.counter:
+                return False
+            raise PartialOrderError
+
+    def __repr__(self) -> str:
+        parts = [str(self.constant)]
+        for term, count in self.terms:
+            prefix = "" if count == 1 else f"{count}x"
+            parts.append(prefix + term.dump())
+        return f"{self.__class__.__name__}({" + ".join(parts)})"
 
     def reveal(self) -> int | None:
         """TODO."""
@@ -215,31 +249,10 @@ class Addend:
         return self.constant
 
 
-def _quick_msb(term: BitwuzlaTerm, recurse: bool = True) -> bool | None:
-    """
-    Quickly extract the most significant bit of the given term, if feasible.
+class PartialOrderError(Exception):
+    """TODO."""
 
-    Handles concrete values and simple `concat`s. To avoid performance issues,
-    does *not* descend into nested `concat`s.
-    """
-    match term.get_kind():
-        case Kind.VAL:
-            return BZLA.get_value_str(term)[0] == "1"
-        case Kind.BV_CONCAT:
-            if not recurse:
-                return None
-            term, _ = term.get_children()
-            return _quick_msb(term, False)
-        case Kind.BV_AND:
-            arg0, arg1 = term.get_children()
-            return _quick_msb(arg0) and _quick_msb(arg1)
-        case Kind.BV_ADD:
-            arg0, arg1 = term.get_children()
-            if _quick_msb(arg0) is False and _quick_msb(arg1) is False:
-                return False  # TODO: need to check two digits down...
-            return None
-        case _:
-            return None
+    pass
 
 
 def get_constants(s: Symbolic | BitwuzlaTerm) -> dict[str, BitwuzlaTerm]:

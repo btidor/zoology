@@ -220,9 +220,9 @@ class State:
         """Simplify the given bytes using the current constraints."""
         return bytes
 
-    def compact_calldata(self, data: Bytes, solver: Solver) -> Bytes | None:
+    def compact_calldata(self, data: Bytes) -> Bytes | None:
         """Simplify the given bytes (optimized for calldata)."""
-        if data.slice(Uint256(0), Uint256(4)).reveal(solver):
+        if data.slice(Uint256(0), Uint256(4)).reveal():
             return data
 
         if not self.solver.check():

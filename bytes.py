@@ -5,11 +5,13 @@ from __future__ import annotations
 import abc
 import copy
 from dataclasses import dataclass, field
-from typing import Any, Iterable, Never, Self
+from typing import Any, Iterable, Self
 
 from smt import (
-    Addend,
     Array,
+    BitwuzlaTerm,
+    Offset,
+    PartialOrderError,
     Solver,
     Uint,
     Uint8,
@@ -78,10 +80,6 @@ class Bytes:
             return (i < self.length).ite(self.array[i], BYTES[0])
         return self.array[i]
 
-    def get(self, i: Uint256, solver: Solver) -> Uint8:
-        """TODO."""
-        return self[i]
-
     def slice(self, offset: Uint256, size: Uint256) -> ByteSlice:
         """Return a symbolic slice of this instance."""
         return ByteSlice(self, offset, size)
@@ -90,7 +88,7 @@ class Bytes:
         """Return a single, large bitvector of this instance's bytes."""
         if (n := self.length.reveal()) is None:
             raise ValueError("bigvector requires concrete length")
-        return concat_bytes(*(self.get(Uint256(i), None) for i in range(n)))
+        return concat_bytes(*(self[Uint256(i)] for i in range(n)))
 
     def describe(self, solver: Solver, prefix: int = 4) -> Iterable[str]:
         """Use a model to evaluate this instance as a hexadecimal string."""
@@ -118,7 +116,7 @@ class Bytes:
             result += solver.evaluate(self[Uint256(i)]).to_bytes(1)
         return result
 
-    def reveal(self, solver: Solver) -> bytes | None:
+    def reveal(self) -> bytes | None:
         """Unwrap this instance to bytes."""
         if self.data is not None:
             return self.data
@@ -144,25 +142,21 @@ class ByteSlice(Bytes):
         self.length = size
         self.data = None
 
-    def __getitem__(self, i: Uint256) -> Never:
-        raise NotImplementedError
-
-    def get(self, i: Uint256, solver: Solver) -> Uint8:
-        """TODO."""
+    def __getitem__(self, i: Uint256) -> Uint8:
         match self.inner:
             case Memory() | ByteSlice():
-                item = self.inner.get(self.offset + i, solver)
+                item = self.inner[self.offset + i]
             case Bytes():
                 item = self.inner[self.offset + i]
         return (i < self.length).ite(item, BYTES[0])
 
-    def reveal(self, solver: Solver) -> bytes | None:
+    def reveal(self) -> bytes | None:
         """Unwrap this instance to bytes."""
         if (length := self.length.reveal()) is None:
             return None
         data = list[int]()
         for i in range(length):
-            if (v := self.get(Uint256(i), solver).reveal()) is None:
+            if (v := self[Uint256(i)].reveal()) is None:
                 return None
             data.append(v)
         return bytes(data)
@@ -172,77 +166,108 @@ class Memory:
     """A mutable, symbolic-length sequence of symbolic bytes."""
 
     __hash__ = None  # type: ignore
-    __slots__ = ("writes",)
+    __slots__ = ("addends", "writes")
 
     def __init__(self, data: bytes = b"") -> None:
         """Create a new Memory with the given data."""
+        # List of terms used in constructing offsets. During narrowing, we check
+        # that every addend fits in a Uint64, guaranteeing that offset
+        # arithmetic does not overflow.
+        self.addends = set[BitwuzlaTerm]()  # TODO: check during narrowing
         self.writes = list[Write]()
         if data:
             self.writes.append(
                 SliceWrite(
-                    Addend(0),
-                    Addend(len(data)),
+                    Offset(0),
+                    Offset(len(data)),
                     ByteSlice(Bytes(data), Uint256(0), Uint256(len(data))),
                 ),
             )
 
-    def get(self, i: Uint256, solver: Solver) -> Uint8:
-        """TODO."""
-        a = Addend.from_symbolic(i, solver)
+    def __deepcopy__(self, memo: Any) -> Self:
+        result = copy.copy(self)
+        result.addends = copy.copy(result.addends)
+        result.writes = copy.copy(result.writes)
+        return result
+
+    def _make_offset(self, value: Uint256) -> Offset:
+        return Offset.from_symbolic(value, self.addends)
+
+    def __getitem__(self, i: Uint256) -> Uint8:
+        a = self._make_offset(i)
+        # print(f"__getitem__({i}) ~ {a}")
+        item = BYTES[0]
+        for write in self.writes:
+            # print(f" try {write.start} {write.stop}")
+            try:
+                if a < write.start:
+                    continue
+                elif a >= write.stop:
+                    continue
+                item = write[a]
+                # print(f" = {item}")
+            except PartialOrderError:
+                try:
+                    cond = (i >= write.start.to_symbolic()) & (
+                        i < write.stop.to_symbolic()
+                    )
+                    item = cond.ite(write[a], item)
+                    # print(f" ite {write[a]} {item}")
+                except AssertionError:
+                    print("TODO")
+                    print(a, write.start)
+                    raise
+        return item
+
+    def __setitem__(self, i: Uint256, v: Uint8) -> None:
+        a = self._make_offset(i)
         for write in reversed(self.writes):
-            match write:
-                case SetWrite():
-                    if a in write.data:
-                        return write.data[a]
-                case SliceWrite():
-                    if a >= write.start and a < write.stop:
-                        offset = a - write.start
-                        assert (
-                            r := offset.reveal()
-                        ) is not None, "TODO: symbolic slice offset"
-                        return write.data.get(Uint256(r), solver)
-        # TODO: how to handle unknown terms in Addend which may be zero, etc.?
-        return BYTES[0]
+            try:
+                if a < write.start:
+                    continue
+                elif a > write.stop:
+                    continue
+                match write:
+                    case ArrayWrite():
+                        write[a] = v
+                        return
+                    case SliceWrite():
+                        if a == write.stop:
+                            continue
+                        break
+            except PartialOrderError:
+                break
 
-    def setbyte(self, i: Uint256, v: Uint8, solver: Solver) -> None:
-        """TODO."""
-        a = Addend.from_symbolic(i, solver)
-        if self.writes and isinstance(self.writes[-1], SetWrite):
-            write = self.writes[-1]
-        else:
-            write = SetWrite()
-            self.writes.append(write)
-        write.data[a] = v
+        write = ArrayWrite(a, a + Offset(1))
+        write[a] = v
+        self.writes.append(write)
 
-    def setword(self, i: Uint256, v: Uint256, solver: Solver) -> None:
+    def setword(self, i: Uint256, v: Uint256) -> None:
         """Write an entire Uint256 to memory starting at the given index."""
         for k, byte in enumerate(reversed(explode_bytes(v))):
-            n = i + Uint256(k)
-            self.setbyte(n, byte, solver)
+            self[i + Uint256(k)] = byte
 
     def slice(self, offset: Uint256, size: Uint256) -> ByteSlice:
         """Return a symbolic slice of this instance."""
         # TODO: filter out nonoverlapping writes
         return ByteSlice(self, offset, size)
 
-    def graft(self, slice: ByteSlice, at: Uint256, solver: Solver) -> None:
+    def graft(self, slice: ByteSlice, at: Uint256) -> None:
         """Graft in a Bytes at the given offset."""
-        a = Addend.from_symbolic(at, solver)
-        self.writes.append(
-            SliceWrite(a, a + Addend.from_symbolic(slice.length, solver), slice)
-        )
+        a = self._make_offset(at)
+        self.writes.append(SliceWrite(a, a + self._make_offset(slice.length), slice))
 
     def reveal(self) -> bytes | None:
         """Unwrap this instance to bytes."""
         data = list[int]()
         for write in self.writes:
             match write:
-                case SetWrite():
+                case ArrayWrite():
                     raise NotImplementedError()
                 case SliceWrite():
-                    if (n := write.data.length.reveal()) is None:
+                    if (n := write.slice.length.reveal()) is None:
                         return None
-                    source = write.data
+                    source = write.slice
             for i in range(n):
                 if (v := source[Uint256(i)].reveal()) is None:
                     return None
@@ -251,19 +276,37 @@ class Memory:
 
 
 @dataclass(slots=True)
-class SetWrite(abc.ABC):
+class ArrayWrite(abc.ABC):
     """TODO."""
 
-    data: dict[Addend, Uint8] = field(default_factory=dict)
+    start: Offset
+    stop: Offset
+    array: Array[Uint256, Uint8] = field(
+        default_factory=lambda: Array[Uint256, Uint8](Uint8(0))
+    )
+
+    def __getitem__(self, abs: Offset) -> Uint8:
+        return self.array[abs.safesub(self.start)]
+
+    def __setitem__(self, abs: Offset, val: Uint8) -> None:
+        if abs < self.stop:
+            pass  # ok
+        elif abs == self.stop:
+            self.stop += Offset(1)
+        else:
+            raise NotImplementedError(
+                f"discontinuous offset: create another ArrayWrite! {abs} {self.stop}"
+            )
+        self.array[abs.safesub(self.start)] = val
 
 
 @dataclass(frozen=True, slots=True)
 class SliceWrite(abc.ABC):
     """TODO."""
 
-    start: Addend
-    stop: Addend
-    data: ByteSlice
+    start: Offset
+    stop: Offset
+    slice: ByteSlice
 
     def __copy__(self) -> Self:
         return self
@@ -271,5 +314,8 @@ class SliceWrite(abc.ABC):
     def __deepcopy__(self, memo: Any) -> Self:
         return self
 
+    def __getitem__(self, abs: Offset) -> Uint8:
+        return self.slice[abs.safesub(self.start)]
 
-type Write = SetWrite | SliceWrite
+
+type Write = ArrayWrite | SliceWrite
