@@ -123,6 +123,8 @@ def reset_bitwuzla() -> Iterator[None]:
     aitem: list[tuple[Array[Any, Any], int]] = []
     for obj in gc.get_objects():
         if isinstance(obj, Symbolic):
+            if not hasattr(obj, "_term"):
+                continue  # TODO
             if not obj._term.is_bv_value():
                 continue
             s = BZLA.get_value_str(obj._term)

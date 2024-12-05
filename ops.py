@@ -469,7 +469,7 @@ def PC(ins: Instruction) -> Uint256:
 
 def MSIZE(s: State) -> Uint256:
     """59 - Get the size of active memory in bytes."""
-    return s.memory.length
+    raise NotImplementedError("MSIZE")
 
 
 def GAS(s: State) -> Uint256:
