@@ -4,7 +4,7 @@ import pytest
 
 from bytes import Bytes
 from disassembler import DisassemblyError, disassemble, printable_disassembly
-from smt import Array, Uint8, Uint256
+from smt import Uint8
 
 
 def test_disassemble_basic() -> None:
@@ -84,12 +84,7 @@ def test_disassemble_symbolic() -> None:
     with pytest.raises(DisassemblyError):
         disassemble(Bytes.symbolic("TESTDISCODE", 10))
 
-    array = Array[Uint256, Uint8](Uint8(0))
-    array[Uint256(0)] = Uint8(0x60)
-    array[Uint256(1)] = Uint8(0xFE)
-    array[Uint256(2)] = Uint8(0xFE)
-    array[Uint256(3)] = Uint8("TESTDISBYTE")
-    code = Bytes.custom(Uint256(4), array)
+    code = Bytes([Uint8(0x60), Uint8(0xFE), Uint8(0xFE), Uint8("TESTDISBYTE")])
     p = disassemble(code)
 
     assert len(p.instructions) == 2

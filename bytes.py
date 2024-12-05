@@ -58,20 +58,16 @@ class Bytes:
     @classmethod
     def symbolic(cls, name: str, length: int | None = None) -> Bytes:
         """Create a new, fully-symbolic Bytes."""
+        result = cls.__new__(cls)
+        result.data = None
         # ASSUMPTION: call data and return data are no longer than 2^64 bytes.
         # CALL, RETURN, etc. incur gas costs for memory expansion, so this
         # should be a reasonable upper limit.
-        return cls.custom(
-            Uint64(length if length is not None else f"{name}.length").into(Uint256),
-            Array[Uint256, Uint8](name),
+        result.length = Uint64(length if length is not None else f"{name}.length").into(
+            Uint256
         )
-
-    @classmethod
-    def custom(cls, length: Uint256, array: Array[Uint256, Uint8]) -> Bytes:
-        """Create a new Bytes with custom properties."""
-        result = cls.__new__(cls)
-        result.data, result.length, result.array = None, length, array
         result.check_length = True
+        result.array = Array[Uint256, Uint8](name)
         return result
 
     def __deepcopy__(self, memo: Any) -> Self:
