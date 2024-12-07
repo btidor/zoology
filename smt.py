@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import copy
-from collections import Counter, defaultdict
-from dataclasses import dataclass, field
+from collections import defaultdict
 from functools import reduce
-from itertools import batched
-from typing import Any, Literal, Self, overload
+from itertools import batched, chain
+from typing import Any, ClassVar, Literal, Self, overload
 
 from Crypto.Hash import keccak
 from zbitvector import Array, Constraint, Int, Symbolic, Uint
@@ -21,6 +20,7 @@ Uint160 = Uint[Literal[160]]
 Uint256 = Uint[Literal[256]]
 
 Uint128 = Uint[Literal[128]]
+Uint192 = Uint[Literal[192]]
 Uint257 = Uint[Literal[257]]
 Uint512 = Uint[Literal[512]]
 
@@ -134,125 +134,110 @@ def bvlshr_harder[N: int](value: Uint[N], shift: Uint[N]) -> Uint[N]:
     return _make_symbolic(value.__class__, BZLA.mk_term(Kind.BV_CONCAT, (prefix, term)))
 
 
-@dataclass(frozen=True, slots=True, eq=True)
 class Offset:
     """TODO."""
 
-    constant: int = field(default=0)
-    terms: frozenset[tuple[BitwuzlaTerm, int]] = field(default_factory=frozenset)
+    __slots__ = ("constant", "terms")
 
-    def __copy__(self) -> Self:
-        return self
+    UPPER_ZERO: ClassVar[Uint192] = Uint192(0)
 
-    def __deepcopy__(self, memo: Any) -> Self:
-        return self
-
-    @classmethod
-    def from_symbolic(cls, value: Uint256, checkset: set[BitwuzlaTerm]) -> Self:
-        """Create a new Addend."""
-        constant = 0
-        terms = defaultdict[BitwuzlaTerm, int](lambda: 0)
+    def __init__(self, value: Uint256) -> None:
+        """Create a new Offset."""
+        self.constant = 0
+        self.terms = defaultdict[BitwuzlaTerm, int](lambda: 0)
         queue = [(_term(value), True)]
         while queue:
             term, msb = queue.pop()
             match term.get_kind():
                 case Kind.VAL:
                     v = int(BZLA.get_value_str(term), 2)
-                    constant += v if msb else -v
+                    self.constant += v if msb else -v
                 case Kind.BV_ADD:
                     queue.extend((t, msb) for t in term.get_children())
                 case Kind.BV_NOT:
                     term = term.get_children()[0]
-                    constant += -1 if msb else 1
+                    self.constant += -1 if msb else 1
                     queue.append((term, not msb))
                 case _:
-                    terms[term] += 1 if msb else -1
+                    self.terms[term] += 1 if msb else -1
+        self._check()
 
-        constant %= 2**value.width
-        assert constant < 2 ** (value.width - 1), f"TODO: {hex(constant)}"
-
-        for term, count in terms.items():
-            assert count > 0
-            checkset.add(term)
-
-        return cls(constant, frozenset(Counter(terms).items()))
-
-    def to_symbolic(self) -> Uint256:
-        """TODO."""
-        term = BZLA.mk_bv_value(_sort(Uint256), self.constant)
-        for addend, count in self.terms:
-            for _ in range(count):
-                term = BZLA.mk_term(Kind.BV_ADD, (term, addend))
-        return _make_symbolic(Uint256, term)
-
-    @property
-    def counter(self) -> Counter[BitwuzlaTerm]:
-        """TODO."""
-        return Counter(dict(self.terms))
-
-    def __add__(self, other: Offset) -> Offset:
-        return Offset(
-            self.constant + other.constant,
-            frozenset((self.counter + other.counter).items()),
-        )
-
-    # def __sub__(self, other: Offset) -> Offset:
-    #     assert self.constant >= other.constant, f"TODO: {self}-{other}"
-    #     assert self.counter >= other.counter, f"TODO: {self}-{other}"
-    #     # assert self >= other, "TODO: document me!"
-    #     return Offset(
-    #         self.constant - other.constant,
-    #         frozenset((self.counter - other.counter).items()),
-    #     )
-
-    def safesub(self, other: Offset) -> Uint256:
-        """TODO."""
-        if self.constant >= other.constant and self.counter >= other.counter:
-            return Offset(
-                self.constant - other.constant,
-                frozenset((self.counter - other.counter).items()),
-            ).to_symbolic()
-        else:
-            return self.to_symbolic() - other.to_symbolic()
-
-    def __lt__(self, other: Offset) -> bool:
-        if self.constant < other.constant:
-            if self.counter <= other.counter:
-                return True
-            raise PartialOrderError(f"{self} {other}")
-        else:
-            if self.counter >= other.counter:
-                return False
-            raise PartialOrderError
-
-    def __le__(self, other: Offset) -> bool:
-        if self.constant <= other.constant:
-            if self.counter <= other.counter:
-                return True
-            raise PartialOrderError
-        else:
-            if self.counter > other.counter:
-                return False
-            raise PartialOrderError
+    def __deepcopy__(self, memo: Any) -> Self:
+        result = copy.copy(self)
+        result.terms = copy.copy(self.terms)
+        return result
 
     def __repr__(self) -> str:
-        parts = [str(self.constant)]
-        for term, count in self.terms:
-            prefix = "" if count == 1 else f"{count}x"
-            parts.append(prefix + term.dump())
-        return f"{self.__class__.__name__}({" + ".join(parts)})"
+        return f"{self.__class__.__name__}({self.constant} + {[f"{k.dump()}: {v}" for k,v in self.terms.items()]})"
 
-    def reveal(self) -> int | None:
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Offset):
+            return NotImplemented
+        if self.constant != other.constant:
+            return False
+        for term in chain(self.terms.keys(), other.terms.keys()):
+            if self.terms[term] != other.terms[term]:
+                return False
+        return True
+
+    def __lt__(self, other: Offset) -> bool:
+        if self.constant >= other.constant:
+            return False
+        for term, count in self.terms.items():
+            if count > other.terms[term]:
+                return False
+        return True
+
+    def __le__(self, other: Offset) -> bool:
+        return self < other or self == other
+
+    def delta(self, other: Offset) -> Offset | None:
         """TODO."""
-        if self.terms:
+        result = copy.deepcopy(other)
+        result.constant -= self.constant
+        for term, count in self.terms.items():
+            result.terms[term] -= count
+        try:
+            result._check()
+        except AssertionError:
             return None
-        return self.constant
+        return result
 
+    def _check(self) -> str | None:
+        self.constant %= 2**256
+        assert (
+            self.constant >= 0 and self.constant < 2**64
+        ), f"out-of-bounds constant: {hex(self.constant)}"
 
-class PartialOrderError(Exception):
-    """TODO."""
+        todelete = set[BitwuzlaTerm]()
+        for term, count in self.terms.items():
+            assert count > 0, f"negative-count term: {term.dump()}"
+            if count == 0:
+                todelete.add(term)
+        for term in todelete:
+            del self.terms[term]
 
-    pass
+    def invalid(self) -> Constraint:
+        """Return a narrowing constraint that should always be False."""
+        result = _term(Constraint(False))
+        for term in self.terms.keys():
+            condition = BZLA.mk_term(
+                Kind.EQUAL,
+                (
+                    BZLA.mk_term(Kind.BV_EXTRACT, (term,), (256, 65)),
+                    _term(self.UPPER_ZERO),
+                ),
+            )
+            result = BZLA.mk_term(Kind.OR, (result, condition))
+        return _make_symbolic(Constraint, result)
+
+    def symbolic(self) -> Uint256:
+        """Return the offset as a Uint256."""
+        result = BZLA.mk_bv_value(_sort(Uint256), self.constant)
+        for term, count in self.terms.items():
+            for _ in range(count):
+                result = BZLA.mk_term(Kind.BV_ADD, (result, term))
+        return _make_symbolic(Uint256, result)
 
 
 def get_constants(s: Symbolic | BitwuzlaTerm) -> dict[str, BitwuzlaTerm]:

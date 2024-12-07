@@ -2,16 +2,14 @@
 
 from __future__ import annotations
 
-import abc
 import copy
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Iterable, Self
 
 from smt import (
     Array,
-    BitwuzlaTerm,
+    Constraint,
     Offset,
-    PartialOrderError,
     Solver,
     Uint,
     Uint8,
@@ -166,81 +164,97 @@ class Memory:
     """A mutable, symbolic-length sequence of symbolic bytes."""
 
     __hash__ = None  # type: ignore
-    __slots__ = ("addends", "writes")
+    __slots__ = ("base", "writes", "invalid")
 
     def __init__(self, data: bytes = b"") -> None:
         """Create a new Memory with the given data."""
-        # List of terms used in constructing offsets. During narrowing, we check
-        # that every addend fits in a Uint64, guaranteeing that offset
-        # arithmetic does not overflow.
-        self.addends = set[BitwuzlaTerm]()  # TODO: check during narrowing
+        self.base = Array[Uint256, Uint8](Uint8(0))
         self.writes = list[Write]()
-        if data:
-            self.writes.append(
-                SliceWrite(
-                    Offset(0),
-                    Offset(len(data)),
-                    ByteSlice(Bytes(data), Uint256(0), Uint256(len(data))),
-                ),
-            )
-
-    def __deepcopy__(self, memo: Any) -> Self:
-        result = copy.copy(self)
-        result.addends = copy.copy(result.addends)
-        result.writes = copy.copy(result.writes)
-        return result
-
-    def _make_offset(self, value: Uint256) -> Offset:
-        return Offset.from_symbolic(value, self.addends)
+        self.invalid = Constraint(False)
+        for i, b in enumerate(data):
+            self[Uint256(i)] = Uint8(b)
 
     def __getitem__(self, i: Uint256) -> Uint8:
-        a = self._make_offset(i)
-        # print(f"__getitem__({i}) ~ {a}")
-        item = BYTES[0]
+        try:
+            offset = Offset(i)
+            self.invalid |= offset.invalid()
+        except AssertionError:
+            result = self.base[i]
+            for write in self.writes:
+                match write:
+                    case SliceWrite():
+                        s0 = write.start.symbolic()
+                        s1 = write.stop.symbolic()
+                        result = ((i >= s0) & (i < s1)).ite(write.slice[i - s0], result)
+                    case ByteWrite():
+                        result = (i == write.offset.symbolic()).ite(write.byte, result)
+            return result
+
+        result = self.base[i]
+        for write in reversed(self.writes):
+            match write:
+                case SliceWrite():
+                    if offset < write.start:
+                        continue
+                    elif offset >= write.stop:
+                        continue
+                    elif offset >= write.start and offset < write.stop:
+                        delta = offset.delta(write.start)
+                        assert delta is not None
+                        return write.slice[delta.symbolic()]
+                    else:
+                        break
+                case ByteWrite():
+                    if offset < write.offset:
+                        continue
+                    elif offset > write.offset:
+                        continue
+                    elif offset == write.offset:
+                        return write.byte
+                    else:
+                        break
         for write in self.writes:
-            # print(f" try {write.start} {write.stop}")
-            try:
-                if a < write.start:
-                    continue
-                elif a >= write.stop:
-                    continue
-                item = write[a]
-                # print(f" = {item}")
-            except PartialOrderError:
-                try:
-                    cond = (i >= write.start.to_symbolic()) & (
-                        i < write.stop.to_symbolic()
-                    )
-                    item = cond.ite(write[a], item)
-                    # print(f" ite {write[a]} {item}")
-                except AssertionError:
-                    print("TODO")
-                    print(a, write.start)
-                    raise
-        return item
+            match write:
+                case SliceWrite():
+                    if offset < write.start:
+                        continue
+                    elif offset >= write.stop:
+                        continue
+                    else:
+                        s0 = write.start.symbolic()
+                        s1 = write.stop.symbolic()
+                        delta = offset.delta(write.start)
+                        k = delta.symbolic() if delta else i - s0
+                        result = ((i >= s0) & (i < s1)).ite(write.slice[k], result)
+                case ByteWrite():
+                    if offset < write.offset:
+                        continue
+                    elif offset > write.offset:
+                        continue
+                    else:
+                        result = (offset.symbolic() == write.offset.symbolic()).ite(
+                            write.byte, result
+                        )
+        return result
 
     def __setitem__(self, i: Uint256, v: Uint8) -> None:
-        a = self._make_offset(i)
-        for write in reversed(self.writes):
-            try:
-                if a < write.start:
-                    continue
-                elif a > write.stop:
-                    continue
-                match write:
-                    case ArrayWrite():
-                        write[a] = v
-                        return
-                    case SliceWrite():
-                        if a == write.stop:
-                            continue
-                        break
-            except PartialOrderError:
-                break
-
-        write = ArrayWrite(a, a + Offset(1))
-        write[a] = v
-        self.writes.append(write)
+        offset = Offset(i)
+        self.invalid |= offset.invalid()
+        for write in self.writes:
+            match write:
+                case SliceWrite():
+                    if offset < write.start:
+                        continue
+                    elif offset >= write.stop:
+                        continue
+                case ByteWrite():
+                    if offset < write.offset:
+                        continue
+                    elif offset > write.offset:
+                        continue
+            self.writes.append(ByteWrite(offset, v))
+            return
+        self.base[i] = v
 
     def setword(self, i: Uint256, v: Uint256) -> None:
         """Write an entire Uint256 to memory starting at the given index."""
@@ -249,73 +263,39 @@ class Memory:
 
     def slice(self, offset: Uint256, size: Uint256) -> ByteSlice:
         """Return a symbolic slice of this instance."""
-        # TODO: filter out nonoverlapping writes
         return ByteSlice(self, offset, size)
 
     def graft(self, slice: ByteSlice, at: Uint256) -> None:
         """Graft in a Bytes at the given offset."""
-        a = self._make_offset(at)
-        self.writes.append(SliceWrite(a, a + self._make_offset(slice.length), slice))
+        if (n := slice.length.reveal()) is not None:
+            for i in range(n):
+                self[at + Uint256(i)] = slice[Uint256(i)]
+        else:
+            start = Offset(at)
+            stop = Offset(at + slice.length)
+            self.writes.append(SliceWrite(start, stop, slice))
 
     def reveal(self) -> bytes | None:
         """Unwrap this instance to bytes."""
-        data = list[int]()
-        for write in self.writes:
-            match write:
-                case ArrayWrite():
-                    raise NotImplementedError()
-                case SliceWrite():
-                    if (n := write.slice.length.reveal()) is None:
-                        return None
-                    source = write.slice
-            for i in range(n):
-                if (v := source[Uint256(i)].reveal()) is None:
-                    return None
-                data.append(v)
-        return bytes(data)
+        raise NotImplementedError("reveal")
 
 
-@dataclass(slots=True)
-class ArrayWrite(abc.ABC):
+@dataclass
+class SliceWrite:
     """TODO."""
 
     start: Offset
     stop: Offset
-    array: Array[Uint256, Uint8] = field(
-        default_factory=lambda: Array[Uint256, Uint8](Uint8(0))
-    )
 
-    def __getitem__(self, abs: Offset) -> Uint8:
-        return self.array[abs.safesub(self.start)]
-
-    def __setitem__(self, abs: Offset, val: Uint8) -> None:
-        if abs < self.stop:
-            pass  # ok
-        elif abs == self.stop:
-            self.stop += Offset(1)
-        else:
-            raise NotImplementedError(
-                f"discontinuous offset: create another ArrayWrite! {abs} {self.stop}"
-            )
-        self.array[abs.safesub(self.start)] = val
-
-
-@dataclass(frozen=True, slots=True)
-class SliceWrite(abc.ABC):
-    """TODO."""
-
-    start: Offset
-    stop: Offset
     slice: ByteSlice
 
-    def __copy__(self) -> Self:
-        return self
 
-    def __deepcopy__(self, memo: Any) -> Self:
-        return self
+@dataclass
+class ByteWrite:
+    """TODO."""
 
-    def __getitem__(self, abs: Offset) -> Uint8:
-        return self.slice[abs.safesub(self.start)]
+    offset: Offset
+    byte: Uint8
 
 
-type Write = ArrayWrite | SliceWrite
+type Write = SliceWrite | ByteWrite

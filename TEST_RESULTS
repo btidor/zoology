@@ -1,0 +1,4 @@
+===================================================== short test summary info ======================================================
+FAILED tests/test_zoology.py::test_motorbike - AssertionError: negative-count term: (let (($e1 (concat #x000000000000000000000000000000000000000000000000 CALLDATA@1.length)))...
+FAILED tests/test_zoology.py::test_double_entry_point - ValueError: SSTORE is forbidden during a STATICCALL
+====================================== 2 failed, 25 passed, 1 deselected in 110.42s (0:01:50) ======================================

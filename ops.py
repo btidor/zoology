@@ -840,6 +840,7 @@ def _call_common(
                 s.path <<= 1
                 state = copy.deepcopy(s)
                 state.path |= 1
+                state.trace.append("DCI")
                 state.solver.add(cond)
                 dc = DelegateCall(
                     transaction,
@@ -857,6 +858,7 @@ def _call_common(
                 s.path <<= 1
                 state = copy.deepcopy(s)
                 state.path |= 1
+                state.trace.append("DCII")
                 state.solver.add(cond)
                 dc = DelegateCall(
                     transaction,
@@ -878,6 +880,7 @@ def _call_common(
                 s.path <<= 1
                 state = copy.deepcopy(s)
                 state.path |= 1
+                state.trace.append("DCIII")
                 state.solver.add(cond)
 
                 state.balances[state.transaction.address] = Uint256(0)
@@ -912,6 +915,7 @@ def _call_common(
                 s.path <<= 1
                 state = copy.deepcopy(s)
                 state.path |= 1
+                state.trace.append("CI")
                 state.solver.add(cond)
                 ok = Constraint(f"RETURNOK{suffix}")
                 state.transfer(
@@ -926,6 +930,7 @@ def _call_common(
                 s.path <<= 1
                 state = copy.deepcopy(s)
                 state.path |= 1
+                state.trace.append("CII")
                 state.solver.add(cond)
                 # This case is kind of weird, so penalize it in favor of Case I.
                 state.cost += 1
@@ -949,6 +954,7 @@ def _call_common(
                     s.path <<= 1
                     state = copy.deepcopy(s)
                     state.path |= 1
+                    state.trace.append("CIII")
                     state.solver.add(cond)
                     state.transfer(transaction.caller, transaction.address, value)
                     state.suffix += "R"
@@ -1097,6 +1103,7 @@ def _descend_substate(
         else:
             next.changed = substate.changed
         assert isinstance(substate.pc, Termination)
+        next.trace.append("RETURN" if substate.pc.success else "REVERT")
         if not substate.pc.success:
             next.contracts = state.contracts
             next.balances = state.balances
