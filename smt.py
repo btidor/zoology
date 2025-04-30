@@ -1,7 +1,5 @@
 """A library of augmentations for zbitvector."""
 
-# pyright: reportPrivateUsage=false
-
 from __future__ import annotations
 
 import copy

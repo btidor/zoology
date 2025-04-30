@@ -13,6 +13,9 @@
     },
     "python.analysis.autoImportCompletions": true,
     "python.analysis.diagnosticMode": "workspace",
+    "python.analysis.diagnosticSeverityOverrides": {
+        "reportPrivateImportUsage": false,
+    },
     "python.analysis.typeCheckingMode": "strict",
     "python.testing.pytestArgs": [
         "."
