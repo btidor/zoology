@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import copy
 from functools import reduce
-from typing import Iterable
+from typing import Any, Iterable
 
 from bytes import Bytes
 from disassembler import abiencode
@@ -13,9 +13,7 @@ from sequence import Sequence
 from sha3 import SHA3
 from smt import (
     Array,
-    BitwuzlaTerm,
     Constraint,
-    Expression,
     Solver,
     Uint160,
     Uint256,
@@ -32,7 +30,7 @@ class Validator:
 
     transaction: Transaction
     constraint: Constraint | None
-    constants: dict[str, BitwuzlaTerm] | None
+    constants: dict[str, Any] | None
 
     def __init__(self, sequence: Sequence, /, *, prints: bool = False) -> None:
         """
@@ -131,7 +129,7 @@ class Validator:
             return None
         assert self.constants is not None
 
-        substitutions = dict[BitwuzlaTerm, Expression]()
+        substitutions = dict[Any, Any]()
         for name, term in self.constants.items():
             if name.startswith("STORAGE@"):
                 addr = int(name[8:], 16)
