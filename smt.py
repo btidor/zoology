@@ -4,7 +4,97 @@
 from __future__ import annotations
 
 import abc
-from typing import Any, ClassVar, Literal, Never, Self, overload
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    ClassVar,
+    Literal,
+    Never,
+    Self,
+    TypeVar,
+    Union,
+    cast,
+    get_args,
+    get_origin,
+    overload,
+)
+
+
+class BitVectorMeta(abc.ABCMeta):
+    _ccache: dict[str, type] = {}
+
+    def __getitem__(self, N: Any, /) -> Any:
+        if isinstance(N, int):
+            raise TypeError(
+                f"integer passed to {self.__name__}[...]; use {self.__name__}[Literal[{N}]] instead"
+            )
+
+        if get_origin(N) != Literal:
+            # No-op unbound type variables, unions, etc. These kind of Uint[...]
+            # can be used in type signatures. Note that trying to instantiate
+            # one will raise an error because _sort is not defined.
+            return self
+
+        args = get_args(N)
+        if len(args) != 1 or not isinstance(args[0], int):
+            raise TypeError(
+                f"unsupported type parameter passed to {self.__name__}[...]"
+            )
+
+        n = args[0]
+        if n <= 0:
+            raise TypeError(f"{self.__name__} requires a positive width")
+
+        name = self.__name__ + str(n)
+        if name not in self._ccache:
+            sort = cast(Any, self)._make_sort(n)
+            cls = type(name, (self,), {"width": n, "_sort": sort, "__slots__": ()})
+            cls.__module__ = self.__module__
+            self._ccache[name] = cls
+        return self._ccache[name]
+
+
+class ArrayMeta(abc.ABCMeta):
+    _ccache: dict[str, type] = {}
+
+    def __getitem__(self, args: Any, /) -> Any:
+        if (
+            not isinstance(args, tuple) or len(args) != 2  # pyright: ignore[reportUnknownArgumentType]
+        ):
+            raise TypeError(
+                f"unexpected type parameter passed to {self.__name__}[...]; expected a pair of types"
+            )
+
+        k, v = cast("tuple[Any, Any]", args)
+        for a in (k, v):
+            if hasattr(a, "_sort"):
+                continue  # `a` is a usable BitVector
+
+            if get_origin(a) is Union or isinstance(a, TypeVar):
+                # No-op unbound type variables, unions, etc. These kind of
+                # Array[...] can be used in type signatures. Note that trying to
+                # instantiate one will raise an error because _sort is not
+                # defined.
+                return self
+
+            if isinstance(a, BitVectorMeta):
+                # Partially-specified BitVector, e.g. Int[Union[...]]; handle
+                # the same as above.
+                return self
+
+            raise TypeError(
+                f"unsupported type parameter passed to {self.__name__}[...]"
+            )
+
+        name = self.__name__ + "[" + k.__name__ + ", " + v.__name__ + "]"
+        if name not in self._ccache:
+            sort = cast(Any, self)._make_sort(k, v)
+            cls = type(
+                name, (self,), {"_sort": sort, "_key": k, "_value": v, "__slots__": ()}
+            )
+            cls.__module__ = self.__module__
+            self._ccache[name] = cls
+        return self._ccache[name]
 
 
 class Symbolic(abc.ABC):
@@ -177,7 +267,9 @@ class Constraint(Symbolic):
         raise NotImplementedError
 
 
-class BitVector[N: int](Symbolic):
+class BitVector[N: int](
+    Symbolic, metaclass=abc.ABCMeta if TYPE_CHECKING else BitVectorMeta
+):
     """
     Represents a symbolic N-bit bitvector. This abstract base class is inherited
     by :class:`Uint` and :class:`Int`.
@@ -584,7 +676,9 @@ class Int[N: int](BitVector[N]):
         raise NotImplementedError
 
 
-class Array[K: Uint[Any] | Int[Any], V: Uint[Any] | Int[Any]]:
+class Array[K: Uint[Any] | Int[Any], V: Uint[Any] | Int[Any]](
+    metaclass=type if TYPE_CHECKING else ArrayMeta
+):
     """
     Represents a mutable symbolic array mapping a :class:`BitVector` to a
     :class:`BitVector`. Arrays do not have a length: they map the full domain to
