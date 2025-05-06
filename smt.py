@@ -120,7 +120,7 @@ class Symbolic(abc.ABC):
         return self._term.__hash__()
 
 
-type BooleanTerm = bool | str | NotOp | AndOp | OrOp | XorOp
+type BooleanTerm = bool | str | NotOp | AndOp | OrOp | XorOp | BvEqOp
 
 
 @dataclass(frozen=True, slots=True)
@@ -258,7 +258,130 @@ class Constraint(Symbolic):
         return self._term if isinstance(self._term, bool) else None
 
 
-type BitvectorTerm = int | str
+type BitvectorTerm = int | str | BvNotOp | BvAndOp | BvOrOp | BvArithOp
+
+
+@dataclass(frozen=True, slots=True)
+class BvNotOp:
+    arg: BitvectorTerm
+
+    @classmethod
+    def apply(cls, width: int, term: BitvectorTerm) -> BitvectorTerm:
+        mask = (1 << width) - 1
+        match term:
+            case int():
+                return mask ^ term
+            case BvNotOp(arg):  # double negation
+                return arg
+            case str() | BvAndOp() | BvOrOp() | BvArithOp():
+                return BvNotOp(term)
+
+
+@dataclass(frozen=True, slots=True)
+class BvAndOp:
+    mask: int
+    args: set[BitvectorTerm]
+
+    @classmethod
+    def apply(cls, width: int, *terms: BitvectorTerm) -> BitvectorTerm:
+        mask = (1 << width) - 1
+        args = set[BitvectorTerm]()
+        deferred = set[BvNotOp]()
+        for term in terms:
+            match term:
+                case int():
+                    mask &= term
+                case BvAndOp():
+                    mask &= term.mask
+                    args.intersection_update(term.args)  # A & A => A
+                case BvNotOp():
+                    deferred.add(term)
+                case str() | BvOrOp() | BvArithOp():
+                    args.add(term)
+        for term in deferred:
+            if term.arg in args:
+                return 0  # A & ~A => 0
+            else:
+                args.add(term)
+        if mask == (1 << width) - 1:  # 0xFF & A => 0xFF
+            return mask
+        return BvAndOp(mask, args) if args else mask
+
+
+@dataclass(frozen=True, slots=True)
+class BvOrOp:
+    mask: int
+    args: set[BitvectorTerm]
+
+    @classmethod
+    def apply(cls, width: int, *terms: BitvectorTerm) -> BitvectorTerm:
+        mask = 0
+        args = set[BitvectorTerm]()
+        deferred = set[BvNotOp]()
+        for term in terms:
+            match term:
+                case int():
+                    mask |= term
+                case BvOrOp():
+                    mask |= term.mask
+                    args.intersection_update(term.args)  # A | A => A
+                case BvNotOp():
+                    deferred.add(term)
+                case str() | BvAndOp() | BvArithOp():
+                    args.add(term)
+        for term in deferred:
+            if term.arg in args:
+                return (1 << width) - 1  # A | ~A => 0xFF
+            else:
+                args.add(term)
+        if mask == 0:  # 0 | A => 0
+            return mask
+        return BvOrOp(mask, args) if args else mask
+
+
+@dataclass(frozen=True, slots=True)
+class BvArithOp:
+    base: int
+    args: tuple[BitvectorTerm, ...]
+
+    @classmethod
+    def apply(cls, width: int, *terms: BitvectorTerm) -> BitvectorTerm:
+        base = 0
+        limit = 1 << width
+        args = list[BitvectorTerm]()
+        deferred = list[BvNotOp]()
+        for term in terms:
+            match term:
+                case int():
+                    base = (base + term) % limit
+                case BvArithOp():
+                    base = (base + term.base) % limit
+                    args.extend(term.args)
+                case BvNotOp():
+                    deferred.append(term)
+                case str() | BvAndOp() | BvOrOp():
+                    args.append(term)
+        for term in deferred:
+            if term.arg in args:  # A + ~A => 0xFF
+                args.remove(term.arg)
+                base = (base + limit - 1) % limit
+            else:
+                args.append(term)
+        return BvArithOp(base, tuple(args)) if args else base
+
+
+@dataclass(frozen=True, slots=True)
+class BvEqOp:
+    left: BitvectorTerm
+    right: BitvectorTerm
+
+    @classmethod
+    def apply(cls, left: BitvectorTerm, right: BitvectorTerm) -> BooleanTerm:
+        match (left, right):
+            case int(), int():
+                return left == right
+            case _:
+                return BvEqOp(left, right)
 
 
 class BitVector[N: int](
@@ -278,22 +401,31 @@ class BitVector[N: int](
     def __le__(self, other: Self, /) -> Constraint: ...
 
     def __invert__(self) -> Self:
-        raise NotImplementedError
+        return self._from_term(BvNotOp.apply(self.width, self._term))
 
     def __and__(self, other: Self, /) -> Self:
-        raise NotImplementedError
+        assert self.width == other.width
+        return self._from_term(BvAndOp.apply(self.width, self._term, other._term))
 
     def __or__(self, other: Self, /) -> Self:
-        raise NotImplementedError
+        assert self.width == other.width
+        return self._from_term(BvOrOp.apply(self.width, self._term, other._term))
 
     def __xor__(self, other: Self, /) -> Self:
+        assert self.width == other.width
         raise NotImplementedError
 
     def __add__(self, other: Self, /) -> Self:
-        raise NotImplementedError
+        assert self.width == other.width
+        return self._from_term(BvArithOp.apply(self.width, self._term, other._term))
 
     def __sub__(self, other: Self, /) -> Self:
-        raise NotImplementedError
+        assert self.width == other.width
+        return self._from_term(
+            BvArithOp.apply(
+                self.width, self._term, BvNotOp.apply(self.width, other._term), 1
+            )
+        )
 
     def __mul__(self, other: Self, /) -> Self:
         raise NotImplementedError
@@ -310,11 +442,17 @@ class BitVector[N: int](
     @abc.abstractmethod
     def __rshift__(self, other: Uint[N], /) -> Self: ...
 
-    def __eq__(self, other: Self, /) -> Constraint:  # pyright: ignore[reportIncompatibleMethodOverride]
-        raise NotImplementedError
+    def __eq__(  # pyright: ignore[reportIncompatibleMethodOverride]
+        self, other: Self, /
+    ) -> Constraint:
+        assert self.width == other.width
+        return Constraint._from_term(BvEqOp.apply(self._term, other._term))
 
-    def __ne__(self, other: Self, /) -> Constraint:  # pyright: ignore[reportIncompatibleMethodOverride]
-        raise NotImplementedError
+    def __ne__(  # pyright: ignore[reportIncompatibleMethodOverride]
+        self, other: Self, /
+    ) -> Constraint:
+        assert self.width == other.width
+        return Constraint._from_term(NotOp.apply(BvEqOp.apply(self._term, other._term)))
 
     def __hash__(self) -> int:
         return self._term.__hash__()
