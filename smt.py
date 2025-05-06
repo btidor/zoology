@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import abc
+from dataclasses import dataclass
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -102,11 +103,13 @@ class Symbolic(abc.ABC):
     inherited by :class:`Constraint`, :class:`Uint` and :class:`Int`.
     """
 
-    __slots__ = ()
+    __slots__ = ("_term",)
 
-    @abc.abstractmethod
-    def __init__(self, term: Any, /) -> None:
-        raise NotImplementedError
+    @classmethod
+    def _from_term(cls, term: Any, /) -> Self:
+        k = cls.__new__(cls)
+        k._term = term
+        return k
 
     # Implementation Note: Symbolic instances are immutable. For performance,
     # don't copy them.
@@ -149,6 +152,103 @@ class Symbolic(abc.ABC):
         raise NotImplementedError
 
 
+type BooleanTerm = bool | str | NotOp | AndOp | OrOp | XorOp
+
+
+@dataclass(frozen=True, slots=True)
+class NotOp:
+    arg: str | AndOp | OrOp | XorOp
+
+    @classmethod
+    def apply(cls, term: BooleanTerm) -> BooleanTerm:
+        match term:
+            case bool():
+                return not term
+            case NotOp(arg):  # double negation
+                return arg
+            case str() | AndOp() | OrOp() | XorOp():
+                return NotOp(term)
+
+
+@dataclass(frozen=True, slots=True)
+class AndOp:
+    args: set[str | NotOp | OrOp | XorOp]
+
+    @classmethod
+    def apply(cls, *terms: BooleanTerm) -> BooleanTerm:
+        args = set[str | NotOp | OrOp | XorOp]()
+        for term in terms:
+            match term:
+                case True:
+                    pass
+                case False:
+                    return False
+                case str() | NotOp() | OrOp() | XorOp():
+                    args.add(term)
+                case AndOp():
+                    args.intersection_update(term.args)
+        return AndOp(args) if args else True
+
+
+@dataclass(frozen=True, slots=True)
+class OrOp:
+    args: set[str | NotOp | AndOp | XorOp]
+
+    @classmethod
+    def apply(cls, *terms: BooleanTerm) -> BooleanTerm:
+        args = set[str | NotOp | AndOp | XorOp]()
+        for term in terms:
+            match term:
+                case True:
+                    return True
+                case False:
+                    pass
+                case str() | NotOp() | AndOp() | XorOp():
+                    args.add(term)
+                case OrOp():
+                    args.intersection_update(term.args)
+        return OrOp(args) if args else False
+
+
+@dataclass(frozen=True, slots=True)
+class XorOp:
+    base: bool
+    args: set[str | NotOp | OrOp | AndOp]
+
+    @classmethod
+    def apply(cls, *terms: BooleanTerm) -> BooleanTerm:
+        invert = False  # False ^ X => X / True ^ X => ~X
+        args = set[str | NotOp | OrOp | AndOp]()
+        deferred = set[NotOp]()
+        queue = list(terms)
+        while queue:
+            match term := queue.pop():
+                case bool():
+                    invert ^= term
+                case NotOp():
+                    if term in deferred:  # A ^ A => False
+                        deferred.remove(term)
+                        invert ^= False
+                    else:
+                        deferred.add(term)
+                case str() | OrOp() | AndOp():
+                    if term in args:  # A ^ A => False
+                        args.remove(term)
+                        invert ^= False
+                    else:
+                        args.add(term)
+                case XorOp():
+                    queue.extend(term.args)
+        for d in deferred:
+            if d.arg in args:  # A ^ ~A => True
+                assert not isinstance(d.arg, XorOp)
+                args.remove(d.arg)
+                invert ^= True
+            else:
+                args.add(d)
+        return XorOp(invert, args) if args else invert
+
+
 class Constraint(Symbolic):
     """
     Represents a symbolic boolean expression. Possible concrete values are
@@ -167,7 +267,9 @@ class Constraint(Symbolic):
     Constraint(`C`)
     """
 
-    __slots__ = ("_term",)
+    __slots__ = ()
+
+    _term: BooleanTerm
 
     def __init__(self, value: bool | str, /):
         self._term = value
@@ -181,9 +283,7 @@ class Constraint(Symbolic):
         >>> ~Constraint(True)
         Constraint(`false`)
         """
-        if isinstance(self._term, bool):
-            return self.__class__(not self._term)
-        raise NotImplementedError
+        return self._from_term(NotOp.apply(self._term))
 
     def __and__(self, other: Self, /) -> Self:
         """
@@ -194,17 +294,7 @@ class Constraint(Symbolic):
         >>> Constraint(True) & Constraint(False)
         Constraint(`false`)
         """
-        match (self._term, other._term):
-            case (True, _):
-                return other
-            case (_, True):
-                return self
-            case (False, _):
-                return self.__class__(False)
-            case (_, False):
-                return self.__class__(False)
-            case _:
-                raise NotImplementedError
+        return self._from_term(AndOp.apply(self._term, other._term))
 
     def __or__(self, other: Self, /) -> Self:
         """
@@ -215,17 +305,7 @@ class Constraint(Symbolic):
         >>> Constraint(True) | Constraint(False)
         Constraint(`true`)
         """
-        match (self._term, other._term):
-            case (True, _):
-                return self.__class__(True)
-            case (_, True):
-                return self.__class__(True)
-            case (False, _):
-                return other
-            case (_, False):
-                return self
-            case _:
-                raise NotImplementedError
+        return self._from_term(OrOp.apply(self._term, other._term))
 
     def __xor__(self, other: Self, /) -> Self:
         """
@@ -236,17 +316,7 @@ class Constraint(Symbolic):
         >>> Constraint(True) ^ Constraint(False)
         Constraint(`true`)
         """
-        match (self._term, other._term):
-            case (True, _):
-                return ~other
-            case (_, True):
-                return ~self
-            case (False, _):
-                return other
-            case (_, False):
-                return self
-            case _:
-                raise NotImplementedError
+        return self._from_term(XorOp.apply(self._term, other._term))
 
     def __bool__(self) -> Never:
         """
@@ -272,10 +342,7 @@ class Constraint(Symbolic):
     @overload
     def ite[N: int](self, then: Int[N], else_: Int[N], /) -> Int[N]: ...
 
-    @overload
-    def ite(self, then: Constraint, else_: Constraint, /) -> Constraint: ...
-
-    def ite(self, then: Symbolic, else_: Symbolic, /) -> Symbolic:
+    def ite[N: int](self, then: BitVector[N], else_: BitVector[N], /) -> Symbolic:
         r"""
         Perform an if-then-else based on this constraint. The result is `then`
         if the constraint evaluates to `True` and `else_` otherwise.
@@ -330,7 +397,7 @@ class BitVector[N: int](
     Int8(`I`)
     """
 
-    __slots__ = ("_term",)
+    __slots__ = ()
 
     width: ClassVar[int]
     """
