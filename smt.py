@@ -111,13 +111,13 @@ class Symbolic(abc.ABC):
     # Implementation Note: Symbolic instances are immutable. For performance,
     # don't copy them.
     def __copy__(self) -> Self:
-        raise NotImplementedError
+        return self
 
     def __deepcopy__(self, memo: Any, /) -> Self:
-        raise NotImplementedError
+        return self
 
-    def __repr__(self) -> str:
-        raise NotImplementedError
+    # def __repr__(self) -> str:
+    #     raise NotImplementedError
 
     def __eq__(  # pyright: ignore[reportIncompatibleMethodOverride]
         self, other: Self, /
@@ -167,10 +167,10 @@ class Constraint(Symbolic):
     Constraint(`C`)
     """
 
-    __slots__ = ()
+    __slots__ = ("_term",)
 
     def __init__(self, value: bool | str, /):
-        raise NotImplementedError
+        self._term = value
 
     def __invert__(self) -> Self:
         """
@@ -181,6 +181,8 @@ class Constraint(Symbolic):
         >>> ~Constraint(True)
         Constraint(`false`)
         """
+        if isinstance(self._term, bool):
+            return self.__class__(not self._term)
         raise NotImplementedError
 
     def __and__(self, other: Self, /) -> Self:
@@ -192,7 +194,17 @@ class Constraint(Symbolic):
         >>> Constraint(True) & Constraint(False)
         Constraint(`false`)
         """
-        raise NotImplementedError
+        match (self._term, other._term):
+            case (True, _):
+                return other
+            case (_, True):
+                return self
+            case (False, _):
+                return self.__class__(False)
+            case (_, False):
+                return self.__class__(False)
+            case _:
+                raise NotImplementedError
 
     def __or__(self, other: Self, /) -> Self:
         """
@@ -203,7 +215,17 @@ class Constraint(Symbolic):
         >>> Constraint(True) | Constraint(False)
         Constraint(`true`)
         """
-        raise NotImplementedError
+        match (self._term, other._term):
+            case (True, _):
+                return self.__class__(True)
+            case (_, True):
+                return self.__class__(True)
+            case (False, _):
+                return other
+            case (_, False):
+                return self
+            case _:
+                raise NotImplementedError
 
     def __xor__(self, other: Self, /) -> Self:
         """
@@ -214,7 +236,17 @@ class Constraint(Symbolic):
         >>> Constraint(True) ^ Constraint(False)
         Constraint(`true`)
         """
-        raise NotImplementedError
+        match (self._term, other._term):
+            case (True, _):
+                return ~other
+            case (_, True):
+                return ~self
+            case (False, _):
+                return other
+            case (_, False):
+                return self
+            case _:
+                raise NotImplementedError
 
     def __bool__(self) -> Never:
         """
@@ -253,7 +285,13 @@ class Constraint(Symbolic):
         >>> Constraint(True).ite(Uint8(0xA), Uint8(0xB))
         Uint8(`#x0a`)
         """
-        raise NotImplementedError
+        match self._term:
+            case True:
+                return then
+            case False:
+                return else_
+            case _:
+                raise NotImplementedError
 
     def reveal(self) -> bool | None:
         """
@@ -267,7 +305,7 @@ class Constraint(Symbolic):
         >>> (Constraint("C") | Constraint(False)).reveal() is None
         True
         """
-        raise NotImplementedError
+        return self._term if isinstance(self._term, bool) else None
 
 
 class BitVector[N: int](
