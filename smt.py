@@ -122,32 +122,6 @@ class Symbolic(abc.ABC):
     # def __repr__(self) -> str:
     #     raise NotImplementedError
 
-    def __eq__(  # pyright: ignore[reportIncompatibleMethodOverride]
-        self, other: Self, /
-    ) -> Constraint:
-        """
-        Check if this expression is equal to `other`.
-
-        :SMT-LIB: (= self other)
-
-        >>> Uint8(1) == Uint8(3)
-        Constraint(`false`)
-        """
-        raise NotImplementedError
-
-    def __ne__(  # pyright: ignore[reportIncompatibleMethodOverride]
-        self, other: Self, /
-    ) -> Constraint:
-        """
-        Check if this expression is not equal to `other`.
-
-        :SMT-LIB: (distinct self other)
-
-        >>> Uint8(2) != Uint8(5)
-        Constraint(`true`)
-        """
-        raise NotImplementedError
-
     def __hash__(self) -> int:
         raise NotImplementedError
 

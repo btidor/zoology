@@ -150,7 +150,7 @@ def check_candidate(ops: list[AnalysisAction], stack: list[Uint256]) -> LoopCopy
     limit: Uint256 | None = None
     for var in starting_stack[:-1]:
         test = starting_stack[-1] < var
-        if (cond == test).reveal() is True:
+        if (~(cond ^ test)).reveal() is True:
             limit = var
             break
     if limit is None:
