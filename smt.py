@@ -9,6 +9,7 @@ from typing import (
     TYPE_CHECKING,
     Any,
     ClassVar,
+    Final,
     Literal,
     Never,
     Self,
@@ -131,7 +132,7 @@ type BooleanTerm = bool | str | NotOp | AndOp | OrOp | XorOp
 
 @dataclass(frozen=True, slots=True)
 class NotOp:
-    arg: str | AndOp | OrOp | XorOp
+    arg: BooleanTerm
 
     @classmethod
     def apply(cls, term: BooleanTerm) -> BooleanTerm:
@@ -140,79 +141,79 @@ class NotOp:
                 return not term
             case NotOp(arg):  # double negation
                 return arg
-            case str() | AndOp() | OrOp() | XorOp():
+            case _:
                 return NotOp(term)
 
 
 @dataclass(frozen=True, slots=True)
 class AndOp:
-    args: set[str | NotOp | OrOp | XorOp]
+    args: set[BooleanTerm]
 
     @classmethod
     def apply(cls, *terms: BooleanTerm) -> BooleanTerm:
-        args = set[str | NotOp | OrOp | XorOp]()
+        args = set[BooleanTerm]()
         for term in terms:
             match term:
                 case True:
                     pass
                 case False:
                     return False
-                case str() | NotOp() | OrOp() | XorOp():
-                    args.add(term)
                 case AndOp():
-                    args.intersection_update(term.args)
+                    args.intersection_update(term.args)  # A & A => A
+                case _:
+                    args.add(term)
         return AndOp(args) if args else True
 
 
 @dataclass(frozen=True, slots=True)
 class OrOp:
-    args: set[str | NotOp | AndOp | XorOp]
+    args: set[BooleanTerm]
 
     @classmethod
     def apply(cls, *terms: BooleanTerm) -> BooleanTerm:
-        args = set[str | NotOp | AndOp | XorOp]()
+        args = set[BooleanTerm]()
         for term in terms:
             match term:
                 case True:
                     return True
                 case False:
                     pass
-                case str() | NotOp() | AndOp() | XorOp():
-                    args.add(term)
                 case OrOp():
-                    args.intersection_update(term.args)
+                    args.intersection_update(term.args)  # A | A => A
+                case _:
+                    args.add(term)
         return OrOp(args) if args else False
 
 
 @dataclass(frozen=True, slots=True)
 class XorOp:
     base: bool
-    args: set[str | NotOp | OrOp | AndOp]
+    args: set[BooleanTerm]
 
     @classmethod
     def apply(cls, *terms: BooleanTerm) -> BooleanTerm:
         invert = False  # False ^ X => X / True ^ X => ~X
-        args = set[str | NotOp | OrOp | AndOp]()
+        args = set[BooleanTerm]()
         deferred = set[NotOp]()
         queue = list(terms)
         while queue:
             match term := queue.pop():
                 case bool():
                     invert ^= term
+                case XorOp():
+                    queue.extend(term.args)
                 case NotOp():
                     if term in deferred:  # A ^ A => False
                         deferred.remove(term)
                         invert ^= False
                     else:
                         deferred.add(term)
-                case str() | OrOp() | AndOp():
+                case _:
                     if term in args:  # A ^ A => False
                         args.remove(term)
                         invert ^= False
                     else:
                         args.add(term)
-                case XorOp():
-                    queue.extend(term.args)
         for d in deferred:
             if d.arg in args:  # A ^ ~A => True
                 assert not isinstance(d.arg, XorOp)
@@ -224,91 +225,26 @@ class XorOp:
 
 
 class Constraint(Symbolic):
-    """
-    Represents a symbolic boolean expression. Possible concrete values are
-    `True` and `False`.
-
-    To create a :class:`Constraint` representing a concrete value, pass a
-    :class:`bool` to the constructor:
-
-    >>> Constraint(True)
-    Constraint(`true`)
-
-    To create a :class:`Constraint` representing a symbolic variable, pass a
-    variable name to the constructor:
-
-    >>> Constraint("C")
-    Constraint(`C`)
-    """
-
     __slots__ = ()
-
     _term: BooleanTerm
 
     def __init__(self, value: bool | str, /):
         self._term = value
 
     def __invert__(self) -> Self:
-        """
-        Compute the boolean NOT of this constraint.
-
-        :SMT-LIB: (not self)
-
-        >>> ~Constraint(True)
-        Constraint(`false`)
-        """
         return self._from_term(NotOp.apply(self._term))
 
     def __and__(self, other: Self, /) -> Self:
-        """
-        Compute the boolean AND of this constraint with `other`.
-
-        :SMT-LIB: (and self other)
-
-        >>> Constraint(True) & Constraint(False)
-        Constraint(`false`)
-        """
         return self._from_term(AndOp.apply(self._term, other._term))
 
     def __or__(self, other: Self, /) -> Self:
-        """
-        Compute the boolean OR of this constraint with `other`.
-
-        :SMT-LIB: (or self other)
-
-        >>> Constraint(True) | Constraint(False)
-        Constraint(`true`)
-        """
         return self._from_term(OrOp.apply(self._term, other._term))
 
     def __xor__(self, other: Self, /) -> Self:
-        """
-        Compute the boolean XOR of this constraint with `other`.
-
-        :SMT-LIB: (xor self other)
-
-        >>> Constraint(True) ^ Constraint(False)
-        Constraint(`true`)
-        """
         return self._from_term(XorOp.apply(self._term, other._term))
 
     def __bool__(self) -> Never:
-        """
-        Prohibit using :class:`Constraint` in a boolean context.
-
-        Without this check, all instances of :class:`Constraint` would be
-        considered true and it would be easy to mis-use :class:`Constraint` in
-        an if statement:
-
-        .. code::
-
-            a, b = Uint8(...), Uint8(...)
-            if a > b:
-                ...
-            else:
-                ...  # unreachable!
-        """
-        raise NotImplementedError
+        raise TypeError("cannot use Constraint in a boolean context")
 
     @overload
     def ite[N: int](self, then: Uint[N], else_: Uint[N], /) -> Uint[N]: ...
@@ -316,16 +252,7 @@ class Constraint(Symbolic):
     @overload
     def ite[N: int](self, then: Int[N], else_: Int[N], /) -> Int[N]: ...
 
-    def ite[N: int](self, then: BitVector[N], else_: BitVector[N], /) -> Symbolic:
-        r"""
-        Perform an if-then-else based on this constraint. The result is `then`
-        if the constraint evaluates to `True` and `else_` otherwise.
-
-        :SMT-LIB: (ite self then else\_)
-
-        >>> Constraint(True).ite(Uint8(0xA), Uint8(0xB))
-        Uint8(`#x0a`)
-        """
+    def ite[N: int](self, then: BitVector[N], else_: BitVector[N], /) -> BitVector[N]:
         match self._term:
             case True:
                 return then
@@ -335,17 +262,6 @@ class Constraint(Symbolic):
                 raise NotImplementedError
 
     def reveal(self) -> bool | None:
-        """
-        Reveal the simplified value of this constraint *without* invoking the
-        solver. If the constraint does not simplify to a constant literal,
-        returns `None`.
-
-        >>> (Constraint("C") | Constraint(True)).reveal()
-        True
-
-        >>> (Constraint("C") | Constraint(False)).reveal() is None
-        True
-        """
         return self._term if isinstance(self._term, bool) else None
 
 
