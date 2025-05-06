@@ -47,8 +47,7 @@ class BitVectorMeta(abc.ABCMeta):
 
         name = self.__name__ + str(n)
         if name not in self._ccache:
-            sort = cast(Any, self)._make_sort(n)
-            cls = type(name, (self,), {"width": n, "_sort": sort, "__slots__": ()})
+            cls = type(name, (self,), {"width": n, "__slots__": ()})
             cls.__module__ = self.__module__
             self._ccache[name] = cls
         return self._ccache[name]
@@ -102,6 +101,8 @@ class Symbolic(abc.ABC):
     Represents an immutable symbolic value. This abstract base class is
     inherited by :class:`Constraint`, :class:`Uint` and :class:`Int`.
     """
+
+    __slots__ = ()
 
     @abc.abstractmethod
     def __init__(self, term: Any, /) -> None:
@@ -165,6 +166,8 @@ class Constraint(Symbolic):
     >>> Constraint("C")
     Constraint(`C`)
     """
+
+    __slots__ = ()
 
     def __init__(self, value: bool | str, /):
         raise NotImplementedError
@@ -289,6 +292,8 @@ class BitVector[N: int](
     Int8(`I`)
     """
 
+    __slots__ = ("_term",)
+
     width: ClassVar[int]
     """
     The number of bits in this bitvector.
@@ -298,7 +303,7 @@ class BitVector[N: int](
     """
 
     def __init__(self, value: int | str, /) -> None:
-        raise NotImplementedError
+        self._term = value
 
     @abc.abstractmethod
     def __lt__(self, other: Self, /) -> Constraint: ...
@@ -429,6 +434,8 @@ class BitVector[N: int](
 class Uint[N: int](BitVector[N]):
     """Represents an N-bit unsigned integer."""
 
+    __slots__ = ()
+
     def __lt__(self, other: Self, /) -> Constraint:
         """
         Check if this bitvector is strictly less than `other` using an unsigned
@@ -541,11 +548,13 @@ class Uint[N: int](BitVector[N]):
         >>> (Uint8("X") + Uint8(1)).reveal() is None
         True
         """
-        raise NotImplementedError
+        return self._term if isinstance(self._term, int) else None
 
 
 class Int[N: int](BitVector[N]):
     """Represents an N-bit signed integer in two's complement form."""
+
+    __slots__ = ()
 
     def __lt__(self, other: Self, /) -> Constraint:
         """
@@ -699,10 +708,11 @@ class Array[K: Uint[Any] | Int[Any], V: Uint[Any] | Int[Any]](
     Array[Int8, Int64](`A`)
     """
 
+    __slots__ = ("_term",)
     __hash__: ClassVar[None] = None  # pyright: ignore[reportIncompatibleMethodOverride]
 
     def __init__(self, value: V | str, /) -> None:
-        raise NotImplementedError
+        self._term = value
 
     def __copy__(self) -> Self:
         raise NotImplementedError

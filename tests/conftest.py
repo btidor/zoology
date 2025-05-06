@@ -37,10 +37,7 @@ def pytest_addoption(
 
 # https://pyinstrument.readthedocs.io/en/latest/guide.html#profile-pytest-tests
 @pytest.fixture(autouse=True)
-def pyinstrument_single(
-    request: Any,
-    reset_bitwuzla: None,  # reset *before* starting profiler
-) -> Iterator[None]:
+def pyinstrument_single(request: Any) -> Iterator[None]:
     if not request.config.getoption("profile"):
         yield
         return
