@@ -18,7 +18,6 @@ from smt import (
     Uint256,
     Uint257,
     Uint512,
-    bvlshr_harder,
     concat_bytes,
     overflow_safe,
     substitute2,
@@ -193,11 +192,7 @@ def SHL(shift: Uint256, value: Uint256) -> Uint256:
 
 def SHR(shift: Uint256, value: Uint256) -> Uint256:
     """1C - Logical right shift operation."""
-    # Solidity contracts use SHR to extract the function signature from the
-    # calldata. It's really important that the result be fully simplified,
-    # otherwise we'll waste time exploring irrelevant branches. Bitwuzla doesn't
-    # simplify well through `concat`s, so we do it manually.
-    return bvlshr_harder(value, shift)
+    return value >> shift
 
 
 def SAR(shift: Uint256, value: Uint256) -> Uint256:
@@ -440,7 +435,7 @@ def JUMPI(
 
             s0, s1 = copy.deepcopy(s), s
             s0.solver.add(c)
-            s0.trace.append(f"{ins.offset+1:04X}")
+            s0.trace.append(f"{ins.offset + 1:04X}")
 
             s1.pc = s.program.jumps[counter]
             s1.path |= 1
@@ -448,7 +443,7 @@ def JUMPI(
             s1.trace.append(f"{counter:04X}")
             return Jump(targets=(s0, s1))
         case True:  # branch never taken, fall through
-            s.trace.append(f"{ins.offset+1:04X}")
+            s.trace.append(f"{ins.offset + 1:04X}")
             return None
         case False:  # branch always taken
             s.pc = s.program.jumps[counter]

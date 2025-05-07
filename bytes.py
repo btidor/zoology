@@ -18,8 +18,6 @@ from smt import (
     concat_bytes,
     concat_words,
     explode_bytes,
-    smart_arith,
-    smart_cmp,
 )
 
 type BytesWrite = tuple[Uint256, Uint8 | ByteSlice]
@@ -204,23 +202,25 @@ class Memory:
                 case ByteSlice():
                     # Compute the index relative to the grafted slice, assuming
                     # the index falls within this write.
-                    delta, sign = smart_arith(i - at)
+                    delta = i - at
+
                     # ASSUMPTION: all memory indexes are small (below 2^64), so
                     # index math never underflows.
-                    if sign == 1:
-                        continue  # delta < 0; this write is not a match
+                    if (delta < Uint256(0)).reveal() is True:
+                        continue
 
                     # Quickly check if the index falls outside this write, in
                     # the other direction.
-                    _, sign = smart_arith(write.length - delta)
+                    #
                     # ASSUMPTION: all memory grafts are smaller than 2^64, so
                     # index math never underflows.
-                    if sign == 1:
-                        continue  # delta >= write.length; not a match
+                    #
+                    if (i - at >= write.length).reveal() is True:
+                        continue
 
                     item = (delta < write.length).ite(write[delta], item)
                 case Uint():
-                    match smart_cmp(eq := (i == at)):
+                    match (eq := i == at).reveal():
                         case True:
                             item = write
                         case False:

@@ -4,8 +4,7 @@
 from __future__ import annotations
 
 import abc
-import copy
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import math
 from typing import (
     TYPE_CHECKING,
@@ -142,7 +141,7 @@ class NotOp:
 
 @dataclass(frozen=True, slots=True)
 class AndOp:
-    args: set[BooleanTerm]
+    args: frozenset[BooleanTerm]
 
     @classmethod
     def apply(cls, *terms: BooleanTerm) -> BooleanTerm:
@@ -157,12 +156,12 @@ class AndOp:
                     args.intersection_update(term.args)  # A & A => A
                 case _:
                     args.add(term)
-        return AndOp(args) if args else True
+        return AndOp(frozenset(args)) if args else True
 
 
 @dataclass(frozen=True, slots=True)
 class OrOp:
-    args: set[BooleanTerm]
+    args: frozenset[BooleanTerm]
 
     @classmethod
     def apply(cls, *terms: BooleanTerm) -> BooleanTerm:
@@ -177,13 +176,13 @@ class OrOp:
                     args.intersection_update(term.args)  # A | A => A
                 case _:
                     args.add(term)
-        return OrOp(args) if args else False
+        return OrOp(frozenset(args)) if args else False
 
 
 @dataclass(frozen=True, slots=True)
 class XorOp:
     base: bool
-    args: set[BooleanTerm]
+    args: frozenset[BooleanTerm]
 
     @classmethod
     def apply(cls, *terms: BooleanTerm) -> BooleanTerm:
@@ -214,7 +213,7 @@ class XorOp:
                 invert ^= True
             else:
                 args.add(d)
-        return XorOp(invert, args) if args else invert
+        return XorOp(invert, frozenset(args)) if args else invert
 
 
 class Constraint(Symbolic):
@@ -268,6 +267,7 @@ type BitvectorTerm = (
     | IteOp
     | ExtractOp
     | ExtendOp
+    | ConcatOp
     | SelectOp
 )
 
@@ -291,7 +291,7 @@ class BvNotOp:
 @dataclass(frozen=True, slots=True)
 class BvAndOp:
     mask: int
-    args: set[BitvectorTerm]
+    args: frozenset[BitvectorTerm]
 
     @classmethod
     def apply(cls, width: int, *terms: BitvectorTerm) -> BitvectorTerm:
@@ -316,13 +316,13 @@ class BvAndOp:
                 args.add(term)
         if mask == (1 << width) - 1:  # 0xFF & A => 0xFF
             return mask
-        return BvAndOp(mask, args) if args else mask
+        return BvAndOp(mask, frozenset(args)) if args else mask
 
 
 @dataclass(frozen=True, slots=True)
 class BvOrOp:
     mask: int
-    args: set[BitvectorTerm]
+    args: frozenset[BitvectorTerm]
 
     @classmethod
     def apply(cls, width: int, *terms: BitvectorTerm) -> BitvectorTerm:
@@ -347,13 +347,13 @@ class BvOrOp:
                 args.add(term)
         if mask == 0:  # 0 | A => 0
             return mask
-        return BvOrOp(mask, args) if args else mask
+        return BvOrOp(mask, frozenset(args)) if args else mask
 
 
 @dataclass(frozen=True, slots=True)
 class BvXorOp:
     base: int
-    args: set[BitvectorTerm]
+    args: frozenset[BitvectorTerm]
 
     @classmethod
     def apply(cls, width: int, *terms: BitvectorTerm) -> BitvectorTerm:
@@ -382,7 +382,7 @@ class BvXorOp:
                 base ^= mask  # A ^ ~A => 0xFF
             else:
                 args.add(term)
-        return BvXorOp(mask, args) if args else base
+        return BvXorOp(mask, frozenset(args)) if args else base
 
 
 @dataclass(frozen=True, slots=True)
@@ -597,7 +597,6 @@ class ExtractOp:
 
     @classmethod
     def apply(cls, term: BitvectorTerm, rightmost: int) -> BitvectorTerm:
-        print("EXTR", term, rightmost)
         assert rightmost > 0
         match (term, rightmost):
             case int(), _:
@@ -624,6 +623,23 @@ class ExtendOp:
                 return to_unsigned(width + extra, to_signed(width, term))
             case _:
                 return ExtendOp(term, extra, signed)
+
+
+@dataclass(frozen=True, slots=True)
+class ConcatOp:
+    width: int
+    terms: tuple[BitvectorTerm, ...]
+
+    @classmethod
+    def apply(cls, width: int, *terms: BitvectorTerm) -> BitvectorTerm:
+        i = 0
+        for t in terms:
+            if not isinstance(t, int):
+                break
+            i = (i << width) | t
+        else:
+            return i
+        return ConcatOp(width, terms)
 
 
 class BitVector[N: int](
@@ -820,20 +836,20 @@ class UninterpretedTerm:
 @dataclass(frozen=True, slots=True)
 class ArrayTerm:
     default: BitvectorTerm | UninterpretedTerm
-    base: dict[int, BitvectorTerm] = field(default_factory=dict)
+    base: frozenset[tuple[int, BitvectorTerm]] = frozenset()
     writes: tuple[tuple[BitvectorTerm, BitvectorTerm], ...] = ()
 
     @classmethod
     def apply(
         cls, array: ArrayTerm, key: BitvectorTerm, value: BitvectorTerm
     ) -> ArrayTerm:
-        base = copy.copy(array.base)
+        base = dict(array.base)
         writes = list(array.writes)
         if array.writes or not isinstance(key, int):
             writes.append((key, value))
         else:
             base[key] = value
-        return ArrayTerm(array.default, base, tuple(writes))
+        return ArrayTerm(array.default, frozenset(base.items()), tuple(writes))
 
 
 @dataclass(frozen=True, slots=True)
@@ -845,8 +861,8 @@ class SelectOp:
     def apply(cls, array: ArrayTerm, key: BitvectorTerm) -> BitvectorTerm:
         if array.writes or not isinstance(key, int):
             return SelectOp(array, key)
-        elif key in array.base:
-            return array.base[key]
+        elif key in (tmp := dict(array.base)):
+            return tmp[key]
         elif isinstance(array.default, UninterpretedTerm):
             return SelectOp(array.default, key)
         else:
@@ -888,7 +904,7 @@ class Solver:
         self.constraints = list[Constraint]()
 
     def add(self, assertion: Constraint, /) -> None:
-        raise NotImplementedError
+        self.constraints.append(assertion)
 
     def check(self, *assumptions: Constraint) -> bool:
         raise NotImplementedError
@@ -919,6 +935,7 @@ Uint257 = Uint[Literal[257]]
 Uint512 = Uint[Literal[512]]
 
 Int256 = Int[Literal[256]]
+Int257 = Int[Literal[257]]
 
 
 class NarrowingError(Exception):
@@ -933,12 +950,12 @@ def describe[N: int](s: Uint[N]) -> str:
     raise NotImplementedError
 
 
-def overflow_safe[N: int](a: Uint[N], b: Uint[N]) -> Constraint:
-    raise NotImplementedError
+def overflow_safe(a: Uint256, b: Uint256) -> Constraint:
+    return (a.into(Uint257) + b.into(Uint257)).into(Int257) >= Int257(0)
 
 
-def underflow_safe[N: int](a: Uint[N], b: Uint[N]) -> Constraint:
-    raise NotImplementedError
+def underflow_safe(a: Uint256, b: Uint256) -> Constraint:
+    return a >= b
 
 
 def compact_array[N: int, M: int](
@@ -954,23 +971,21 @@ def compact_helper[N: int](
 
 
 def concat_bytes(*bytes: Uint8) -> Uint[Any]:
-    raise NotImplementedError
+    cls = Uint[Literal[8 * len(bytes)]]  # pyright: ignore
+    return cls._from_term(ConcatOp.apply(8, *(b._term for b in bytes)))  # pyright: ignore
 
 
 def concat_words(*words: Uint256) -> Uint[Any]:
-    raise NotImplementedError
+    cls = Uint[Literal[256 * len(words)]]  # pyright: ignore
+    return cls._from_term(ConcatOp.apply(256, *(w._term for w in words)))  # pyright: ignore
 
 
 def explode_bytes(v: Uint256) -> list[Uint8]:
-    raise NotImplementedError
-
-
-def smart_arith[N: int](v: Uint[N]) -> tuple[Uint[N], int]:
-    raise NotImplementedError
-
-
-def smart_cmp(v: Constraint) -> bool | None:
-    raise NotImplementedError
+    r = list[Uint8]()
+    for _ in range(32):
+        r.append(v.into(Uint8))
+        v >>= Uint256(8)
+    return r
 
 
 def iff(a: Constraint, b: Constraint) -> Constraint:
@@ -982,10 +997,6 @@ def implies(a: Constraint, b: Constraint) -> Constraint:
 
 
 def prequal[N: int](a: Uint[N], b: Uint[N]) -> bool:
-    raise NotImplementedError
-
-
-def bvlshr_harder[N: int](a: Uint[N], b: Uint[N]) -> Uint[N]:
     raise NotImplementedError
 
 
