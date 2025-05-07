@@ -4,7 +4,8 @@
 from __future__ import annotations
 
 import abc
-from dataclasses import dataclass
+import copy
+from dataclasses import dataclass, field
 import math
 from typing import (
     TYPE_CHECKING,
@@ -35,7 +36,7 @@ class BitVectorMeta(abc.ABCMeta):
         if get_origin(N) != Literal:
             # No-op unbound type variables, unions, etc. These kind of Uint[...]
             # can be used in type signatures. Note that trying to instantiate
-            # one will raise an error because _sort is not defined.
+            # one will raise an error because width is not defined.
             return self
 
         args = get_args(N)
@@ -69,13 +70,13 @@ class ArrayMeta(abc.ABCMeta):
 
         k, v = cast("tuple[Any, Any]", args)
         for a in (k, v):
-            if hasattr(a, "_sort"):
+            if hasattr(a, "width"):
                 continue  # `a` is a usable BitVector
 
             if get_origin(a) is Union or isinstance(a, TypeVar):
                 # No-op unbound type variables, unions, etc. These kind of
                 # Array[...] can be used in type signatures. Note that trying to
-                # instantiate one will raise an error because _sort is not
+                # instantiate one will raise an error because width is not
                 # defined.
                 return self
 
@@ -90,10 +91,7 @@ class ArrayMeta(abc.ABCMeta):
 
         name = self.__name__ + "[" + k.__name__ + ", " + v.__name__ + "]"
         if name not in self._ccache:
-            sort = cast(Any, self)._make_sort(k, v)
-            cls = type(
-                name, (self,), {"_sort": sort, "_key": k, "_value": v, "__slots__": ()}
-            )
+            cls = type(name, (self,), {"_key": k, "_value": v, "__slots__": ()})
             cls.__module__ = self.__module__
             self._ccache[name] = cls
         return self._ccache[name]
@@ -270,6 +268,7 @@ type BitvectorTerm = (
     | IteOp
     | ExtractOp
     | ExtendOp
+    | SelectOp
 )
 
 
@@ -813,47 +812,80 @@ class Int[N: int](BitVector[N]):
         )
 
 
+@dataclass(frozen=True, slots=True)
+class UninterpretedTerm:
+    name: str
+
+
+@dataclass(frozen=True, slots=True)
+class ArrayTerm:
+    default: BitvectorTerm | UninterpretedTerm
+    base: dict[int, BitvectorTerm] = field(default_factory=dict)
+    writes: tuple[tuple[BitvectorTerm, BitvectorTerm], ...] = ()
+
+    @classmethod
+    def apply(
+        cls, array: ArrayTerm, key: BitvectorTerm, value: BitvectorTerm
+    ) -> ArrayTerm:
+        base = copy.copy(array.base)
+        writes = list(array.writes)
+        if array.writes or not isinstance(key, int):
+            writes.append((key, value))
+        else:
+            base[key] = value
+        return ArrayTerm(array.default, base, tuple(writes))
+
+
+@dataclass(frozen=True, slots=True)
+class SelectOp:
+    array: ArrayTerm | UninterpretedTerm
+    key: BitvectorTerm
+
+    @classmethod
+    def apply(cls, array: ArrayTerm, key: BitvectorTerm) -> BitvectorTerm:
+        if array.writes or not isinstance(key, int):
+            return SelectOp(array, key)
+        elif key in array.base:
+            return array.base[key]
+        elif isinstance(array.default, UninterpretedTerm):
+            return SelectOp(array.default, key)
+        else:
+            return array.default
+
+
 class Array[K: Uint[Any] | Int[Any], V: Uint[Any] | Int[Any]](
     metaclass=type if TYPE_CHECKING else ArrayMeta
 ):
-    __slots__ = ("_term",)
+    __slots__ = ("_array",)
     __hash__: ClassVar[None] = None  # pyright: ignore[reportIncompatibleMethodOverride]
 
     def __init__(self, value: V | str, /) -> None:
-        self._term = value
+        match value:
+            case str():
+                self._array = ArrayTerm(UninterpretedTerm(value))
+            case BitVector():
+                self._array = ArrayTerm(value._term)  # pyright: ignore[reportPrivateUsage]
 
-    def __copy__(self) -> Self:
-        raise NotImplementedError
-
-    def __deepcopy__(self, memo: Any, /) -> Self:
-        raise NotImplementedError
-
-    def __repr__(self) -> str:
-        raise NotImplementedError
-
-    # Implementation Note: Arrays cannot be compared for equality.
     def __eq__(  # pyright: ignore[reportIncompatibleMethodOverride]
         self, other: Never, /
     ) -> Never:
-        raise NotImplementedError
+        raise TypeError("arrays cannot be compared for equality.")
 
     def __ne__(  # pyright: ignore[reportIncompatibleMethodOverride]
         self, other: Never, /
     ) -> Never:
-        raise NotImplementedError
+        raise TypeError("arrays cannot be compared for equality.")
 
     def __getitem__(self, key: K) -> V:
-        raise NotImplementedError
+        return self._value(SelectOp.apply(self._array, key._term))  # pyright: ignore
 
     def __setitem__(self, key: K, value: V) -> None:
-        raise NotImplementedError
+        self._array = ArrayTerm.apply(self._array, key._term, value._term)  # pyright: ignore[reportPrivateUsage]
 
 
 class Solver:
-    constraint: Constraint
-
     def __init__(self) -> None:
-        raise NotImplementedError
+        self.constraints = list[Constraint]()
 
     def add(self, assertion: Constraint, /) -> None:
         raise NotImplementedError
