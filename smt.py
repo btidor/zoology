@@ -284,6 +284,13 @@ class BvNotOp:
                 return mask ^ term
             case BvNotOp(arg):  # double negation
                 return arg
+            case BvArithOp(base, args):  # ~(A + B) => ~A + ~B - 1
+                inv = list[BitvectorTerm]()
+                inv.append(BvNotOp.apply(width, base))
+                for arg in args:
+                    inv.append(BvNotOp.apply(width, arg))
+                    inv.append(1)
+                return BvArithOp.apply(width, *inv)
             case _:
                 return BvNotOp(term)
 
@@ -394,15 +401,16 @@ class BvArithOp:
     def apply(cls, width: int, *terms: BitvectorTerm) -> BitvectorTerm:
         base = 0
         limit = 1 << width
+        queue = list(terms)
         args = list[BitvectorTerm]()
         deferred = list[BvNotOp]()
-        for term in terms:
-            match term:
+        while queue:
+            match term := queue.pop():
                 case int():
                     base = (base + term) % limit
                 case BvArithOp():
                     base = (base + term.base) % limit
-                    args.extend(term.args)
+                    queue.extend(term.args)
                 case BvNotOp():
                     deferred.append(term)
                 case _:
