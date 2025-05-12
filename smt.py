@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import abc
 from dataclasses import dataclass
+from functools import reduce
 import math
+from subprocess import Popen, PIPE
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -138,6 +140,9 @@ class NotOp:
             case _:
                 return NotOp(term)
 
+    def dump(self, defs: set[str]) -> str:
+        return f"(not {dump(self.arg, defs)})"
+
 
 @dataclass(frozen=True, slots=True)
 class AndOp:
@@ -153,10 +158,23 @@ class AndOp:
                 case False:
                     return False
                 case AndOp():
-                    args.intersection_update(term.args)  # A & A => A
+                    args.update(term.args)  # A & A => A
                 case _:
                     args.add(term)
-        return AndOp(frozenset(args)) if args else True
+        match len(args):
+            case 0:
+                return True
+            case 1:
+                return args.pop()
+            case _:
+                return AndOp(frozenset(args))
+
+    def dump(self, defs: set[str]) -> str:
+        args = set(self.args)
+        s = dump(args.pop(), defs)
+        while args:
+            s = f"(and {s} {dump(args.pop(), defs)})"
+        return s
 
 
 @dataclass(frozen=True, slots=True)
@@ -173,10 +191,23 @@ class OrOp:
                 case False:
                     pass
                 case OrOp():
-                    args.intersection_update(term.args)  # A | A => A
+                    args.update(term.args)  # A | A => A
                 case _:
                     args.add(term)
-        return OrOp(frozenset(args)) if args else False
+        match len(args):
+            case 0:
+                return False
+            case 1:
+                return args.pop()
+            case _:
+                return OrOp(frozenset(args))
+
+    def dump(self, defs: set[str]) -> str:
+        args = set(self.args)
+        s = dump(args.pop(), defs)
+        while args:
+            s = f"(or {s} {dump(args.pop(), defs)})"
+        return s
 
 
 @dataclass(frozen=True, slots=True)
@@ -214,6 +245,15 @@ class XorOp:
             else:
                 args.add(d)
         return XorOp(invert, frozenset(args)) if args else invert
+
+    def dump(self, defs: set[str]) -> str:
+        args = set(self.args)
+        s = dump(args.pop(), defs)
+        while args:
+            s = f"(xor {s} {dump(args.pop(), defs)})"
+        if self.base is True:
+            s = f"(xor {s} true)"
+        return s
 
 
 class Constraint(Symbolic):
@@ -294,6 +334,9 @@ class BvNotOp:
             case _:
                 return BvNotOp(term)
 
+    def dump(self, width: int, defs: set[str]) -> str:
+        return f"(bvnot {dump(self.arg, defs, width)})"
+
 
 @dataclass(frozen=True, slots=True)
 class BvAndOp:
@@ -311,7 +354,7 @@ class BvAndOp:
                     mask &= term
                 case BvAndOp():
                     mask &= term.mask
-                    args.intersection_update(term.args)  # A & A => A
+                    args.update(term.args)  # A & A => A
                 case BvNotOp():
                     deferred.add(term)
                 case _:
@@ -324,6 +367,15 @@ class BvAndOp:
         if mask == (1 << width) - 1:  # 0xFF & A => 0xFF
             return mask
         return BvAndOp(mask, frozenset(args)) if args else mask
+
+    def dump(self, width: int, defs: set[str]) -> str:
+        args = set(self.args)
+        s = dump(args.pop(), defs, width)
+        while args:
+            s = f"(bvand {s} {dump(args.pop(), defs, width)})"
+        if self.mask != (1 << width) - 1:
+            s = f"(bvand {s} {dump(self.mask, defs, width)})"
+        return s
 
 
 @dataclass(frozen=True, slots=True)
@@ -342,7 +394,7 @@ class BvOrOp:
                     mask |= term
                 case BvOrOp():
                     mask |= term.mask
-                    args.intersection_update(term.args)  # A | A => A
+                    args.update(term.args)  # A | A => A
                 case BvNotOp():
                     deferred.add(term)
                 case _:
@@ -355,6 +407,15 @@ class BvOrOp:
         if mask == 0:  # 0 | A => 0
             return mask
         return BvOrOp(mask, frozenset(args)) if args else mask
+
+    def dump(self, width: int, defs: set[str]) -> str:
+        args = set(self.args)
+        s = dump(args.pop(), defs, width)
+        while args:
+            s = f"(bvor {s} {dump(args.pop(), defs, width)})"
+        if self.mask != 0:
+            s = f"(bvor {s} {dump(self.mask, defs, width)})"
+        return s
 
 
 @dataclass(frozen=True, slots=True)
@@ -391,6 +452,13 @@ class BvXorOp:
                 args.add(term)
         return BvXorOp(mask, frozenset(args)) if args else base
 
+    def dump(self, width: int, defs: set[str]) -> str:
+        args = set(self.args)
+        s = dump(self.base, defs, width)
+        while args:
+            s = f"(bvxor {s} {dump(args.pop(), defs, width)})"
+        return s
+
 
 @dataclass(frozen=True, slots=True)
 class BvArithOp:
@@ -422,6 +490,15 @@ class BvArithOp:
             else:
                 args.append(term)
         return BvArithOp(base, tuple(args)) if args else base
+
+    def dump(self, width: int, defs: set[str]) -> str:
+        args = set(self.args)
+        s = dump(args.pop(), defs, width)
+        while args:
+            s = f"(bvadd {s} {dump(args.pop(), defs, width)})"
+        if self.base:
+            s = f"(bvadd {dump(self.base, defs, width)} {s})"
+        return s
 
 
 @dataclass(frozen=True, slots=True)
@@ -455,6 +532,15 @@ class BvMulOp:
             return args[0]
         return BvMulOp(base, tuple(args))
 
+    def dump(self, width: int, defs: set[str]) -> str:
+        args = set(self.args)
+        s = dump(args.pop(), defs, width)
+        while args:
+            s = f"(bvmul {s} {dump(args.pop(), defs, width)})"
+        if self.base:
+            s = f"(bvmul {dump(self.base, defs, width)} {s})"
+        return s
+
 
 @dataclass(frozen=True, slots=True)
 class BvDivOp:
@@ -482,6 +568,9 @@ class BvDivOp:
             case _:
                 return BvDivOp(left, right, signed)
 
+    def dump(self, width: int, defs: set[str]) -> str:
+        return f"(bv{'s' if self.signed else 'u'}div {dump(self.left, defs, width)} {dump(self.right, defs, width)})"
+
 
 @dataclass(frozen=True, slots=True)
 class BvModOp:
@@ -505,9 +594,13 @@ class BvModOp:
             case _:
                 return BvModOp(left, right, signed)
 
+    def dump(self, width: int, defs: set[str]) -> str:
+        return f"(bv{'s' if self.signed else 'u'}mod {dump(self.left, defs, width)} {dump(self.right, defs, width)})"
+
 
 @dataclass(frozen=True, slots=True)
 class BvCmpOp:
+    width: int
     left: BitvectorTerm
     right: BitvectorTerm
     kind: (
@@ -542,13 +635,28 @@ class BvCmpOp:
             case int(), int(), "SLE":
                 return to_signed(width, left) <= to_signed(width, right)
             case _:
-                return BvCmpOp(left, right, kind)
+                return BvCmpOp(width, left, right, kind)
+
+    def dump(self, defs: set[str]) -> str:
+        match self.kind:
+            case "EQ":
+                short = "="
+            case "ULT":
+                short = "bvult"
+            case "ULE":
+                short = "bvule"
+            case "SLT":
+                short = "bvslt"
+            case "SLE":
+                short = "bvsle"
+        return f"({short} {dump(self.left, defs, self.width)} {dump(self.right, defs, self.width)})"
 
 
 @dataclass(frozen=True, slots=True)
 class BvShiftOp:
     term: BitvectorTerm
     shift: BitvectorTerm
+    way: Literal["L"] | Literal["RU"] | Literal["RS"]
 
     @classmethod
     def apply(
@@ -571,7 +679,19 @@ class BvShiftOp:
             case _, int(), "L" | "RU" if shift >= width:
                 return 0
             case _:
-                return BvShiftOp(term, shift)
+                return BvShiftOp(term, shift, way)
+
+    def dump(self, width: int, defs: set[str]) -> str:
+        match self.way:
+            case "L":
+                short = "bvshl"
+            case "RU":
+                short = "bvlshr"
+            case "RS":
+                short = "bvashr"
+        return (
+            f"({short} {dump(self.term, defs, width)} {dump(self.shift, defs, width)})"
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -597,6 +717,9 @@ class IteOp:
             case _:
                 return IteOp(cond, left, right)
 
+    def dump(self, width: int, defs: set[str]) -> str:
+        return f"(ite {dump(self.cond, defs)} {dump(self.left, defs, width)} {dump(self.right, defs, width)})"
+
 
 @dataclass(frozen=True, slots=True)
 class ExtractOp:
@@ -611,6 +734,9 @@ class ExtractOp:
                 return term & ((1 << rightmost) - 1)
             case _:
                 return ExtractOp(term, rightmost)
+
+    def dump(self, width: int, defs: set[str]) -> str:
+        return f"((_ extract {self.rightmost - 1} 0) {dump(self.term, defs, width)})"
 
 
 @dataclass(frozen=True, slots=True)
@@ -632,6 +758,9 @@ class ExtendOp:
             case _:
                 return ExtendOp(term, extra, signed)
 
+    def dump(self, width: int, defs: set[str]) -> str:
+        return f"(concat {dump(0, defs, self.extra)} {dump(self.term, defs, width - self.extra)})"
+
 
 @dataclass(frozen=True, slots=True)
 class ConcatOp:
@@ -648,6 +777,9 @@ class ConcatOp:
         else:
             return i
         return ConcatOp(width, terms)
+
+    def dump(self, width: int, defs: set[str]) -> str:
+        return f"(concat {' '.join(dump(t, defs, self.width) for t in self.terms)})"
 
 
 class BitVector[N: int](
@@ -839,6 +971,13 @@ class Int[N: int](BitVector[N]):
 @dataclass(frozen=True, slots=True)
 class UninterpretedTerm:
     name: str
+    width: tuple[int, int]
+
+    def dump(self, width: tuple[int, int], defs: set[str]) -> str:
+        defs.add(
+            f"(declare-fun {self.name} () (Array (_ BitVec {width[0]}) (_ BitVec {width[1]})))"
+        )
+        return self.name
 
 
 @dataclass(frozen=True, slots=True)
@@ -846,6 +985,7 @@ class ArrayTerm:
     default: BitvectorTerm | UninterpretedTerm
     base: frozenset[tuple[int, BitvectorTerm]] = frozenset()
     writes: tuple[tuple[BitvectorTerm, BitvectorTerm], ...] = ()
+    width: tuple[int, int] = (-1, -1)
 
     @classmethod
     def apply(
@@ -857,7 +997,20 @@ class ArrayTerm:
             writes.append((key, value))
         else:
             base[key] = value
-        return ArrayTerm(array.default, frozenset(base.items()), tuple(writes))
+        return ArrayTerm(
+            array.default, frozenset(base.items()), tuple(writes), array.width
+        )
+
+    def dump(self, width: tuple[int, int], defs: set[str]) -> str:
+        if isinstance(self.default, UninterpretedTerm):
+            s = dump(self.default, defs, width)
+        else:
+            s = dump(self.default, defs, width[1])
+        for k, v in self.base:
+            s = f"(store {s} {dump(k, defs, width[0])} {dump(v, defs, width[1])})"
+        for k, v in self.writes:
+            s = f"(store {s} {dump(k, defs, width[0])} {dump(v, defs, width[1])})"
+        return s
 
 
 @dataclass(frozen=True, slots=True)
@@ -876,6 +1029,9 @@ class SelectOp:
         else:
             return array.default
 
+    def dump(self, width: int, defs: set[str]) -> str:
+        return f"(select {dump(self.array, defs, self.array.width)} {dump(self.key, defs, self.array.width[0])})"
+
 
 class Array[K: Uint[Any] | Int[Any], V: Uint[Any] | Int[Any]](
     metaclass=type if TYPE_CHECKING else ArrayMeta
@@ -884,11 +1040,12 @@ class Array[K: Uint[Any] | Int[Any], V: Uint[Any] | Int[Any]](
     __hash__: ClassVar[None] = None  # pyright: ignore[reportIncompatibleMethodOverride]
 
     def __init__(self, value: V | str, /) -> None:
+        width: tuple[int, int] = (self._key.width, self._value.width)  # pyright: ignore
         match value:
             case str():
-                self._array = ArrayTerm(UninterpretedTerm(value))
+                self._array = ArrayTerm(UninterpretedTerm(value, width))  # pyright: ignore[reportPrivateUsage]
             case BitVector():
-                self._array = ArrayTerm(value._term)  # pyright: ignore[reportPrivateUsage]
+                self._array = ArrayTerm(value._term, frozenset(), (), width)  # pyright: ignore[reportPrivateUsage]
 
     def __eq__(  # pyright: ignore[reportIncompatibleMethodOverride]
         self, other: Never, /
@@ -909,13 +1066,36 @@ class Array[K: Uint[Any] | Int[Any], V: Uint[Any] | Int[Any]](
 
 class Solver:
     def __init__(self) -> None:
-        self.constraints = list[Constraint]()
+        self.constraint = Constraint(True)
+        self.model = None
 
     def add(self, assertion: Constraint, /) -> None:
-        self.constraints.append(assertion)
+        self.constraint &= assertion
+        self.model = None
 
     def check(self, *assumptions: Constraint) -> bool:
-        raise NotImplementedError
+        defs = set[str]()
+        constraint = reduce(Constraint.__and__, assumptions, self.constraint)
+        match constraint._term:  # pyright: ignore[reportPrivateUsage]
+            case bool() as b:
+                self.model = {}
+                return b
+            case str() as s:
+                self.model = {s: True}
+                return True
+            case term:
+                sexpr = term.dump(defs)
+        smt = "\n".join([*defs, f"(assert {sexpr})", "(check-sat)"])
+        p = Popen(["z3", "/dev/stdin"], stdin=PIPE, stdout=PIPE, stderr=PIPE)
+        out, err = p.communicate(smt.encode())
+        # print(smt)
+        match out.decode().strip():
+            case "sat":
+                return True
+            case "unsat":
+                return False
+            case _:
+                raise RuntimeError(out, err)
 
     @overload
     def evaluate(self, s: Constraint, /) -> bool: ...
@@ -929,9 +1109,59 @@ class Solver:
     ) -> dict[int, int]: ...
 
     def evaluate[N: int, M: int](
-        self, s: Constraint | Uint[N] | Int[N] | Array[Uint[N], Uint[M]], /
+        self, sym: Constraint | Uint[N] | Int[N] | Array[Uint[N], Uint[M]], /
     ) -> bool | int | dict[int, int]:
-        raise NotImplementedError
+        if isinstance(sym, Array):
+            raise NotImplementedError
+        match sym._term:  # pyright: ignore[reportPrivateUsage]
+            case bool() as b:
+                return b
+            case int() as i:
+                return i
+            case str() as s:
+                raise NotImplementedError(s)
+            case other:
+                raise NotImplementedError(other)
+
+
+@overload
+def dump(term: BooleanTerm, defs: set[str], width: None = None) -> str: ...
+
+
+@overload
+def dump(term: BitvectorTerm, defs: set[str], width: int) -> str: ...
+
+
+@overload
+def dump(
+    term: ArrayTerm | UninterpretedTerm, defs: set[str], width: tuple[int, int]
+) -> str: ...
+
+
+def dump(
+    term: BooleanTerm | BitvectorTerm | ArrayTerm | UninterpretedTerm,
+    defs: set[str],
+    width: None | int | tuple[int, int] = None,
+) -> str:
+    match term:
+        case True:
+            return "true"
+        case False:
+            return "false"
+        case int():
+            assert isinstance(width, int)
+            if width % 8 == 0:
+                return "#x" + term.to_bytes(width // 8).hex()
+            else:
+                return "#b" + bin(term)[2:].zfill(width)
+        case str():
+            if width is None:
+                defs.add(f"(declare-fun {term} () Bool)")
+            else:
+                defs.add(f"(declare-fun {term} () (_ BitVec {width}))")
+            return term
+        case _:
+            return term.dump(defs) if width is None else term.dump(width, defs)  # pyright: ignore
 
 
 Uint8 = Uint[Literal[8]]

@@ -92,9 +92,8 @@ class Validator:
             # This logic needs to match State.constrain(). We don't need to
             # worry about narrowing because SHA3 is not invoked (see check
             # below).
-            # b: Uint256 = end.pc.returndata.slice(Uint256(0), Uint256(32)).bigvector()
-            # predicates.append(end.solver.constraint & (b != Uint256(0)))
-            raise NotImplementedError
+            b: Uint256 = end.pc.returndata.slice(Uint256(0), Uint256(32)).bigvector()
+            predicates.append(end.solver.constraint & (b != Uint256(0)))
 
             if len(end.contracts) > len(previous.contracts):
                 # We can't handle validators that create contracts. That would
