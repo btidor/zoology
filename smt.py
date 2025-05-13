@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import abc
+from collections import defaultdict
 from dataclasses import dataclass
 from functools import reduce
 from itertools import chain
@@ -24,6 +25,8 @@ from typing import (
     get_origin,
     overload,
 )
+
+type Model = dict[str, bool | int | dict[int, int]]
 
 
 class BitVectorMeta(abc.ABCMeta):
@@ -144,6 +147,9 @@ class NotOp:
     def dump(self, defs: set[str]) -> str:
         return f"(not {dump(self.arg, defs)})"
 
+    def eval(self, model: Model) -> bool:
+        return not eval(self.arg, model)
+
 
 @dataclass(frozen=True, slots=True)
 class AndOp:
@@ -177,6 +183,9 @@ class AndOp:
             s = f"(and {s} {dump(args.pop(), defs)})"
         return s
 
+    def eval(self, model: Model) -> bool:
+        return reduce(lambda p, q: p and eval(q, model), self.args, True)
+
 
 @dataclass(frozen=True, slots=True)
 class OrOp:
@@ -209,6 +218,9 @@ class OrOp:
         while args:
             s = f"(or {s} {dump(args.pop(), defs)})"
         return s
+
+    def eval(self, model: Model) -> bool:
+        return reduce(lambda p, q: p or eval(q, model), self.args, False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -255,6 +267,9 @@ class XorOp:
         if self.base is True:
             s = f"(xor {s} true)"
         return s
+
+    def eval(self, model: Model) -> bool:
+        return reduce(lambda p, q: p ^ eval(q, model), self.args, False)
 
 
 class Constraint(Symbolic):
@@ -341,6 +356,10 @@ class BvNotOp:
     def dump(self, width: int, defs: set[str]) -> str:
         return f"(bvnot {dump(self.arg, defs, width)})"
 
+    def eval(self, width: int, model: Model) -> int:
+        mask = (1 << width) - 1
+        return mask ^ eval(self.arg, model, width)
+
 
 @dataclass(frozen=True, slots=True)
 class BvAndOp:
@@ -381,6 +400,10 @@ class BvAndOp:
             s = f"(bvand {s} {dump(self.mask, defs, width)})"
         return s
 
+    def eval(self, width: int, model: Model) -> int:
+        mask = (1 << width) - 1
+        return reduce(lambda p, q: p & eval(q, model, width), self.args, mask)
+
 
 @dataclass(frozen=True, slots=True)
 class BvOrOp:
@@ -420,6 +443,9 @@ class BvOrOp:
         if self.mask != 0:
             s = f"(bvor {s} {dump(self.mask, defs, width)})"
         return s
+
+    def eval(self, width: int, model: Model) -> int:
+        return reduce(lambda p, q: p | eval(q, model, width), self.args, 0)
 
 
 @dataclass(frozen=True, slots=True)
@@ -463,6 +489,9 @@ class BvXorOp:
             s = f"(bvxor {s} {dump(args.pop(), defs, width)})"
         return s
 
+    def eval(self, width: int, model: Model) -> int:
+        return reduce(lambda p, q: p ^ eval(q, model, width), self.args, 0)
+
 
 @dataclass(frozen=True, slots=True)
 class BvArithOp:
@@ -503,6 +532,12 @@ class BvArithOp:
         if self.base:
             s = f"(bvadd {dump(self.base, defs, width)} {s})"
         return s
+
+    def eval(self, width: int, model: Model) -> int:
+        limit = 1 << width
+        return reduce(
+            lambda p, q: (p + eval(q, model, width)) % limit, self.args, self.base
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -545,6 +580,12 @@ class BvMulOp:
             s = f"(bvmul {dump(self.base, defs, width)} {s})"
         return s
 
+    def eval(self, width: int, model: Model) -> int:
+        limit = 1 << width
+        return reduce(
+            lambda p, q: (p * eval(q, model, width)) % limit, self.args, self.base
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class BvDivOp:
@@ -575,6 +616,16 @@ class BvDivOp:
     def dump(self, width: int, defs: set[str]) -> str:
         return f"(bv{'s' if self.signed else 'u'}div {dump(self.left, defs, width)} {dump(self.right, defs, width)})"
 
+    def eval(self, width: int, model: Model) -> int:
+        if self.signed:
+            return to_unsigned(
+                width,
+                to_signed(width, eval(self.left, model, width))
+                // to_signed(width, eval(self.right, model, width)),
+            )
+        else:
+            return eval(self.left, model, width) // eval(self.right, model, width)
+
 
 @dataclass(frozen=True, slots=True)
 class BvModOp:
@@ -600,6 +651,16 @@ class BvModOp:
 
     def dump(self, width: int, defs: set[str]) -> str:
         return f"(bv{'s' if self.signed else 'u'}rem {dump(self.left, defs, width)} {dump(self.right, defs, width)})"
+
+    def eval(self, width: int, model: Model) -> int:
+        if self.signed:
+            return to_unsigned(
+                width,
+                to_signed(width, eval(self.left, model, width))
+                % to_signed(width, eval(self.right, model, width)),
+            )
+        else:
+            return eval(self.left, model, width) % eval(self.right, model, width)
 
 
 @dataclass(frozen=True, slots=True)
@@ -669,6 +730,21 @@ class BvCmpOp:
                     short = "bvsle"
             return f"({short} {dump(self.left, defs, self.width)} {dump(self.right, defs, self.width)})"
 
+    def eval(self, model: Model) -> bool:
+        width = self.width
+        left, right = eval(self.left, model, width), eval(self.right, model, width)
+        match self.kind:
+            case "EQ":
+                return left == right
+            case "ULT":
+                return left < right
+            case "ULE":
+                return left <= right
+            case "SLT":
+                return to_signed(width, left) < to_signed(width, right)
+            case "SLE":
+                return to_signed(width, left) <= to_signed(width, right)
+
 
 @dataclass(frozen=True, slots=True)
 class BvShiftOp:
@@ -691,9 +767,9 @@ class BvShiftOp:
             case int(), int(), "L":
                 return (term << shift) % limit
             case int(), int(), "RU":
-                return (term >> shift) % limit
+                return term >> shift
             case int(), int(), "RS":
-                return to_unsigned(width, (to_signed(width, term) >> shift) % limit)
+                return to_unsigned(width, to_signed(width, term) >> shift)
             case _, int(), "L" | "RU" if shift >= width:
                 return 0
             case _:
@@ -710,6 +786,17 @@ class BvShiftOp:
         return (
             f"({short} {dump(self.term, defs, width)} {dump(self.shift, defs, width)})"
         )
+
+    def eval(self, width: int, model: Model) -> int:
+        limit = 1 << width
+        term, shift = eval(self.term, model, width), eval(self.shift, model, width)
+        match self.way:
+            case "L":
+                return (term << shift) % limit
+            case "RU":
+                return term >> shift
+            case "RS":
+                return to_unsigned(width, to_signed(width, term) >> shift)
 
 
 @dataclass(frozen=True, slots=True)
@@ -738,6 +825,12 @@ class IteOp:
     def dump(self, width: int, defs: set[str]) -> str:
         return f"(ite {dump(self.cond, defs)} {dump(self.left, defs, width)} {dump(self.right, defs, width)})"
 
+    def eval(self, width: int, model: Model) -> int:
+        if eval(self.cond, model):
+            return eval(self.left, model, width)
+        else:
+            return eval(self.right, model, width)
+
 
 @dataclass(frozen=True, slots=True)
 class ExtractOp:
@@ -755,6 +848,9 @@ class ExtractOp:
 
     def dump(self, width: int, defs: set[str]) -> str:
         return f"((_ extract {width - 1} 0) {dump(self.term, defs, self.prior)})"
+
+    def eval(self, width: int, model: Model) -> int:
+        return eval(self.term, model, width) & ((1 << width) - 1)
 
 
 @dataclass(frozen=True, slots=True)
@@ -782,6 +878,14 @@ class ExtendOp:
         else:
             return f"(concat {dump(0, defs, self.extra)} {dump(self.term, defs, width - self.extra)})"
 
+    def eval(self, width: int, model: Model) -> int:
+        if self.signed:
+            return to_unsigned(
+                width, to_signed(width, eval(self.term, model, width - self.extra))
+            )
+        else:
+            return eval(self.term, model, width - self.extra)
+
 
 @dataclass(frozen=True, slots=True)
 class ConcatOp:
@@ -801,6 +905,12 @@ class ConcatOp:
 
     def dump(self, width: int, defs: set[str]) -> str:
         return f"(concat {' '.join(dump(t, defs, self.width) for t in self.terms)})"
+
+    def eval(self, width: int, model: Model) -> int:
+        i = 0
+        for t in self.terms:
+            i = (i << self.width) | eval(t, model, self.width)
+        return i
 
 
 class BitVector[N: int](
@@ -1007,6 +1117,14 @@ class UninterpretedTerm:
         )
         return self.name
 
+    def eval(self, width: tuple[int, int], model: Model) -> dict[int, int]:
+        if self.name in model:
+            m = model[self.name]
+            assert isinstance(m, dict)
+            return m
+        else:
+            return defaultdict(lambda: 0)
+
 
 @dataclass(frozen=True, slots=True)
 class ArrayTerm:
@@ -1047,6 +1165,16 @@ class ArrayTerm:
                 s = f"(store {s} {dump(k, defs, width[0])} {dump(v, defs, width[1])})"
             return s
 
+    def eval(self, width: tuple[int, int], model: Model) -> dict[int, int]:
+        if isinstance(self.default, UninterpretedTerm):
+            x = eval(self.default, model, width)
+        else:
+            d = eval(self.default, model, width[1])
+            x = defaultdict[int, int](lambda: d)
+        for k, v in chain(self.base, self.writes):
+            x[eval(k, model, self.width[0])] = eval(v, model, self.width[1])
+        return x
+
 
 @dataclass(frozen=True, slots=True)
 class SelectOp:
@@ -1071,6 +1199,11 @@ class SelectOp:
             return f"({dump(self.array, defs, self.array.width)}[{dump(self.key, defs, self.array.width[0])}])"
         else:
             return f"(select {dump(self.array, defs, self.array.width)} {dump(self.key, defs, self.array.width[0])})"
+
+    def eval(self, width: int, model: Model) -> int:
+        a = eval(self.array, model, self.array.width)
+        k = eval(self.key, model, self.array.width[0])
+        return a[k]
 
 
 class Array[K: Uint[Any] | Int[Any], V: Uint[Any] | Int[Any]](
@@ -1110,13 +1243,14 @@ class Array[K: Uint[Any] | Int[Any], V: Uint[Any] | Int[Any]](
 class Solver:
     def __init__(self) -> None:
         self.constraint = Constraint(True)
-        self.model = None
+        self.model: Model | None = None
 
     def add(self, assertion: Constraint, /) -> None:
         self.constraint &= assertion
         self.model = None
 
     def check(self, *assumptions: Constraint) -> bool:
+        self.model = None
         defs = set[str]()
         constraint = reduce(Constraint.__and__, assumptions, self.constraint)
         match constraint._term:  # pyright: ignore[reportPrivateUsage]
@@ -1129,10 +1263,37 @@ class Solver:
             case term:
                 sexpr = term.dump(defs)
         smt = "\n".join([*defs, f"(assert {sexpr})", "(check-sat)"])
-        p = Popen(["z3", "/dev/stdin"], stdin=PIPE, stdout=PIPE, stderr=PIPE)
+        p = Popen(["z3", "-model", "/dev/stdin"], stdin=PIPE, stdout=PIPE, stderr=PIPE)
         out, err = p.communicate(smt.encode())
-        match out.decode().strip():
+        outs = out.decode().splitlines()
+        match outs.pop(0):
             case "sat":
+                self.model = {}
+                assert outs.pop(0) == "("
+                while len(outs) > 1:
+                    d, k, *rest = outs.pop(0).split()
+                    assert d == "(define-fun"
+                    if "(Array" in rest:
+                        assert "as const" in outs.pop(0)
+                        d = outs.pop(0).strip(" ()")
+                        assert d.startswith("#x")
+                        v = defaultdict[int, int](lambda: int(d[2:], 16))
+                        while True:
+                            p = outs.pop(0).strip(" ()")
+                            r = outs.pop(0)
+                            q = r.strip(" ()")
+                            assert p.startswith("#x") and q.startswith("#x")
+                            v[int(p[2:], 16)] = int(q[2:], 16)
+                            if r.endswith("))"):
+                                break
+                        self.model[k] = v
+                    elif "BitVec" in rest:
+                        v = outs.pop(0).strip(" ()")
+                        assert v.startswith("#x")
+                        self.model[k] = int(v[2:], 16)
+                    else:
+                        raise NotImplementedError(rest)
+                assert outs == [")"]
                 return True
             case "unsat":
                 return False
@@ -1153,17 +1314,14 @@ class Solver:
     def evaluate[N: int, M: int](
         self, sym: Constraint | Uint[N] | Int[N] | Array[Uint[N], Uint[M]], /
     ) -> bool | int | dict[int, int]:
-        if isinstance(sym, Array):
-            raise NotImplementedError
-        match sym._term:  # pyright: ignore[reportPrivateUsage]
-            case bool() as b:
-                return b
-            case int() as i:
-                return i
-            case str() as s:
-                raise NotImplementedError(s)
-            case other:
-                raise NotImplementedError(other)
+        assert self.model is not None, "solver is not ready for model evaluation"
+        match sym:
+            case Constraint():
+                return eval(sym._term, self.model)  # pyright: ignore[reportPrivateUsage]
+            case BitVector():
+                return eval(sym._term, self.model, sym.width)  # pyright: ignore[reportPrivateUsage]
+            case Array():
+                return eval(sym._array, self.model, sym._array.width)  # pyright: ignore[reportPrivateUsage]
 
 
 @overload
@@ -1206,6 +1364,42 @@ def dump(
             return term
         case _:
             return term.dump(defs) if width is None else term.dump(width, defs)  # pyright: ignore
+
+
+@overload
+def eval(term: BooleanTerm, model: Model, width: None = None) -> bool: ...
+
+
+@overload
+def eval(term: BitvectorTerm, model: Model, width: int) -> int: ...
+
+
+@overload
+def eval(
+    term: ArrayTerm | UninterpretedTerm,
+    model: Model,
+    width: tuple[int, int],
+) -> dict[int, int]: ...
+
+
+def eval(
+    term: BooleanTerm | BitvectorTerm | ArrayTerm | UninterpretedTerm,
+    model: Model,
+    width: None | int | tuple[int, int] = None,
+) -> bool | int | dict[int, int]:
+    match term:
+        case bool() | int():
+            return term
+        case str():
+            match width:
+                case None:
+                    return True
+                case int():
+                    return 0
+                case (int(), int()):
+                    return defaultdict(lambda: 0)
+        case _:
+            return term.eval(model) if width is None else term.eval(width, model)  # pyright: ignore
 
 
 Uint8 = Uint[Literal[8]]
