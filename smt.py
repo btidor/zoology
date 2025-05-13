@@ -863,6 +863,7 @@ class BvShiftOp:
         term: BitvectorTerm,
         shift: BitvectorTerm,
         way: Literal["L"] | Literal["RU"] | Literal["RS"],
+        recursed: bool = False,
     ) -> BitvectorTerm:
         limit = 1 << width
         match (term, shift, way):
@@ -876,6 +877,17 @@ class BvShiftOp:
                 return to_unsigned(width, to_signed(width, term) >> shift)
             case _, int(), "L" | "RU" if shift >= width:
                 return 0
+            case ConcatOp(), int(), "L" | "RU" if not recursed:
+                terms = list(term.terms)
+                while shift >= term.width:
+                    terms: list[BitvectorTerm] = (
+                        [*terms[1:], 0] if way == "L" else [0, *terms[:-1]]
+                    )
+                    shift -= term.width
+                term = ConcatOp.apply(term.width, *terms)
+                if shift:
+                    return BvShiftOp.apply(width, term, shift, way, recursed=True)
+                return term
             case _:
                 m, n = minmax(term, width)
                 match way:
