@@ -6,6 +6,7 @@ from __future__ import annotations
 import abc
 from dataclasses import dataclass
 from functools import reduce
+from itertools import chain
 import math
 from subprocess import Popen, PIPE
 from typing import (
@@ -119,8 +120,8 @@ class Symbolic(abc.ABC):
     def __hash__(self) -> int:
         return self._term.__hash__()
 
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}({self._term})"
+    @abc.abstractmethod
+    def __repr__(self) -> str: ...
 
 
 type BooleanTerm = bool | str | NotOp | AndOp | OrOp | XorOp | BvCmpOp
@@ -262,6 +263,9 @@ class Constraint(Symbolic):
 
     def __init__(self, value: bool | str, /):
         self._term = value  # pyright: ignore
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}({dump(self._term, set(['_pretty']))})"
 
     def __invert__(self) -> Self:
         return self._from_term(NotOp.apply(self._term))
@@ -595,7 +599,7 @@ class BvModOp:
                 return BvModOp(left, right, signed)
 
     def dump(self, width: int, defs: set[str]) -> str:
-        return f"(bv{'s' if self.signed else 'u'}mod {dump(self.left, defs, width)} {dump(self.right, defs, width)})"
+        return f"(bv{'s' if self.signed else 'u'}rem {dump(self.left, defs, width)} {dump(self.right, defs, width)})"
 
 
 @dataclass(frozen=True, slots=True)
@@ -638,18 +642,32 @@ class BvCmpOp:
                 return BvCmpOp(width, left, right, kind)
 
     def dump(self, defs: set[str]) -> str:
-        match self.kind:
-            case "EQ":
-                short = "="
-            case "ULT":
-                short = "bvult"
-            case "ULE":
-                short = "bvule"
-            case "SLT":
-                short = "bvslt"
-            case "SLE":
-                short = "bvsle"
-        return f"({short} {dump(self.left, defs, self.width)} {dump(self.right, defs, self.width)})"
+        if "_pretty" in defs:
+            match self.kind:
+                case "EQ":
+                    short = "="
+                case "ULT":
+                    short = "u<"
+                case "ULE":
+                    short = "u<="
+                case "SLT":
+                    short = "s<"
+                case "SLE":
+                    short = "s<="
+            return f"({dump(self.left, defs, self.width)} {short} {dump(self.right, defs, self.width)})"
+        else:
+            match self.kind:
+                case "EQ":
+                    short = "="
+                case "ULT":
+                    short = "bvult"
+                case "ULE":
+                    short = "bvule"
+                case "SLT":
+                    short = "bvslt"
+                case "SLE":
+                    short = "bvsle"
+            return f"({short} {dump(self.left, defs, self.width)} {dump(self.right, defs, self.width)})"
 
 
 @dataclass(frozen=True, slots=True)
@@ -724,19 +742,19 @@ class IteOp:
 @dataclass(frozen=True, slots=True)
 class ExtractOp:
     term: BitvectorTerm
-    rightmost: int
+    prior: int
 
     @classmethod
-    def apply(cls, term: BitvectorTerm, rightmost: int) -> BitvectorTerm:
+    def apply(cls, term: BitvectorTerm, rightmost: int, prior: int) -> BitvectorTerm:
         assert rightmost > 0
         match (term, rightmost):
             case int(), _:
                 return term & ((1 << rightmost) - 1)
             case _:
-                return ExtractOp(term, rightmost)
+                return ExtractOp(term, prior)
 
     def dump(self, width: int, defs: set[str]) -> str:
-        return f"((_ extract {self.rightmost - 1} 0) {dump(self.term, defs, width)})"
+        return f"((_ extract {width - 1} 0) {dump(self.term, defs, self.prior)})"
 
 
 @dataclass(frozen=True, slots=True)
@@ -759,7 +777,10 @@ class ExtendOp:
                 return ExtendOp(term, extra, signed)
 
     def dump(self, width: int, defs: set[str]) -> str:
-        return f"(concat {dump(0, defs, self.extra)} {dump(self.term, defs, width - self.extra)})"
+        if "_pretty" in defs:
+            return f"(...{dump(self.term, defs, width - self.extra)})"
+        else:
+            return f"(concat {dump(0, defs, self.extra)} {dump(self.term, defs, width - self.extra)})"
 
 
 @dataclass(frozen=True, slots=True)
@@ -791,6 +812,9 @@ class BitVector[N: int](
 
     def __init__(self, value: int | str, /) -> None:
         self._term = value  # pyright: ignore
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}({dump(self._term, set(['_pretty']), self.width)})"
 
     @abc.abstractmethod
     def __lt__(self, other: Self, /) -> Constraint: ...
@@ -911,7 +935,9 @@ class Uint[N: int](BitVector[N]):
                 ExtendOp.apply(self.width, self._term, other.width - self.width, False)
             )
         else:
-            return other._from_term(ExtractOp.apply(self._term, other.width))
+            return other._from_term(
+                ExtractOp.apply(self._term, other.width, self.width)
+            )
 
     def reveal(self) -> int | None:
         return self._term if isinstance(self._term, int) else None
@@ -960,7 +986,9 @@ class Int[N: int](BitVector[N]):
                 ExtendOp.apply(self.width, self._term, other.width - self.width, True)
             )
         else:
-            return other._from_term(ExtractOp.apply(self._term, other.width))
+            return other._from_term(
+                ExtractOp.apply(self._term, other.width, self.width)
+            )
 
     def reveal(self) -> int | None:
         return (
@@ -983,9 +1011,9 @@ class UninterpretedTerm:
 @dataclass(frozen=True, slots=True)
 class ArrayTerm:
     default: BitvectorTerm | UninterpretedTerm
+    width: tuple[int, int]
     base: frozenset[tuple[int, BitvectorTerm]] = frozenset()
     writes: tuple[tuple[BitvectorTerm, BitvectorTerm], ...] = ()
-    width: tuple[int, int] = (-1, -1)
 
     @classmethod
     def apply(
@@ -998,19 +1026,26 @@ class ArrayTerm:
         else:
             base[key] = value
         return ArrayTerm(
-            array.default, frozenset(base.items()), tuple(writes), array.width
+            array.default, array.width, frozenset(base.items()), tuple(writes)
         )
 
     def dump(self, width: tuple[int, int], defs: set[str]) -> str:
-        if isinstance(self.default, UninterpretedTerm):
-            s = dump(self.default, defs, width)
+        if "_pretty" in defs:
+            if isinstance(self.default, UninterpretedTerm):
+                stores = [("default", self.default.name)]
+            else:
+                stores = [("default", dump(self.default, defs, width[1]))]
+            for k, v in chain(self.base, self.writes):
+                stores.append((dump(k, defs, width[0]), dump(k, defs, width[1])))
+            return str(dict(stores))
         else:
-            s = dump(self.default, defs, width[1])
-        for k, v in self.base:
-            s = f"(store {s} {dump(k, defs, width[0])} {dump(v, defs, width[1])})"
-        for k, v in self.writes:
-            s = f"(store {s} {dump(k, defs, width[0])} {dump(v, defs, width[1])})"
-        return s
+            if isinstance(self.default, UninterpretedTerm):
+                s = dump(self.default, defs, width)
+            else:
+                s = f"((as const (Array (_ BitVec {width[0]}) (_ BitVec {width[1]}))) {dump(self.default, defs, width[1])})"
+            for k, v in chain(self.base, self.writes):
+                s = f"(store {s} {dump(k, defs, width[0])} {dump(v, defs, width[1])})"
+            return s
 
 
 @dataclass(frozen=True, slots=True)
@@ -1020,7 +1055,9 @@ class SelectOp:
 
     @classmethod
     def apply(cls, array: ArrayTerm, key: BitvectorTerm) -> BitvectorTerm:
-        if array.writes or not isinstance(key, int):
+        if array.writes and key == array.writes[-1][0]:
+            return array.writes[-1][1]
+        elif array.writes or not isinstance(key, int):
             return SelectOp(array, key)
         elif key in (tmp := dict(array.base)):
             return tmp[key]
@@ -1030,7 +1067,10 @@ class SelectOp:
             return array.default
 
     def dump(self, width: int, defs: set[str]) -> str:
-        return f"(select {dump(self.array, defs, self.array.width)} {dump(self.key, defs, self.array.width[0])})"
+        if "_pretty" in defs:
+            return f"({dump(self.array, defs, self.array.width)}[{dump(self.key, defs, self.array.width[0])}])"
+        else:
+            return f"(select {dump(self.array, defs, self.array.width)} {dump(self.key, defs, self.array.width[0])})"
 
 
 class Array[K: Uint[Any] | Int[Any], V: Uint[Any] | Int[Any]](
@@ -1043,9 +1083,12 @@ class Array[K: Uint[Any] | Int[Any], V: Uint[Any] | Int[Any]](
         width: tuple[int, int] = (self._key.width, self._value.width)  # pyright: ignore
         match value:
             case str():
-                self._array = ArrayTerm(UninterpretedTerm(value, width))  # pyright: ignore[reportPrivateUsage]
+                self._array = ArrayTerm(UninterpretedTerm(value, width), width)  # pyright: ignore[reportPrivateUsage]
             case BitVector():
-                self._array = ArrayTerm(value._term, frozenset(), (), width)  # pyright: ignore[reportPrivateUsage]
+                self._array = ArrayTerm(value._term, width)  # pyright: ignore[reportPrivateUsage]
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}({dump(self._array, set(['_pretty']), self._array.width)})"
 
     def __eq__(  # pyright: ignore[reportIncompatibleMethodOverride]
         self, other: Never, /
@@ -1088,7 +1131,6 @@ class Solver:
         smt = "\n".join([*defs, f"(assert {sexpr})", "(check-sat)"])
         p = Popen(["z3", "/dev/stdin"], stdin=PIPE, stdout=PIPE, stderr=PIPE)
         out, err = p.communicate(smt.encode())
-        # print(smt)
         match out.decode().strip():
             case "sat":
                 return True
@@ -1150,7 +1192,9 @@ def dump(
             return "false"
         case int():
             assert isinstance(width, int)
-            if width % 8 == 0:
+            if "_pretty" in defs:
+                return hex(to_signed(width, term))
+            elif width % 8 == 0:
                 return "#x" + term.to_bytes(width // 8).hex()
             else:
                 return "#b" + bin(term)[2:].zfill(width)
