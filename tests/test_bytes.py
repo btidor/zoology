@@ -13,7 +13,7 @@ def test_memory_simplify():
     ptr = Uint256(0x60) + Uint64("BYTES0").into(Uint256)
     memory[ptr] = Uint8(0x33)
     assert memory[ptr].reveal() == 0x33
-    # assert memory[Uint256(0x20)].reveal() == 0x11  # :(
+    assert memory[Uint256(0x20)].reveal() == 0x11
 
 
 def test_memory_slice():

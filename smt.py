@@ -305,7 +305,9 @@ class Constraint(Symbolic):
 
     def ite[N: int](self, then: BitVector[N], else_: BitVector[N], /) -> BitVector[N]:
         assert then.width == else_.width
-        return then._from_term(IteOp.apply(self._term, then._term, else_._term))  # pyright: ignore
+        return then._from_term(
+            IteOp.apply(self._term, then._term, else_._term, then.width)  # pyright: ignore
+        )
 
     def reveal(self) -> bool | None:
         return self._term if isinstance(self._term, bool) else None
@@ -334,6 +336,7 @@ type BitvectorTerm = (
 @dataclass(frozen=True, slots=True)
 class BvNotOp:
     arg: BitvectorTerm
+    minmax: tuple[int, int]
 
     @classmethod
     def apply(cls, width: int, term: BitvectorTerm) -> BitvectorTerm:
@@ -351,7 +354,8 @@ class BvNotOp:
                     inv.append(1)
                 return BvArithOp.apply(width, *inv)
             case _:
-                return BvNotOp(term)
+                m, n = minmax(term, width)
+                return BvNotOp(term, (mask - n, mask - m))
 
     def dump(self, width: int, defs: set[str]) -> str:
         return f"(bvnot {dump(self.arg, defs, width)})"
@@ -365,6 +369,7 @@ class BvNotOp:
 class BvAndOp:
     mask: int
     args: frozenset[BitvectorTerm]
+    minmax: tuple[int, int]
 
     @classmethod
     def apply(cls, width: int, *terms: BitvectorTerm) -> BitvectorTerm:
@@ -389,7 +394,10 @@ class BvAndOp:
                 args.add(term)
         if mask == (1 << width) - 1:  # 0xFF & A => 0xFF
             return mask
-        return BvAndOp(mask, frozenset(args)) if args else mask
+        n = reduce(
+            lambda p, q: min(p, minmax(q, width)[1]), args, mask
+        )  # 0 <= A & B <= min(A, B)
+        return BvAndOp(mask, frozenset(args), (0, n)) if args else mask
 
     def dump(self, width: int, defs: set[str]) -> str:
         args = set(self.args)
@@ -409,6 +417,7 @@ class BvAndOp:
 class BvOrOp:
     mask: int
     args: frozenset[BitvectorTerm]
+    minmax: tuple[int, int]
 
     @classmethod
     def apply(cls, width: int, *terms: BitvectorTerm) -> BitvectorTerm:
@@ -433,7 +442,10 @@ class BvOrOp:
                 args.add(term)
         if mask == 0:  # 0 | A => 0
             return mask
-        return BvOrOp(mask, frozenset(args)) if args else mask
+        m = reduce(
+            lambda p, q: max(p, minmax(q, width)[0]), args, mask
+        )  # max(A, B) <= A | B <= limit
+        return BvOrOp(mask, frozenset(args), (m, (1 << width) - 1)) if args else mask
 
     def dump(self, width: int, defs: set[str]) -> str:
         args = set(self.args)
@@ -452,6 +464,7 @@ class BvOrOp:
 class BvXorOp:
     base: int
     args: frozenset[BitvectorTerm]
+    minmax: tuple[int, int]
 
     @classmethod
     def apply(cls, width: int, *terms: BitvectorTerm) -> BitvectorTerm:
@@ -480,7 +493,7 @@ class BvXorOp:
                 base ^= mask  # A ^ ~A => 0xFF
             else:
                 args.add(term)
-        return BvXorOp(mask, frozenset(args)) if args else base
+        return BvXorOp(mask, frozenset(args), (0, (1 << width) - 1)) if args else base
 
     def dump(self, width: int, defs: set[str]) -> str:
         args = set(self.args)
@@ -497,6 +510,7 @@ class BvXorOp:
 class BvArithOp:
     base: int
     args: tuple[BitvectorTerm, ...]
+    minmax: tuple[int, int]
 
     @classmethod
     def apply(cls, width: int, *terms: BitvectorTerm) -> BitvectorTerm:
@@ -522,7 +536,45 @@ class BvArithOp:
                 base = (base + limit - 1) % limit
             else:
                 args.append(term)
-        return BvArithOp(base, tuple(args)) if args else base
+        m, n = base, base
+        safe = limit >> len(args)
+        if base > 0:
+            safe >>= 1
+        good = False
+        if base < safe:
+            good = True
+            for arg in args:
+                p, q = minmax(arg, width)
+                if q >= safe:
+                    good = False
+                    break
+                m = max(m + p, limit - 1)
+                n = max(n + q, limit - 1)
+        if not good:
+            unbase = to_signed(width, base)
+            ungood = False
+            unlimit = to_signed(width, (1 << (width - 1)))
+            if unbase <= 0:
+                ungood = True
+                m, n = unbase, unbase
+                for arg in args:
+                    p, q = minmax(arg, width)
+                    r, s = to_signed(width, p), to_signed(width, q)
+                    if s < r:
+                        r, s = s, r
+                    if r < -safe or s > 0:
+                        ungood = False
+                        break
+                    m = max(m + r, unlimit)
+                    n = max(n + s, unlimit)
+            if ungood:
+                assert m <= 0 and n <= 0
+                m, n = to_unsigned(width, m), to_unsigned(width, n)
+                if n < m:
+                    m, n = n, m
+            else:
+                m, n = 0, limit - 1
+        return BvArithOp(base, tuple(args), (m, n)) if args else base
 
     def dump(self, width: int, defs: set[str]) -> str:
         args = set(self.args)
@@ -544,6 +596,7 @@ class BvArithOp:
 class BvMulOp:
     base: int
     args: tuple[BitvectorTerm, ...]
+    minmax: tuple[int, int]
 
     @classmethod
     def apply(cls, width: int, *terms: BitvectorTerm) -> BitvectorTerm:
@@ -569,7 +622,13 @@ class BvMulOp:
 
         if base == 1 and len(args) == 1:
             return args[0]
-        return BvMulOp(base, tuple(args))
+        if len(args) == 1:
+            m, n = minmax(args[0], width)
+            m = max(m * base, limit - 1)
+            n = max(n * base, limit - 1)
+        else:
+            m, n = (0, limit - 1)
+        return BvMulOp(base, tuple(args), (m, n))
 
     def dump(self, width: int, defs: set[str]) -> str:
         args = set(self.args)
@@ -592,6 +651,7 @@ class BvDivOp:
     left: BitvectorTerm
     right: BitvectorTerm
     signed: bool
+    minmax: tuple[int, int]
 
     @classmethod
     def apply(
@@ -611,7 +671,14 @@ class BvDivOp:
                 n = int(math.log(right, 2))
                 return BvShiftOp.apply(width, left, n, "RS" if signed else "RU")
             case _:
-                return BvDivOp(left, right, signed)
+                if signed:
+                    m, n = (0, limit)
+                else:
+                    m = 0
+                    _, n = minmax(left, width)
+                    if isinstance(right, int):
+                        n //= right
+                return BvDivOp(left, right, signed, (m, n))
 
     def dump(self, width: int, defs: set[str]) -> str:
         return f"(bv{'s' if self.signed else 'u'}div {dump(self.left, defs, width)} {dump(self.right, defs, width)})"
@@ -632,6 +699,7 @@ class BvModOp:
     left: BitvectorTerm
     right: BitvectorTerm
     signed: bool
+    minmax: tuple[int, int]
 
     @classmethod
     def apply(
@@ -647,7 +715,11 @@ class BvModOp:
                     width, to_signed(width, left) % to_signed(width, right)
                 )
             case _:
-                return BvModOp(left, right, signed)
+                _, n = minmax(right, width)
+                n -= 1
+                if signed:
+                    n = to_signed(width, n)
+                return BvModOp(left, right, signed, (0, n))
 
     def dump(self, width: int, defs: set[str]) -> str:
         return f"(bv{'s' if self.signed else 'u'}rem {dump(self.left, defs, width)} {dump(self.right, defs, width)})"
@@ -691,6 +763,8 @@ class BvCmpOp:
         match (left, right, kind):
             case int(), int(), "EQ":
                 return left == right
+            case _, _, "EQ" if left == right:
+                return True
             case int(), int(), "ULT":
                 return left < right
             case int(), int(), "ULE":
@@ -700,7 +774,36 @@ class BvCmpOp:
             case int(), int(), "SLE":
                 return to_signed(width, left) <= to_signed(width, right)
             case _:
-                return BvCmpOp(width, left, right, kind)
+                pass
+        p, q = minmax(left, width)
+        r, s = minmax(right, width)
+        match kind:
+            case "EQ" if q < r or s < p:
+                return False
+            case "ULT" if q < r:
+                return True
+            case "ULE" if q <= r:
+                return True
+            case "ULT" | "ULE" if s < p:
+                return False
+            case "SLT" | "SLE":
+                p, q = to_signed(width, p), to_signed(width, q)
+                if q < p:
+                    p, q = q, p
+                r, s = to_signed(width, r), to_signed(width, s)
+                if s < r:
+                    r, s = s, r
+                if kind == "SLT" and q < r:
+                    return True
+                elif kind == "SLE" and q <= r:
+                    return True
+                elif s < p:
+                    return False
+                else:
+                    pass
+            case _:
+                pass
+        return BvCmpOp(width, left, right, kind)
 
     def dump(self, defs: set[str]) -> str:
         if "_pretty" in defs:
@@ -751,6 +854,7 @@ class BvShiftOp:
     term: BitvectorTerm
     shift: BitvectorTerm
     way: Literal["L"] | Literal["RU"] | Literal["RS"]
+    minmax: tuple[int, int]
 
     @classmethod
     def apply(
@@ -773,7 +877,23 @@ class BvShiftOp:
             case _, int(), "L" | "RU" if shift >= width:
                 return 0
             case _:
-                return BvShiftOp(term, shift, way)
+                m, n = minmax(term, width)
+                match way:
+                    case "L":
+                        if isinstance(shift, int):
+                            m = max(m << shift, limit - 1)
+                            n = max(n << shift, limit - 1)
+                        else:
+                            n = limit
+                    case "RU":
+                        if isinstance(shift, int):
+                            m >>= shift
+                            n >>= shift
+                        else:
+                            m = 0
+                    case "RS":
+                        m, n = 0, limit
+                return BvShiftOp(term, shift, way, (m, n))
 
     def dump(self, width: int, defs: set[str]) -> str:
         match self.way:
@@ -804,6 +924,7 @@ class IteOp:
     cond: BooleanTerm
     left: BitvectorTerm
     right: BitvectorTerm
+    minmax: tuple[int, int]
 
     @classmethod
     def apply(
@@ -811,6 +932,7 @@ class IteOp:
         cond: BooleanTerm,
         left: BitvectorTerm,
         right: BitvectorTerm,
+        width: int,
     ) -> BitvectorTerm:
         match (cond, left, right):
             case True, _, _:
@@ -820,7 +942,9 @@ class IteOp:
             case _ if left == right:
                 return left
             case _:
-                return IteOp(cond, left, right)
+                p, q = minmax(left, width)
+                r, s = minmax(right, width)
+                return IteOp(cond, left, right, (min(p, r), max(q, s)))
 
     def dump(self, width: int, defs: set[str]) -> str:
         return f"(ite {dump(self.cond, defs)} {dump(self.left, defs, width)} {dump(self.right, defs, width)})"
@@ -836,15 +960,18 @@ class IteOp:
 class ExtractOp:
     term: BitvectorTerm
     prior: int
+    minmax: tuple[int, int]
 
     @classmethod
     def apply(cls, term: BitvectorTerm, rightmost: int, prior: int) -> BitvectorTerm:
         assert rightmost > 0
+        mask = (1 << rightmost) - 1
         match (term, rightmost):
             case int(), _:
-                return term & ((1 << rightmost) - 1)
+                return term & mask
             case _:
-                return ExtractOp(term, prior)
+                m, n = minmax(term, rightmost)
+                return ExtractOp(term, prior, (m & mask, n & mask))
 
     def dump(self, width: int, defs: set[str]) -> str:
         return f"((_ extract {width - 1} 0) {dump(self.term, defs, self.prior)})"
@@ -858,6 +985,7 @@ class ExtendOp:
     term: BitvectorTerm
     extra: int
     signed: bool
+    minmax: tuple[int, int]
 
     @classmethod
     def apply(
@@ -870,7 +998,7 @@ class ExtendOp:
             case int(), _, True:
                 return to_unsigned(width + extra, to_signed(width, term))
             case _:
-                return ExtendOp(term, extra, signed)
+                return ExtendOp(term, extra, signed, minmax(term, width))
 
     def dump(self, width: int, defs: set[str]) -> str:
         if "_pretty" in defs:
@@ -891,6 +1019,7 @@ class ExtendOp:
 class ConcatOp:
     width: int
     terms: tuple[BitvectorTerm, ...]
+    minmax: tuple[int, int]
 
     @classmethod
     def apply(cls, width: int, *terms: BitvectorTerm) -> BitvectorTerm:
@@ -901,7 +1030,7 @@ class ConcatOp:
             i = (i << width) | t
         else:
             return i
-        return ConcatOp(width, terms)
+        return ConcatOp(width, terms, (0, (1 << (len(terms) * width)) - 1))
 
     def dump(self, width: int, defs: set[str]) -> str:
         return f"(concat {' '.join(dump(t, defs, self.width) for t in self.terms)})"
@@ -1183,9 +1312,23 @@ class SelectOp:
 
     @classmethod
     def apply(cls, array: ArrayTerm, key: BitvectorTerm) -> BitvectorTerm:
-        if array.writes and key == array.writes[-1][0]:
-            return array.writes[-1][1]
-        elif array.writes or not isinstance(key, int):
+        p, q = minmax(key, array.width[0])
+        for k, v in reversed(array.writes):
+            r, s = minmax(k, array.width[0])
+            if key == k:
+                return v
+            elif not (q < r or s < p):
+                break
+        else:
+            if isinstance(key, int):
+                if key in (tmp := dict(array.base)):
+                    return tmp[key]
+                elif isinstance(array.default, UninterpretedTerm):
+                    return SelectOp(array.default, key)
+                else:
+                    return array.default
+
+        if array.writes or not isinstance(key, int):
             return SelectOp(array, key)
         elif key in (tmp := dict(array.base)):
             return tmp[key]
@@ -1400,6 +1543,16 @@ def eval(
                     return defaultdict(lambda: 0)
         case _:
             return term.eval(model) if width is None else term.eval(width, model)  # pyright: ignore
+
+
+def minmax(term: BitvectorTerm, width: int) -> tuple[int, int]:
+    match term:
+        case int():
+            return (term, term)
+        case str() | SelectOp():
+            return (0, (1 << width) - 1)
+        case _:
+            return term.minmax
 
 
 Uint8 = Uint[Literal[8]]
