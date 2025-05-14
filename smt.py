@@ -13,6 +13,7 @@ from subprocess import Popen, PIPE
 from typing import (
     TYPE_CHECKING,
     Any,
+    Callable,
     ClassVar,
     Final,
     Literal,
@@ -27,6 +28,14 @@ from typing import (
 )
 
 type Model = dict[str, bool | int | dict[int, int]]
+
+
+def hashcache[T: Any](cls: type[T]) -> type[T]:
+    cls.__slots__ = (*cls.__slots__, "_hash")
+    cls._hash = cls.__hash__(cls)
+    h: Callable[[T], int] = lambda c: c._hash
+    cls.__hash__ = h
+    return cls
 
 
 class BitVectorMeta(abc.ABCMeta):
@@ -130,6 +139,7 @@ class Symbolic(abc.ABC):
 type BooleanTerm = bool | str | NotOp | AndOp | OrOp | XorOp | BvCmpOp
 
 
+@hashcache
 @dataclass(frozen=True, slots=True)
 class NotOp:
     arg: BooleanTerm
@@ -151,6 +161,7 @@ class NotOp:
         return not eval(self.arg, model)
 
 
+@hashcache
 @dataclass(frozen=True, slots=True)
 class AndOp:
     args: frozenset[BooleanTerm]
@@ -187,6 +198,7 @@ class AndOp:
         return reduce(lambda p, q: p and eval(q, model), self.args, True)
 
 
+@hashcache
 @dataclass(frozen=True, slots=True)
 class OrOp:
     args: frozenset[BooleanTerm]
@@ -223,6 +235,7 @@ class OrOp:
         return reduce(lambda p, q: p or eval(q, model), self.args, False)
 
 
+@hashcache
 @dataclass(frozen=True, slots=True)
 class XorOp:
     base: bool
@@ -333,6 +346,7 @@ type BitvectorTerm = (
 )
 
 
+@hashcache
 @dataclass(frozen=True, slots=True)
 class BvNotOp:
     arg: BitvectorTerm
@@ -369,6 +383,7 @@ class BvNotOp:
         return mask ^ eval(self.arg, model, width)
 
 
+@hashcache
 @dataclass(frozen=True, slots=True)
 class BvAndOp:
     mask: int
@@ -429,6 +444,7 @@ class BvAndOp:
         return reduce(lambda p, q: p & eval(q, model, width), self.args, mask)
 
 
+@hashcache
 @dataclass(frozen=True, slots=True)
 class BvOrOp:
     mask: int
@@ -490,6 +506,7 @@ class BvOrOp:
         return reduce(lambda p, q: p | eval(q, model, width), self.args, 0)
 
 
+@hashcache
 @dataclass(frozen=True, slots=True)
 class BvXorOp:
     base: int
@@ -536,6 +553,7 @@ class BvXorOp:
         return reduce(lambda p, q: p ^ eval(q, model, width), self.args, 0)
 
 
+@hashcache
 @dataclass(frozen=True, slots=True)
 class BvArithOp:
     base: int
@@ -618,6 +636,7 @@ class BvArithOp:
         )
 
 
+@hashcache
 @dataclass(frozen=True, slots=True)
 class BvMulOp:
     base: int
@@ -672,6 +691,7 @@ class BvMulOp:
         )
 
 
+@hashcache
 @dataclass(frozen=True, slots=True)
 class BvDivOp:
     left: BitvectorTerm
@@ -720,6 +740,7 @@ class BvDivOp:
             return eval(self.left, model, width) // eval(self.right, model, width)
 
 
+@hashcache
 @dataclass(frozen=True, slots=True)
 class BvModOp:
     left: BitvectorTerm
@@ -761,6 +782,7 @@ class BvModOp:
             return eval(self.left, model, width) % eval(self.right, model, width)
 
 
+@hashcache
 @dataclass(frozen=True, slots=True)
 class BvCmpOp:
     width: int
@@ -897,6 +919,7 @@ class BvCmpOp:
                 return to_signed(width, left) <= to_signed(width, right)
 
 
+@hashcache
 @dataclass(frozen=True, slots=True)
 class BvShiftOp:
     term: BitvectorTerm
@@ -981,6 +1004,7 @@ class BvShiftOp:
                 return to_unsigned(width, to_signed(width, term) >> shift)
 
 
+@hashcache
 @dataclass(frozen=True, slots=True)
 class IteOp:
     cond: BooleanTerm
@@ -1018,6 +1042,7 @@ class IteOp:
             return eval(self.right, model, width)
 
 
+@hashcache
 @dataclass(frozen=True, slots=True)
 class ExtractOp:
     term: BitvectorTerm
@@ -1052,6 +1077,7 @@ class ExtractOp:
         return eval(self.term, model, width) & ((1 << width) - 1)
 
 
+@hashcache
 @dataclass(frozen=True, slots=True)
 class ExtendOp:
     term: BitvectorTerm
@@ -1089,6 +1115,7 @@ class ExtendOp:
             return eval(self.term, model, width - self.extra)
 
 
+@hashcache
 @dataclass(frozen=True, slots=True)
 class ConcatOp:
     width: int
@@ -1309,6 +1336,7 @@ class Int[N: int](BitVector[N]):
         )
 
 
+@hashcache
 @dataclass(frozen=True, slots=True)
 class UninterpretedTerm:
     name: str
@@ -1329,6 +1357,7 @@ class UninterpretedTerm:
             return defaultdict(lambda: 0)
 
 
+@hashcache
 @dataclass(frozen=True, slots=True)
 class ArrayTerm:
     default: BitvectorTerm | UninterpretedTerm
@@ -1379,6 +1408,7 @@ class ArrayTerm:
         return x
 
 
+@hashcache
 @dataclass(frozen=True, slots=True)
 class SelectOp:
     array: ArrayTerm | UninterpretedTerm
