@@ -1444,7 +1444,7 @@ class Array[K: Uint[Any] | Int[Any], V: Uint[Any] | Int[Any]](
 class Solver:
     def __init__(self) -> None:
         self.constraint = Constraint(True)
-        self.model: Model | None = None
+        self.model: Model | str | None = None
 
     def add(self, assertion: Constraint, /) -> None:
         self.constraint &= assertion
@@ -1466,35 +1466,10 @@ class Solver:
         smt = "\n".join([*defs, f"(assert {sexpr})", "(check-sat)"])
         p = Popen(["z3", "-model", "/dev/stdin"], stdin=PIPE, stdout=PIPE, stderr=PIPE)
         out, err = p.communicate(smt.encode())
-        outs = out.decode().splitlines()
-        match outs.pop(0):
+        outs = out.decode().split("\n", 1)
+        match outs[0]:
             case "sat":
-                self.model = {}
-                assert outs.pop(0) == "("
-                while len(outs) > 1:
-                    d, k, *rest = outs.pop(0).split()
-                    assert d == "(define-fun"
-                    if "(Array" in rest:
-                        assert "as const" in outs.pop(0)
-                        d = outs.pop(0).strip(" ()")
-                        assert d.startswith("#x")
-                        v = defaultdict[int, int](lambda: int(d[2:], 16))
-                        while True:
-                            p = outs.pop(0).strip(" ()")
-                            r = outs.pop(0)
-                            q = r.strip(" ()")
-                            assert p.startswith("#x") and q.startswith("#x")
-                            v[int(p[2:], 16)] = int(q[2:], 16)
-                            if r.endswith("))"):
-                                break
-                        self.model[k] = v
-                    elif "BitVec" in rest:
-                        v = outs.pop(0).strip(" ()")
-                        assert v.startswith("#x")
-                        self.model[k] = int(v[2:], 16)
-                    else:
-                        raise NotImplementedError(rest)
-                assert outs == [")"]
+                self.model = outs[1]
                 return True
             case "unsat":
                 return False
@@ -1516,6 +1491,35 @@ class Solver:
         self, sym: Constraint | Uint[N] | Int[N] | Array[Uint[N], Uint[M]], /
     ) -> bool | int | dict[int, int]:
         assert self.model is not None, "solver is not ready for model evaluation"
+        if isinstance(self.model, str):
+            model = {}
+            parts = self.model.splitlines()
+            assert parts.pop(0) == "("
+            while len(parts) > 1:
+                d, k, *rest = parts.pop(0).split()
+                assert d == "(define-fun"
+                if "(Array" in rest:
+                    assert "as const" in parts.pop(0)
+                    d = parts.pop(0).strip(" ()")
+                    assert d.startswith("#x")
+                    v = defaultdict[int, int](lambda: int(d[2:], 16))
+                    while True:
+                        p = parts.pop(0).strip(" ()")
+                        r = parts.pop(0)
+                        q = r.strip(" ()")
+                        assert p.startswith("#x") and q.startswith("#x")
+                        v[int(p[2:], 16)] = int(q[2:], 16)
+                        if r.endswith("))"):
+                            break
+                    model[k] = v
+                elif "BitVec" in rest:
+                    v = parts.pop(0).strip(" ()")
+                    assert v.startswith("#x")
+                    model[k] = int(v[2:], 16)
+                else:
+                    raise NotImplementedError(rest)
+            assert parts == [")"]
+            self.model = model
         match sym:
             case Constraint():
                 return eval(sym._term, self.model)  # pyright: ignore[reportPrivateUsage]
