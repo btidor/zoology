@@ -32,7 +32,6 @@ from state import (
     Log,
     State,
     Termination,
-    Unreachable,
 )
 
 
@@ -526,9 +525,7 @@ def CREATE(s: State, value: Uint256, offset: Uint256, size: Uint256) -> ControlF
     """F0 - Create a new account with associated code."""
     if s.changed is None:
         raise ValueError("CREATE is forbidden during a STATICCALL")
-    initcode = s.compact_bytes(s.memory.slice(offset, size))
-    if initcode is None:
-        return Unreachable()
+    initcode = s.memory.slice(offset, size)
     sender_address = s.transaction.address.reveal()
     assert sender_address is not None, "CREATE requires concrete sender address"
 
@@ -626,9 +623,7 @@ def CREATE2(
     """F5 - Create a new account with associated code at a predictable address."""
     if s.changed is None:
         raise ValueError("CREATE2 is forbidden during a STATICCALL")
-    initcode = s.compact_bytes(s.memory.slice(offset, size))
-    if initcode is None:
-        return Unreachable()
+    initcode = s.memory.slice(offset, size)
     assert initcode.reveal() is not None, "CREATE2 requires concrete program data"
     # ...because the code is hashed and used in the address, which must be concrete
     salt = _salt.reveal()
@@ -759,9 +754,6 @@ def _call_common(
 ) -> ControlFlow:
     address = _address.into(Uint160)
     calldata = s.memory.slice(argsOffset, argsSize)
-    calldata = s.compact_calldata(calldata)
-    if calldata is None:
-        return Unreachable()
 
     substates = list[State]()
     eoa = Constraint(True)

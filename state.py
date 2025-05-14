@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import copy
 from dataclasses import dataclass, field
 from typing import Any, Callable, Iterable, Self
 
-from bytes import BYTES, Bytes, Memory
+from bytes import Bytes, Memory
 from disassembler import Program
 from environment import Block, Contract, Transaction
 from sha3 import SHA3
@@ -14,7 +13,6 @@ from smt import (
     Array,
     Constraint,
     Solver,
-    Uint8,
     Uint160,
     Uint256,
     overflow_safe,
@@ -217,45 +215,6 @@ class State:
             call.narrow(solver)
 
         assert solver.check()
-
-    def compact_bytes(self, bytes: Bytes) -> Bytes | None:
-        """Simplify the given bytes using the current constraints."""
-        if bytes.reveal() is not None:
-            return bytes
-
-        if not self.solver.check():
-            return None  # this path is unreachable
-        solver = copy.deepcopy(self.solver)
-        self.solver.add(bytes.compact(solver, Constraint(True)))
-        return bytes
-
-    def compact_calldata(self, data: Bytes) -> Bytes | None:
-        """Simplify the given bytes (optimized for calldata)."""
-        if data.slice(Uint256(0), Uint256(4)).reveal():
-            return data
-
-        if not self.solver.check():
-            return None  # this path is unreachable
-
-        solver = copy.deepcopy(self.solver)
-        length = solver.evaluate(data.length)
-        constraint = data.length == Uint256(length)
-        if solver.check(~constraint):
-            return data  # length may be arbitrarily large
-        assert solver.check()
-
-        result = list[Uint8]()
-        for i in range(4):
-            v = data[Uint256(i)]
-            e = BYTES[solver.evaluate(v)]
-            constraint &= v == e
-            result.append(e)
-        for i in range(4, length):
-            result.append(data[Uint256(i)])
-
-        if solver.check(~constraint):
-            return data
-        return Bytes(result[:length])  # remember, length can be < 4
 
 
 @dataclass(frozen=True, slots=True)

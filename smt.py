@@ -353,6 +353,8 @@ class BvNotOp:
                     inv.append(BvNotOp.apply(width, arg))
                     inv.append(1)
                 return BvArithOp.apply(width, *inv)
+            case ConcatOp(w, terms):
+                return ConcatOp.apply(w, *(BvNotOp.apply(w, t) for t in terms))
             case _:
                 m, n = minmax(term, width)
                 return BvNotOp(term, (mask - n, mask - m))
@@ -392,12 +394,23 @@ class BvAndOp:
                 return 0  # A & ~A => 0
             else:
                 args.add(term)
-        if mask == (1 << width) - 1:  # 0xFF & A => 0xFF
+        if not args:
             return mask
-        n = reduce(
-            lambda p, q: min(p, minmax(q, width)[1]), args, mask
-        )  # 0 <= A & B <= min(A, B)
-        return BvAndOp(mask, frozenset(args), (0, n)) if args else mask
+        elif mask == 0:  # 0 & A => 0
+            return mask
+        elif len(args) == 1 and mask == (1 << width) - 1:  # 0xFF & A => A
+            return args.pop()
+        elif len(args) == 1 and isinstance(c := list(args)[0], ConcatOp):
+            pushed = list[BitvectorTerm]()
+            for term in reversed(c.terms):
+                pushed.append(BvAndOp.apply(c.width, term, mask & ((1 << c.width) - 1)))
+                mask >>= c.width
+            return ConcatOp.apply(c.width, *reversed(pushed))
+        else:
+            n = reduce(
+                lambda p, q: min(p, minmax(q, width)[1]), args, mask
+            )  # 0 <= A & B <= min(A, B)
+            return BvAndOp(mask, frozenset(args), (0, n)) if args else mask
 
     def dump(self, width: int, defs: set[str]) -> str:
         args = set(self.args)
@@ -440,12 +453,25 @@ class BvOrOp:
                 return (1 << width) - 1  # A | ~A => 0xFF
             else:
                 args.add(term)
-        if mask == 0:  # 0 | A => 0
+        if not args:
             return mask
-        m = reduce(
-            lambda p, q: max(p, minmax(q, width)[0]), args, mask
-        )  # max(A, B) <= A | B <= limit
-        return BvOrOp(mask, frozenset(args), (m, (1 << width) - 1)) if args else mask
+        elif mask == (1 << width) - 1:  # 0xFF | A => 0xFF
+            return mask
+        elif len(args) == 1 and mask == 0:  # 0 | A => A
+            return args.pop()
+        elif len(args) == 1 and isinstance(c := list(args)[0], ConcatOp):
+            pushed = list[BitvectorTerm]()
+            for term in reversed(c.terms):
+                pushed.append(BvOrOp.apply(c.width, term, mask & ((1 << c.width) - 1)))
+                mask >>= c.width
+            return ConcatOp.apply(c.width, *reversed(pushed))
+        else:
+            m = reduce(
+                lambda p, q: max(p, minmax(q, width)[0]), args, mask
+            )  # max(A, B) <= A | B <= limit
+            return (
+                BvOrOp(mask, frozenset(args), (m, (1 << width) - 1)) if args else mask
+            )
 
     def dump(self, width: int, defs: set[str]) -> str:
         args = set(self.args)
@@ -765,6 +791,12 @@ class BvCmpOp:
                 return left == right
             case _, _, "EQ" if left == right:
                 return True
+            case ConcatOp(w, t0), ConcatOp(w1, t1), "EQ" if w == w1 and len(t0) == len(
+                t1
+            ):
+                return AndOp.apply(
+                    *(BvCmpOp.apply(w, a, b, "EQ") for a, b in zip(t0, t1, strict=True))
+                )
             case int(), int(), "ULT":
                 return left < right
             case int(), int(), "ULE":
@@ -888,6 +920,8 @@ class BvShiftOp:
                 if shift:
                     return BvShiftOp.apply(width, term, shift, way, recursed=True)
                 return term
+            case BvShiftOp(t, s, w), _, _ if w == way:
+                return BvShiftOp.apply(width, t, BvAndOp.apply(width, s, shift), way)
             case _:
                 m, n = minmax(term, width)
                 match way:
@@ -981,6 +1015,16 @@ class ExtractOp:
         match (term, rightmost):
             case int(), _:
                 return term & mask
+            case ConcatOp(w, terms), _:
+                terms = list(terms)
+                while w * len(terms) >= rightmost + w:
+                    terms.pop(0)
+                term = ConcatOp.apply(w, *terms)
+                if w * len(terms) == rightmost:
+                    return term
+                else:
+                    m, n = minmax(term, rightmost)
+                    return ExtractOp(term, prior, (m & mask, n & mask))
             case _:
                 m, n = minmax(term, rightmost)
                 return ExtractOp(term, prior, (m & mask, n & mask))
@@ -1009,6 +1053,8 @@ class ExtendOp:
                 return term
             case int(), _, True:
                 return to_unsigned(width + extra, to_signed(width, term))
+            case ExtendOp(t, x, s), _, _ if s == signed:
+                return ExtendOp.apply(width, t, x + extra, signed)
             case _:
                 return ExtendOp(term, extra, signed, minmax(term, width))
 
@@ -1599,18 +1645,6 @@ def underflow_safe(a: Uint256, b: Uint256) -> Constraint:
     return a >= b
 
 
-def compact_array[N: int, M: int](
-    solver: Solver, constraint: Constraint, a: Array[Uint[N], Uint[M]]
-) -> Constraint:
-    raise NotImplementedError
-
-
-def compact_helper[N: int](
-    solver: Solver, constraint: Constraint, a: Uint[N], b: Uint[N]
-) -> tuple[Constraint, Uint[N]]:
-    raise NotImplementedError
-
-
 def concat_bytes(*bytes: Uint8) -> Uint[Any]:
     cls = Uint[Literal[8 * len(bytes)]]  # pyright: ignore
     return cls._from_term(ConcatOp.apply(8, *(b._term for b in bytes)))  # pyright: ignore
@@ -1630,15 +1664,15 @@ def explode_bytes(v: Uint256) -> list[Uint8]:
 
 
 def iff(a: Constraint, b: Constraint) -> Constraint:
-    raise NotImplementedError
+    return ~(a ^ b)
 
 
 def implies(a: Constraint, b: Constraint) -> Constraint:
-    raise NotImplementedError
+    return ~(a & ~b)
 
 
 def prequal[N: int](a: Uint[N], b: Uint[N]) -> bool:
-    raise NotImplementedError
+    return (a == b).reveal() is True
 
 
 def get_constants[N: int](v: Constraint | Uint[N] | Int[N]) -> Any:
