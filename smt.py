@@ -357,7 +357,9 @@ class BvNotOp:
                 return ConcatOp.apply(w, *(BvNotOp.apply(w, t) for t in terms))
             case _:
                 m, n = minmax(term, width)
-                return BvNotOp(term, (mask - n, mask - m))
+                p, q = (mask - n, mask - m)
+                assert 0 <= p <= q <= mask
+                return BvNotOp(term, (p, q))
 
     def dump(self, width: int, defs: set[str]) -> str:
         return f"(bvnot {dump(self.arg, defs, width)})"
@@ -410,6 +412,7 @@ class BvAndOp:
             n = reduce(
                 lambda p, q: min(p, minmax(q, width)[1]), args, mask
             )  # 0 <= A & B <= min(A, B)
+            assert 0 <= n <= mask
             return BvAndOp(mask, frozenset(args), (0, n)) if args else mask
 
     def dump(self, width: int, defs: set[str]) -> str:
@@ -469,6 +472,7 @@ class BvOrOp:
             m = reduce(
                 lambda p, q: max(p, minmax(q, width)[0]), args, mask
             )  # max(A, B) <= A | B <= limit
+            assert 0 <= m < (1 << width)
             return (
                 BvOrOp(mask, frozenset(args), (m, (1 << width) - 1)) if args else mask
             )
@@ -574,8 +578,8 @@ class BvArithOp:
                 if q >= safe:
                     good = False
                     break
-                m = max(m + p, limit - 1)
-                n = max(n + q, limit - 1)
+                m = min(m + p, limit - 1)
+                n = min(n + q, limit - 1)
         if not good:
             unbase = to_signed(width, base)
             ungood = False
@@ -584,22 +588,18 @@ class BvArithOp:
                 ungood = True
                 m, n = unbase, unbase
                 for arg in args:
-                    p, q = minmax(arg, width)
-                    r, s = to_signed(width, p), to_signed(width, q)
-                    if s < r:
-                        r, s = s, r
-                    if r < -safe or s > 0:
+                    p, q = mm_to_signed(width, *minmax(arg, width))
+                    if p < -safe or q > 0:
                         ungood = False
                         break
-                    m = max(m + r, unlimit)
-                    n = max(n + s, unlimit)
+                    m = max(m + p, unlimit)
+                    n = max(n + q, unlimit)
             if ungood:
                 assert m <= 0 and n <= 0
-                m, n = to_unsigned(width, m), to_unsigned(width, n)
-                if n < m:
-                    m, n = n, m
+                m, n = mm_to_unsigned(width, m, n)
             else:
                 m, n = 0, limit - 1
+        assert 0 <= m <= n < limit
         return BvArithOp(base, tuple(args), (m, n)) if args else base
 
     def dump(self, width: int, defs: set[str]) -> str:
@@ -786,6 +786,26 @@ class BvCmpOp:
         | Literal["SLT"]
         | Literal["SLE"],
     ) -> BooleanTerm:
+        r = cls._apply(width, left, right, kind)
+        # if isinstance(r, bool):
+        #     s = Solver()
+        #     t = Constraint._from_term(BvCmpOp(width, left, right, kind))  # pyright: ignore[reportPrivateUsage]
+        #     s.add(~t if r else t)
+        #     assert not s.check(), f"MISMATCH-{r}: {kind} {left} {right}"
+        return r
+
+    @classmethod
+    def _apply(
+        cls,
+        width: int,
+        left: BitvectorTerm,
+        right: BitvectorTerm,
+        kind: Literal["EQ"]
+        | Literal["ULT"]
+        | Literal["ULE"]
+        | Literal["SLT"]
+        | Literal["SLE"],
+    ) -> BooleanTerm:
         match (left, right, kind):
             case int(), int(), "EQ":
                 return left == right
@@ -819,12 +839,8 @@ class BvCmpOp:
             case "ULT" | "ULE" if s < p:
                 return False
             case "SLT" | "SLE":
-                p, q = to_signed(width, p), to_signed(width, q)
-                if q < p:
-                    p, q = q, p
-                r, s = to_signed(width, r), to_signed(width, s)
-                if s < r:
-                    r, s = s, r
+                p, q = mm_to_signed(width, p, q)
+                r, s = mm_to_signed(width, r, s)
                 if kind == "SLT" and q < r:
                     return True
                 elif kind == "SLE" and q <= r:
@@ -1701,3 +1717,29 @@ def to_unsigned(width: int, value: int) -> int:
     if value < 0:
         return (((1 << width) - 1) ^ -value) + 1
     return value
+
+
+def mm_to_signed(width: int, min: int, max: int) -> tuple[int, int]:
+    limit = 1 << (width - 1)
+    assert 0 <= min <= max < (1 << width)
+    if max < limit:  # pos, pos
+        return min, max
+    elif min >= limit:  # neg, neg
+        p, q = to_signed(width, min), to_signed(width, max)
+        assert -limit <= p <= q <= 0
+        return p, q
+    else:  # pos, neg => includes MAX_INT, MIN_INT
+        return -limit, limit - 1
+
+
+def mm_to_unsigned(width: int, min: int, max: int) -> tuple[int, int]:
+    limit = 1 << (width - 1)
+    assert -limit <= min <= max < limit
+    if min >= 0:  # pos, pos
+        p, q = min, max
+    elif max < 0:  # neg, neg
+        p, q = to_unsigned(width, min), to_unsigned(width, max)
+    else:  # neg, pos => includes zero, -1
+        p, q = 0, (1 << width) - 1
+    assert 0 <= p <= q < (1 << width)
+    return p, q
