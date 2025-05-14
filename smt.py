@@ -1141,8 +1141,8 @@ class ExtendOp:
 
     def dump(self, width: int, defs: set[str]) -> str:
         if self.signed:
-            raise NotImplementedError
-        if "_pretty" in defs:
+            return f"((_ sign_extend {self.extra}) {dump(self.term, defs, width - self.extra)})"
+        elif "_pretty" in defs:
             return f"(...{dump(self.term, defs, width - self.extra)})"
         else:
             return f"(concat {dump(0, defs, self.extra)} {dump(self.term, defs, width - self.extra)})"
@@ -1604,7 +1604,7 @@ class Solver:
                     assert v.startswith("#x")
                     model[k] = int(v[2:], 16)
                 else:
-                    raise NotImplementedError(rest)
+                    raise NotImplementedError("evaluate: cannot parse model", rest)
             assert parts == [")"]
             self.model = model
         match sym:
@@ -1725,7 +1725,7 @@ class ConstrainingError(Exception):
 
 
 def describe[N: int](s: Uint[N]) -> str:
-    raise NotImplementedError
+    raise NotImplementedError("describe")
 
 
 def overflow_safe(a: Uint256, b: Uint256) -> Constraint:
@@ -1767,15 +1767,15 @@ def prequal[N: int](a: Uint[N], b: Uint[N]) -> bool:
 
 
 def get_constants[N: int](v: Constraint | Uint[N] | Int[N]) -> Any:
-    raise NotImplementedError
+    raise NotImplementedError("get_constants")
 
 
 def substitute(s: Symbolic, b: Any) -> Any:
-    raise NotImplementedError
+    raise NotImplementedError("substitute")
 
 
 def substitute2[N: int](s: Uint[N], b: Any) -> Uint[N]:
-    raise NotImplementedError
+    raise NotImplementedError("substitute2")
 
 
 def to_signed(width: int, value: int) -> int:
