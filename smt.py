@@ -847,6 +847,23 @@ class BvCmpOp:
                 return to_signed(width, left) < to_signed(width, right)
             case int(), int(), "SLE":
                 return to_signed(width, left) <= to_signed(width, right)
+            case IteOp(i, t, e), o, _:
+                a = BvCmpOp.apply(width, t, o, kind)
+                b = BvCmpOp.apply(width, e, o, kind)
+                return OrOp.apply(AndOp.apply(i, a), AndOp.apply(NotOp.apply(i), b))
+            case o, IteOp(i, t, e), _:
+                a = BvCmpOp.apply(width, o, t, kind)
+                b = BvCmpOp.apply(width, o, e, kind)
+                return OrOp.apply(AndOp.apply(i, a), AndOp.apply(NotOp.apply(i), b))
+            case (ExtendOp(t, x, False), int() as i, "EQ") | (
+                int() as i,
+                ExtendOp(t, x, False),
+                "EQ",
+            ):
+                if i < (1 << (width - x)):
+                    return BvCmpOp.apply(width - x, t, i, "EQ")
+                else:
+                    return False
             case _:
                 pass
         p, q = minmax(left, width)
@@ -1056,6 +1073,28 @@ class ExtractOp:
         match (term, rightmost):
             case int(), _:
                 return term & mask
+            case BvAndOp(m, args), _:
+                return BvAndOp.apply(
+                    rightmost,
+                    m & mask,
+                    *(
+                        BvAndOp.apply(
+                            rightmost, ExtractOp.apply(a, rightmost, prior), mask
+                        )
+                        for a in args
+                    ),
+                )
+            case BvOrOp(m, args), _:
+                return BvOrOp.apply(
+                    rightmost,
+                    m & mask,
+                    *(
+                        BvAndOp.apply(
+                            rightmost, ExtractOp.apply(a, rightmost, prior), mask
+                        )
+                        for a in args
+                    ),
+                )
             case ConcatOp(w, terms), _:
                 terms = list(terms)
                 while w * len(terms) >= rightmost + w:
@@ -1101,6 +1140,8 @@ class ExtendOp:
                 return ExtendOp(term, extra, signed, minmax(term, width))
 
     def dump(self, width: int, defs: set[str]) -> str:
+        if self.signed:
+            raise NotImplementedError
         if "_pretty" in defs:
             return f"(...{dump(self.term, defs, width - self.extra)})"
         else:
