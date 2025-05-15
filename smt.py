@@ -154,8 +154,8 @@ class NotOp:
             case _:
                 return NotOp(term)
 
-    def dump(self, defs: set[str]) -> str:
-        return f"(not {dump(self.arg, defs)})"
+    def dump(self, defs: set[str]) -> tuple[str, ...]:
+        return ("(not", *dump(self.arg, defs), ")")
 
     def eval(self, model: Model) -> bool:
         return not eval(self.arg, model)
@@ -187,11 +187,11 @@ class AndOp:
             case _:
                 return AndOp(frozenset(args))
 
-    def dump(self, defs: set[str]) -> str:
+    def dump(self, defs: set[str]) -> tuple[str, ...]:
         args = set(self.args)
         s = dump(args.pop(), defs)
         while args:
-            s = f"(and {s} {dump(args.pop(), defs)})"
+            s = ("(and", *s, *dump(args.pop(), defs), ")")
         return s
 
     def eval(self, model: Model) -> bool:
@@ -224,11 +224,11 @@ class OrOp:
             case _:
                 return OrOp(frozenset(args))
 
-    def dump(self, defs: set[str]) -> str:
+    def dump(self, defs: set[str]) -> tuple[str, ...]:
         args = set(self.args)
         s = dump(args.pop(), defs)
         while args:
-            s = f"(or {s} {dump(args.pop(), defs)})"
+            s = ("(or", *s, *dump(args.pop(), defs), ")")
         return s
 
     def eval(self, model: Model) -> bool:
@@ -272,13 +272,13 @@ class XorOp:
                 args.add(d)
         return XorOp(invert, frozenset(args)) if args else invert
 
-    def dump(self, defs: set[str]) -> str:
+    def dump(self, defs: set[str]) -> tuple[str, ...]:
         args = set(self.args)
         s = dump(args.pop(), defs)
         while args:
-            s = f"(xor {s} {dump(args.pop(), defs)})"
+            s = ("(xor", *s, *dump(args.pop(), defs), ")")
         if self.base is True:
-            s = f"(xor {s} true)"
+            s = ("(xor", *s, "true)")
         return s
 
     def eval(self, model: Model) -> bool:
@@ -293,7 +293,9 @@ class Constraint(Symbolic):
         self._term = value  # pyright: ignore
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}({dump(self._term, set(['_pretty']))})"
+        return (
+            f"{self.__class__.__name__}({' '.join(dump(self._term, set(['_pretty'])))})"
+        )
 
     def __invert__(self) -> Self:
         return self._from_term(NotOp.apply(self._term))
@@ -375,8 +377,8 @@ class BvNotOp:
                 assert 0 <= p <= q <= mask
                 return BvNotOp(term, (p, q))
 
-    def dump(self, width: int, defs: set[str]) -> str:
-        return f"(bvnot {dump(self.arg, defs, width)})"
+    def dump(self, width: int, defs: set[str]) -> tuple[str, ...]:
+        return ("(bvnot", *dump(self.arg, defs, width), ")")
 
     def eval(self, width: int, model: Model) -> int:
         mask = (1 << width) - 1
@@ -430,13 +432,13 @@ class BvAndOp:
             assert 0 <= n <= mask
             return BvAndOp(mask, frozenset(args), (0, n)) if args else mask
 
-    def dump(self, width: int, defs: set[str]) -> str:
+    def dump(self, width: int, defs: set[str]) -> tuple[str, ...]:
         args = set(self.args)
         s = dump(args.pop(), defs, width)
         while args:
-            s = f"(bvand {s} {dump(args.pop(), defs, width)})"
+            s = ("(bvand", *s, *dump(args.pop(), defs, width), ")")
         if self.mask != (1 << width) - 1:
-            s = f"(bvand {s} {dump(self.mask, defs, width)})"
+            s = ("(bvand", *s, *dump(self.mask, defs, width), ")")
         return s
 
     def eval(self, width: int, model: Model) -> int:
@@ -493,13 +495,13 @@ class BvOrOp:
                 BvOrOp(mask, frozenset(args), (m, (1 << width) - 1)) if args else mask
             )
 
-    def dump(self, width: int, defs: set[str]) -> str:
+    def dump(self, width: int, defs: set[str]) -> tuple[str, ...]:
         args = set(self.args)
         s = dump(args.pop(), defs, width)
         while args:
-            s = f"(bvor {s} {dump(args.pop(), defs, width)})"
+            s = ("(bvor", *s, *dump(args.pop(), defs, width), ")")
         if self.mask != 0:
-            s = f"(bvor {s} {dump(self.mask, defs, width)})"
+            s = ("(bvor", *s, *dump(self.mask, defs, width), ")")
         return s
 
     def eval(self, width: int, model: Model) -> int:
@@ -542,11 +544,11 @@ class BvXorOp:
                 args.add(term)
         return BvXorOp(mask, frozenset(args), (0, (1 << width) - 1)) if args else base
 
-    def dump(self, width: int, defs: set[str]) -> str:
+    def dump(self, width: int, defs: set[str]) -> tuple[str, ...]:
         args = set(self.args)
         s = dump(self.base, defs, width)
         while args:
-            s = f"(bvxor {s} {dump(args.pop(), defs, width)})"
+            s = ("(bvxor", *s, *dump(args.pop(), defs, width), ")")
         return s
 
     def eval(self, width: int, model: Model) -> int:
@@ -620,13 +622,13 @@ class BvArithOp:
         assert 0 <= m <= n < limit
         return BvArithOp(base, tuple(args), (m, n)) if args else base
 
-    def dump(self, width: int, defs: set[str]) -> str:
+    def dump(self, width: int, defs: set[str]) -> tuple[str, ...]:
         args = set(self.args)
         s = dump(args.pop(), defs, width)
         while args:
-            s = f"(bvadd {s} {dump(args.pop(), defs, width)})"
+            s = ("(bvadd", *s, *dump(args.pop(), defs, width), ")")
         if self.base:
-            s = f"(bvadd {dump(self.base, defs, width)} {s})"
+            s = ("(bvadd", *dump(self.base, defs, width), *s, ")")
         return s
 
     def eval(self, width: int, model: Model) -> int:
@@ -675,13 +677,13 @@ class BvMulOp:
             m, n = (0, limit - 1)
         return BvMulOp(base, tuple(args), (m, n))
 
-    def dump(self, width: int, defs: set[str]) -> str:
+    def dump(self, width: int, defs: set[str]) -> tuple[str, ...]:
         args = set(self.args)
         s = dump(args.pop(), defs, width)
         while args:
-            s = f"(bvmul {s} {dump(args.pop(), defs, width)})"
+            s = ("(bvmul", *s, *dump(args.pop(), defs, width), ")")
         if self.base:
-            s = f"(bvmul {dump(self.base, defs, width)} {s})"
+            s = ("(bvmul", *dump(self.base, defs, width), *s, ")")
         return s
 
     def eval(self, width: int, model: Model) -> int:
@@ -726,8 +728,13 @@ class BvDivOp:
                         n //= right
                 return BvDivOp(left, right, signed, (m, n))
 
-    def dump(self, width: int, defs: set[str]) -> str:
-        return f"(bv{'s' if self.signed else 'u'}div {dump(self.left, defs, width)} {dump(self.right, defs, width)})"
+    def dump(self, width: int, defs: set[str]) -> tuple[str, ...]:
+        return (
+            f"(bv{'s' if self.signed else 'u'}div",
+            *dump(self.left, defs, width),
+            *dump(self.right, defs, width),
+            ")",
+        )
 
     def eval(self, width: int, model: Model) -> int:
         if self.signed:
@@ -768,8 +775,13 @@ class BvModOp:
                     n = to_signed(width, n)
                 return BvModOp(left, right, signed, (0, n))
 
-    def dump(self, width: int, defs: set[str]) -> str:
-        return f"(bv{'s' if self.signed else 'u'}rem {dump(self.left, defs, width)} {dump(self.right, defs, width)})"
+    def dump(self, width: int, defs: set[str]) -> tuple[str, ...]:
+        return (
+            f"(bv{'s' if self.signed else 'u'}rem",
+            *dump(self.left, defs, width),
+            *dump(self.right, defs, width),
+            ")",
+        )
 
     def eval(self, width: int, model: Model) -> int:
         if self.signed:
@@ -892,7 +904,7 @@ class BvCmpOp:
                 pass
         return BvCmpOp(width, left, right, kind)
 
-    def dump(self, defs: set[str]) -> str:
+    def dump(self, defs: set[str]) -> tuple[str, ...]:
         if "_pretty" in defs:
             match self.kind:
                 case "EQ":
@@ -905,7 +917,6 @@ class BvCmpOp:
                     short = "s<"
                 case "SLE":
                     short = "s<="
-            return f"({dump(self.left, defs, self.width)} {short} {dump(self.right, defs, self.width)})"
         else:
             match self.kind:
                 case "EQ":
@@ -918,7 +929,12 @@ class BvCmpOp:
                     short = "bvslt"
                 case "SLE":
                     short = "bvsle"
-            return f"({short} {dump(self.left, defs, self.width)} {dump(self.right, defs, self.width)})"
+        return (
+            f"({short}",
+            *dump(self.left, defs, self.width),
+            *dump(self.right, defs, self.width),
+            ")",
+        )
 
     def eval(self, model: Model) -> bool:
         width = self.width
@@ -997,7 +1013,7 @@ class BvShiftOp:
                         m, n = 0, limit
                 return BvShiftOp(term, shift, way, (m, n))
 
-    def dump(self, width: int, defs: set[str]) -> str:
+    def dump(self, width: int, defs: set[str]) -> tuple[str, ...]:
         match self.way:
             case "L":
                 short = "bvshl"
@@ -1006,7 +1022,10 @@ class BvShiftOp:
             case "RS":
                 short = "bvashr"
         return (
-            f"({short} {dump(self.term, defs, width)} {dump(self.shift, defs, width)})"
+            f"({short}",
+            *dump(self.term, defs, width),
+            *dump(self.shift, defs, width),
+            ")",
         )
 
     def eval(self, width: int, model: Model) -> int:
@@ -1049,8 +1068,14 @@ class IteOp:
                 r, s = minmax(right, width)
                 return IteOp(cond, left, right, (min(p, r), max(q, s)))
 
-    def dump(self, width: int, defs: set[str]) -> str:
-        return f"(ite {dump(self.cond, defs)} {dump(self.left, defs, width)} {dump(self.right, defs, width)})"
+    def dump(self, width: int, defs: set[str]) -> tuple[str, ...]:
+        return (
+            "(ite",
+            *dump(self.cond, defs),
+            *dump(self.left, defs, width),
+            *dump(self.right, defs, width),
+            ")",
+        )
 
     def eval(self, width: int, model: Model) -> int:
         if eval(self.cond, model):
@@ -1109,8 +1134,8 @@ class ExtractOp:
                 m, n = minmax(term, rightmost)
                 return ExtractOp(term, prior, (m & mask, n & mask))
 
-    def dump(self, width: int, defs: set[str]) -> str:
-        return f"((_ extract {width - 1} 0) {dump(self.term, defs, self.prior)})"
+    def dump(self, width: int, defs: set[str]) -> tuple[str, ...]:
+        return (f"((_ extract {width - 1} 0)", *dump(self.term, defs, self.prior), ")")
 
     def eval(self, width: int, model: Model) -> int:
         return eval(self.term, model, width) & ((1 << width) - 1)
@@ -1139,13 +1164,22 @@ class ExtendOp:
             case _:
                 return ExtendOp(term, extra, signed, minmax(term, width))
 
-    def dump(self, width: int, defs: set[str]) -> str:
+    def dump(self, width: int, defs: set[str]) -> tuple[str, ...]:
         if self.signed:
-            return f"((_ sign_extend {self.extra}) {dump(self.term, defs, width - self.extra)})"
+            return (
+                f"((_ sign_extend {self.extra})",
+                *dump(self.term, defs, width - self.extra),
+                ")",
+            )
         elif "_pretty" in defs:
-            return f"(...{dump(self.term, defs, width - self.extra)})"
+            return ("(...", *dump(self.term, defs, width - self.extra), ")")
         else:
-            return f"(concat {dump(0, defs, self.extra)} {dump(self.term, defs, width - self.extra)})"
+            return (
+                "(concat",
+                *dump(0, defs, self.extra),
+                *dump(self.term, defs, width - self.extra),
+                ")",
+            )
 
     def eval(self, width: int, model: Model) -> int:
         if self.signed:
@@ -1174,8 +1208,12 @@ class ConcatOp:
             return i
         return ConcatOp(width, terms, (0, (1 << (len(terms) * width)) - 1))
 
-    def dump(self, width: int, defs: set[str]) -> str:
-        return f"(concat {' '.join(dump(t, defs, self.width) for t in self.terms)})"
+    def dump(self, width: int, defs: set[str]) -> tuple[str, ...]:
+        r = ["(concat"]
+        for t in self.terms:
+            r.extend(dump(t, defs, self.width))
+        r.append(")")
+        return tuple(r)
 
     def eval(self, width: int, model: Model) -> int:
         i = 0
@@ -1195,7 +1233,7 @@ class BitVector[N: int](
         self._term = value  # pyright: ignore
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}({dump(self._term, set(['_pretty']), self.width)})"
+        return f"{self.__class__.__name__}({' '.join(dump(self._term, set(['_pretty']), self.width))})"
 
     @abc.abstractmethod
     def __lt__(self, other: Self, /) -> Constraint: ...
@@ -1383,11 +1421,11 @@ class UninterpretedTerm:
     name: str
     width: tuple[int, int]
 
-    def dump(self, width: tuple[int, int], defs: set[str]) -> str:
+    def dump(self, width: tuple[int, int], defs: set[str]) -> tuple[str, ...]:
         defs.add(
             f"(declare-fun {self.name} () (Array (_ BitVec {width[0]}) (_ BitVec {width[1]})))"
         )
-        return self.name
+        return (self.name,)
 
     def eval(self, width: tuple[int, int], model: Model) -> dict[int, int]:
         if self.name in model:
@@ -1420,22 +1458,37 @@ class ArrayTerm:
             array.default, array.width, frozenset(base.items()), tuple(writes)
         )
 
-    def dump(self, width: tuple[int, int], defs: set[str]) -> str:
+    def dump(self, width: tuple[int, int], defs: set[str]) -> tuple[str, ...]:
         if "_pretty" in defs:
             if isinstance(self.default, UninterpretedTerm):
                 stores = [("default", self.default.name)]
             else:
-                stores = [("default", dump(self.default, defs, width[1]))]
+                stores = [("default", " ".join(dump(self.default, defs, width[1])))]
             for k, v in chain(self.base, self.writes):
-                stores.append((dump(k, defs, width[0]), dump(k, defs, width[1])))
-            return str(dict(stores))
+                stores.append(
+                    (
+                        " ".join(dump(k, defs, width[0])),
+                        " ".join(dump(k, defs, width[1])),
+                    )
+                )
+            return (str(dict(stores)),)
         else:
             if isinstance(self.default, UninterpretedTerm):
                 s = dump(self.default, defs, width)
             else:
-                s = f"((as const (Array (_ BitVec {width[0]}) (_ BitVec {width[1]}))) {dump(self.default, defs, width[1])})"
+                s = (
+                    f"((as const (Array (_ BitVec {width[0]}) (_ BitVec {width[1]})))",
+                    *dump(self.default, defs, width[1]),
+                    ")",
+                )
             for k, v in chain(self.base, self.writes):
-                s = f"(store {s} {dump(k, defs, width[0])} {dump(v, defs, width[1])})"
+                s = (
+                    "(store",
+                    *s,
+                    *dump(k, defs, width[0]),
+                    *dump(v, defs, width[1]),
+                    ")",
+                )
             return s
 
     def eval(self, width: tuple[int, int], model: Model) -> dict[int, int]:
@@ -1482,11 +1535,22 @@ class SelectOp:
         else:
             return array.default
 
-    def dump(self, width: int, defs: set[str]) -> str:
+    def dump(self, width: int, defs: set[str]) -> tuple[str, ...]:
         if "_pretty" in defs:
-            return f"({dump(self.array, defs, self.array.width)}[{dump(self.key, defs, self.array.width[0])}])"
+            return (
+                "(",
+                *dump(self.array, defs, self.array.width),
+                "[",
+                *dump(self.key, defs, self.array.width[0]),
+                "] )",
+            )
         else:
-            return f"(select {dump(self.array, defs, self.array.width)} {dump(self.key, defs, self.array.width[0])})"
+            return (
+                "(select",
+                *dump(self.array, defs, self.array.width),
+                *dump(self.key, defs, self.array.width[0]),
+                ")",
+            )
 
     def eval(self, width: int, model: Model) -> int:
         a = eval(self.array, model, self.array.width)
@@ -1509,7 +1573,7 @@ class Array[K: Uint[Any] | Int[Any], V: Uint[Any] | Int[Any]](
                 self._array = ArrayTerm(value._term, width)  # pyright: ignore[reportPrivateUsage]
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}({dump(self._array, set(['_pretty']), self._array.width)})"
+        return f"{self.__class__.__name__}({' '.join(dump(self._array, set(['_pretty']), self._array.width))})"
 
     def __eq__(  # pyright: ignore[reportIncompatibleMethodOverride]
         self, other: Never, /
@@ -1549,7 +1613,7 @@ class Solver:
                 self.model = {s: True}
                 return True
             case term:
-                sexpr = term.dump(defs)
+                sexpr = " ".join(term.dump(defs))
         smt = "\n".join([*defs, f"(assert {sexpr})", "(check-sat)"])
         p = Popen(["z3", "-model", "/dev/stdin"], stdin=PIPE, stdout=PIPE, stderr=PIPE)
         out, err = p.communicate(smt.encode())
@@ -1561,7 +1625,7 @@ class Solver:
             case "unsat":
                 return False
             case _:
-                raise RuntimeError(out, err)
+                raise RuntimeError(out, err, smt)
 
     @overload
     def evaluate(self, s: Constraint, /) -> bool: ...
@@ -1617,43 +1681,43 @@ class Solver:
 
 
 @overload
-def dump(term: BooleanTerm, defs: set[str], width: None = None) -> str: ...
+def dump(term: BooleanTerm, defs: set[str], width: None = None) -> tuple[str, ...]: ...
 
 
 @overload
-def dump(term: BitvectorTerm, defs: set[str], width: int) -> str: ...
+def dump(term: BitvectorTerm, defs: set[str], width: int) -> tuple[str, ...]: ...
 
 
 @overload
 def dump(
     term: ArrayTerm | UninterpretedTerm, defs: set[str], width: tuple[int, int]
-) -> str: ...
+) -> tuple[str, ...]: ...
 
 
 def dump(
     term: BooleanTerm | BitvectorTerm | ArrayTerm | UninterpretedTerm,
     defs: set[str],
     width: None | int | tuple[int, int] = None,
-) -> str:
+) -> tuple[str, ...]:
     match term:
         case True:
-            return "true"
+            return ("true",)
         case False:
-            return "false"
+            return ("false",)
         case int():
             assert isinstance(width, int)
             if "_pretty" in defs:
-                return hex(to_signed(width, term))
+                return (hex(to_signed(width, term)),)
             elif width % 8 == 0:
-                return "#x" + term.to_bytes(width // 8).hex()
+                return ("#x" + term.to_bytes(width // 8).hex(),)
             else:
-                return "#b" + bin(term)[2:].zfill(width)
+                return ("#b" + bin(term)[2:].zfill(width),)
         case str():
             if width is None:
                 defs.add(f"(declare-fun {term} () Bool)")
             else:
                 defs.add(f"(declare-fun {term} () (_ BitVec {width}))")
-            return term
+            return (term,)
         case _:
             return term.dump(defs) if width is None else term.dump(width, defs)  # pyright: ignore
 
