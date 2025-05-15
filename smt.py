@@ -1310,25 +1310,25 @@ class BitVector[N: int](
 class Uint[N: int](BitVector[N]):
     __slots__ = ()
 
-    def __lt__(self, other: Self, /) -> Constraint:
+    def __lt__(self, other: Self, /) -> Constraint:  # pyright: ignore[reportIncompatibleMethodOverride]
         assert self.width == other.width
         return Constraint._from_term(
             BvCmpOp.apply(self.width, self._term, other._term, "ULT")
         )
 
-    def __le__(self, other: Self, /) -> Constraint:
+    def __le__(self, other: Self, /) -> Constraint:  # pyright: ignore[reportIncompatibleMethodOverride]
         assert self.width == other.width
         return Constraint._from_term(
             BvCmpOp.apply(self.width, self._term, other._term, "ULE")
         )
 
-    def __truediv__(self, other: Self, /) -> Self:
+    def __truediv__(self, other: Self, /) -> Self:  # pyright: ignore[reportIncompatibleMethodOverride]
         assert self.width == other.width
         return self._from_term(
             BvDivOp.apply(self.width, self._term, other._term, False)
         )
 
-    def __mod__(self, other: Self, /) -> Self:
+    def __mod__(self, other: Self, /) -> Self:  # pyright: ignore[reportIncompatibleMethodOverride]
         assert self.width == other.width
         return self._from_term(
             BvModOp.apply(self.width, self._term, other._term, False)
@@ -1365,23 +1365,23 @@ class Uint[N: int](BitVector[N]):
 class Int[N: int](BitVector[N]):
     __slots__ = ()
 
-    def __lt__(self, other: Self, /) -> Constraint:
+    def __lt__(self, other: Self, /) -> Constraint:  # pyright: ignore[reportIncompatibleMethodOverride]
         assert self.width == other.width
         return Constraint._from_term(
             BvCmpOp.apply(self.width, self._term, other._term, "SLT")
         )
 
-    def __le__(self, other: Self, /) -> Constraint:
+    def __le__(self, other: Self, /) -> Constraint:  # pyright: ignore[reportIncompatibleMethodOverride]
         assert self.width == other.width
         return Constraint._from_term(
             BvCmpOp.apply(self.width, self._term, other._term, "SLE")
         )
 
-    def __truediv__(self, other: Self, /) -> Self:
+    def __truediv__(self, other: Self, /) -> Self:  # pyright: ignore[reportIncompatibleMethodOverride]
         assert self.width == other.width
         return self._from_term(BvDivOp.apply(self.width, self._term, other._term, True))
 
-    def __mod__(self, other: Self, /) -> Self:
+    def __mod__(self, other: Self, /) -> Self:  # pyright: ignore[reportIncompatibleMethodOverride]
         assert self.width == other.width
         return self._from_term(BvModOp.apply(self.width, self._term, other._term, True))
 
