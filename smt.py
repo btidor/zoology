@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import abc
 from collections import defaultdict
+import copy
 from dataclasses import dataclass
 from functools import reduce
 from itertools import chain
@@ -1643,34 +1644,27 @@ class Solver:
     ) -> bool | int | dict[int, int]:
         assert self.model is not None, "solver is not ready for model evaluation"
         if isinstance(self.model, str):
-            model = {}
-            parts = self.model.splitlines()
-            assert parts.pop(0) == "("
-            while len(parts) > 1:
-                d, k, *rest = parts.pop(0).split()
-                assert d == "(define-fun"
-                if "(Array" in rest:
-                    assert "as const" in parts.pop(0)
-                    d = parts.pop(0).strip(" ()")
-                    assert d.startswith("#x")
-                    v = defaultdict[int, int](lambda: int(d[2:], 16))
-                    while True:
-                        p = parts.pop(0).strip(" ()")
-                        r = parts.pop(0)
-                        q = r.strip(" ()")
-                        assert p.startswith("#x") and q.startswith("#x")
-                        v[int(p[2:], 16)] = int(q[2:], 16)
-                        if r.endswith("))"):
-                            break
-                    model[k] = v
-                elif "BitVec" in rest:
-                    v = parts.pop(0).strip(" ()")
-                    assert v.startswith("#x")
-                    model[k] = int(v[2:], 16)
-                else:
-                    raise NotImplementedError("evaluate: cannot parse model", rest)
-            assert parts == [")"]
-            self.model = model
+            tokens = self.model.replace("(", " ( ").replace(")", " ) ").split()
+            self.model = {}
+            for fun in read_from_tokens(tokens):
+                match fun:
+                    case "define-fun", name, _, "Bool", value:
+                        assert name not in self.model, f"duplicate term: {name}"
+                        match value:
+                            case "true":
+                                self.model[name] = True
+                            case "false":
+                                self.model[name] = False
+                            case _:
+                                raise NotImplementedError(f"unknown boolean: {value}")
+                    case "define-fun", name, _, [_, "BitVec", _], value:
+                        assert name not in self.model, f"duplicate term: {name}"
+                        self.model[name] = parse_numeral(value)
+                    case "define-fun", name, _, ["Array", _, _], value:
+                        assert name not in self.model, f"duplicate term: {name}"
+                        self.model[name] = parse_array(value, self.model)
+                    case _:
+                        raise NotImplementedError(f"unexpected term: {fun}")
         match sym:
             case Constraint():
                 return eval(sym._term, self.model)  # pyright: ignore[reportPrivateUsage]
@@ -1747,6 +1741,8 @@ def eval(
         case bool() | int():
             return term
         case str():
+            if term in model:
+                return model[term]
             match width:
                 case None:
                     return True
@@ -1878,3 +1874,52 @@ def mm_to_unsigned(width: int, min: int, max: int) -> tuple[int, int]:
         p, q = 0, (1 << width) - 1
     assert 0 <= p <= q < (1 << width)
     return p, q
+
+
+def read_from_tokens(tokens: list[str]) -> Any:
+    # https://norvig.com/lispy.html
+    match tokens.pop(0).strip():
+        case "(":
+            L = list[Any]()
+            while tokens[0] != ")":
+                L.append(read_from_tokens(tokens))
+            assert tokens.pop(0) == ")"
+            return L
+        case ")":
+            raise SyntaxError("unexpected )")
+        case "":
+            return None
+        case word:
+            return word
+
+
+def parse_numeral(s: str) -> int:
+    if s.startswith("#x"):
+        return int(s[2:], 16)
+    elif s.startswith("#b"):
+        return int(s[2:], 2)
+    else:
+        raise SyntaxError(f"cannot parse numeral: {s}")
+
+
+def parse_array(parts: str | list[Any], model: Model) -> int | dict[int, int]:
+    match parts:
+        case str():
+            if parts.startswith("#"):
+                return parse_numeral(parts)
+            else:
+                return copy.copy(model[parts])
+        case "let", [[name, value]], expr:
+            assert name not in model, f"duplicate term: {name}"
+            model[name] = parse_array(value, model)
+            return parse_array(expr, model)
+        case "store", expr, key, value:
+            array = parse_array(expr, model)
+            assert isinstance(array, dict)
+            array[parse_numeral(key)] = parse_numeral(value)
+            return array
+        case [["as", "const", _], value]:
+            default = parse_numeral(value)
+            return defaultdict(lambda: default)
+        case _:
+            raise NotImplementedError(f"unexpected term: {parts}")
