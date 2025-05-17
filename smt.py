@@ -839,6 +839,9 @@ class CmpOp:
         | Literal["SLT"]
         | Literal["SLE"],
     ) -> BooleanTerm:
+        if kind == "EQ" and isinstance(right, int):
+            # normalize ints on lefthand side
+            left, right = right, left
         match (left, right, kind):
             case int(), int(), "EQ":
                 return left == right
@@ -858,6 +861,14 @@ class CmpOp:
                 return to_signed(width, left) < to_signed(width, right)
             case int(), int(), "SLE":
                 return to_signed(width, left) <= to_signed(width, right)
+            case _, 0, "ULT":  # X < 0 => False
+                return False
+            case 0, x, "ULT":  # X > 0 => X != 0
+                return NotOp.apply(CmpOp.apply(width, x, 0, "EQ"))
+            case x, 0, "ULE":  # X <= 0 => X = 0
+                return CmpOp.apply(width, x, 0, "EQ")
+            case 0, _, "ULE":  # X >= 0 => True
+                return True
             case IteOp(i, t, e), o, _:
                 a = CmpOp.apply(width, t, o, kind)
                 b = CmpOp.apply(width, e, o, kind)
@@ -866,15 +877,32 @@ class CmpOp:
                 a = CmpOp.apply(width, o, t, kind)
                 b = CmpOp.apply(width, o, e, kind)
                 return OrOp.apply(AndOp.apply(i, a), AndOp.apply(NotOp.apply(i), b))
-            case (ExtendOp(t, x, False), int() as i, "EQ") | (
-                int() as i,
-                ExtendOp(t, x, False),
-                "EQ",
-            ):
+            case int() as i, ExtendOp(t, x, False), "EQ":
                 if i < (1 << (width - x)):
                     return CmpOp.apply(width - x, t, i, "EQ")
                 else:
                     return False
+            case int() as i, ConcatOp(w, terms), "EQ":
+                assert width % w == 0
+                ints = list[int]()
+                mask = (1 << w) - 1
+                for _ in terms:
+                    ints.append(i & mask)
+                    i >>= w
+                ints.reverse()
+                return AndOp.apply(
+                    *(CmpOp.apply(w, j, t, "EQ") for j, t in zip(ints, terms))
+                )
+            case int() as i, BvArithOp(base, args), "EQ" if base != 0:
+                limit = 1 << width
+                delta = i - base
+                if delta < 0:
+                    delta += limit
+                assert 0 <= delta < limit
+                return CmpOp.apply(width, delta, BvArithOp.apply(width, *args), "EQ")
+            case int() as i, BvNotOp(arg), "EQ":
+                mask = (1 << width) - 1
+                return CmpOp.apply(width, i ^ mask, arg, "EQ")
             case _:
                 pass
         p, q = minmax(left, width)
@@ -1062,6 +1090,8 @@ class IteOp:
                 return right
             case _ if left == right:
                 return left
+            case NotOp(arg), _, _:
+                return IteOp.apply(arg, right, left, width)
             case _:
                 p, q = minmax(left, width)
                 r, s = minmax(right, width)
