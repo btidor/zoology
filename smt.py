@@ -294,9 +294,7 @@ class Constraint(Symbolic):
         self._term = value  # pyright: ignore
 
     def __repr__(self) -> str:
-        return (
-            f"{self.__class__.__name__}({' '.join(dump(self._term, set(['_pretty'])))})"
-        )
+        return f"{self.__class__.__name__}({prettify(self._term)})"
 
     def __invert__(self) -> Self:
         return self._from_term(NotOp.apply(self._term))
@@ -1166,21 +1164,17 @@ class ExtendOp:
                 return ExtendOp(term, extra, signed, minmax(term, width))
 
     def dump(self, width: int, defs: set[str]) -> tuple[str, ...]:
+        inner = dump(self.term, defs, width - self.extra)
         if self.signed:
-            return (
-                f"((_ sign_extend {self.extra})",
-                *dump(self.term, defs, width - self.extra),
-                ")",
-            )
+            return (f"((_ sign_extend {self.extra})", *inner, ")")
         elif "_pretty" in defs:
-            return ("(...", *dump(self.term, defs, width - self.extra), ")")
+            match inner:
+                case (single,):
+                    return (f"...{single}",)
+                case _:
+                    return ("(...", *inner, ")")
         else:
-            return (
-                "(concat",
-                *dump(0, defs, self.extra),
-                *dump(self.term, defs, width - self.extra),
-                ")",
-            )
+            return ("(concat", *dump(0, defs, self.extra), *inner, ")")
 
     def eval(self, width: int, model: Model) -> int:
         if self.signed:
@@ -1234,7 +1228,7 @@ class BitVector[N: int](
         self._term = value  # pyright: ignore
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}({' '.join(dump(self._term, set(['_pretty']), self.width))})"
+        return f"{self.__class__.__name__}({prettify(self._term, self.width)})"
 
     @abc.abstractmethod
     def __lt__(self, other: Self, /) -> Constraint: ...
@@ -1539,11 +1533,10 @@ class SelectOp:
     def dump(self, width: int, defs: set[str]) -> tuple[str, ...]:
         if "_pretty" in defs:
             return (
-                "(",
                 *dump(self.array, defs, self.array.width),
                 "[",
                 *dump(self.key, defs, self.array.width[0]),
-                "] )",
+                "]",
             )
         else:
             return (
@@ -1574,7 +1567,7 @@ class Array[K: Uint[Any] | Int[Any], V: Uint[Any] | Int[Any]](
                 self._array = ArrayTerm(value._term, width)  # pyright: ignore[reportPrivateUsage]
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}({' '.join(dump(self._array, set(['_pretty']), self._array.width))})"
+        return f"{self.__class__.__name__}({prettify(self._array, self._array.width)})"
 
     def __eq__(  # pyright: ignore[reportIncompatibleMethodOverride]
         self, other: Never, /
@@ -1595,31 +1588,39 @@ class Array[K: Uint[Any] | Int[Any], V: Uint[Any] | Int[Any]](
 
 class Solver:
     def __init__(self) -> None:
-        self._constraint = Constraint(True)
+        self._constraint = True
         self._model: Model | str | None = None
 
     @property
     def constraint(self) -> Constraint:
-        return self._constraint
+        return Constraint._from_term(self._constraint)  # pyright: ignore[reportPrivateUsage]
 
     def add(self, assertion: Constraint, /) -> None:
-        self._constraint &= assertion
+        self._constraint = AndOp.apply(self._constraint, assertion._term)  # pyright: ignore[reportPrivateUsage]
         self._model = None
 
     def check(self, *assumptions: Constraint) -> bool:
+        aterms = [a._term for a in assumptions]  # pyright: ignore[reportPrivateUsage]
+        constraint = reduce(AndOp.apply, aterms, self._constraint)
         self._model = None
-        defs = set[str]()
-        constraint = reduce(Constraint.__and__, assumptions, self._constraint)
-        match constraint._term:  # pyright: ignore[reportPrivateUsage]
+        match constraint:
             case bool() as b:
                 self._model = {}
                 return b
             case str() as s:
                 self._model = {s: True}
                 return True
-            case term:
-                sexpr = " ".join(term.dump(defs))
-        smt = "\n".join([*defs, f"(assert {sexpr})", "(check-sat)"])
+            case AndOp():
+                args = constraint.args
+            case _:
+                args = set([constraint])
+        asserts = list[str]()
+        defs = set[str]()
+        for a in args:
+            asserts.append(" ".join(dump(a, defs)))
+        #     print(prettify(a))
+        # print("***")
+        smt = "\n".join((*defs, *(f"(assert {s})" for s in asserts), "(check-sat)"))
         p = Popen(["z3", "-model", "/dev/stdin"], stdin=PIPE, stdout=PIPE, stderr=PIPE)
         out, err = p.communicate(smt.encode())
         outs = out.decode().split("\n", 1)
@@ -1718,6 +1719,31 @@ def dump(
             return (term,)
         case _:
             return term.dump(defs) if width is None else term.dump(width, defs)  # pyright: ignore
+
+
+@overload
+def prettify(term: BooleanTerm, width: None = None) -> str: ...
+
+
+@overload
+def prettify(term: BitvectorTerm, width: int) -> str: ...
+
+
+@overload
+def prettify(term: ArrayTerm | UninterpretedTerm, width: tuple[int, int]) -> str: ...
+
+
+def prettify(
+    term: BooleanTerm | BitvectorTerm | ArrayTerm | UninterpretedTerm,
+    width: None | int | tuple[int, int] = None,
+) -> str:
+    return (
+        " ".join(dump(term, set(["_pretty"]), width))  # pyright: ignore
+        .replace(" )", ")")
+        .replace(" [ ", "[")
+        .replace(" ]", "]")
+        .replace("... ", "...")
+    )
 
 
 @overload
