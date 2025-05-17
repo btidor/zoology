@@ -1595,23 +1595,27 @@ class Array[K: Uint[Any] | Int[Any], V: Uint[Any] | Int[Any]](
 
 class Solver:
     def __init__(self) -> None:
-        self.constraint = Constraint(True)
-        self.model: Model | str | None = None
+        self._constraint = Constraint(True)
+        self._model: Model | str | None = None
+
+    @property
+    def constraint(self) -> Constraint:
+        return self._constraint
 
     def add(self, assertion: Constraint, /) -> None:
-        self.constraint &= assertion
-        self.model = None
+        self._constraint &= assertion
+        self._model = None
 
     def check(self, *assumptions: Constraint) -> bool:
-        self.model = None
+        self._model = None
         defs = set[str]()
-        constraint = reduce(Constraint.__and__, assumptions, self.constraint)
+        constraint = reduce(Constraint.__and__, assumptions, self._constraint)
         match constraint._term:  # pyright: ignore[reportPrivateUsage]
             case bool() as b:
-                self.model = {}
+                self._model = {}
                 return b
             case str() as s:
-                self.model = {s: True}
+                self._model = {s: True}
                 return True
             case term:
                 sexpr = " ".join(term.dump(defs))
@@ -1621,7 +1625,7 @@ class Solver:
         outs = out.decode().split("\n", 1)
         match outs[0]:
             case "sat":
-                self.model = outs[1]
+                self._model = outs[1]
                 return True
             case "unsat":
                 return False
@@ -1642,36 +1646,36 @@ class Solver:
     def evaluate[N: int, M: int](
         self, sym: Constraint | Uint[N] | Int[N] | Array[Uint[N], Uint[M]], /
     ) -> bool | int | dict[int, int]:
-        assert self.model is not None, "solver is not ready for model evaluation"
-        if isinstance(self.model, str):
-            tokens = self.model.replace("(", " ( ").replace(")", " ) ").split()
-            self.model = {}
+        assert self._model is not None, "solver is not ready for model evaluation"
+        if isinstance(self._model, str):
+            tokens = self._model.replace("(", " ( ").replace(")", " ) ").split()
+            self._model = {}
             for fun in read_from_tokens(tokens):
                 match fun:
                     case "define-fun", name, _, "Bool", value:
-                        assert name not in self.model, f"duplicate term: {name}"
+                        assert name not in self._model, f"duplicate term: {name}"
                         match value:
                             case "true":
-                                self.model[name] = True
+                                self._model[name] = True
                             case "false":
-                                self.model[name] = False
+                                self._model[name] = False
                             case _:
                                 raise NotImplementedError(f"unknown boolean: {value}")
                     case "define-fun", name, _, [_, "BitVec", _], value:
-                        assert name not in self.model, f"duplicate term: {name}"
-                        self.model[name] = parse_numeral(value)
+                        assert name not in self._model, f"duplicate term: {name}"
+                        self._model[name] = parse_numeral(value)
                     case "define-fun", name, _, ["Array", _, _], value:
-                        assert name not in self.model, f"duplicate term: {name}"
-                        self.model[name] = parse_array(value, self.model)
+                        assert name not in self._model, f"duplicate term: {name}"
+                        self._model[name] = parse_array(value, self._model)
                     case _:
                         raise NotImplementedError(f"unexpected term: {fun}")
         match sym:
             case Constraint():
-                return eval(sym._term, self.model)  # pyright: ignore[reportPrivateUsage]
+                return eval(sym._term, self._model)  # pyright: ignore[reportPrivateUsage]
             case BitVector():
-                return eval(sym._term, self.model, sym.width)  # pyright: ignore[reportPrivateUsage]
+                return eval(sym._term, self._model, sym.width)  # pyright: ignore[reportPrivateUsage]
             case Array():
-                return eval(sym._array, self.model, sym._array.width)  # pyright: ignore[reportPrivateUsage]
+                return eval(sym._array, self._model, sym._array.width)  # pyright: ignore[reportPrivateUsage]
 
 
 @overload
