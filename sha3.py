@@ -43,9 +43,15 @@ class SHA3:
     there are no hash *collisions* (other preimage attacks are legal).
     """
 
-    free: list[tuple[Bytes, Uint256]] = field(default_factory=list)
-    symbolic: list[tuple[Uint[Any], Uint256]] = field(default_factory=list)
-    concrete: dict[bytes, tuple[Uint[Any], Uint256]] = field(default_factory=dict)
+    free: list[tuple[Bytes, Uint256]] = field(
+        default_factory=list[tuple[Bytes, Uint256]]
+    )
+    symbolic: list[tuple[Uint[Any], Uint256]] = field(
+        default_factory=list[tuple[Uint[Any], Uint256]]
+    )
+    concrete: dict[bytes, tuple[Uint[Any], Uint256]] = field(
+        default_factory=dict[bytes, tuple[Uint[Any], Uint256]]
+    )
 
     def __deepcopy__(self, memo: Any) -> Self:
         result = copy.copy(self)

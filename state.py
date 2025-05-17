@@ -34,16 +34,18 @@ class State:
 
     # ASSUMPTION: all contract accounts are listed here. All other addresses are
     # either EOAs or are uncreated.
-    contracts: dict[int, Contract] = field(default_factory=dict)  # address -> Contract
+    contracts: dict[int, Contract] = field(
+        default_factory=dict[int, Contract]
+    )  # address -> Contract
     balances: Array[Uint160, Uint256] = field(
         # address -> balance in wei
         default_factory=lambda: Array[Uint160, Uint256](Uint256(0))
     )
 
     pc: int | Termination = 0
-    stack: list[Uint256] = field(default_factory=list)
+    stack: list[Uint256] = field(default_factory=list[Uint256])
     memory: Memory = field(default_factory=Memory)
-    logs: list[Log] = field(default_factory=list)
+    logs: list[Log] = field(default_factory=list[Any])
 
     # The return data of the most recent subcontext, for the RETURNDATASIZE and
     # RETURNDATACOPY instructions.
@@ -89,7 +91,7 @@ class State:
     # prioritizing states according to a cost function.
     cost: int = 0
     last_jumpi: int = -1
-    trace: list[str] = field(default_factory=list)
+    trace: list[str] = field(default_factory=list[str])
 
     # If this State represents a subcontext, this callback should be called upon
     # termination. It takes a copy of this State as an argument and returns the
@@ -115,9 +117,9 @@ class State:
         # the BLOCKHASH instruction from overflowing.
         self.solver.add(self.block.number >= Uint256(256))
         if self.mystery_proxy is not None:
-            assert (
-                self.mystery_proxy.reveal() is not None
-            ), "State requires concrete mystery proxy address, if present"
+            assert self.mystery_proxy.reveal() is not None, (
+                "State requires concrete mystery proxy address, if present"
+            )
 
     def __lt__(self, other: Any) -> bool:
         if not isinstance(other, State):
