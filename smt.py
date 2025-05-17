@@ -137,7 +137,7 @@ class Symbolic(abc.ABC):
     def __repr__(self) -> str: ...
 
 
-type BooleanTerm = bool | str | NotOp | AndOp | OrOp | XorOp | BvCmpOp
+type BooleanTerm = bool | str | NotOp | AndOp | OrOp | XorOp | CmpOp
 
 
 @hashcache
@@ -797,7 +797,7 @@ class BvModOp:
 
 @hashcache
 @dataclass(frozen=True, slots=True)
-class BvCmpOp:
+class CmpOp:
     width: int
     left: BitvectorTerm
     right: BitvectorTerm
@@ -824,7 +824,7 @@ class BvCmpOp:
         r = cls._apply(width, left, right, kind)
         # if isinstance(r, bool):
         #     s = Solver()
-        #     t = Constraint._from_term(BvCmpOp(width, left, right, kind))  # pyright: ignore[reportPrivateUsage]
+        #     t = Constraint._from_term(CmpOp(width, left, right, kind))  # pyright: ignore[reportPrivateUsage]
         #     s.add(~t if r else t)
         #     assert not s.check(), f"MISMATCH-{r}: {kind} {left} {right}"
         return r
@@ -850,7 +850,7 @@ class BvCmpOp:
                 t1
             ):
                 return AndOp.apply(
-                    *(BvCmpOp.apply(w, a, b, "EQ") for a, b in zip(t0, t1, strict=True))
+                    *(CmpOp.apply(w, a, b, "EQ") for a, b in zip(t0, t1, strict=True))
                 )
             case int(), int(), "ULT":
                 return left < right
@@ -861,12 +861,12 @@ class BvCmpOp:
             case int(), int(), "SLE":
                 return to_signed(width, left) <= to_signed(width, right)
             case IteOp(i, t, e), o, _:
-                a = BvCmpOp.apply(width, t, o, kind)
-                b = BvCmpOp.apply(width, e, o, kind)
+                a = CmpOp.apply(width, t, o, kind)
+                b = CmpOp.apply(width, e, o, kind)
                 return OrOp.apply(AndOp.apply(i, a), AndOp.apply(NotOp.apply(i), b))
             case o, IteOp(i, t, e), _:
-                a = BvCmpOp.apply(width, o, t, kind)
-                b = BvCmpOp.apply(width, o, e, kind)
+                a = CmpOp.apply(width, o, t, kind)
+                b = CmpOp.apply(width, o, e, kind)
                 return OrOp.apply(AndOp.apply(i, a), AndOp.apply(NotOp.apply(i), b))
             case (ExtendOp(t, x, False), int() as i, "EQ") | (
                 int() as i,
@@ -874,7 +874,7 @@ class BvCmpOp:
                 "EQ",
             ):
                 if i < (1 << (width - x)):
-                    return BvCmpOp.apply(width - x, t, i, "EQ")
+                    return CmpOp.apply(width - x, t, i, "EQ")
                 else:
                     return False
             case _:
@@ -903,7 +903,7 @@ class BvCmpOp:
                     pass
             case _:
                 pass
-        return BvCmpOp(width, left, right, kind)
+        return CmpOp(width, left, right, kind)
 
     def dump(self, defs: set[str]) -> tuple[str, ...]:
         if "_pretty" in defs:
@@ -1293,7 +1293,7 @@ class BitVector[N: int](
     ) -> Constraint:
         assert self.width == other.width
         return Constraint._from_term(
-            BvCmpOp.apply(self.width, self._term, other._term, "EQ")
+            CmpOp.apply(self.width, self._term, other._term, "EQ")
         )
 
     def __ne__(  # pyright: ignore[reportIncompatibleMethodOverride]
@@ -1301,7 +1301,7 @@ class BitVector[N: int](
     ) -> Constraint:
         assert self.width == other.width
         return Constraint._from_term(
-            NotOp.apply(BvCmpOp.apply(self.width, self._term, other._term, "EQ"))
+            NotOp.apply(CmpOp.apply(self.width, self._term, other._term, "EQ"))
         )
 
     def __hash__(self) -> int:
@@ -1314,13 +1314,13 @@ class Uint[N: int](BitVector[N]):
     def __lt__(self, other: Self, /) -> Constraint:  # pyright: ignore[reportIncompatibleMethodOverride]
         assert self.width == other.width
         return Constraint._from_term(
-            BvCmpOp.apply(self.width, self._term, other._term, "ULT")
+            CmpOp.apply(self.width, self._term, other._term, "ULT")
         )
 
     def __le__(self, other: Self, /) -> Constraint:  # pyright: ignore[reportIncompatibleMethodOverride]
         assert self.width == other.width
         return Constraint._from_term(
-            BvCmpOp.apply(self.width, self._term, other._term, "ULE")
+            CmpOp.apply(self.width, self._term, other._term, "ULE")
         )
 
     def __truediv__(self, other: Self, /) -> Self:  # pyright: ignore[reportIncompatibleMethodOverride]
@@ -1369,13 +1369,13 @@ class Int[N: int](BitVector[N]):
     def __lt__(self, other: Self, /) -> Constraint:  # pyright: ignore[reportIncompatibleMethodOverride]
         assert self.width == other.width
         return Constraint._from_term(
-            BvCmpOp.apply(self.width, self._term, other._term, "SLT")
+            CmpOp.apply(self.width, self._term, other._term, "SLT")
         )
 
     def __le__(self, other: Self, /) -> Constraint:  # pyright: ignore[reportIncompatibleMethodOverride]
         assert self.width == other.width
         return Constraint._from_term(
-            BvCmpOp.apply(self.width, self._term, other._term, "SLE")
+            CmpOp.apply(self.width, self._term, other._term, "SLE")
         )
 
     def __truediv__(self, other: Self, /) -> Self:  # pyright: ignore[reportIncompatibleMethodOverride]
