@@ -14,8 +14,6 @@ from state import Descend, GasHogCall, Jump, State, Termination, Unreachable
 from tests.solidity import load_solidity
 from vm import step
 
-TRACE = "000E:0020:00E0:00ED:0A94:0AA8:0A57:0731:0AB5:0A57:0731:0AC7:00FF:0403:0xd4a60e8d26023aa7c4bcd61cf2b298749340eec7:0010:001A:002B:0036:0041:02B4:01CF:016B:RETURN:044A:0B43:0B56:0A57:0731:0A8D:0470:CI:04D6:0B43:0B56:0A57:0731:0A8D:04FC:050E:0698:0105"
-
 
 def universal_transaction(
     state: State, /, *, check: bool = True, prints: bool = False
@@ -45,12 +43,10 @@ def universal_transaction(
                     continue
                 case Jump(targets):
                     for target in targets:
-                        # if TRACE.startswith(":".join(target.trace)):
                         heappush(queue, target)
                     break
                 case Descend(substates):
                     for substate in substates:
-                        # if TRACE.startswith(":".join(substate.trace)):
                         heappush(queue, substate)
                     break
                 case Unreachable():

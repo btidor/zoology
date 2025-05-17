@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import copy
+import re
 from collections import defaultdict
 from functools import reduce
-from itertools import batched, chain
-from typing import Any, ClassVar, Literal, Self, overload
+from itertools import batched, repeat
+from typing import Any, Literal, Self, overload
 
 from Crypto.Hash import keccak
 from zbitvector import Array, Constraint, Int, Symbolic, Uint
@@ -20,13 +21,15 @@ Uint160 = Uint[Literal[160]]
 Uint256 = Uint[Literal[256]]
 
 Uint128 = Uint[Literal[128]]
-Uint192 = Uint[Literal[192]]
 Uint257 = Uint[Literal[257]]
 Uint512 = Uint[Literal[512]]
 
 Int256 = Int[Literal[256]]
 
 type Expression = Symbolic | Array[Any, Any]
+
+Leading0s = re.compile(r"\A0{64}")
+Leading1s = re.compile(r"\A1{64}")
 
 
 def _make_symbolic[X: Expression](cls: type[X], term: BitwuzlaTerm) -> X:
@@ -134,110 +137,128 @@ def bvlshr_harder[N: int](value: Uint[N], shift: Uint[N]) -> Uint[N]:
     return _make_symbolic(value.__class__, BZLA.mk_term(Kind.BV_CONCAT, (prefix, term)))
 
 
-class Offset:
-    """TODO."""
+def smart_arith(value: Uint256) -> tuple[Uint256, int | None]:
+    """
+    Aggressively simplify an addition or subtraction operation.
 
-    __slots__ = ("constant", "terms")
+    Intended for index arithmetic where a fixed term (memory offset) is
+    subtracted out of an expression containing itself.
+    """
+    constant = 0
+    terms = defaultdict[BitwuzlaTerm, int](lambda: 0)
+    queue = [(_term(value), True)]
+    while queue:
+        term, msb = queue.pop()
+        match term.get_kind():
+            case Kind.VAL:
+                v = int(BZLA.get_value_str(term), 2)
+                constant += v if msb else -v
+            case Kind.BV_ADD:
+                queue.extend((t, msb) for t in term.get_children())
+            case Kind.BV_NOT:
+                term = term.get_children()[0]
+                constant += -1 if msb else 1
+                queue.append((term, not msb))
+            case _:
+                terms[term] += 1 if msb else -1
 
-    UPPER_ZERO: ClassVar[Uint192] = Uint192(0)
+    additions, removals = list[BitwuzlaTerm](), list[BitwuzlaTerm]()
+    constant %= 2**value.width
+    term = BZLA.mk_bv_value(_term(value).get_sort(), constant)
+    additions.append(term)
+    if constant == 0:
+        zeroes, ones = True, True
+    elif constant < 2 ** (value.width - 1):
+        zeroes, ones = True, False
+    else:
+        zeroes, ones = False, True
 
-    def __init__(self, value: Uint256) -> None:
-        """Create a new Offset."""
-        self.constant = 0
-        self.terms = defaultdict[BitwuzlaTerm, int](lambda: 0)
-        queue = [(_term(value), True)]
-        while queue:
-            term, msb = queue.pop()
-            match term.get_kind():
-                case Kind.VAL:
-                    v = int(BZLA.get_value_str(term), 2)
-                    self.constant += v if msb else -v
-                case Kind.BV_ADD:
-                    queue.extend((t, msb) for t in term.get_children())
-                case Kind.BV_NOT:
-                    term = term.get_children()[0]
-                    self.constant += -1 if msb else 1
-                    queue.append((term, not msb))
-                case _:
-                    self.terms[term] += 1 if msb else -1
-        self._check()
+    for term, count in terms.items():
+        if count == 0:
+            continue
 
-    def __deepcopy__(self, memo: Any) -> Self:
-        result = copy.copy(self)
-        result.terms = copy.copy(self.terms)
-        return result
+        prefix = _quick_prefix(term)
+        if prefix is None:
+            zeroes, ones = False, False
+        else:
+            if not Leading0s.match(prefix):
+                if count > 0:
+                    zeroes = False
+                else:
+                    ones = False
+            if not Leading1s.match(prefix):
+                if count > 0:
+                    ones = False
+                else:
+                    zeroes = False
 
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}({self.constant} + {[f"{k.dump()}: {v}" for k,v in self.terms.items()]})"
+        if count > 0:
+            additions.extend(repeat(term, count))
+        else:
+            removals.extend(repeat(term, -count))
 
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, Offset):
-            return NotImplemented
-        if self.constant != other.constant:
-            return False
-        for term in chain(self.terms.keys(), other.terms.keys()):
-            if self.terms[term] != other.terms[term]:
-                return False
-        return True
+    term = _bvsum256(additions)
+    if removals:
+        term = BZLA.mk_term(Kind.BV_SUB, (term, _bvsum256(removals)))
 
-    def __lt__(self, other: Offset) -> bool:
-        if self.constant >= other.constant:
-            return False
-        for term, count in self.terms.items():
-            if count > other.terms[term]:
-                return False
-        return True
+    if zeroes:
+        msb = 0
+    elif ones:
+        msb = 1
+    else:
+        msb = None
 
-    def __le__(self, other: Offset) -> bool:
-        return self < other or self == other
+    return _make_symbolic(Uint256, term), msb
 
-    def delta(self, other: Offset) -> Offset | None:
-        """TODO."""
-        result = copy.deepcopy(other)
-        result.constant -= self.constant
-        for term, count in self.terms.items():
-            result.terms[term] -= count
-        try:
-            result._check()
-        except AssertionError:
-            return None
-        return result
 
-    def _check(self) -> str | None:
-        self.constant %= 2**256
-        assert (
-            self.constant >= 0 and self.constant < 2**64
-        ), f"out-of-bounds constant: {hex(self.constant)}"
+def _bvsum256(values: list[BitwuzlaTerm]) -> BitwuzlaTerm:
+    """Compute the sum of a list of 256-bit bitvectors."""
+    match len(values):
+        case 0:
+            return BZLA.mk_bv_value(_sort(Uint256), 0)
+        case 1:
+            return values[0]
+        case _:
+            return BZLA.mk_term(Kind.BV_ADD, values)
 
-        todelete = set[BitwuzlaTerm]()
-        for term, count in self.terms.items():
-            assert count > 0, f"negative-count term: {term.dump()}"
-            if count == 0:
-                todelete.add(term)
-        for term in todelete:
-            del self.terms[term]
 
-    def invalid(self) -> Constraint:
-        """Return a narrowing constraint that should always be False."""
-        result = _term(Constraint(False))
-        for term in self.terms.keys():
-            condition = BZLA.mk_term(
-                Kind.EQUAL,
-                (
-                    BZLA.mk_term(Kind.BV_EXTRACT, (term,), (256, 65)),
-                    _term(self.UPPER_ZERO),
-                ),
-            )
-            result = BZLA.mk_term(Kind.OR, (result, condition))
-        return _make_symbolic(Constraint, result)
+def smart_cmp(constraint: Constraint) -> bool | None:
+    """
+    Aggressively simplify an equality operation.
 
-    def symbolic(self) -> Uint256:
-        """Return the offset as a Uint256."""
-        result = BZLA.mk_bv_value(_sort(Uint256), self.constant)
-        for term, count in self.terms.items():
-            for _ in range(count):
-                result = BZLA.mk_term(Kind.BV_ADD, (result, term))
-        return _make_symbolic(Uint256, result)
+    Uses `quick_msb()` to check if the high bits differ. Returns False if the
+    term definitively simplifies to False, otherwise None.
+    """
+    term = _term(constraint)
+    if term.get_kind() != Kind.EQUAL:
+        return None
+
+    lterm, rterm = term.get_children()
+    if (a := _quick_prefix(lterm)) is None:
+        return None
+    elif (b := _quick_prefix(rterm)) is None:
+        return None
+    elif a == b:
+        return None  # didn't compare other digits, so unknown
+    return False
+
+
+def _quick_prefix(term: BitwuzlaTerm) -> str | None:
+    """
+    Quickly extract the concrete prefix of the given term, if available.
+
+    Handles concrete values and simple `concat`s. To avoid performance issues,
+    does *not* descend into nested `concat`s.
+    """
+    match term.get_kind():
+        case Kind.VAL:
+            return BZLA.get_value_str(term)
+        case Kind.BV_CONCAT:
+            term, _ = term.get_children()
+            if term.get_kind() == Kind.VAL:
+                return BZLA.get_value_str(term)
+        case _:
+            pass
 
 
 def get_constants(s: Symbolic | BitwuzlaTerm) -> dict[str, BitwuzlaTerm]:

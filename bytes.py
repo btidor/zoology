@@ -1,23 +1,28 @@
-"""Types for representing symbolic sequences of bytes."""
+"""Types for representing symbolic sequence of bytes."""
 
 from __future__ import annotations
 
 import copy
-from dataclasses import dataclass
 from typing import Any, Iterable, Self
 
 from smt import (
     Array,
     Constraint,
-    Offset,
     Solver,
     Uint,
     Uint8,
     Uint64,
     Uint256,
+    compact_array,
+    compact_helper,
     concat_bytes,
+    concat_words,
     explode_bytes,
+    smart_arith,
+    smart_cmp,
 )
+
+type BytesWrite = tuple[Uint256, Uint8 | ByteSlice]
 
 DESCRIBE_LIMIT = 256
 
@@ -88,6 +93,10 @@ class Bytes:
             raise ValueError("bigvector requires concrete length")
         return concat_bytes(*(self[Uint256(i)] for i in range(n)))
 
+    def compact(self, solver: Solver, constraint: Constraint) -> Constraint:
+        """Simplify using the given solver's contraints (a no-op)."""
+        return constraint
+
     def describe(self, solver: Solver, prefix: int = 4) -> Iterable[str]:
         """Use a model to evaluate this instance as a hexadecimal string."""
         length = solver.evaluate(self.length)
@@ -118,14 +127,7 @@ class Bytes:
         """Unwrap this instance to bytes."""
         if self.data is not None:
             return self.data
-        elif (length := self.length.reveal()) is None:
-            return None
-        data = list[int]()
-        for i in range(length):
-            if (v := self[Uint256(i)].reveal()) is None:
-                return None
-            data.append(v)
-        return bytes(data)
+        return _reveal(self)
 
 
 class ByteSlice(Bytes):
@@ -141,125 +143,118 @@ class ByteSlice(Bytes):
         self.data = None
 
     def __getitem__(self, i: Uint256) -> Uint8:
-        match self.inner:
-            case Memory() | ByteSlice():
-                item = self.inner[self.offset + i]
-            case Bytes():
-                item = self.inner[self.offset + i]
+        item = self.inner[self.offset + i]
         return (i < self.length).ite(item, BYTES[0])
 
-    def reveal(self) -> bytes | None:
-        """Unwrap this instance to bytes."""
-        if (length := self.length.reveal()) is None:
-            return None
-        data = list[int]()
-        for i in range(length):
-            if (v := self[Uint256(i)].reveal()) is None:
-                return None
-            data.append(v)
-        return bytes(data)
+    def bigvector(self) -> Uint[Any]:
+        """Return a single, large bitvector of this instance's bytes."""
+        if (
+            isinstance(self.inner, Memory)
+            and (start := self.offset.reveal()) is not None
+            and (size := self.length.reveal() is not None)
+            and start % 0x20 == 0
+            and size % 0x20 == 0
+        ):
+            words = list[Uint256]()
+            for i in range(start, start + size, 0x20):
+                if i in self.inner.wordcache:
+                    words.append(self.inner.wordcache[i])
+                else:
+                    return super().bigvector()
+            return concat_words(*words)
+        return super().bigvector()
+
+    def compact(self, solver: Solver, constraint: Constraint) -> Constraint:
+        """Simplify length and offset using the given solver's contraints."""
+        length_, offset_ = solver.evaluate(self.length), solver.evaluate(self.offset)
+
+        constraint = self.inner.compact(solver, constraint)
+        constraint, self.length = compact_helper(
+            solver, constraint, self.length, Uint256(length_)
+        )
+        constraint, self.offset = compact_helper(
+            solver, constraint, self.offset, Uint256(offset_)
+        )
+        return constraint
 
 
 class Memory:
     """A mutable, symbolic-length sequence of symbolic bytes."""
 
     __hash__ = None  # type: ignore
-    __slots__ = ("base", "writes", "invalid")
+    __slots__ = ("length", "array", "writes", "wordcache")
 
     def __init__(self, data: bytes = b"") -> None:
-        """Create a new Memory with the given data."""
-        self.base = Array[Uint256, Uint8](Uint8(0))
-        self.writes = list[Write]()
-        self.invalid = Constraint(False)
+        """Create a new, empty Memory."""
+        self.length = Uint256(0)
+        self.array = Array[Uint256, Uint8](BYTES[0])
+        self.writes = list[BytesWrite]()  # writes to apply *on top of* array
+        # When hashing mapping keys, Solidity programs put the values to be
+        # hashed in the reserved range [0x0, 0x40). Splitting up the key into
+        # bytes and reassembling it is slow, so we optimistically cache MSTOREd
+        # words here.
+        self.wordcache = dict[int, Uint256]()
         for i, b in enumerate(data):
-            self[Uint256(i)] = Uint8(b)
+            self[Uint256(i)] = BYTES[b]
 
     def __getitem__(self, i: Uint256) -> Uint8:
-        try:
-            offset = Offset(i)
-            self.invalid |= offset.invalid()
-        except AssertionError:
-            result = self.base[i]
-            for write in self.writes:
-                match write:
-                    case SliceWrite():
-                        s0 = write.start.symbolic()
-                        s1 = write.stop.symbolic()
-                        result = ((i >= s0) & (i < s1)).ite(write.slice[i - s0], result)
-                    case ByteWrite():
-                        result = (i == write.offset.symbolic()).ite(write.byte, result)
-            return result
+        item = self.array[i]
+        for at, write in self.writes:
+            match write:
+                case ByteSlice():
+                    # Compute the index relative to the grafted slice, assuming
+                    # the index falls within this write.
+                    delta, sign = smart_arith(i - at)
+                    # ASSUMPTION: all memory indexes are small (below 2^64), so
+                    # index math never underflows.
+                    if sign == 1:
+                        continue  # delta < 0; this write is not a match
 
-        result = self.base[i]
-        for write in reversed(self.writes):
-            match write:
-                case SliceWrite():
-                    if offset < write.start:
-                        continue
-                    elif offset >= write.stop:
-                        continue
-                    elif offset >= write.start and offset < write.stop:
-                        delta = offset.delta(write.start)
-                        assert delta is not None
-                        return write.slice[delta.symbolic()]
-                    else:
-                        break
-                case ByteWrite():
-                    if offset < write.offset:
-                        continue
-                    elif offset > write.offset:
-                        continue
-                    elif offset == write.offset:
-                        return write.byte
-                    else:
-                        break
-        for write in self.writes:
-            match write:
-                case SliceWrite():
-                    if offset < write.start:
-                        continue
-                    elif offset >= write.stop:
-                        continue
-                    else:
-                        s0 = write.start.symbolic()
-                        s1 = write.stop.symbolic()
-                        delta = offset.delta(write.start)
-                        k = delta.symbolic() if delta else i - s0
-                        result = ((i >= s0) & (i < s1)).ite(write.slice[k], result)
-                case ByteWrite():
-                    if offset < write.offset:
-                        continue
-                    elif offset > write.offset:
-                        continue
-                    else:
-                        result = (offset.symbolic() == write.offset.symbolic()).ite(
-                            write.byte, result
-                        )
-        return result
+                    # Quickly check if the index falls outside this write, in
+                    # the other direction.
+                    _, sign = smart_arith(write.length - delta)
+                    # ASSUMPTION: all memory grafts are smaller than 2^64, so
+                    # index math never underflows.
+                    if sign == 1:
+                        continue  # delta >= write.length; not a match
+
+                    item = (delta < write.length).ite(write[delta], item)
+                case Uint():
+                    match smart_cmp(eq := (i == at)):
+                        case True:
+                            item = write
+                        case False:
+                            pass
+                        case None:
+                            item = eq.ite(write, item)
+        return item
 
     def __setitem__(self, i: Uint256, v: Uint8) -> None:
-        offset = Offset(i)
-        self.invalid |= offset.invalid()
-        for write in self.writes:
-            match write:
-                case SliceWrite():
-                    if offset < write.start:
-                        continue
-                    elif offset >= write.stop:
-                        continue
-                case ByteWrite():
-                    if offset < write.offset:
-                        continue
-                    elif offset > write.offset:
-                        continue
-            self.writes.append(ByteWrite(offset, v))
-            return
-        self.base[i] = v
+        self.length = (i < self.length).ite(self.length, i + Uint256(1))
+        self.wordcache.clear()
+        if len(self.writes) == 0:
+            # Warning: passing writes through to the underlying array when there
+            # are no custom writes is a good optimization (~12% speedup), but it
+            # does create a performance cliff.
+            self.array[i] = v
+        else:
+            self.writes.append((i, v))
 
     def setword(self, i: Uint256, v: Uint256) -> None:
         """Write an entire Uint256 to memory starting at the given index."""
+        self.length = (i + Uint256(0x20) <= self.length).ite(
+            self.length, i + Uint256(0x20)
+        )
+        if (i_ := i.reveal()) is not None and i_ % 0x20 == 0:
+            self.wordcache[i_] = v
+        else:
+            self.wordcache.clear()
         for k, byte in enumerate(reversed(explode_bytes(v))):
-            self[i + Uint256(k)] = byte
+            n = i + Uint256(k)
+            if len(self.writes) == 0:
+                self.array[n] = byte
+            else:
+                self.writes.append((n, byte))
 
     def slice(self, offset: Uint256, size: Uint256) -> ByteSlice:
         """Return a symbolic slice of this instance."""
@@ -267,35 +262,62 @@ class Memory:
 
     def graft(self, slice: ByteSlice, at: Uint256) -> None:
         """Graft in a Bytes at the given offset."""
-        if (n := slice.length.reveal()) is not None:
-            for i in range(n):
+        if slice.length.reveal() == 0:
+            # Short circuit e.g. in DELEGATECALL when retSize is zero.
+            return
+
+        self.length = (at + slice.length - Uint256(1) < self.length).ite(
+            self.length,
+            at + slice.length,
+        )
+        self.wordcache.clear()
+
+        if len(self.writes) == 0 and (length := slice.length.reveal()) is not None:
+            # Avoid creating custom writes when possible because of the
+            # performance cliff (see above).
+            for i in range(length):
                 self[at + Uint256(i)] = slice[Uint256(i)]
         else:
-            start = Offset(at)
-            stop = Offset(at + slice.length)
-            self.writes.append(SliceWrite(start, stop, slice))
+            self.writes.append((at, slice))
+
+    def compact(self, solver: Solver, constraint: Constraint) -> Constraint:
+        """Simplify array keys using the given solver's contraints."""
+        length_ = Uint256(solver.evaluate(self.length))
+        for k, v in self.writes:
+            if isinstance(v, ByteSlice):
+                constraint &= v.compact(solver, constraint)
+                assert solver.check()
+        constraint, self.length = compact_helper(
+            solver, constraint, self.length, length_
+        )
+
+        # Try passing through writes to the underlying array again, now that
+        # we've simplified the slice lengths:
+        while self.writes:
+            k, v = self.writes[0]
+            if isinstance(v, ByteSlice):
+                if (n := v.length.reveal()) is None:
+                    break
+                for i in range(n):
+                    self.array[k + Uint256(i)] = v[Uint256(i)]
+            else:
+                self.array[k] = v
+            self.writes.pop(0)
+
+        assert solver.check()
+        return compact_array(solver, constraint, self.array)
 
     def reveal(self) -> bytes | None:
         """Unwrap this instance to bytes."""
-        raise NotImplementedError("reveal")
+        return _reveal(self)
 
 
-@dataclass
-class SliceWrite:
-    """TODO."""
-
-    start: Offset
-    stop: Offset
-
-    slice: ByteSlice
-
-
-@dataclass
-class ByteWrite:
-    """TODO."""
-
-    offset: Offset
-    byte: Uint8
-
-
-type Write = SliceWrite | ByteWrite
+def _reveal(instance: Bytes | Memory) -> bytes | None:
+    if (length := instance.length.reveal()) is None:
+        return None
+    data = list[int]()
+    for i in range(length):
+        if (v := instance[Uint256(i)].reveal()) is None:
+            return None
+        data.append(v)
+    return bytes(data)

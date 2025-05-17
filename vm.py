@@ -45,11 +45,7 @@ def step(state: State) -> ControlFlow | None:
     # because instructions may overwrite it (e.g. in the case of a JUMP).
     state.pc += 1
 
-    try:
-        result: Uint256 | ControlFlow | None = fn(*args)
-    except:
-        print(state.transaction.address, ":".join(state.trace))
-        raise
+    result: Uint256 | ControlFlow | None = fn(*args)
     match result:
         case None:
             return None
