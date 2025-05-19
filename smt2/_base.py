@@ -29,8 +29,10 @@ class DumpContext:
     defs: dict[bytes, bytes] = field(default_factory=dict[bytes, bytes])
 
     def add(self, name: bytes, defn: bytes) -> None:
-        assert name not in self.defs
-        self.defs[name] = defn
+        if name in self.defs:
+            assert self.defs[name] == defn
+        else:
+            self.defs[name] = defn
 
     def write(self, b: bytes) -> None:
         self.out.extend(b)

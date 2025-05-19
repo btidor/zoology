@@ -60,6 +60,7 @@ class Constraint(Symbolic, metaclass=TMeta):
 
 class Value(Constraint):
     __slots__ = ("_value",)
+    __match_args__ = ("_value",)
 
     def __init__(self, value: bool, /):
         self._value = value
@@ -73,6 +74,7 @@ class Value(Constraint):
 
 class Symbol(Constraint):
     __slots__ = ("_name",)
+    __match_args__ = ("_name",)
 
     def __init__(self, name: str, /):
         self._name = name.encode()
@@ -84,6 +86,7 @@ class Symbol(Constraint):
 
 class Not(Constraint):
     __slots__ = ("_term",)
+    __match_args__ = ("_term",)
 
     def __init__(self, term: Constraint, /):
         self._term = term
@@ -96,6 +99,7 @@ class Not(Constraint):
 
 class Binary(Constraint):
     __slots__ = ("_left", "_right")
+    __match_args__ = ("_left", "_right")
 
     def __init__(self, left: Constraint, right: Constraint, /):
         self._left = left
@@ -137,5 +141,7 @@ class Xor(Binary):
 
 def rewrite_constraint(term: Constraint) -> Constraint:
     match term:
+        case Not(Not(term)):
+            return term
         case _:
             return term
