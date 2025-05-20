@@ -170,6 +170,9 @@ class NotOp:
     def walk(self) -> Generator[Term]:
         yield from walk(self.arg)
 
+    def substitute(self, subs: dict[str, Term]) -> BooleanTerm:
+        return NotOp.apply(_substitute(self.arg, subs))
+
 
 @hashcache
 @dataclass(frozen=True, slots=True)
@@ -210,6 +213,9 @@ class AndOp:
     def walk(self) -> Generator[Term]:
         yield from walk(*self.args)
 
+    def substitute(self, subs: dict[str, Term]) -> BooleanTerm:
+        return AndOp.apply(*(_substitute(a, subs) for a in self.args))
+
 
 @hashcache
 @dataclass(frozen=True, slots=True)
@@ -249,6 +255,9 @@ class OrOp:
 
     def walk(self) -> Generator[Term]:
         yield from walk(*self.args)
+
+    def substitute(self, subs: dict[str, Term]) -> BooleanTerm:
+        return OrOp.apply(*(_substitute(a, subs) for a in self.args))
 
 
 @hashcache
@@ -302,6 +311,9 @@ class XorOp:
 
     def walk(self) -> Generator[Term]:
         yield from walk(*self.args)
+
+    def substitute(self, subs: dict[str, Term]) -> BooleanTerm:
+        return XorOp.apply(self.base, *(_substitute(a, subs) for a in self.args))
 
 
 class Constraint(Symbolic):
@@ -404,6 +416,9 @@ class BvNotOp:
     def walk(self) -> Generator[Term]:
         yield from walk(self.arg)
 
+    def substitute(self, width: int, subs: dict[str, Term]) -> BitvectorTerm:
+        return BvNotOp.apply(width, _substitute(self.arg, subs, width))
+
 
 @hashcache
 @dataclass(frozen=True, slots=True)
@@ -467,6 +482,11 @@ class BvAndOp:
 
     def walk(self) -> Generator[Term]:
         yield from walk(*self.args)
+
+    def substitute(self, width: int, subs: dict[str, Term]) -> BitvectorTerm:
+        return BvAndOp.apply(
+            width, self.mask, *(_substitute(a, subs, width) for a in self.args)
+        )
 
 
 @hashcache
@@ -533,6 +553,11 @@ class BvOrOp:
     def walk(self) -> Generator[Term]:
         yield from walk(*self.args)
 
+    def substitute(self, width: int, subs: dict[str, Term]) -> BitvectorTerm:
+        return BvOrOp.apply(
+            width, self.mask, *(_substitute(a, subs, width) for a in self.args)
+        )
+
 
 @hashcache
 @dataclass(frozen=True, slots=True)
@@ -582,6 +607,11 @@ class BvXorOp:
 
     def walk(self) -> Generator[Term]:
         yield from walk(*self.args)
+
+    def substitute(self, width: int, subs: dict[str, Term]) -> BitvectorTerm:
+        return BvXorOp.apply(
+            width, self.base, *(_substitute(a, subs, width) for a in self.args)
+        )
 
 
 @hashcache
@@ -669,6 +699,11 @@ class BvArithOp:
     def walk(self) -> Generator[Term]:
         yield from walk(*self.args)
 
+    def substitute(self, width: int, subs: dict[str, Term]) -> BitvectorTerm:
+        return BvArithOp.apply(
+            width, self.base, *(_substitute(a, subs, width) for a in self.args)
+        )
+
 
 @hashcache
 @dataclass(frozen=True, slots=True)
@@ -727,6 +762,11 @@ class BvMulOp:
     def walk(self) -> Generator[Term]:
         yield from walk(*self.args)
 
+    def substitute(self, width: int, subs: dict[str, Term]) -> BitvectorTerm:
+        return BvMulOp.apply(
+            width, self.base, *(_substitute(a, subs, width) for a in self.args)
+        )
+
 
 @hashcache
 @dataclass(frozen=True, slots=True)
@@ -784,6 +824,14 @@ class BvDivOp:
     def walk(self) -> Generator[Term]:
         yield from walk(self.left, self.right)
 
+    def substitute(self, width: int, subs: dict[str, Term]) -> BitvectorTerm:
+        return BvDivOp.apply(
+            width,
+            _substitute(self.left, subs, width),
+            _substitute(self.right, subs, width),
+            self.signed,
+        )
+
 
 @hashcache
 @dataclass(frozen=True, slots=True)
@@ -833,6 +881,14 @@ class BvModOp:
 
     def walk(self) -> Generator[Term]:
         yield from walk(self.left, self.right)
+
+    def substitute(self, width: int, subs: dict[str, Term]) -> BitvectorTerm:
+        return BvModOp.apply(
+            width,
+            _substitute(self.left, subs, width),
+            _substitute(self.right, subs, width),
+            self.signed,
+        )
 
 
 @hashcache
@@ -1023,6 +1079,14 @@ class CmpOp:
     def walk(self) -> Generator[Term]:
         yield from walk(self.left, self.right)
 
+    def substitute(self, subs: dict[str, Term]) -> BooleanTerm:
+        return CmpOp.apply(
+            self.width,
+            _substitute(self.left, subs, self.width),
+            _substitute(self.right, subs, self.width),
+            self.kind,
+        )
+
 
 @hashcache
 @dataclass(frozen=True, slots=True)
@@ -1114,6 +1178,14 @@ class BvShiftOp:
     def walk(self) -> Generator[Term]:
         yield from walk(self.term, self.shift)
 
+    def substitute(self, width: int, subs: dict[str, Term]) -> BitvectorTerm:
+        return BvShiftOp.apply(
+            width,
+            _substitute(self.term, subs, width),
+            _substitute(self.shift, subs, width),
+            self.way,
+        )
+
 
 @hashcache
 @dataclass(frozen=True, slots=True)
@@ -1162,6 +1234,14 @@ class IteOp:
 
     def walk(self) -> Generator[Term]:
         yield from walk(self.cond, self.left, self.right)
+
+    def substitute(self, width: int, subs: dict[str, Term]) -> BitvectorTerm:
+        return IteOp.apply(
+            _substitute(self.cond, subs),
+            _substitute(self.left, subs, width),
+            _substitute(self.right, subs, width),
+            width,
+        )
 
 
 @hashcache
@@ -1223,6 +1303,13 @@ class ExtractOp:
     def walk(self) -> Generator[Term]:
         yield from walk(self.term)
 
+    def substitute(self, width: int, subs: dict[str, Term]) -> BitvectorTerm:
+        return ExtractOp.apply(
+            _substitute(self.term, subs, self.prior),
+            width,
+            self.prior,
+        )
+
 
 @hashcache
 @dataclass(frozen=True, slots=True)
@@ -1271,6 +1358,14 @@ class ExtendOp:
     def walk(self) -> Generator[Term]:
         yield from walk(self.term)
 
+    def substitute(self, width: int, subs: dict[str, Term]) -> BitvectorTerm:
+        return ExtendOp.apply(
+            width - self.extra,
+            _substitute(self.term, subs, width - self.extra),
+            self.extra,
+            self.signed,
+        )
+
 
 @hashcache
 @dataclass(frozen=True, slots=True)
@@ -1305,6 +1400,12 @@ class ConcatOp:
 
     def walk(self) -> Generator[Term]:
         yield from walk(*self.terms)
+
+    def substitute(self, width: int, subs: dict[str, Term]) -> BitvectorTerm:
+        return ConcatOp.apply(
+            self.width,
+            *(_substitute(t, subs, self.width) for t in self.terms),
+        )
 
 
 class BitVector[N: int](
@@ -1654,6 +1755,12 @@ class SelectOp:
     def walk(self) -> Generator[Term]:
         yield from walk(self.key, self.array)
 
+    def substitute(self, width: int, subs: dict[str, Term]) -> BitvectorTerm:
+        return SelectOp(
+            _substitute(self.array, subs, self.array.width),
+            _substitute(self.key, subs, width),
+        )
+
 
 class Array[K: Uint[Any] | Int[Any], V: Uint[Any] | Int[Any]](
     metaclass=type if TYPE_CHECKING else ArrayMeta
@@ -1975,8 +2082,61 @@ def get_constants(s: Symbolic | Array[Any, Any]) -> set[str]:
     return result
 
 
-def substitute[T: Symbolic](s: T, model: dict[str, Symbolic | Array[Any, Any]]) -> T:
-    raise NotImplementedError("substitute")
+def substitute[S: Symbolic](s: S, model: dict[str, Symbolic | Array[Any, Any]]) -> S:
+    subs = dict[str, Term]()
+    for k, v in model.items():
+        match v:
+            case Symbolic():
+                subs[k] = v._term  # pyright: ignore[reportPrivateUsage]
+            case Array():
+                subs[k] = v._array  # pyright: ignore[reportPrivateUsage]
+    match s:
+        case Constraint():
+            return s._from_term(_substitute(s._term, subs))  # pyright: ignore[reportPrivateUsage]
+        case BitVector():
+            return s._from_term(_substitute(s._term, subs, s.width))  # pyright: ignore
+        case _:
+            raise TypeError(f"unhandled type: {s.__class__}")
+
+
+@overload
+def _substitute(
+    term: BooleanTerm, subs: dict[str, Term], width: None = None
+) -> BooleanTerm: ...
+
+
+@overload
+def _substitute(
+    term: BitvectorTerm, subs: dict[str, Term], width: int
+) -> BitvectorTerm: ...
+
+
+@overload
+def _substitute[T: ArrayTerm | UninterpretedTerm](
+    term: T, subs: dict[str, Term], width: tuple[int, int]
+) -> T: ...
+
+
+def _substitute(
+    term: Term, subs: dict[str, Term], width: int | tuple[int, int] | None = None
+) -> Term:
+    match term:
+        case bool() | int():
+            return term
+        case str():
+            if term in subs:
+                return subs[term]
+            else:
+                return term
+        case UninterpretedTerm():
+            if term.name in subs:
+                return subs[term.name]
+            else:
+                return term
+        case _:
+            return (
+                term.substitute(subs) if width is None else term.substitute(width, subs)  # pyright: ignore
+            )
 
 
 def to_signed(width: int, value: int) -> int:
