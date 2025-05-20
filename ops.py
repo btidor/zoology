@@ -2,7 +2,7 @@
 
 import copy
 from inspect import Signature, signature
-from typing import Callable
+from typing import Any, Callable
 
 from bytes import Bytes
 from disassembler import Instruction, LoopCopy, Program, disassemble
@@ -12,6 +12,7 @@ from smt import (
     Array,
     Constraint,
     Int256,
+    Symbolic,
     Uint8,
     Uint64,
     Uint160,
@@ -20,7 +21,7 @@ from smt import (
     Uint512,
     concat_bytes,
     overflow_safe,
-    substitute2,
+    substitute,
 )
 from state import (
     Call,
@@ -1109,12 +1110,14 @@ def CUSTOM(s: State, ins: Instruction) -> None:
     match ins.custom:
         case LoopCopy(start, end, stride, read, write, exit):
             stack = list(reversed(s.stack))
-            substitutions = dict((Uint256(f"STACK{i}"), stack[i]) for i in range(8))
-            start = substitute2(start, substitutions)
-            end = substitute2(end, substitutions)
-            stride = substitute2(stride, substitutions)
-            read = substitute2(read, substitutions)
-            write = substitute2(write, substitutions)
+            substitutions = dict[str, Symbolic | Array[Any, Any]](
+                (f"STACK{i}", stack[i]) for i in range(8)
+            )
+            start = substitute(start, substitutions)
+            end = substitute(end, substitutions)
+            stride = substitute(stride, substitutions)
+            read = substitute(read, substitutions)
+            write = substitute(write, substitutions)
 
             if stride.reveal() != 0x20:
                 raise NotImplementedError(f"unsupported stride length: {stride}")

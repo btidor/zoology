@@ -17,6 +17,7 @@ from typing import (
     Callable,
     ClassVar,
     Final,
+    Generator,
     Literal,
     Never,
     Self,
@@ -29,6 +30,8 @@ from typing import (
 )
 
 type Model = dict[str, bool | int | dict[int, int]]
+
+type Term = BooleanTerm | BitvectorTerm | ArrayTerm | UninterpretedTerm
 
 
 def hashcache[T: Any](cls: type[T]) -> type[T]:
@@ -100,6 +103,9 @@ class ArrayMeta(abc.ABCMeta):
                 # the same as above.
                 return self
 
+            if a == Any:
+                return self
+
             raise TypeError(
                 f"unsupported type parameter passed to {self.__name__}[...]"
             )
@@ -161,6 +167,9 @@ class NotOp:
     def eval(self, model: Model) -> bool:
         return not eval(self.arg, model)
 
+    def walk(self) -> Generator[Term]:
+        yield from walk(self.arg)
+
 
 @hashcache
 @dataclass(frozen=True, slots=True)
@@ -198,6 +207,9 @@ class AndOp:
     def eval(self, model: Model) -> bool:
         return reduce(lambda p, q: p and eval(q, model), self.args, True)
 
+    def walk(self) -> Generator[Term]:
+        yield from walk(*self.args)
+
 
 @hashcache
 @dataclass(frozen=True, slots=True)
@@ -234,6 +246,9 @@ class OrOp:
 
     def eval(self, model: Model) -> bool:
         return reduce(lambda p, q: p or eval(q, model), self.args, False)
+
+    def walk(self) -> Generator[Term]:
+        yield from walk(*self.args)
 
 
 @hashcache
@@ -284,6 +299,9 @@ class XorOp:
 
     def eval(self, model: Model) -> bool:
         return reduce(lambda p, q: p ^ eval(q, model), self.args, False)
+
+    def walk(self) -> Generator[Term]:
+        yield from walk(*self.args)
 
 
 class Constraint(Symbolic):
@@ -383,6 +401,9 @@ class BvNotOp:
         mask = (1 << width) - 1
         return mask ^ eval(self.arg, model, width)
 
+    def walk(self) -> Generator[Term]:
+        yield from walk(self.arg)
+
 
 @hashcache
 @dataclass(frozen=True, slots=True)
@@ -443,6 +464,9 @@ class BvAndOp:
     def eval(self, width: int, model: Model) -> int:
         mask = (1 << width) - 1
         return reduce(lambda p, q: p & eval(q, model, width), self.args, mask)
+
+    def walk(self) -> Generator[Term]:
+        yield from walk(*self.args)
 
 
 @hashcache
@@ -506,6 +530,9 @@ class BvOrOp:
     def eval(self, width: int, model: Model) -> int:
         return reduce(lambda p, q: p | eval(q, model, width), self.args, 0)
 
+    def walk(self) -> Generator[Term]:
+        yield from walk(*self.args)
+
 
 @hashcache
 @dataclass(frozen=True, slots=True)
@@ -552,6 +579,9 @@ class BvXorOp:
 
     def eval(self, width: int, model: Model) -> int:
         return reduce(lambda p, q: p ^ eval(q, model, width), self.args, 0)
+
+    def walk(self) -> Generator[Term]:
+        yield from walk(*self.args)
 
 
 @hashcache
@@ -636,6 +666,9 @@ class BvArithOp:
             lambda p, q: (p + eval(q, model, width)) % limit, self.args, self.base
         )
 
+    def walk(self) -> Generator[Term]:
+        yield from walk(*self.args)
+
 
 @hashcache
 @dataclass(frozen=True, slots=True)
@@ -691,6 +724,9 @@ class BvMulOp:
             lambda p, q: (p * eval(q, model, width)) % limit, self.args, self.base
         )
 
+    def walk(self) -> Generator[Term]:
+        yield from walk(*self.args)
+
 
 @hashcache
 @dataclass(frozen=True, slots=True)
@@ -745,6 +781,9 @@ class BvDivOp:
         else:
             return eval(self.left, model, width) // eval(self.right, model, width)
 
+    def walk(self) -> Generator[Term]:
+        yield from walk(self.left, self.right)
+
 
 @hashcache
 @dataclass(frozen=True, slots=True)
@@ -791,6 +830,9 @@ class BvModOp:
             )
         else:
             return eval(self.left, model, width) % eval(self.right, model, width)
+
+    def walk(self) -> Generator[Term]:
+        yield from walk(self.left, self.right)
 
 
 @hashcache
@@ -978,6 +1020,9 @@ class CmpOp:
             case "SLE":
                 return to_signed(width, left) <= to_signed(width, right)
 
+    def walk(self) -> Generator[Term]:
+        yield from walk(self.left, self.right)
+
 
 @hashcache
 @dataclass(frozen=True, slots=True)
@@ -1066,6 +1111,9 @@ class BvShiftOp:
             case "RS":
                 return to_unsigned(width, to_signed(width, term) >> shift)
 
+    def walk(self) -> Generator[Term]:
+        yield from walk(self.term, self.shift)
+
 
 @hashcache
 @dataclass(frozen=True, slots=True)
@@ -1111,6 +1159,9 @@ class IteOp:
             return eval(self.left, model, width)
         else:
             return eval(self.right, model, width)
+
+    def walk(self) -> Generator[Term]:
+        yield from walk(self.cond, self.left, self.right)
 
 
 @hashcache
@@ -1169,6 +1220,9 @@ class ExtractOp:
     def eval(self, width: int, model: Model) -> int:
         return eval(self.term, model, width) & ((1 << width) - 1)
 
+    def walk(self) -> Generator[Term]:
+        yield from walk(self.term)
+
 
 @hashcache
 @dataclass(frozen=True, slots=True)
@@ -1214,6 +1268,9 @@ class ExtendOp:
         else:
             return eval(self.term, model, width - self.extra)
 
+    def walk(self) -> Generator[Term]:
+        yield from walk(self.term)
+
 
 @hashcache
 @dataclass(frozen=True, slots=True)
@@ -1245,6 +1302,9 @@ class ConcatOp:
         for t in self.terms:
             i = (i << self.width) | eval(t, model, self.width)
         return i
+
+    def walk(self) -> Generator[Term]:
+        yield from walk(*self.terms)
 
 
 class BitVector[N: int](
@@ -1460,6 +1520,9 @@ class UninterpretedTerm:
         else:
             return defaultdict(lambda: 0)
 
+    def walk(self) -> Generator[Term]:
+        yield from ()
+
 
 @hashcache
 @dataclass(frozen=True, slots=True)
@@ -1526,6 +1589,13 @@ class ArrayTerm:
             x[eval(k, model, self.width[0])] = eval(v, model, self.width[1])
         return x
 
+    def walk(self) -> Generator[Term]:
+        for k, v in self.writes:
+            yield from walk(k, v)
+        for _, v in self.base:
+            yield from walk(v)
+        yield from walk(self.default)
+
 
 @hashcache
 @dataclass(frozen=True, slots=True)
@@ -1580,6 +1650,9 @@ class SelectOp:
         a = eval(self.array, model, self.array.width)
         k = eval(self.key, model, self.array.width[0])
         return a[k]
+
+    def walk(self) -> Generator[Term]:
+        yield from walk(self.key, self.array)
 
 
 class Array[K: Uint[Any] | Int[Any], V: Uint[Any] | Int[Any]](
@@ -1724,9 +1797,7 @@ def dump(
 
 
 def dump(
-    term: BooleanTerm | BitvectorTerm | ArrayTerm | UninterpretedTerm,
-    defs: set[str],
-    width: None | int | tuple[int, int] = None,
+    term: Term, defs: set[str], width: None | int | tuple[int, int] = None
 ) -> tuple[str, ...]:
     match term:
         case True:
@@ -1763,10 +1834,7 @@ def prettify(term: BitvectorTerm, width: int) -> str: ...
 def prettify(term: ArrayTerm | UninterpretedTerm, width: tuple[int, int]) -> str: ...
 
 
-def prettify(
-    term: BooleanTerm | BitvectorTerm | ArrayTerm | UninterpretedTerm,
-    width: None | int | tuple[int, int] = None,
-) -> str:
+def prettify(term: Term, width: None | int | tuple[int, int] = None) -> str:
     return (
         " ".join(dump(term, set(["_pretty"]), width))  # pyright: ignore
         .replace(" )", ")")
@@ -1793,9 +1861,7 @@ def eval(
 
 
 def eval(
-    term: BooleanTerm | BitvectorTerm | ArrayTerm | UninterpretedTerm,
-    model: Model,
-    width: None | int | tuple[int, int] = None,
+    term: Term, model: Model, width: None | int | tuple[int, int] = None
 ) -> bool | int | dict[int, int]:
     match term:
         case bool() | int():
@@ -1822,6 +1888,16 @@ def minmax(term: BitvectorTerm, width: int) -> tuple[int, int]:
             return (0, (1 << width) - 1)
         case _:
             return term.minmax
+
+
+def walk(*terms: Term) -> Generator[Term]:
+    for term in terms:
+        yield term
+        match term:
+            case bool() | int() | str():
+                pass
+            case _:
+                yield from term.walk()
 
 
 Uint8 = Uint[Literal[8]]
@@ -1886,16 +1962,21 @@ def prequal[N: int](a: Uint[N], b: Uint[N]) -> bool:
     return (a == b).reveal() is True
 
 
-def get_constants[N: int](v: Constraint | Uint[N] | Int[N]) -> Any:
-    raise NotImplementedError("get_constants")
+def get_constants(s: Symbolic | Array[Any, Any]) -> set[str]:
+    result = set[str]()
+    for term in walk(s._term if isinstance(s, Symbolic) else s._array):  # pyright: ignore[reportPrivateUsage]
+        match term:
+            case str():
+                result.add(term)
+            case UninterpretedTerm():
+                result.add(term.name)
+            case _:
+                pass
+    return result
 
 
-def substitute(s: Symbolic, b: Any) -> Any:
+def substitute[T: Symbolic](s: T, model: dict[str, Symbolic | Array[Any, Any]]) -> T:
     raise NotImplementedError("substitute")
-
-
-def substitute2[N: int](s: Uint[N], b: Any) -> Uint[N]:
-    raise NotImplementedError("substitute2")
 
 
 def to_signed(width: int, value: int) -> int:

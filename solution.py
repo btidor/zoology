@@ -15,6 +15,7 @@ from smt import (
     Array,
     Constraint,
     Solver,
+    Symbolic,
     Uint160,
     Uint256,
     get_constants,
@@ -30,7 +31,7 @@ class Validator:
 
     transaction: Transaction
     constraint: Constraint | None
-    constants: dict[str, Any] | None
+    constants: set[str] | None
 
     def __init__(self, sequence: Sequence, /, *, prints: bool = False) -> None:
         """
@@ -109,7 +110,7 @@ class Validator:
         assert predicates
         constraint = reduce(lambda p, q: p | q, predicates, Constraint(False))
         constants = get_constants(constraint)
-        for name in constants.keys():
+        for name in constants:
             if name.startswith("STORAGE@"):
                 continue
             elif name == "BALANCE":
@@ -129,20 +130,20 @@ class Validator:
             return None
         assert self.constants is not None
 
-        substitutions = dict[Any, Any]()
-        for name, term in self.constants.items():
+        substitutions = dict[str, Symbolic | Array[Any, Any]]()
+        for name in self.constants:
             if name.startswith("STORAGE@"):
                 addr = int(name[8:], 16)
                 if addr in sequence.states[-1].contracts:
-                    substitutions[term] = sequence.states[-1].contracts[addr].storage
+                    substitutions[name] = sequence.states[-1].contracts[addr].storage
                 else:
-                    substitutions[term] = Array[Uint256, Uint256](Uint256(0))
+                    substitutions[name] = Array[Uint256, Uint256](Uint256(0))
             elif name == "BALANCE":
-                substitutions[term] = sequence.states[-1].balances
+                substitutions[name] = sequence.states[-1].balances
             elif name == "CODESIZE":
                 pass
             elif name == "NUMBER":
-                substitutions[term] = sequence.blocks[len(sequence.states) - 1].number
+                substitutions[name] = sequence.blocks[len(sequence.states) - 1].number
             else:
                 raise ValueError(f"unknown variable: {name}")
 
