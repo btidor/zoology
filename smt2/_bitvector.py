@@ -1,4 +1,4 @@
-"""TODO."""
+"""Definitions and rewrite rules for the theory of bitvectors."""
 # ruff: noqa
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-"""TODO."""
+"""Base classes and helpers."""
 # ruff: noqa
 
 from __future__ import annotations

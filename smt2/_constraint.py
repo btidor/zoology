@@ -1,4 +1,4 @@
-"""TODO."""
+"""Definitions and rewrite rules for boolean constraints."""
 # ruff: noqa
 
 from __future__ import annotations
@@ -141,7 +141,33 @@ class Xor(Binary):
 
 def rewrite_constraint(term: Constraint) -> Constraint:
     match term:
-        case Not(Not(term)):
-            return term
+        case Not(Value(v)):
+            return Value(not v)
+        case Not(Not(inner)):  # ~(~X) => X
+            return inner
+        case And(Value(True), x) | And(x, Value(True)):  # X & True => X
+            return x
+        case And(Value(False), x) | And(x, Value(False)):  # X & False => False
+            return Value(False)
+        case And(x, y) if x == y:  # X & X => X
+            return x
+        case And(x, Not(y)) | And(Not(y), x) if x == y:  # X & ~X => False
+            return Value(False)
+        case Or(Value(True), x) | Or(x, Value(True)):  # X | True => True
+            return Value(True)
+        case Or(Value(False), x) | Or(x, Value(False)):  # X | False => X
+            return x
+        case Or(x, y) if x == y:  # X | X => X
+            return x
+        case Or(x, Not(y)) | Or(Not(y), x) if x == y:  # X | ~X => True
+            return Value(True)
+        case Xor(Value(True), x) | Xor(x, Value(True)):  # X ^ True => ~X
+            return Not(x)
+        case Xor(Value(False), x) | Xor(x, Value(False)):  # X ^ False => X
+            return x
+        case Xor(x, y) if x == y:  # X ^ X => False
+            return Value(False)
+        case Xor(x, Not(y)) | Xor(Not(y), x) if x == y:  # X ^ ~X => True
+            return Value(True)
         case _:
             return term
