@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import copy
-from typing import Any, Iterable, Self
+from typing import Any, ClassVar, Iterable, Self
 
 from smt import (
     Array,
@@ -159,7 +159,7 @@ class ByteSlice(Bytes):
 class Memory:
     """A mutable, symbolic-length sequence of symbolic bytes."""
 
-    __hash__ = None  # type: ignore
+    __hash__: ClassVar[None] = None  # pyright: ignore[reportIncompatibleMethodOverride]
     __slots__ = ("length", "array", "writes", "wordcache")
 
     def __init__(self, data: bytes = b"") -> None:

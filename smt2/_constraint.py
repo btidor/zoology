@@ -10,7 +10,7 @@ from ._base import DumpContext, Symbolic
 
 class Meta(abc.ABCMeta):
     def __call__(cls, *args: Any) -> Constraint:
-        if cls == Constraint:  # pyright: ignore
+        if cls == Constraint:  # pyright: ignore[reportUnnecessaryComparison]
             match args:
                 case (bool() as b,):
                     return Value(b)
