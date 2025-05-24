@@ -67,16 +67,16 @@ class BitVector[N: int](Symbolic, metaclass=TMeta):
     def __le__(self, other: BitVector[N], /) -> Constraint: ...
 
     def __invert__(self) -> BitVector[N]:
-        raise NotImplementedError
+        return rewrite(Not(self))
 
     def __and__(self, other: BitVector[N], /) -> BitVector[N]:
-        raise NotImplementedError
+        return rewrite(And(self, other))
 
     def __or__(self, other: BitVector[N], /) -> BitVector[N]:
-        raise NotImplementedError
+        return rewrite(Or(self, other))
 
     def __xor__(self, other: BitVector[N], /) -> BitVector[N]:
-        raise NotImplementedError
+        return rewrite(Xor(self, other))
 
     def __add__(self, other: BitVector[N], /) -> BitVector[N]:
         raise NotImplementedError
@@ -257,7 +257,7 @@ class Xor[N: int](Binary[N]):
         ctx.write(b")")
 
 
-def rewrite_bitvector[N: int](term: BitVector[N]) -> BitVector[N]:
+def rewrite[N: int](term: BitVector[N]) -> BitVector[N]:
     N: Any = Literal[term.width]
     mask = (1 << term.width) - 1
     match term:

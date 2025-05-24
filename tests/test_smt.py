@@ -16,7 +16,9 @@ from smt import (
     explode_bytes,
 )
 from smt2._base import DumpContext
-from smt2._constraint import Not, Symbol, Xor, rewrite_constraint
+from smt2._bitvector import rewrite as rewrite_bitvector
+from smt2._constraint import Not, Symbol, Xor
+from smt2._constraint import rewrite as rewrite_constraint
 
 # pyright: strict
 # pyright: reportUnknownMemberType=none
@@ -69,6 +71,17 @@ def _parse_rewrite_constraint() -> list[ast.match_case]:
     return m.cases
 
 
+def _parse_rewrite_bitvector() -> list[ast.match_case]:
+    p = ast.parse(inspect.getsource(rewrite_bitvector))
+    assert len(p.body) == 1 and isinstance(fn := p.body[0], ast.FunctionDef)
+    assert len(fn.args.args) == 1
+    assert len(fn.body) == 3
+    # TODO: check N, mask assignments
+    assert isinstance(m := fn.body[2], ast.Match)
+    assert isinstance(m.subject, ast.Name) and m.subject.id == fn.args.args[0].arg
+    return m.cases
+
+
 @pytest.mark.parametrize("case", _parse_rewrite_constraint())
 def test_rewrite_constraint(case: ast.match_case):
     conds = list[z3.BoolRef]()
@@ -88,69 +101,136 @@ def test_rewrite_constraint(case: ast.match_case):
             patterns = [pattern]
     s = z3.Solver()
     for pattern in patterns:
-        term1 = _interpret_match(pattern)
-        term2 = _interpret_rewrite(case.body)
+        term1 = _interpret_match(pattern, None)
+        term2 = _interpret_rewrite(case.body, None)
         print(term1, term2)
-        assert s.check(z3.Xor(term1, term2), *conds) == z3.unsat
+        assert s.check(term1 != term2, *conds) == z3.unsat
 
 
-def _interpret_match(pattern: ast.pattern) -> z3.BoolRef:
+@pytest.mark.parametrize("case", _parse_rewrite_bitvector())
+def test_rewrite_bitvector(case: ast.match_case):
+    for width in range(1, 65):  # TODO: expand range
+        conds = list[z3.BoolRef]()
+        match case.guard:
+            case None:
+                pass
+            case ast.Compare(ast.Name(left), [ast.Eq()], [ast.Name(right)]):
+                conds.append(z3.BitVec(left, width) == z3.BitVec(right, width))  # pyright: ignore[reportArgumentType]
+            case _:
+                raise NotImplementedError(f"unknown guard: {case.guard}")
+        match case.pattern:
+            case ast.MatchAs(None, None):
+                return  # terminal case
+            case ast.MatchOr(patterns):
+                pass
+            case pattern:
+                patterns = [pattern]
+        s = z3.Solver()
+        for pattern in patterns:
+            term1 = _interpret_match(pattern, width)
+            term2 = _interpret_rewrite(case.body, width)
+            print(term1, term2)
+            # assert s.check(term1 != term2, *conds) == z3.unsat
+            if s.check(term1 != term2, *conds) == z3.sat:
+                print(s.model())
+                assert False
+
+
+def _interpret_match(
+    pattern: ast.pattern, width: int | None
+) -> z3.BoolRef | z3.BitVecRef:
     match pattern:
         case ast.MatchClass(ast.Name(name), patterns):
-            return _interpret_z3(name, patterns, _interpret_match)
+            return _interpret_z3(name, patterns, width, _interpret_match)
         case ast.MatchAs(None, str() as name):
-            return z3.Bool(name)
+            if name == "N":
+                raise NotImplementedError
+            elif name == "mask":
+                assert width is not None
+                return z3.BitVecVal((1 << width) - 1, width)
+            if width is None:
+                return z3.Bool(name)
+            else:
+                return z3.BitVec(name, width)
         case ast.MatchSingleton(bool() as b):
+            assert width is None
             res = z3.BoolVal(b)
+        case ast.MatchSingleton(int() as i):
+            assert width is not None
+            res = z3.BitVecVal(i, width)
+        case ast.MatchValue(value):
+            return _interpret_expr(value, width)
         case ast.MatchClass(ast.Name(name)):
             raise TypeError(f"unhandled match class: {name}")
         case _:
             raise TypeError(f"unhandled pattern: {pattern.__class__}")
-    assert isinstance(res, z3.BoolRef)
+    assert not isinstance(res, z3.Probe)
     return res
 
 
-def _interpret_rewrite(body: list[ast.stmt]) -> z3.BoolRef:
+def _interpret_rewrite(
+    body: list[ast.stmt], width: int | None
+) -> z3.BoolRef | z3.BitVecRef:
     for stmt in body:
         match stmt:
             case ast.Return(ast.expr() as value):
-                return _interpret_expr(value)
+                return _interpret_expr(value, width)
             case _:
                 raise NotImplementedError(stmt)
     raise SyntaxError("no return value")
 
 
-def _interpret_expr(expr: ast.expr) -> z3.BoolRef:
+def _interpret_expr(expr: ast.expr, width: int | None) -> z3.BoolRef | z3.BitVecRef:
     match expr:
         case ast.Call(ast.Name(name), args, []):
-            return _interpret_z3(name, args, _interpret_expr)
+            return _interpret_z3(name, args, width, _interpret_expr)
+        case ast.Call(ast.Subscript(ast.Name(name), _), args, []):
+            # TODO: check width
+            return _interpret_z3(name, args, width, _interpret_expr)
         case ast.UnaryOp(ast.Not(), operand):
-            res = z3.Not(_interpret_expr(operand))
-            assert isinstance(res, z3.BoolRef)
+            res = ~_interpret_expr(operand, width)
+            assert not isinstance(res, z3.Probe)
             return res
+        case ast.BinOp(left, ast.BitXor(), right):
+            return _interpret_expr(left, width) ^ _interpret_expr(right, width)
         case ast.Name(name):
-            return z3.Bool(name)
+            if name == "N":
+                raise NotImplementedError
+            elif name == "mask":
+                assert width is not None
+                return z3.BitVecVal((1 << width) - 1, width)
+            if width is None:
+                return z3.Bool(name)
+            else:
+                return z3.BitVec(name, width)
         case ast.Constant(bool() as b):
+            assert width is None
             return z3.BoolVal(b)
+        case ast.Constant(int() as i):
+            assert width is not None
+            return z3.BitVecVal(i, width)
         case _:
             raise NotImplementedError(expr)
 
 
 def _interpret_z3[T: ast.pattern | ast.expr](
-    name: str, args: list[T], fn: Callable[[T], z3.BoolRef]
-) -> z3.BoolRef:
+    name: str,
+    args: list[T],
+    width: int | None,
+    fn: Callable[[T, int | None], z3.BoolRef | z3.BitVecRef],
+) -> z3.BoolRef | z3.BitVecRef:
     match name, args:
         case "Value", [pattern]:
-            res = fn(pattern)
+            res = fn(pattern, width)
         case "Not", [pattern]:
-            res = z3.Not(fn(pattern))
+            res = ~fn(pattern, width)
         case "And", [left, right]:
-            res = z3.And(fn(left), fn(right))
+            res = fn(left, width) & fn(right, width)
         case "Or", [left, right]:
-            res = z3.Or(fn(left), fn(right))
+            res = fn(left, width) | fn(right, width)
         case "Xor", [left, right]:
-            res = z3.Xor(fn(left), fn(right))
+            res = fn(left, width) ^ fn(right, width)
         case _:
             raise TypeError(f"unknown operation: {name} ({len(args)} args)")
-    assert isinstance(res, z3.BoolRef)
+    assert not isinstance(res, z3.Probe)
     return res

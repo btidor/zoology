@@ -38,16 +38,16 @@ class Constraint(Symbolic, metaclass=TMeta):
         return f"Constraint({ctx.out.decode()})"
 
     def __invert__(self) -> Constraint:
-        return rewrite_constraint(Not(self))
+        return rewrite(Not(self))
 
     def __and__(self, other: Constraint, /) -> Constraint:
-        return rewrite_constraint(And(self, other))
+        return rewrite(And(self, other))
 
     def __or__(self, other: Constraint, /) -> Constraint:
-        return rewrite_constraint(Or(self, other))
+        return rewrite(Or(self, other))
 
     def __xor__(self, other: Constraint, /) -> Constraint:
-        return rewrite_constraint(Xor(self, other))
+        return rewrite(Xor(self, other))
 
     def __bool__(self) -> Never:
         raise TypeError("cannot use Constraint in a boolean context")
@@ -139,7 +139,7 @@ class Xor(Binary):
         ctx.write(b")")
 
 
-def rewrite_constraint(term: Constraint) -> Constraint:
+def rewrite(term: Constraint) -> Constraint:
     match term:
         case Not(Value(v)):
             return Value(not v)
