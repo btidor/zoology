@@ -46,13 +46,13 @@ def test_bvlshr_harder():
 
 
 def test_simple_rewrite():
-    term1 = Not(Not(Symbol("X")))
-    term2 = Symbol("X")
+    term1 = Not(Not(Symbol(b"X")))
+    term2 = Symbol(b"X")
     cmp = Xor(term1, term2)
 
     ctx = DumpContext()
     ctx.write(b"(assert ")
-    cmp._dump(ctx)  # pyright: ignore[reportPrivateUsage]
+    cmp.dump(ctx)  # pyright: ignore[reportPrivateUsage]
     ctx.write(b")")
     smt = b"\n".join((*ctx.defs.values(), bytes(ctx.out))).decode()
 
@@ -74,10 +74,10 @@ def _parse_rewrite_constraint() -> list[ast.match_case]:
 def _parse_rewrite_bitvector() -> list[ast.match_case]:
     p = ast.parse(inspect.getsource(rewrite_bitvector))
     assert len(p.body) == 1 and isinstance(fn := p.body[0], ast.FunctionDef)
-    assert len(fn.args.args) == 1
-    assert len(fn.body) == 3
+    assert len(fn.args.args) == 2
+    assert len(fn.body) == 2
     # TODO: check N, mask assignments
-    assert isinstance(m := fn.body[2], ast.Match)
+    assert isinstance(m := fn.body[-1], ast.Match)
     assert isinstance(m.subject, ast.Name) and m.subject.id == fn.args.args[0].arg
     return m.cases
 
@@ -221,6 +221,10 @@ def _interpret_z3[T: ast.pattern | ast.expr](
 ) -> z3.BoolRef | z3.BitVecRef:
     match name, args:
         case "Value", [pattern]:
+            res = fn(pattern, width)
+        case "Value", [pattern, ast.MatchAs(None)]:
+            res = fn(pattern, width)
+        case "Value", [pattern, ast.Name("width")]:
             res = fn(pattern, width)
         case "Not", [pattern]:
             res = ~fn(pattern, width)

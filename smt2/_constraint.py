@@ -4,138 +4,94 @@
 from __future__ import annotations
 
 import abc
-from typing import TYPE_CHECKING, Any, Never
-from ._base import DumpContext, Symbolic
+from dataclasses import dataclass
+from typing import Any, Self, override
+from ._base import DumpContext
 
 
-class Meta(abc.ABCMeta):
-    def __call__(cls, *args: Any) -> Constraint:
-        if cls == Constraint:  # pyright: ignore[reportUnnecessaryComparison]
-            match args:
-                case (bool() as b,):
-                    return Value(b)
-                case (str() as s,):
-                    return Symbol(s)
-                case _:
-                    raise TypeError(f"cannot init Constraint with args: {args}")
-        else:
-            return super().__call__(*args)
-
-
-# This prevents the metaclass from breaking __init__() type checking:
-TMeta = abc.ABCMeta if TYPE_CHECKING else Meta
-
-
-class Constraint(Symbolic, metaclass=TMeta):
+class Constraint(abc.ABC):
     __slots__ = ()
 
-    def __init__(self, value: bool | str, /):
-        raise TypeError("__init__ should be handled by metaclass")
+    def __copy__(self) -> Self:
+        return self
 
-    def __repr__(self) -> str:
-        ctx = DumpContext()
-        self._dump(ctx)
-        return f"Constraint({ctx.out.decode()})"
+    def __deepcopy__(self, memo: Any, /) -> Self:
+        return self
 
-    def __invert__(self) -> Constraint:
-        return rewrite(Not(self))
-
-    def __and__(self, other: Constraint, /) -> Constraint:
-        return rewrite(And(self, other))
-
-    def __or__(self, other: Constraint, /) -> Constraint:
-        return rewrite(Or(self, other))
-
-    def __xor__(self, other: Constraint, /) -> Constraint:
-        return rewrite(Xor(self, other))
-
-    def __bool__(self) -> Never:
-        raise TypeError("cannot use Constraint in a boolean context")
-
-    # TODO: ite()
+    @abc.abstractmethod
+    def dump(self, ctx: DumpContext) -> None: ...
 
     def reveal(self) -> bool | None:
         return None
 
 
+@dataclass(frozen=True, slots=True)
 class Value(Constraint):
-    __slots__ = ("_value",)
-    __match_args__ = ("_value",)
+    value: bool
 
-    def __init__(self, value: bool, /):
-        self._value = value
+    def dump(self, ctx: DumpContext) -> None:
+        ctx.write(b"true" if self.value else b"false")
 
+    @override
     def reveal(self) -> bool | None:
-        return self._value
-
-    def _dump(self, ctx: DumpContext) -> None:
-        ctx.write(b"true" if self._value else b"false")
+        return self.value
 
 
+@dataclass(frozen=True, slots=True)
 class Symbol(Constraint):
-    __slots__ = ("_name",)
-    __match_args__ = ("_name",)
+    name: bytes
 
-    def __init__(self, name: str, /):
-        self._name = name.encode()
-
-    def _dump(self, ctx: DumpContext) -> None:
-        ctx.add(self._name, (b"(declare-fun %s () Bool)" % self._name))
-        ctx.write(self._name)
+    def dump(self, ctx: DumpContext) -> None:
+        ctx.add(self.name, (b"(declare-fun %s () Bool)" % self.name))
+        ctx.write(self.name)
 
 
+@dataclass(frozen=True, slots=True)
 class Not(Constraint):
-    __slots__ = ("_term",)
-    __match_args__ = ("_term",)
+    term: Constraint
 
-    def __init__(self, term: Constraint, /):
-        self._term = term
-
-    def _dump(self, ctx: DumpContext) -> None:
+    def dump(self, ctx: DumpContext) -> None:
         ctx.write(b"(not ")
-        self._term._dump(ctx)
+        self.term.dump(ctx)
         ctx.write(b")")
 
 
-class Binary(Constraint):
-    __slots__ = ("_left", "_right")
-    __match_args__ = ("_left", "_right")
+@dataclass(frozen=True, slots=True)
+class And(Constraint):
+    left: Constraint
+    right: Constraint
 
-    def __init__(self, left: Constraint, right: Constraint, /):
-        self._left = left
-        self._right = right
-
-
-class And(Binary):
-    __slots__ = ()
-
-    def _dump(self, ctx: DumpContext) -> None:
+    def dump(self, ctx: DumpContext) -> None:
         ctx.write(b"(and ")
-        self._left._dump(ctx)
+        self.left.dump(ctx)
         ctx.write(b" ")
-        self._right._dump(ctx)
+        self.right.dump(ctx)
         ctx.write(b")")
 
 
-class Or(Binary):
-    __slots__ = ()
+@dataclass(frozen=True, slots=True)
+class Or(Constraint):
+    left: Constraint
+    right: Constraint
 
-    def _dump(self, ctx: DumpContext) -> None:
+    def dump(self, ctx: DumpContext) -> None:
         ctx.write(b"(or ")
-        self._left._dump(ctx)
+        self.left.dump(ctx)
         ctx.write(b" ")
-        self._right._dump(ctx)
+        self.right.dump(ctx)
         ctx.write(b")")
 
 
-class Xor(Binary):
-    __slots__ = ()
+@dataclass(frozen=True, slots=True)
+class Xor(Constraint):
+    left: Constraint
+    right: Constraint
 
-    def _dump(self, ctx: DumpContext) -> None:
+    def dump(self, ctx: DumpContext) -> None:
         ctx.write(b"(xor ")
-        self._left._dump(ctx)
+        self.left.dump(ctx)
         ctx.write(b" ")
-        self._right._dump(ctx)
+        self.right.dump(ctx)
         ctx.write(b")")
 
 
