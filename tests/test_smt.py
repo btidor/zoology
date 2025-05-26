@@ -75,8 +75,8 @@ def _parse_rewrite_bitvector() -> list[ast.match_case]:
     p = ast.parse(inspect.getsource(rewrite_bitvector))
     assert len(p.body) == 1 and isinstance(fn := p.body[0], ast.FunctionDef)
     assert len(fn.args.args) == 2
-    assert len(fn.body) == 2
-    # TODO: check N, mask assignments
+    assert len(fn.body) == 3
+    # TODO: check assignments
     assert isinstance(m := fn.body[-1], ast.Match)
     assert isinstance(m.subject, ast.Name) and m.subject.id == fn.args.args[0].arg
     return m.cases
@@ -143,11 +143,12 @@ def _interpret_match(
         case ast.MatchClass(ast.Name(name), patterns):
             return _interpret_z3(name, patterns, width, _interpret_match)
         case ast.MatchAs(None, str() as name):
-            if name == "N":
-                raise NotImplementedError
-            elif name == "mask":
+            if name == "mask":
                 assert width is not None
                 return z3.BitVecVal((1 << width) - 1, width)
+            elif name == "modulus":
+                assert width is not None
+                return z3.BitVecVal(1 << width, width)
             if width is None:
                 return z3.Bool(name)
             else:
@@ -191,14 +192,31 @@ def _interpret_expr(expr: ast.expr, width: int | None) -> z3.BoolRef | z3.BitVec
             res = ~_interpret_expr(operand, width)
             assert not isinstance(res, z3.Probe)
             return res
+        case ast.BinOp(left, ast.BitAnd(), right):
+            res = _interpret_expr(left, width) & _interpret_expr(right, width)
+            assert isinstance(res, z3.BoolRef) or isinstance(res, z3.BitVecRef)
+            return res
+        case ast.BinOp(left, ast.BitOr(), right):
+            res = _interpret_expr(left, width) | _interpret_expr(right, width)
+            assert isinstance(res, z3.BoolRef) or isinstance(res, z3.BitVecRef)
+            return res
         case ast.BinOp(left, ast.BitXor(), right):
             return _interpret_expr(left, width) ^ _interpret_expr(right, width)
+        case ast.BinOp(left, ast.Add(), right):
+            res = _interpret_expr(left, width) + _interpret_expr(right, width)
+            assert isinstance(res, z3.BitVecRef)
+            return res
+        case ast.BinOp(left, ast.Mod(), right):
+            a, b = _interpret_expr(left, width), _interpret_expr(right, width)
+            assert isinstance(a, z3.BitVecRef) and isinstance(b, z3.BitVecRef)
+            return a % b
         case ast.Name(name):
-            if name == "N":
-                raise NotImplementedError
-            elif name == "mask":
+            if name == "mask":
                 assert width is not None
                 return z3.BitVecVal((1 << width) - 1, width)
+            elif name == "modulus":
+                assert width is not None
+                return z3.BitVecVal(1 << width, width)
             if width is None:
                 return z3.Bool(name)
             else:
@@ -209,6 +227,8 @@ def _interpret_expr(expr: ast.expr, width: int | None) -> z3.BoolRef | z3.BitVec
         case ast.Constant(int() as i):
             assert width is not None
             return z3.BitVecVal(i, width)
+        case ast.BinOp(_, op, _):
+            raise NotImplementedError(op)
         case _:
             raise NotImplementedError(expr)
 
@@ -234,6 +254,9 @@ def _interpret_z3[T: ast.pattern | ast.expr](
             res = fn(left, width) | fn(right, width)
         case "Xor", [left, right]:
             res = fn(left, width) ^ fn(right, width)
+        case "Add", [left, right]:
+            res = fn(left, width) + fn(right, width)  # TODO: which theory?
+            assert isinstance(res, z3.BitVecRef)
         case _:
             raise TypeError(f"unknown operation: {name} ({len(args)} args)")
     assert not isinstance(res, z3.Probe)

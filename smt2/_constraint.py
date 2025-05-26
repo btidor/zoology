@@ -6,6 +6,7 @@ from __future__ import annotations
 import abc
 from dataclasses import dataclass
 from typing import Any, Self, override
+
 from ._base import DumpContext
 
 

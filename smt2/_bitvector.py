@@ -2,6 +2,7 @@
 # ruff: noqa
 
 from __future__ import annotations
+
 import abc
 from dataclasses import dataclass
 from typing import Any, Self, override
@@ -106,13 +107,81 @@ class Xor[N: int](BitVector[N]):
         ctx.write(b")")
 
 
+@dataclass(frozen=True, slots=True)
+class Add[N: int](BitVector[N]):
+    left: BitVector[N]
+    right: BitVector[N]
+
+    def dump(self, ctx: DumpContext) -> None:
+        ctx.write(b"(bvadd ")
+        self.left.dump(ctx)
+        ctx.write(b" ")
+        self.right.dump(ctx)
+        ctx.write(b")")
+
+
+@dataclass(frozen=True, slots=True)
+class Sub[N: int](BitVector[N]):
+    left: BitVector[N]
+    right: BitVector[N]
+
+    def dump(self, ctx: DumpContext) -> None:
+        ctx.write(b"(bvsub ")
+        self.left.dump(ctx)
+        ctx.write(b" ")
+        self.right.dump(ctx)
+        ctx.write(b")")
+
+
+@dataclass(frozen=True, slots=True)
+class Mul[N: int](BitVector[N]):
+    left: BitVector[N]
+    right: BitVector[N]
+
+    def dump(self, ctx: DumpContext) -> None:
+        ctx.write(b"(bvmul ")
+        self.left.dump(ctx)
+        ctx.write(b" ")
+        self.right.dump(ctx)
+        ctx.write(b")")
+
+
+@dataclass(frozen=True, slots=True)
+class Div[N: int](BitVector[N]):
+    left: BitVector[N]
+    right: BitVector[N]
+
+    def dump(self, ctx: DumpContext) -> None:
+        ctx.write(b"(bvudiv ")
+        self.left.dump(ctx)
+        ctx.write(b" ")
+        self.right.dump(ctx)
+        ctx.write(b")")
+
+
+@dataclass(frozen=True, slots=True)
+class Mod[N: int](BitVector[N]):
+    left: BitVector[N]
+    right: BitVector[N]
+
+    def dump(self, ctx: DumpContext) -> None:
+        ctx.write(b"(bvurem ")
+        self.left.dump(ctx)
+        ctx.write(b" ")
+        self.right.dump(ctx)
+        ctx.write(b")")
+
+
 def rewrite[N: int](term: BitVector[N], width: N) -> BitVector[N]:
     mask = (1 << width) - 1
+    modulus = 1 << width
     match term:
         case Not(Value(v, width)):
             return Value(mask ^ v, width)
         case Not(Not(inner)):  # ~(~X) => X
             return inner
+        case And(Value(p), Value(q)):
+            return Value(p & q, width)
         case And(Value(mask), x) | And(x, Value(mask)):  # X & 1111 => X
             return x
         case And(Value(0), x) | And(x, Value(0)):  # X & 0000 => 0000
@@ -121,6 +190,8 @@ def rewrite[N: int](term: BitVector[N], width: N) -> BitVector[N]:
             return x
         case And(x, Not(y)) | And(Not(y), x) if x == y:  # X & ~X => 0000
             return Value(0, width)
+        case Or(Value(p), Value(q)):
+            return Value(p | q, width)
         case Or(Value(mask), x) | Or(x, Value(mask)):  # X | 1111 => 1111
             return Value(mask, width)
         case Or(Value(0), x) | Or(x, Value(0)):  # X | 0000 => X
@@ -129,6 +200,8 @@ def rewrite[N: int](term: BitVector[N], width: N) -> BitVector[N]:
             return x
         case Or(x, Not(y)) | Or(Not(y), x) if x == y:  # X | ~X => 1111
             return Value(mask, width)
+        case Xor(Value(p), Value(q)):
+            return Value(p ^ q, width)
         case Xor(Value(mask), x) | Xor(x, Value(mask)):  # X ^ 1111 => ~X
             return Not(x)
         case Xor(Value(0), x) | Xor(x, Value(0)):  # X ^ 0000 => X
@@ -137,5 +210,7 @@ def rewrite[N: int](term: BitVector[N], width: N) -> BitVector[N]:
             return Value(0, width)
         case Xor(x, Not(y)) | Xor(Not(y), x) if x == y:  # X ^ ~X => 1111
             return Value(mask, width)
+        case Add(Value(p), Value(q)):
+            return Value((p + q) % modulus, width)
         case _:
             return term
