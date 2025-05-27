@@ -3,27 +3,30 @@
 
 from __future__ import annotations
 
-import abc
 from dataclasses import dataclass
-from typing import Any, Self, override
+from typing import override
 
-from ._base import DumpContext
+from ._core import DumpContext, Symbolic
 
 
-class BitVector[N: int](abc.ABC):
+class BitVector[N: int](Symbolic):
     __slots__ = ()
-
-    def __copy__(self) -> Self:
-        return self
-
-    def __deepcopy__(self, memo: Any, /) -> Self:
-        return self
-
-    @abc.abstractmethod
-    def dump(self, ctx: DumpContext) -> None: ...
 
     def reveal(self) -> int | None:
         return None
+
+
+@dataclass(frozen=True, slots=True)
+class Symbol[N: int](BitVector[N]):
+    name: bytes
+    width: N
+
+    def dump(self, ctx: DumpContext) -> None:
+        ctx.add(
+            self.name,
+            (b"(declare-fun %s () (_ BitVec %d))" % (self.name, self.width)),
+        )
+        ctx.write(self.name)
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,19 +46,6 @@ class Value[N: int](BitVector[N]):
     @override
     def reveal(self) -> int | None:
         return self.value
-
-
-@dataclass(frozen=True, slots=True)
-class Symbol[N: int](BitVector[N]):
-    name: bytes
-    width: N
-
-    def dump(self, ctx: DumpContext) -> None:
-        ctx.add(
-            self.name,
-            (b"(declare-fun %s () (_ BitVec %d))" % (self.name, self.width)),
-        )
-        ctx.write(self.name)
 
 
 @dataclass(frozen=True, slots=True)
@@ -176,7 +166,7 @@ def rewrite[N: int](term: BitVector[N], width: N) -> BitVector[N]:
     mask = (1 << width) - 1
     modulus = 1 << width
     match term:
-        case Not(Value(v, width)):
+        case Not(Value(v)):
             return Value(mask ^ v, width)
         case Not(Not(inner)):  # ~(~X) => X
             return inner
