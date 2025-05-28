@@ -17,8 +17,8 @@ from .defcore import (
 def rewrite_constraint(term: Constraint) -> Constraint:
     """Simplify the given term."""
     match term:
-        case Not(Value(v)):
-            return Value(not v)
+        case Not(Value(val)):
+            return Value(not val)
         case Not(Not(inner)):  # ~(~X) <=> X
             return inner
         case Implies(x, y):  # (X => Y) <=> (Y | ~X)
@@ -59,5 +59,7 @@ def rewrite_constraint(term: Constraint) -> Constraint:
             return x
         case Ite(Value(False), x, y):  # False ? X : Y <=> Y
             return y
+        case Ite(_, x, y) if x == y:  # C ? X : X <=> X
+            return x
         case _:
             return term

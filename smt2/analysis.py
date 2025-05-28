@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import copy
 import inspect
+from random import randint
 from typing import Any, Callable, Generator, NewType, Self
 
 from . import defbv, defcore
@@ -151,7 +152,10 @@ class CaseParser:
     def _match(self, pattern: ast.pattern) -> SymbolicType:
         """Recursively parse a case statement pattern."""
         match pattern:
-            case ast.MatchAs(_, str() as name):
+            case ast.MatchAs(_, name):
+                if name is None:  # underscore, generate random symbol
+                    name = f"_{randint(0, 2**16)}"
+                    assert name not in self.svars
                 assert name not in self.pyvars
                 if self.width is None:
                     sym = defcore.Symbol(name.encode())
@@ -226,6 +230,8 @@ class CaseParser:
                         return PythonType(defbv.Add[int](left, right))
                     case ast.Sub():
                         return PythonType(defbv.Sub[int](left, right))
+                    case ast.Mult():
+                        return PythonType(defbv.Mul[int](left, right))
                     case ast.Mod():
                         return PythonType(defbv.Smod[int](left, right))
                     case ast.BitAnd():

@@ -98,16 +98,6 @@ class Value(Constraint):
 
 
 @dataclass(frozen=True, slots=True)
-class Not(Constraint):
-    term: Constraint
-
-    def dump(self, ctx: DumpContext) -> None:
-        ctx.write(b"(not ")
-        self.term.dump(ctx)
-        ctx.write(b")")
-
-
-@dataclass(frozen=True, slots=True)
 class BinaryOp(Constraint):
     op: ClassVar[bytes]
     left: Constraint
@@ -119,6 +109,16 @@ class BinaryOp(Constraint):
         self.left.dump(ctx)
         ctx.write(b" ")
         self.right.dump(ctx)
+        ctx.write(b")")
+
+
+@dataclass(frozen=True, slots=True)
+class Not(Constraint):
+    term: Constraint
+
+    def dump(self, ctx: DumpContext) -> None:
+        ctx.write(b"(not ")
+        self.term.dump(ctx)
         ctx.write(b")")
 
 

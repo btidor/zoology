@@ -111,7 +111,7 @@ class SingleParamOp[N: int](BitVector[N]):
 
 @dataclass(frozen=True, slots=True)
 class Concat[N: int](BitVector[N]):
-    terms: tuple[BitVector[int]]
+    terms: tuple[BitVector[int], ...]
 
     def dump(self, ctx: DumpContext) -> None:
         ctx.write(b"(concat")
@@ -306,3 +306,19 @@ class Sgt[N: int](CompareOp[N]):
 class Sge[N: int](CompareOp[N]):
     __slots__ = ()
     op: ClassVar[bytes] = b"bvsge"
+
+
+@dataclass(frozen=True, slots=True)
+class Ite[N: int](BitVector[N]):
+    cond: Constraint
+    left: BitVector[N]
+    right: BitVector[N]
+
+    def dump(self, ctx: DumpContext) -> None:
+        ctx.write(b"(ite ")
+        self.cond.dump(ctx)
+        ctx.write(b" ")
+        self.left.dump(ctx)
+        ctx.write(b" ")
+        self.right.dump(ctx)
+        ctx.write(b")")
