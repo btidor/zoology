@@ -22,6 +22,7 @@ SymbolicType = NewType("SymbolicType", Symbolic)
 
 # When handling Python ints, assume they fit in a fixed (large) number of bytes.
 MAX_WIDTH = 128
+ZERO = bv.Value(0, MAX_WIDTH)
 
 
 class Casette:
@@ -226,7 +227,8 @@ class CaseParser:
                 left, right = self._pyexpr(left), self._pyexpr(right)
                 assert isinstance(left, BitVector)
                 assert isinstance(right, BitVector)
-                rnonzero = Distinct(right, bv.Value(0, MAX_WIDTH))
+                nonneg = core.And(bv.Sge(left, ZERO), bv.Sge(right, ZERO))
+                rnonzero = Distinct(right, ZERO)
                 match op:
                     case ast.Add():
                         return PythonType(bv.Add[int](left, right))
@@ -235,18 +237,22 @@ class CaseParser:
                     case ast.Mult():
                         return PythonType(bv.Mul[int](left, right))
                     case ast.FloorDiv():
-                        self.assertions.extend((rnonzero,))  # else ZeroDivisionError
+                        self.assertions.append(rnonzero)  # else ZeroDivisionError
                         return PythonType(bv.Sdiv[int](left, right))
                     case ast.Mod():
-                        self.assertions.extend((rnonzero,))  # else ZeroDivisionError
+                        self.assertions.append(rnonzero)  # else ZeroDivisionError
                         return PythonType(bv.Smod[int](left, right))
                     case ast.BitAnd():
+                        self.assertions.append(nonneg)  # else incorrect result
                         return PythonType(bv.And[int](left, right))
                     case ast.BitOr():
+                        self.assertions.append(nonneg)  # else incorrect result
                         return PythonType(bv.Or[int](left, right))
                     case ast.BitXor():
+                        self.assertions.append(nonneg)  # else incorrect result
                         return PythonType(bv.Xor[int](left, right))
                     case ast.LShift():
+                        self.assertions.append(nonneg)  # else incorrect result
                         return PythonType(bv.Shl[int](left, right))
                     case _:
                         raise NotImplementedError(op)

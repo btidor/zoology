@@ -20,7 +20,7 @@ from .bv import (
 
 
 def rewrite_bitvector[N: int](term: BitVector[N], width: N) -> BitVector[N]:
-    """Simplify the given term."""
+    """Simplify the given bitvector."""
     mask = (1 << width) - 1
     modulus = 1 << width
     match term:
@@ -51,7 +51,7 @@ def rewrite_bitvector[N: int](term: BitVector[N], width: N) -> BitVector[N]:
             return Value(mask, width)
         case Xor(Value(a), Value(b)):
             return Value(a ^ b, width)
-        case Xor(Value(m), x) | Xor(x, Value(m)) if m == modulus:  # X ^ 1111 <=> ~X
+        case Xor(Value(m), x) | Xor(x, Value(m)) if m == mask:  # X ^ 1111 <=> ~X
             return Not(x)
         case Xor(Value(0), x) | Xor(x, Value(0)):  # X ^ 0000 <=> X
             return x

@@ -47,14 +47,12 @@ def rewrite_constraint(term: Constraint) -> Constraint:
             return Value(False)
         case Xor(x, Not(y)) | Xor(Not(y), x) if x == y:  # X ^ ~X <=> True
             return Value(True)
+        # Note: technically, these rules need to be checked for every type of
+        # input argument (see rewrite_mixed for an example).
         case Eq(Constraint() as x, Constraint() as y):  # X = Y <=> ~(X ^ Y)
             return Not(Xor(x, y))
-        case Eq(x, y) if x == y:  # pyright: ignore[reportUnknownVariableType]
-            return Value(True)
         case Distinct(Constraint() as x, Constraint() as y):  # X != Y <=> X ^ Y
             return Xor(x, y)
-        case Distinct(x, y) if x == y:  # pyright: ignore[reportUnknownVariableType]
-            return Value(False)
         case Ite(Value(True), x, y):  # True ? X : Y <=> X
             return x
         case Ite(Value(False), x, y):  # False ? X : Y <=> Y
