@@ -1,6 +1,6 @@
 """A pure-Python term-rewriting SMT frontend."""
 
-from ._bitvector import BitVector
-from ._core import Constraint
+from .defbv import BitVector
+from .defcore import Constraint
 
 __all__ = ("BitVector", "Constraint")

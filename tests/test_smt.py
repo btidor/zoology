@@ -10,10 +10,10 @@ from smt import (
     concat_bytes,
     explode_bytes,
 )
-from smt2._analysis import ParsedCase, PreCase
-from smt2._bitvector import rewrite as rewrite_bitvector
-from smt2._core import Distinct, Not, Symbol, check
-from smt2._core import rewrite as rewrite_constraint
+from smt2.analysis import CaseParser, Casette
+from smt2.defcore import And, Distinct, Eq, Not, Symbol, check
+from smt2.rwbv import rewrite_bitvector
+from smt2.rwcore import rewrite_constraint
 
 
 def test_bvlshr_harder():
@@ -42,18 +42,24 @@ def test_simple_rewrite():
     assert not check(Distinct(term1, term2))
 
 
-@pytest.mark.parametrize("case", PreCase.from_function(rewrite_constraint))
-def test_rewrite_constraint(case: PreCase):
-    ctx = ParsedCase(case, None)
-    for term1, subctx in ctx.parse_pattern():
-        term2 = subctx.parse_body()
-        subctx.check(term1, term2)
+@pytest.mark.parametrize("case", Casette.from_function(rewrite_constraint))
+def test_rewrite_constraint(case: Casette):
+    _check_case(CaseParser(case, None))
 
 
-@pytest.mark.parametrize("case", PreCase.from_function(rewrite_bitvector))
-def test_rewrite_bitvector(case: PreCase):
+@pytest.mark.parametrize("case", Casette.from_function(rewrite_bitvector))
+def test_rewrite_bitvector(case: Casette):
     for width in range(1, 65):
-        ctx = ParsedCase(case, width)
-        for term1, subctx in ctx.parse_pattern():
-            term2 = subctx.parse_body()
-            subctx.check(term1, term2)
+        _check_case(CaseParser(case, width))
+
+
+def _check_case(ctx: CaseParser) -> None:
+    for term1, ctx in ctx.parse_pattern():
+        term2 = ctx.parse_body()
+        goal = Eq(term1, term2)
+        for a in ctx.assertions:
+            goal = And(goal, a)
+        if ctx.guard is None:
+            assert not check(Not(goal))
+        else:
+            assert not check(Not(goal), ctx.guard)

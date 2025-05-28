@@ -1,4 +1,10 @@
-"""Definitions and rewrite rules for the theory of bitvectors."""
+"""
+Definitions for the theory of bitvectors.
+
+Up-to-date with SMT-LIB version 2.7, QF_BV logic.
+
+See: https://smt-lib.org/logics-all.shtml#QF_BV
+"""
 # ruff: noqa
 
 from __future__ import annotations
@@ -6,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import ClassVar, Literal, override
 
-from ._core import Constraint, DumpContext, Symbolic
+from .defcore import Constraint, DumpContext, Symbolic
 
 
 class BitVector[N: int](Symbolic):
@@ -300,47 +306,3 @@ class Sgt[N: int](CompareOp[N]):
 class Sge[N: int](CompareOp[N]):
     __slots__ = ()
     op: ClassVar[bytes] = b"bvsge"
-
-
-def rewrite[N: int](term: BitVector[N], width: N) -> BitVector[N]:
-    mask = (1 << width) - 1
-    modulus = 1 << width
-    match term:
-        case Not(Value(v)):
-            return Value(mask ^ v, width)
-        case Not(Not(inner)):  # ~(~X) => X
-            return inner
-        case And(Value(p), Value(q)):
-            return Value(p & q, width)
-        case And(Value(m), x) | And(x, Value(m)) if m == mask:  # X & 1111 => X
-            return x
-        case And(Value(0), x) | And(x, Value(0)):  # X & 0000 => 0000
-            return Value(0, width)
-        case And(x, y) if x == y:  # X & X => X
-            return x
-        case And(x, Not(y)) | And(Not(y), x) if x == y:  # X & ~X => 0000
-            return Value(0, width)
-        case Or(Value(p), Value(q)):
-            return Value(p | q, width)
-        case Or(Value(m), x) | Or(x, Value(m)) if m == mask:  # X | 1111 => 1111
-            return Value(mask, width)
-        case Or(Value(0), x) | Or(x, Value(0)):  # X | 0000 => X
-            return x
-        case Or(x, y) if x == y:  # X | X => X
-            return x
-        case Or(x, Not(y)) | Or(Not(y), x) if x == y:  # X | ~X => 1111
-            return Value(mask, width)
-        case Xor(Value(p), Value(q)):
-            return Value(p ^ q, width)
-        case Xor(Value(m), x) | Xor(x, Value(m)) if m == modulus:  # X ^ 1111 => ~X
-            return Not(x)
-        case Xor(Value(0), x) | Xor(x, Value(0)):  # X ^ 0000 => X
-            return x
-        case Xor(x, y) if x == y:  # X ^ X => 0000
-            return Value(0, width)
-        case Xor(x, Not(y)) | Xor(Not(y), x) if x == y:  # X ^ ~X => 1111
-            return Value(mask, width)
-        case Add(Value(p), Value(q)):
-            return Value((p + q) % modulus, width)
-        case _:
-            return term
