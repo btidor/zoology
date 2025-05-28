@@ -4,9 +4,15 @@ from .defbv import (
     Add,
     And,
     BitVector,
+    Mul,
+    Nand,
+    Neg,
+    Nor,
     Not,
     Or,
+    Sub,
     Value,
+    Xnor,
     Xor,
 )
 
@@ -51,7 +57,28 @@ def rewrite_bitvector[N: int](term: BitVector[N], width: N) -> BitVector[N]:
             return Value(0, width)
         case Xor(x, Not(y)) | Xor(Not(y), x) if x == y:  # X ^ ~X <=> 1111
             return Value(mask, width)
+        # Normalize negated variants
+        case Nand(x, y):
+            return Not(And(x, y))
+        case Nor(x, y):
+            return Not(Or(x, y))
+        case Xnor(x, y):
+            return Not(Xor(x, y))
+        # Arithmetic
         case Add(Value(a), Value(b)):
             return Value((a + b) % modulus, width)
+        case Add(Value(0), x) | Add(x, Value(0)):  # X + 0 <=> X
+            return x
+        case Mul(Value(a), Value(b)):
+            return Value((a * b) % modulus, width)
+        case Mul(Value(0), x) | Mul(x, Value(0)):  # X * 0 <=> 0
+            return Value(0, width)
+        case Mul(Value(1), x) | Mul(x, Value(1)):  # X * 1 <=> X
+            return x
+        # Normalize Neg, Sub to arithmetic
+        case Neg(x):  # negate(X) <=> ~X + 1
+            return Add(Not(x), Value(1, width))
+        case Sub(x, y):  # X - Y <=> X + ~Y + 1
+            return Add(Add(x, Not(y)), Value(1, width))
         case _:
             return term
