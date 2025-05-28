@@ -1,6 +1,6 @@
 """Term-rewriting rules for the core theory."""
 
-from .defcore import (
+from .core import (
     And,
     Constraint,
     Distinct,

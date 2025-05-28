@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import ClassVar, Literal, override
 
-from .defcore import Constraint, DumpContext, Symbolic
+from .core import Constraint, DumpContext, Symbolic
 
 
 class BitVector[N: int](Symbolic):

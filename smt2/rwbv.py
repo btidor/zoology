@@ -1,6 +1,6 @@
 """Term-rewriting rules for the theory of bitvectors."""
 
-from .defbv import (
+from .bv import (
     Add,
     And,
     BitVector,

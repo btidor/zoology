@@ -8,9 +8,9 @@ import inspect
 from random import randint
 from typing import Any, Callable, Generator, NewType, Self
 
-from . import defbv, defcore
-from .defbv import BitVector
-from .defcore import Constraint, Distinct, Eq, Symbolic
+from . import bv, core
+from .bv import BitVector
+from .core import Constraint, Distinct, Eq, Symbolic
 
 # During analysis, all values are symbolic (type Constraint, etc.). This
 # includes values that are symbolic at runtime (e.g. Not(...)) and those that
@@ -83,7 +83,7 @@ class CaseParser:
         # For BitVectors, rewrite() takes `width` as its second parameter
         if width is not None:
             assert width < MAX_WIDTH
-            self.pyvars["width"] = PythonType(defbv.Value(width, MAX_WIDTH))
+            self.pyvars["width"] = PythonType(bv.Value(width, MAX_WIDTH))
 
         # Handle any assignments in the prefix
         for stmt in pre.prefix:
@@ -164,9 +164,9 @@ class CaseParser:
                     assert name not in self.svars
                 assert name not in self.pyvars
                 if self.width is None:
-                    sym = defcore.Symbol(name.encode())
+                    sym = core.Symbol(name.encode())
                 else:
-                    sym = defbv.Symbol(name.encode(), self.width)
+                    sym = bv.Symbol(name.encode(), self.width)
                 self.svars[name] = SymbolicType(sym)
                 return self.svars[name]
             case ast.MatchClass(ast.Name("Symbol")):
@@ -174,41 +174,36 @@ class CaseParser:
             case ast.MatchClass(ast.Name("Value"), patterns):
                 match patterns:
                     case [ast.MatchSingleton(bool() as b)]:
-                        return SymbolicType(defcore.Value(b))
+                        return SymbolicType(core.Value(b))
                     case [ast.MatchValue(ast.Constant(int() as i))]:
                         assert self.width is not None
                         assert 0 <= i < (1 << self.width)
-                        return SymbolicType(defbv.Value(i, self.width))
+                        return SymbolicType(bv.Value(i, self.width))
                     case [ast.MatchAs(_, str() as name)]:
                         # Value(...) converts an inner Python type to an outer
                         # symbolic type.
                         assert name not in self.svars
                         if self.width is None:
-                            self.pyvars[name] = PythonType(
-                                defcore.Symbol(name.encode())
-                            )
+                            self.pyvars[name] = PythonType(core.Symbol(name.encode()))
                             return SymbolicType(self.pyvars[name])
                         else:
-                            sym = defbv.Symbol(name.encode(), self.width)
+                            sym = bv.Symbol(name.encode(), self.width)
                             self.pyvars[name] = PythonType(
-                                defbv.ZeroExtend[int](MAX_WIDTH - self.width, sym)
+                                bv.ZeroExtend[int](MAX_WIDTH - self.width, sym)
                             )
                             return SymbolicType(sym)
                     case _:
                         raise TypeError("unexpected match on Value(...)", patterns)
             case ast.MatchClass(ast.Name(name), patterns):
-                d = defcore.__dict__ if self.width is None else defbv.__dict__
+                d = core.__dict__ if self.width is None else bv.__dict__
                 return d[name](*(self._match(p) for p in patterns))
             case _:
                 raise NotImplementedError(pattern)
 
-    def _check_size(self, bv: BitVector[int]) -> Constraint:
+    def _check_size(self, x: BitVector[int]) -> Constraint:
         """Assert that a given Python int is within the configured bit-width."""
         assert self.width is not None
-        return defbv.Ult(
-            bv,
-            defbv.Value(1 << self.width, MAX_WIDTH),
-        )
+        return bv.Ult(x, bv.Value(1 << self.width, MAX_WIDTH))
 
     def _pyexpr(self, expr: ast.expr) -> PythonType:
         """Recursively parse a Python expression."""
@@ -216,43 +211,43 @@ class CaseParser:
             case ast.Name(name):
                 return self.pyvars[name]
             case ast.Constant(bool() as b):
-                return PythonType(defcore.Value(b))
+                return PythonType(core.Value(b))
             case ast.Constant(int() as i):
-                return PythonType(defbv.Value(i, MAX_WIDTH))
+                return PythonType(bv.Value(i, MAX_WIDTH))
             case ast.UnaryOp(op, operand):
                 operand = self._pyexpr(operand)
                 match op:
                     case ast.Not():
                         assert isinstance(operand, Constraint)
-                        return PythonType(defcore.Not(operand))
+                        return PythonType(core.Not(operand))
                     case _:
                         raise NotImplementedError(op)
             case ast.BinOp(left, op, right):
                 left, right = self._pyexpr(left), self._pyexpr(right)
                 assert isinstance(left, BitVector)
                 assert isinstance(right, BitVector)
-                rnonzero = Distinct(right, defbv.Value(0, MAX_WIDTH))
+                rnonzero = Distinct(right, bv.Value(0, MAX_WIDTH))
                 match op:
                     case ast.Add():
-                        return PythonType(defbv.Add[int](left, right))
+                        return PythonType(bv.Add[int](left, right))
                     case ast.Sub():
-                        return PythonType(defbv.Sub[int](left, right))
+                        return PythonType(bv.Sub[int](left, right))
                     case ast.Mult():
-                        return PythonType(defbv.Mul[int](left, right))
+                        return PythonType(bv.Mul[int](left, right))
                     case ast.FloorDiv():
                         self.assertions.extend((rnonzero,))  # else ZeroDivisionError
-                        return PythonType(defbv.Sdiv[int](left, right))
+                        return PythonType(bv.Sdiv[int](left, right))
                     case ast.Mod():
                         self.assertions.extend((rnonzero,))  # else ZeroDivisionError
-                        return PythonType(defbv.Smod[int](left, right))
+                        return PythonType(bv.Smod[int](left, right))
                     case ast.BitAnd():
-                        return PythonType(defbv.And[int](left, right))
+                        return PythonType(bv.And[int](left, right))
                     case ast.BitOr():
-                        return PythonType(defbv.Or[int](left, right))
+                        return PythonType(bv.Or[int](left, right))
                     case ast.BitXor():
-                        return PythonType(defbv.Xor[int](left, right))
+                        return PythonType(bv.Xor[int](left, right))
                     case ast.LShift():
-                        return PythonType(defbv.Shl[int](left, right))
+                        return PythonType(bv.Shl[int](left, right))
                     case _:
                         raise NotImplementedError(op)
             case ast.Compare(left, [op], [right]):
@@ -290,9 +285,9 @@ class CaseParser:
                     inner = self._pyexpr(args[0])
                     assert isinstance(inner, BitVector)
                     self.assertions.append(self._check_size(inner))
-                    return SymbolicType(defbv.Extract[int](self.width - 1, 0, inner))
+                    return SymbolicType(bv.Extract[int](self.width - 1, 0, inner))
             case ast.Call(ast.Name(name), args):  # Not(...), etc.
-                d = defcore.__dict__ if self.width is None else defbv.__dict__
+                d = core.__dict__ if self.width is None else bv.__dict__
                 return d[name](*(self._sexpr(a) for a in args))
             case ast.BinOp(a, b, c):
                 raise NotImplementedError(a, b, c)

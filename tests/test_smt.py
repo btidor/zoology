@@ -11,7 +11,7 @@ from smt import (
     explode_bytes,
 )
 from smt2.analysis import CaseParser, Casette
-from smt2.defcore import And, Distinct, Eq, Not, Symbol, check
+from smt2.core import And, Distinct, Eq, Not, Symbol, check
 from smt2.rwbv import rewrite_bitvector
 from smt2.rwcore import rewrite_constraint
 
