@@ -10,7 +10,7 @@ from typing import Any, Callable, Generator, NewType, Self
 
 from . import defbv, defcore
 from .defbv import BitVector
-from .defcore import Constraint, Eq, Symbolic
+from .defcore import Constraint, Distinct, Eq, Symbolic
 
 # During analysis, all values are symbolic (type Constraint, etc.). This
 # includes values that are symbolic at runtime (e.g. Not(...)) and those that
@@ -118,20 +118,26 @@ class CaseParser:
             match ctx.case.guard:
                 case None:
                     pass
-                case ast.Compare(left, [ast.Eq()], [right]):
-                    # If two trees are equal, then the symbolic expressions must
-                    # be equal. (Note: this is only safe to do in a guard, not
-                    # in the general expr parser).
-                    try:
-                        ctx.guard = Eq(ctx._sexpr(left), ctx._sexpr(right))
-                    except KeyError:
-                        # We might want to compare svars or pyvars, but not
-                        # both...
-                        ctx.guard = Eq(ctx._pyexpr(left), ctx._pyexpr(right))
-                case ast.Compare(left, [ast.NotEq()], [right]):
-                    # If two trees are unequal, then the symbolic expressions
-                    # may be equal or not, we don't know!
-                    raise SyntaxError("!= is not supported")
+                case ast.Compare(ast.Name(name), [op], [right]):
+                    if name in ctx.svars:
+                        # When comparing symbolic expressions: if two ASTs are
+                        # equal, the expressions must be equal (but not vice
+                        # versa). Note: this rewrite is only safe to do in a
+                        # guard.
+                        match op:
+                            case ast.Eq():
+                                ctx.guard = Eq(ctx.svars[name], ctx._sexpr(right))
+                            case ast.NotEq():
+                                # ASTs distinct: this tells us nothing about
+                                # whether or not the expressions are equal.
+                                raise SyntaxError(
+                                    "symbolic expressions must not be compared with !="
+                                )
+                            case _:
+                                raise NotImplementedError("unsupported op", op)
+                    else:
+                        # When comparing concrete expressions, treat as normal.
+                        ctx.guard = ctx._pyexpr(ctx.case.guard)
                 case other:
                     raise NotImplementedError(other)
             yield term, ctx
@@ -225,6 +231,7 @@ class CaseParser:
                 left, right = self._pyexpr(left), self._pyexpr(right)
                 assert isinstance(left, BitVector)
                 assert isinstance(right, BitVector)
+                rnonzero = Distinct(right, defbv.Value(0, MAX_WIDTH))
                 match op:
                     case ast.Add():
                         return PythonType(defbv.Add[int](left, right))
@@ -232,28 +239,32 @@ class CaseParser:
                         return PythonType(defbv.Sub[int](left, right))
                     case ast.Mult():
                         return PythonType(defbv.Mul[int](left, right))
+                    case ast.FloorDiv():
+                        self.assertions.extend((rnonzero,))  # else ZeroDivisionError
+                        return PythonType(defbv.Sdiv[int](left, right))
                     case ast.Mod():
+                        self.assertions.extend((rnonzero,))  # else ZeroDivisionError
                         return PythonType(defbv.Smod[int](left, right))
                     case ast.BitAnd():
-                        self.assertions.extend(
-                            (self._check_size(left), self._check_size(right))
-                        )
                         return PythonType(defbv.And[int](left, right))
                     case ast.BitOr():
-                        self.assertions.extend(
-                            (self._check_size(left), self._check_size(right))
-                        )
                         return PythonType(defbv.Or[int](left, right))
                     case ast.BitXor():
-                        self.assertions.extend(
-                            (self._check_size(left), self._check_size(right))
-                        )
                         return PythonType(defbv.Xor[int](left, right))
                     case ast.LShift():
-                        self.assertions.extend(
-                            (self._check_size(left), self._check_size(right))
-                        )
                         return PythonType(defbv.Shl[int](left, right))
+                    case _:
+                        raise NotImplementedError(op)
+            case ast.Compare(left, [op], [right]):
+                left, right = self._pyexpr(left), self._pyexpr(right)
+                assert isinstance(left, BitVector)
+                assert isinstance(right, BitVector)
+                assert self.width is not None
+                match op:
+                    case ast.Eq():
+                        return PythonType(Eq(left, right))
+                    case ast.NotEq():
+                        return PythonType(Distinct(left, right))
                     case _:
                         raise NotImplementedError(op)
             case _:

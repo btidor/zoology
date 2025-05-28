@@ -11,6 +11,8 @@ from .defbv import (
     Not,
     Or,
     Sub,
+    Udiv,
+    Urem,
     Value,
     Xnor,
     Xor,
@@ -74,6 +76,16 @@ def rewrite_bitvector[N: int](term: BitVector[N], width: N) -> BitVector[N]:
         case Mul(Value(0), x) | Mul(x, Value(0)):  # X * 0 <=> 0
             return Value(0, width)
         case Mul(Value(1), x) | Mul(x, Value(1)):  # X * 1 <=> X
+            return x
+        case Udiv(Value(a), Value(b)) if b != 0:
+            return Value(a // b, width)
+        case Udiv(x, Value(0)):  # X // 0 <=> 1111
+            return Value(mask, width)
+        case Udiv(x, Value(1)):  # X // 1 <=> X
+            return x
+        case Urem(Value(a), Value(b)) if b != 0:
+            return Value((a % b) % modulus, width)
+        case Urem(x, Value(0)):  # X % 0 <=> X
             return x
         # Normalize Neg, Sub to arithmetic
         case Neg(x):  # negate(X) <=> ~X + 1
