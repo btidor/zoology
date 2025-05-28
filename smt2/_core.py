@@ -6,7 +6,7 @@ from __future__ import annotations
 import abc
 from dataclasses import dataclass, field
 from subprocess import PIPE, Popen
-from typing import Any, Self, override
+from typing import Any, ClassVar, Self, override
 
 
 @dataclass
@@ -102,55 +102,38 @@ class Not(Constraint):
 
 
 @dataclass(frozen=True, slots=True)
-class Implies(Constraint):
+class BinaryOp(Constraint):
+    op: ClassVar[bytes]
     left: Constraint
     right: Constraint
 
     def dump(self, ctx: DumpContext) -> None:
-        ctx.write(b"(=> ")
+        assert self.op
+        ctx.write(b"(%b " % self.op)
         self.left.dump(ctx)
         ctx.write(b" ")
         self.right.dump(ctx)
         ctx.write(b")")
 
 
-@dataclass(frozen=True, slots=True)
-class And(Constraint):
-    left: Constraint
-    right: Constraint
-
-    def dump(self, ctx: DumpContext) -> None:
-        ctx.write(b"(and ")
-        self.left.dump(ctx)
-        ctx.write(b" ")
-        self.right.dump(ctx)
-        ctx.write(b")")
+class Implies(BinaryOp):
+    __slots__ = ()
+    op: ClassVar[bytes] = b"=>"
 
 
-@dataclass(frozen=True, slots=True)
-class Or(Constraint):
-    left: Constraint
-    right: Constraint
-
-    def dump(self, ctx: DumpContext) -> None:
-        ctx.write(b"(or ")
-        self.left.dump(ctx)
-        ctx.write(b" ")
-        self.right.dump(ctx)
-        ctx.write(b")")
+class And(BinaryOp):
+    __slots__ = ()
+    op: ClassVar[bytes] = b"and"
 
 
-@dataclass(frozen=True, slots=True)
-class Xor(Constraint):
-    left: Constraint
-    right: Constraint
+class Or(BinaryOp):
+    __slots__ = ()
+    op: ClassVar[bytes] = b"or"
 
-    def dump(self, ctx: DumpContext) -> None:
-        ctx.write(b"(xor ")
-        self.left.dump(ctx)
-        ctx.write(b" ")
-        self.right.dump(ctx)
-        ctx.write(b")")
+
+class Xor(BinaryOp):
+    __slots__ = ()
+    op: ClassVar[bytes] = b"xor"
 
 
 @dataclass(frozen=True, slots=True)

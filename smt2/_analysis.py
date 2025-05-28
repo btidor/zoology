@@ -156,7 +156,7 @@ class ParsedCase:
                         else:
                             sym = bitvector.Symbol(name.encode(), self.width)
                             self.pyvars[name] = PythonType(
-                                bitvector.ZeroExtend(MAX_WIDTH - self.width, sym)
+                                bitvector.ZeroExtend[int](MAX_WIDTH - self.width, sym)
                             )
                             return SymbolicType(sym)
                     case _:
