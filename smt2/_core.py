@@ -30,9 +30,10 @@ def check(*constraints: Constraint) -> bool:
         ctx.write(b"(assert ")
         constraint.dump(ctx)
         ctx.write(b")\n")
-    ctx.write(b"(check-sat)\n")
+    ctx.write(b"(check-sat)")
 
-    smt = b"\n".join(ctx.defs.values()) + ctx.out
+    smt = b"\n".join(ctx.defs.values()) + b"\n" + ctx.out
+    print(smt.decode())
     p = Popen(["z3", "-model", "/dev/stdin"], stdin=PIPE, stdout=PIPE, stderr=PIPE)
     out, err = p.communicate(smt)
     outs = out.decode().split("\n", 1)

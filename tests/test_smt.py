@@ -11,6 +11,7 @@ from smt import (
     explode_bytes,
 )
 from smt2._analysis import ParsedCase, PreCase
+from smt2._bitvector import rewrite as rewrite_bitvector
 from smt2._core import Distinct, Not, Symbol, check
 from smt2._core import rewrite as rewrite_constraint
 
@@ -43,7 +44,16 @@ def test_simple_rewrite():
 
 @pytest.mark.parametrize("case", PreCase.from_function(rewrite_constraint))
 def test_rewrite_constraint(case: PreCase):
-    ctx = ParsedCase(case)
+    ctx = ParsedCase(case, None)
     for term1, subctx in ctx.parse_pattern():
         term2 = subctx.parse_body()
-        assert not check(Distinct(term1, term2), *subctx.constraints)
+        subctx.check(term1, term2)
+
+
+@pytest.mark.parametrize("case", PreCase.from_function(rewrite_bitvector))
+def test_rewrite_bitvector(case: PreCase):
+    for width in range(1, 65):
+        ctx = ParsedCase(case, width)
+        for term1, subctx in ctx.parse_pattern():
+            term2 = subctx.parse_body()
+            subctx.check(term1, term2)

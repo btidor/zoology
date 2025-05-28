@@ -8,15 +8,22 @@ import copy
 import inspect
 from typing import Any, Callable, NewType, Self
 
-from ._core import Constraint, Eq, Not, Symbol, Value, __dict__ as coredef
+from ._bitvector import BitVector
+from ._core import Symbolic, Constraint, Eq, check
+from . import _core as core  # pyright: ignore[reportPrivateUsage]
+from . import _bitvector as bitvector  # pyright: ignore[reportPrivateUsage]
 
-# During analysis, all values are symbolic (type Constraint). This includes
-# values that are symbolic at runtime (e.g. Not(...)) and those that are
-# instances of concrete Python types (e.g. True). We want to be explicit about
-# which context we're operating in, and these type wrappers force us to convert
-# between the two explicitly.
-SymbolicType = NewType("SymbolicType", Constraint)
-PythonType = NewType("PythonType", Constraint)
+
+# During analysis, all values are symbolic (type Constraint, etc.). This
+# includes values that are symbolic at runtime (e.g. Not(...)) and those that
+# are instances of concrete Python types (e.g. True). We want to be explicit
+# about which context we're operating in, and these type wrappers force us to
+# convert between the two explicitly.
+PythonType = NewType("PythonType", Symbolic)
+SymbolicType = NewType("SymbolicType", Symbolic)
+
+# When handling Python ints, assume they fit in a fixed (large) number of bytes.
+MAX_WIDTH = 128
 
 
 class PreCase:
@@ -53,15 +60,30 @@ class PreCase:
 
 
 class ParsedCase:
-    def __init__(self, pre: PreCase) -> None:
+    def __init__(self, pre: PreCase, width: int | None) -> None:
         self.case = pre.case
-        self.constraints = list[Constraint]()
-        self.svars = dict[str, SymbolicType]()
+        self.guard = None
+        self.assertions = list[Constraint]()
         self.pyvars = dict[str, PythonType]()
+        self.svars = dict[str, SymbolicType]()
+        self.width = width
+        if width is not None:
+            assert width < MAX_WIDTH
+            self.pyvars["width"] = PythonType(bitvector.Value(width, MAX_WIDTH))
         for stmt in pre.prefix:
             self.assign(stmt)
 
-    def parse_pattern(self) -> list[tuple[Constraint, Self]]:
+    def check(self, term1: Symbolic, term2: Symbolic) -> None:
+        goal = Eq(term1, term2)
+        for a in self.assertions:
+            goal = core.And(goal, a)
+
+        if self.guard is None:
+            assert not check(core.Not(goal))
+        else:
+            assert not check(core.Not(goal), self.guard)
+
+    def parse_pattern(self) -> list[tuple[Symbolic, Self]]:
         match self.case.pattern:
             case ast.MatchAs(None, None):  # terminal `case _:`
                 patterns = [ast.MatchAs(None, "term")]
@@ -69,7 +91,7 @@ class ParsedCase:
                 pass
             case pattern:
                 patterns = [pattern]
-        res = list[tuple[Constraint, Self]]()
+        res = list[tuple[Symbolic, Self]]()
         for pattern in patterns:
             ctx = copy.deepcopy(self)
             term = ctx.match(pattern)  # may define new vars!
@@ -80,7 +102,12 @@ class ParsedCase:
                     # If two trees are equal, then the symbolic expressions must
                     # be equal. (Note: this is only safe to do in a guard, not
                     # in the general expr parser).
-                    ctx.constraints.append(Eq(ctx.sexpr(left), ctx.sexpr(right)))
+                    try:
+                        ctx.guard = Eq(ctx.sexpr(left), ctx.sexpr(right))
+                    except KeyError:
+                        # We might want to compare svars or pyvars, but not
+                        # both...
+                        ctx.guard = Eq(ctx.pyexpr(left), ctx.pyexpr(right))
                 case ast.Compare(left, [ast.NotEq()], [right]):
                     # If two trees are unequal, then the symbolic expressions
                     # may be equal or not, we don't know!
@@ -90,7 +117,7 @@ class ParsedCase:
             res.append((term, ctx))
         return res
 
-    def parse_body(self) -> Constraint:
+    def parse_body(self) -> Symbolic:
         for stmt in self.case.body[:-1]:
             self.assign(stmt)
         match self.case.body[-1]:
@@ -103,24 +130,40 @@ class ParsedCase:
         match pattern:
             case ast.MatchAs(_, str() as name):
                 assert name not in self.pyvars
-                self.svars[name] = SymbolicType(Symbol(name.encode()))
+                if self.width is None:
+                    sym = core.Symbol(name.encode())
+                else:
+                    sym = bitvector.Symbol(name.encode(), self.width)
+                self.svars[name] = SymbolicType(sym)
                 return self.svars[name]
             case ast.MatchClass(ast.Name("Symbol")):
                 raise SyntaxError("Symbol is not supported")
             case ast.MatchClass(ast.Name("Value"), patterns):
                 match patterns:
                     case [ast.MatchSingleton(bool() as b)]:
-                        return SymbolicType(Value(b))
+                        return SymbolicType(core.Value(b))
+                    case [ast.MatchValue(ast.Constant(int() as i))]:
+                        assert self.width is not None
+                        assert 0 <= i < (1 << self.width)
+                        return SymbolicType(bitvector.Value(i, self.width))
                     case [ast.MatchAs(_, str() as name)]:
                         # Value(...) converts an inner Python type to an outer
                         # symbolic type.
                         assert name not in self.svars
-                        self.pyvars[name] = PythonType(Symbol(name.encode()))
-                        return SymbolicType(self.pyvars[name])
+                        if self.width is None:
+                            self.pyvars[name] = PythonType(core.Symbol(name.encode()))
+                            return SymbolicType(self.pyvars[name])
+                        else:
+                            sym = bitvector.Symbol(name.encode(), self.width)
+                            self.pyvars[name] = PythonType(
+                                bitvector.ZeroExtend(MAX_WIDTH - self.width, sym)
+                            )
+                            return SymbolicType(sym)
                     case _:
                         raise TypeError(f"unexpected match on Value(...)", patterns)
             case ast.MatchClass(ast.Name(name), patterns):
-                return coredef[name](*(self.match(p) for p in patterns))
+                d = core.__dict__ if self.width is None else bitvector.__dict__
+                return d[name](*(self.match(p) for p in patterns))
             case _:
                 raise NotImplementedError(pattern)
 
@@ -131,32 +174,91 @@ class ParsedCase:
             case _:
                 raise SyntaxError("expected assignment")
 
-    def sexpr(self, expr: ast.expr) -> SymbolicType:
-        match expr:
-            case ast.Name(name):
-                return self.svars[name]
-            case ast.Call(ast.Name("Symbol")):
-                raise SyntaxError("Symbol is not supported")
-            case ast.Call(ast.Name("Value"), [arg]):
-                # Value(...) converts an inner Python type to an outer symbolic
-                # type.
-                return SymbolicType(self.pyexpr(arg))
-            case ast.Call(ast.Name(name), args):  # Not(...), etc.
-                return coredef[name](*(self.sexpr(a) for a in args))
-            case _:
-                raise NotImplementedError(expr)
+    def check_size(self, bv: BitVector[int]) -> Constraint:
+        assert self.width is not None
+        return bitvector.Ult(
+            bv,
+            bitvector.Value(1 << self.width, MAX_WIDTH),
+        )
 
     def pyexpr(self, expr: ast.expr) -> PythonType:
         match expr:
             case ast.Name(name):
                 return self.pyvars[name]
             case ast.Constant(bool() as b):
-                return PythonType(Value(b))
+                return PythonType(core.Value(b))
+            case ast.Constant(int() as i):
+                return PythonType(bitvector.Value(i, MAX_WIDTH))
             case ast.UnaryOp(op, operand):
+                operand = self.pyexpr(operand)
                 match op:
                     case ast.Not():
-                        return PythonType(Not(self.pyexpr(operand)))
+                        assert isinstance(operand, Constraint)
+                        return PythonType(core.Not(operand))
                     case _:
                         raise NotImplementedError(op)
+            case ast.BinOp(left, op, right):
+                left, right = self.pyexpr(left), self.pyexpr(right)
+                assert isinstance(left, BitVector)
+                assert isinstance(right, BitVector)
+                match op:
+                    case ast.Add():
+                        return PythonType(bitvector.Add[int](left, right))
+                    case ast.Sub():
+                        return PythonType(bitvector.Sub[int](left, right))
+                    case ast.Mod():
+                        return PythonType(bitvector.Smod[int](left, right))
+                    case ast.BitAnd():
+                        self.assertions.extend(
+                            (self.check_size(left), self.check_size(right))
+                        )
+                        return PythonType(bitvector.And[int](left, right))
+                    case ast.BitOr():
+                        self.assertions.extend(
+                            (self.check_size(left), self.check_size(right))
+                        )
+                        return PythonType(bitvector.Or[int](left, right))
+                    case ast.BitXor():
+                        self.assertions.extend(
+                            (self.check_size(left), self.check_size(right))
+                        )
+                        return PythonType(bitvector.Xor[int](left, right))
+                    case ast.LShift():
+                        self.assertions.extend(
+                            (self.check_size(left), self.check_size(right))
+                        )
+                        return PythonType(bitvector.Shl[int](left, right))
+                    case _:
+                        raise NotImplementedError(op)
+            case _:
+                raise NotImplementedError(expr)
+
+    def sexpr(self, expr: ast.expr) -> SymbolicType:
+        match expr:
+            case ast.Name(name):
+                return self.svars[name]
+            case ast.Call(ast.Name("Symbol")):
+                raise SyntaxError("Symbol is not supported")
+            case ast.Call(ast.Name("Value"), args):
+                # Value(...) converts an inner Python type to an outer symbolic
+                # type.
+                if self.width is None:
+                    assert len(args) == 1
+                    return SymbolicType(self.pyexpr(args[0]))
+                else:
+                    assert len(args) == 2
+                    # No width-changing operations for now...
+                    assert isinstance(args[1], ast.Name) and args[1].id == "width"
+                    inner = self.pyexpr(args[0])
+                    assert isinstance(inner, BitVector)
+                    self.assertions.append(self.check_size(inner))
+                    return SymbolicType(
+                        bitvector.Extract[int](self.width - 1, 0, inner)
+                    )
+            case ast.Call(ast.Name(name), args):  # Not(...), etc.
+                d = core.__dict__ if self.width is None else bitvector.__dict__
+                return d[name](*(self.sexpr(a) for a in args))
+            case ast.BinOp(a, b, c):
+                raise NotImplementedError(a, b, c)
             case _:
                 raise NotImplementedError(expr)
