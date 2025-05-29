@@ -39,6 +39,11 @@ class Casette:
         """Create a new ThinCase."""
         self.case = case
         self.prefix = prefix
+        match case.body:
+            case [ast.Expr(ast.Constant(str() as s)), *_]:
+                self.id = s.split(":")[0]
+            case _:
+                raise SyntaxError("every case should begin with a docstring")
 
     @classmethod
     def from_function(cls, fn: Callable[..., Any]) -> list[Self]:
@@ -61,7 +66,8 @@ class Casette:
                 raise SyntaxError("unexpected function signature")
 
         # Expected format: zero or more variable assignments (to be parsed
-        # later), followed by a single match statement.
+        # later), followed by a single match statement. Each case in the match
+        # statement should begin with a docstring.
         match body[-1]:
             case ast.Match(ast.Name("term"), cases):
                 return [cls(c, body[:-1]) for c in cases]
@@ -157,11 +163,17 @@ class CaseParser:
         i.e. the rewritten term.
         """
         assert self.term1 and self.guard and not self.term2, "out of order"
-        match self.case.body[-1]:
-            case ast.Return(ast.expr() as expr):
-                self.term2 = self._sexpr(expr)
-            case _:
-                raise SyntaxError("expected trailing return")
+        for stmt in self.case.body:
+            match stmt:
+                case ast.Expr(ast.Constant(str())):
+                    pass  # skip docstring
+                case ast.Return(ast.expr() as expr):
+                    self.term2 = self._sexpr(expr)
+                    return
+                case _:
+                    raise NotImplementedError("unknown statement", stmt)
+        else:
+            raise SyntaxError("expected trailing return")
 
     def equivalent(self) -> bool:
         """Step Four: check equivalence."""

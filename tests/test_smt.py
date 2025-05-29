@@ -1,5 +1,7 @@
 #!/usr/bin/env pytest
 
+from typing import Any, Callable
+
 import pytest
 
 from bytes import Bytes
@@ -42,25 +44,36 @@ def test_simple_rewrite():
     assert not check(Distinct(term1, term2))
 
 
-@pytest.mark.parametrize("case", Casette.from_function(rewrite_constraint))
-def test_rewrite_constraint(case: Casette):
-    _check_case(CaseParser(case, None))
+# SMT Test for Rewrite Rules
+
+MAX_WIDTH = 65
 
 
-@pytest.mark.parametrize("case", Casette.from_function(rewrite_bitvector))
-def test_rewrite_bitvector(case: Casette):
-    for width in range(1, 65):
-        _check_case(CaseParser(case, width))
-
-
-@pytest.mark.parametrize("case", Casette.from_function(rewrite_mixed))
-def test_rewrite_mixed(case: Casette):
-    for width in range(1, 65):
-        _check_case(CaseParser(case, width))
-
-
-def _check_case(ctx: CaseParser) -> None:
+def check_case(ctx: CaseParser) -> None:
     for ctx in ctx.parse_pattern():
         ctx.parse_guard()
         ctx.parse_body()
         assert ctx.equivalent()
+
+
+def parameterize(rw: Callable[..., Any]) -> Any:
+    return pytest.mark.parametrize(
+        "case", map(lambda c: pytest.param(c, id=c.id), Casette.from_function(rw))
+    )
+
+
+@parameterize(rewrite_constraint)
+def test_rewrite_constraint(case: Casette):
+    check_case(CaseParser(case, None))
+
+
+@parameterize(rewrite_bitvector)
+def test_rewrite_bitvector(case: Casette):
+    for width in range(1, MAX_WIDTH):
+        check_case(CaseParser(case, width))
+
+
+@parameterize(rewrite_mixed)
+def test_rewrite_mixed(case: Casette):
+    for width in range(1, MAX_WIDTH):
+        check_case(CaseParser(case, width))
