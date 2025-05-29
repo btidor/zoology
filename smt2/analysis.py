@@ -234,24 +234,30 @@ class CaseParser:
                 args = list[SymbolicType]()
                 for field, pattern in zip(fields(cls), patterns, strict=True):
                     if field.type == "Constraint":
-                        subsort = ConstraintSort()
-                    elif field.type == "BitVector[N]":
+                        arg = self._match(pattern, ConstraintSort())
+                    elif field.type == "BitVector[N]" or field.type == "BitVector[int]":
                         assert isinstance(sort, BitVectorSort)
-                        subsort = sort
+                        arg = self._match(pattern, sort)
                     elif field.type == "S":
                         # When matching a generic field, check if an explicit
                         # class was given in the case pattern.
                         match pattern:
                             case ast.MatchAs(ast.MatchClass(ast.Name("Constraint"))):
-                                subsort = ConstraintSort()
+                                arg = self._match(pattern, ConstraintSort())
                             case ast.MatchAs(ast.MatchClass(ast.Name("BitVector"))):
                                 assert isinstance(self.sort, BitVectorSort)
-                                subsort = self.sort
+                                arg = self._match(pattern, self.sort)
                             case _:
-                                subsort = sort
+                                arg = self._match(pattern, sort)
+                    elif field.type == "int":
+                        match pattern:
+                            case ast.MatchValue(ast.Constant(k)):
+                                arg = k
+                            case _:
+                                raise NotImplementedError("unknown constant", pattern)
                     else:
                         raise NotImplementedError("unknown field type", field.type)
-                    args.append(self._match(pattern, subsort))
+                    args.append(arg)
                 return cls(*args)
 
     def _pyexpr(self, expr: ast.expr) -> PythonType:
@@ -342,6 +348,8 @@ class CaseParser:
         match expr, self.sort:
             case ast.Name(name), _:
                 return self.svars[name]
+            case ast.Call(ast.Name("cast"), [_, arg]), _:
+                return self._sexpr(arg)  # ignore casts
             case ast.Call(ast.Name("Symbol")), _:
                 raise SyntaxError("Symbol is not supported")
             case (ast.Call(ast.Name("Value"), args), ConstraintSort()) | (

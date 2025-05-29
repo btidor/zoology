@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 from . import core
 from .bv import (
     Add,
@@ -18,6 +20,7 @@ from .bv import (
     Sge,
     Sgt,
     Shl,
+    SignExtend,
     Sle,
     Slt,
     Sub,
@@ -30,6 +33,7 @@ from .bv import (
     Value,
     Xnor,
     Xor,
+    ZeroExtend,
 )
 from .core import Constraint
 
@@ -123,6 +127,10 @@ def rewrite_bitvector[N: int](term: BitVector[N], width: N) -> BitVector[N]:
             return Lshr(x, Value(a + b, width))
         case Lshr(x, Value(val)) if val >= width:
             return Value(0, width)
+        case ZeroExtend(0, x):
+            return cast(BitVector[N], x)
+        case SignExtend(0, x):
+            return cast(BitVector[N], x)
         # Core generics
         case Ite(core.Value(True), x, y):  # True ? X : Y <=> X
             return x
@@ -130,6 +138,15 @@ def rewrite_bitvector[N: int](term: BitVector[N], width: N) -> BitVector[N]:
             return y
         case Ite(_, x, y) if x == y:  # C ? X : X <=> X
             return x
+        # Push boolean expressions down over ITEs
+        case Not(Ite(c, x, y)):
+            return Ite(c, Not(x), Not(y))
+        case And(Ite(c, x, y), z) | And(z, Ite(c, x, y)):
+            return Ite(c, And(x, z), And(y, z))
+        case Or(Ite(c, x, y), z) | Or(z, Ite(c, x, y)):
+            return Ite(c, Or(x, z), Or(y, z))
+        case Xor(Ite(c, x, y), z) | Xor(z, Ite(c, x, y)):
+            return Ite(c, Xor(x, z), Xor(y, z))
         case other:
             return other
 
