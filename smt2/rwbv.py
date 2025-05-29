@@ -1,11 +1,14 @@
 """Term-rewriting rules for the theory of bitvectors."""
 
+from __future__ import annotations
+
 from . import core
 from .bv import (
     Add,
     And,
     BitVector,
     Ite,
+    Lshr,
     Mul,
     Nand,
     Neg,
@@ -14,6 +17,7 @@ from .bv import (
     Or,
     Sge,
     Sgt,
+    Shl,
     Sle,
     Slt,
     Sub,
@@ -106,6 +110,19 @@ def rewrite_bitvector[N: int](term: BitVector[N], width: N) -> BitVector[N]:
             return Add(Not(x), Value(1, width))
         case Sub(x, y):  # X - Y <=> X + ~Y + 1
             return Add(Add(x, Not(y)), Value(1, width))
+        # Bit-shifting
+        case Shl(Value(a), Value(b)):
+            return Value((a << b) % modulus, width)
+        case Shl(x, Value(val)) if val >= width:
+            return Value(0, width)
+        case Shl(Shl(x, Value(a)), Value(b)) if a < width and b < width:
+            return Shl(x, Value(a + b, width))
+        case Lshr(Value(a), Value(b)):
+            return Value((a >> b) % modulus, width)
+        case Lshr(Lshr(x, Value(a)), Value(b)) if a < width and b < width:
+            return Lshr(x, Value(a + b, width))
+        case Lshr(x, Value(val)) if val >= width:
+            return Value(0, width)
         # Core generics
         case Ite(core.Value(True), x, y):  # True ? X : Y <=> X
             return x
@@ -117,8 +134,9 @@ def rewrite_bitvector[N: int](term: BitVector[N], width: N) -> BitVector[N]:
             return other
 
 
-def rewrite_mixed(term: Constraint) -> Constraint:
+def rewrite_mixed(term: Constraint, width: int) -> Constraint:
     """Simplify the given bitvector-containing constraint."""
+    mask = (1 << width) - 1
     match term:
         # Core generics
         case core.Eq(Value(a), Value(b)):
@@ -129,13 +147,46 @@ def rewrite_mixed(term: Constraint) -> Constraint:
             x == y
         ):
             return core.Value(False)
+        case core.Eq(Value(a), Not(x)) | core.Eq(Not(x), Value(a)):
+            return core.Eq(Value(mask ^ a, width), x)
+        case (
+            core.Eq(Value(a), And(x, Value(b)))
+            | core.Eq(Value(a), And(Value(b), x))
+            | core.Eq(And(x, Value(b)), Value(a))
+            | core.Eq(And(Value(b), x), Value(a))
+        ) if a & (b ^ mask) != 0:
+            return core.Value(False)
+        case (
+            core.Eq(Value(a), Or(x, Value(b)))
+            | core.Eq(Value(a), Or(Value(b), x))
+            | core.Eq(Or(x, Value(b)), Value(a))
+            | core.Eq(Or(Value(b), x), Value(a))
+        ) if (a ^ mask) & b != 0:
+            return core.Value(False)
+        case (
+            core.Eq(Value(a), Xor(x, Value(b)))
+            | core.Eq(Value(a), Xor(Value(b), x))
+            | core.Eq(Xor(x, Value(b)), Value(a))
+            | core.Eq(Xor(Value(b), x), Value(a))
+        ):
+            return core.Eq(Value(a ^ b, width), x)
         case core.Distinct(BitVector() as x, BitVector() as y):
             return core.Not(core.Eq(x, y))
         # BitVector-specific comparators
         case Ult(Value(a), Value(b)):
             return core.Value(a < b)
+        case Ult(x, Value(0)):  # X < 0 <=> False
+            return core.Value(False)
+        case Ult(Value(0), x):  # 0 < X <=> X != 0
+            return core.Distinct(x, Value(0, width))
+        case Ult(x, Value(1)):  # X < 1 <=> X = 0
+            return core.Eq(x, Value(0, width))
         case Ule(Value(a), Value(b)):
             return core.Value(a <= b)
+        case Ule(x, Value(0)):  # X <= 0 <=> X = 0
+            return core.Eq(x, Value(0, width))
+        case Ule(Value(0), x):  # 0 <= X <=> True
+            return core.Value(True)
         case Ugt(x, y):
             return Ult[int](y, x)
         case Uge(x, y):

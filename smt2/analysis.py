@@ -131,24 +131,23 @@ class CaseParser:
         match self.case.guard:
             case None:
                 self.guard = core.Value(True)
-            case ast.Compare(ast.Name(name), [op], [right]):
-                if name in self.svars:  # comparing symbolic types (special!)
-                    if isinstance(op, ast.Eq):
-                        # If two ASTs are equal, the expressions must be equal.
-                        # Note: the opposite is not true, and this substitution
-                        # may not be safe in other contexts.
-                        self.guard = Eq(self.svars[name], self._sexpr(right))
-                    else:
-                        # Note: it's unsafe to implement != because if two ASTs
-                        # are distinct, that tells us nothing about whether or
-                        # not the expressions are equal.
-                        raise SyntaxError("unsupported op")
-                else:  # comparing Python types, proceed as usual
-                    expr = self._pyexpr(self.case.guard)
-                    assert isinstance(expr, Constraint)
-                    self.guard = expr
-            case other:
-                raise NotImplementedError("unsupported guard", other)
+            case ast.Compare(ast.Name(name), [ast.Eq()], [right]) if name in self.svars:
+                # Comparing symbolic types (special!). If two ASTs are
+                # equal, the expressions must be equal.
+                #
+                # Note: the opposite is not true, and this substitution may
+                # not be safe in other contexts.
+                #
+                # Note: it's unsafe to implement != because if two ASTs are
+                # distinct, that tells us nothing about whether or not the
+                # expressions are equal.
+                #
+                self.guard = Eq(self.svars[name], self._sexpr(right))
+            case normal:
+                # Assume we're comparing Python types, proceed as usual.
+                expr = self._pyexpr(normal)
+                assert isinstance(expr, Constraint)
+                self.guard = expr
 
     def parse_body(self) -> None:
         """
@@ -274,8 +273,7 @@ class CaseParser:
                         raise NotImplementedError(op)
             case ast.BinOp(left, op, right):
                 left, right = self._pyexpr(left), self._pyexpr(right)
-                assert isinstance(left, BitVector)
-                assert isinstance(right, BitVector)
+                assert isinstance(left, BitVector) and isinstance(right, BitVector)
                 rnonzero = Distinct(right, ZERO)
                 nonneg = core.And(bv.Sge(left, ZERO), bv.Sge(right, ZERO))
                 match op:
@@ -303,12 +301,14 @@ class CaseParser:
                     case ast.LShift():
                         self.assertions.append(nonneg)  # else incorrect result
                         return PythonType(bv.Shl[int](left, right))
+                    case ast.RShift():
+                        self.assertions.append(nonneg)  # else incorrect result
+                        return PythonType(bv.Lshr[int](left, right))
                     case _:
                         raise NotImplementedError(op)
             case ast.Compare(left, [op], [right]):
                 left, right = self._pyexpr(left), self._pyexpr(right)
-                assert isinstance(left, BitVector)
-                assert isinstance(right, BitVector)
+                assert isinstance(left, BitVector) and isinstance(right, BitVector)
                 match op:
                     case ast.Eq():
                         return PythonType(Eq(left, right))
@@ -318,6 +318,20 @@ class CaseParser:
                         return PythonType(bv.Slt[int](left, right))
                     case ast.LtE():
                         return PythonType(bv.Sle[int](left, right))
+                    case ast.Gt():
+                        return PythonType(bv.Sgt[int](left, right))
+                    case ast.GtE():
+                        return PythonType(bv.Sge[int](left, right))
+                    case _:
+                        raise NotImplementedError(op)
+            case ast.BoolOp(op, [left, right]):
+                left, right = self._pyexpr(left), self._pyexpr(right)
+                assert isinstance(left, Constraint) and isinstance(right, Constraint)
+                match op:
+                    case ast.And():
+                        return PythonType(core.And(left, right))
+                    case ast.Or():
+                        return PythonType(core.Or(left, right))
                     case _:
                         raise NotImplementedError(op)
             case _:

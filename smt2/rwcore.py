@@ -1,5 +1,7 @@
 """Term-rewriting rules for the core theory."""
 
+from __future__ import annotations
+
 from .core import (
     And,
     Constraint,
