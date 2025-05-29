@@ -1,22 +1,36 @@
 """Term-rewriting rules for the theory of bitvectors."""
 
+from . import core
 from .bv import (
     Add,
     And,
     BitVector,
+    Ite,
     Mul,
     Nand,
     Neg,
     Nor,
     Not,
     Or,
+    Sge,
+    Sgt,
+    Sle,
+    Slt,
     Sub,
     Udiv,
+    Uge,
+    Ugt,
+    Ule,
+    Ult,
     Urem,
     Value,
     Xnor,
     Xor,
 )
+from .core import Constraint
+
+# pyright: reportUnknownArgumentType=false
+# pyright: reportUnknownVariableType=false
 
 
 def rewrite_bitvector[N: int](term: BitVector[N], width: N) -> BitVector[N]:
@@ -92,5 +106,43 @@ def rewrite_bitvector[N: int](term: BitVector[N], width: N) -> BitVector[N]:
             return Add(Not(x), Value(1, width))
         case Sub(x, y):  # X - Y <=> X + ~Y + 1
             return Add(Add(x, Not(y)), Value(1, width))
-        case _:
-            return term
+        # Core generics
+        case Ite(core.Value(True), x, y):  # True ? X : Y <=> X
+            return x
+        case Ite(core.Value(False), x, y):  # False ? X : Y <=> Y
+            return y
+        case Ite(_, x, y) if x == y:  # C ? X : X <=> X
+            return x
+        case other:
+            return other
+
+
+def rewrite_mixed(term: Constraint) -> Constraint:
+    """Simplify the given bitvector-containing constraint."""
+    match term:
+        # Core generics
+        case core.Eq(Value(a), Value(b)):
+            return core.Value(a == b)
+        case core.Eq(BitVector() as x, BitVector() as y) if x == y:
+            return core.Value(True)
+        case core.Eq(BitVector() as x, Not(y)) | core.Eq(Not(y), BitVector() as x) if (
+            x == y
+        ):
+            return core.Value(False)
+        case core.Distinct(BitVector() as x, BitVector() as y):
+            return core.Not(core.Eq(x, y))
+        # BitVector-specific comparators
+        case Ult(Value(a), Value(b)):
+            return core.Value(a < b)
+        case Ule(Value(a), Value(b)):
+            return core.Value(a <= b)
+        case Ugt(x, y):
+            return Ult[int](y, x)
+        case Uge(x, y):
+            return Ule[int](y, x)
+        case Sgt(x, y):
+            return Slt[int](y, x)
+        case Sge(x, y):
+            return Sle[int](y, x)
+        case other:
+            return other

@@ -11,8 +11,8 @@ from smt import (
     explode_bytes,
 )
 from smt2.analysis import CaseParser, Casette
-from smt2.core import And, Distinct, Eq, Not, Symbol, check
-from smt2.rwbv import rewrite_bitvector
+from smt2.core import Distinct, Not, Symbol, check
+from smt2.rwbv import rewrite_bitvector, rewrite_mixed
 from smt2.rwcore import rewrite_constraint
 
 
@@ -53,13 +53,14 @@ def test_rewrite_bitvector(case: Casette):
         _check_case(CaseParser(case, width))
 
 
+@pytest.mark.parametrize("case", Casette.from_function(rewrite_mixed))
+def test_rewrite_mixed(case: Casette):
+    for width in range(1, 65):
+        _check_case(CaseParser(case, width))
+
+
 def _check_case(ctx: CaseParser) -> None:
-    for term1, ctx in ctx.parse_pattern():
-        term2 = ctx.parse_body()
-        goal = Eq(term1, term2)
-        for a in ctx.assertions:
-            goal = And(goal, a)
-        if ctx.guard is None:
-            assert not check(Not(goal))
-        else:
-            assert not check(Not(goal), ctx.guard)
+    for ctx in ctx.parse_pattern():
+        ctx.parse_guard()
+        ctx.parse_body()
+        assert ctx.equivalent()

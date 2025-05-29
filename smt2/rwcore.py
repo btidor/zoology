@@ -59,5 +59,5 @@ def rewrite_constraint(term: Constraint) -> Constraint:
             return y
         case Ite(_, x, y) if x == y:  # C ? X : X <=> X
             return x
-        case _:
-            return term
+        case other:
+            return other
