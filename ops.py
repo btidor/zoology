@@ -19,7 +19,6 @@ from smt import (
     Uint256,
     Uint257,
     Uint512,
-    concat_bytes,
     overflow_safe,
     substitute,
 )
@@ -237,7 +236,7 @@ def CALLVALUE(s: State) -> Uint256:
 
 def CALLDATALOAD(s: State, i: Uint256) -> Uint256:
     """35 - Get input data of current environment."""
-    return concat_bytes(*[s.transaction.calldata[i + Uint256(j)] for j in range(32)])
+    return Uint256.concat(*[s.transaction.calldata[i + Uint256(j)] for j in range(32)])
 
 
 def CALLDATASIZE(s: State) -> Uint256:
@@ -376,7 +375,7 @@ def POP(y: Uint256) -> None:
 
 def MLOAD(s: State, offset: Uint256) -> Uint256:
     """51 - Load word from memory."""
-    return concat_bytes(*[s.memory[offset + Uint256(i)] for i in range(32)])
+    return Uint256.concat(*[s.memory[offset + Uint256(i)] for i in range(32)])
 
 
 def MSTORE(s: State, offset: Uint256, value: Uint256) -> None:

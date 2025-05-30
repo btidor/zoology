@@ -26,6 +26,7 @@ class Symbol[N: int](BitVector[N]):
     name: bytes
     width: N
 
+    @override
     def dump(self, ctx: DumpContext) -> None:
         ctx.add(
             self.name,
@@ -42,6 +43,7 @@ class Value[N: int](BitVector[N]):
     def __post_init__(self):
         assert 0 <= self.value < (1 << self.width)
 
+    @override
     def dump(self, ctx: DumpContext) -> None:
         if self.width % 8 == 0:
             ctx.write(b"#x" + self.value.to_bytes(self.width // 8).hex().encode())
@@ -78,8 +80,15 @@ class SingleParamOp[N: int](BitVector[N]):
 
 @dataclass(frozen=True, slots=True)
 class Concat[N: int](BitVector[N]):
-    op: ClassVar[bytes] = b"concat"
     terms: tuple[BitVector[int], ...]
+
+    @override
+    def dump(self, ctx: DumpContext) -> None:
+        ctx.write(b"(concat")
+        for term in self.terms:
+            ctx.write(b" ")
+            term.dump(ctx)
+        ctx.write(b")")
 
 
 @dataclass(frozen=True, slots=True)

@@ -5,13 +5,7 @@ from typing import Any, Callable
 import pytest
 
 from bytes import Bytes
-from smt import (
-    Array,
-    Uint8,
-    Uint256,
-    concat_bytes,
-    explode_bytes,
-)
+from smt import Array, Uint8, Uint256
 from smt2.analysis import CaseParser, Casette
 from smt2.core import Distinct, Not, Symbol, check
 from smt2.rwbv import rewrite_bitvector, rewrite_mixed
@@ -25,8 +19,8 @@ def test_bvlshr_harder():
     assert (Uint256(0x1234) >> Uint256(257)).reveal() == 0
 
     a = Array[Uint256, Uint256]("BVLSHR0")
-    b = Bytes(explode_bytes(a[Uint256(0)]))
-    q = concat_bytes(
+    b = Bytes(Uint8.explode(a[Uint256(0)]))
+    q = Uint256.concat(
         Uint8(0x12),
         Uint8(0x34),
         Uint8(0x56),

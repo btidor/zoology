@@ -29,11 +29,12 @@ class Symbol[K: int, V: int](Array[K, V]):
     key: K
     value: V
 
+    @override
     def dump(self, ctx: DumpContext) -> None:
         ctx.add(
             self.name,
             (
-                b"(declare-fun %s () (_ Array (_ BitVec %d) (_ BitVec %d)))"
+                b"(declare-fun %s () (Array (_ BitVec %d) (_ BitVec %d)))"
                 % (self.name, self.key, self.value)
             ),
         )
@@ -46,6 +47,7 @@ class Value[K: int, V: int](Array[K, V]):
     key: K
     value: V
 
+    @override
     def dump(self, ctx: DumpContext) -> None:
         ctx.write(
             b"((_ as const (Array (_ BitVec %d) (_ BitVec %d)))"

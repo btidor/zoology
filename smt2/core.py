@@ -97,10 +97,7 @@ class Constraint(Symbolic):
 class Symbol(Constraint):
     name: bytes
 
-    @property
-    def code(self) -> bytes:
-        raise NotImplementedError
-
+    @override
     def dump(self, ctx: DumpContext) -> None:
         ctx.add(self.name, (b"(declare-fun %s () Bool)" % self.name))
         ctx.out.extend(self.name)
@@ -110,10 +107,7 @@ class Symbol(Constraint):
 class Value(Constraint):
     value: bool
 
-    @property
-    def code(self) -> bytes:
-        raise NotImplementedError
-
+    @override
     def dump(self, ctx: DumpContext) -> None:
         ctx.out.extend(b"true" if self.value else b"false")
 

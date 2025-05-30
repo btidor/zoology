@@ -17,10 +17,6 @@ from smt import (
     Uint8,
     Uint128,
     Uint256,
-    concat_bytes,
-    iff,
-    implies,
-    prequal,
 )
 
 
@@ -78,24 +74,24 @@ class SHA3:
             # ASSUMPTION: every hash digest is distinct. This is SHA-3, there
             # are no collisions, ever. (We check free digests for collisions
             # during narrowing, when we can concretize the length.)
-            constraint &= iff(input.length == Uint256(0), digest == EMPTY_DIGEST)
+            constraint &= (input.length == Uint256(0)).implies(digest == EMPTY_DIGEST)
             for data, (_, digest2) in self.concrete.items():
-                constraint &= implies(
-                    input.length != Uint256(len(data)), digest != digest2
+                constraint &= (input.length != Uint256(len(data))).implies(
+                    digest != digest2
                 )
-                constraint &= implies(
-                    digest == digest2, input.length == Uint256(len(data))
+                constraint &= (digest == digest2).implies(
+                    input.length == Uint256(len(data))
                 )
             for vector2, digest2 in self.symbolic:
-                constraint &= implies(
-                    input.length != Uint256(vector2.width // 8), digest != digest2
+                constraint &= (input.length != Uint256(vector2.width // 8)).implies(
+                    digest != digest2,
                 )
-                constraint &= implies(
-                    digest == digest2, input.length == Uint256(vector2.width // 8)
+                constraint &= (digest == digest2).implies(
+                    input.length == Uint256(vector2.width // 8),
                 )
             for input2, digest2 in self.free[:-1]:
-                constraint &= implies(input.length != input2.length, digest != digest2)
-                constraint &= implies(digest == digest2, input.length == input2.length)
+                constraint &= (input.length != input2.length).implies(digest != digest2)
+                constraint &= (digest == digest2).implies(input.length == input2.length)
             return (digest, constraint)
         elif size == 0:
             # Case II: Empty Digest (zero length).
@@ -113,24 +109,24 @@ class SHA3:
             constraint &= digest != EMPTY_DIGEST
             for data, (vector2, digest2) in self.concrete.items():
                 if vector.width // 8 == len(data):
-                    constraint &= iff(vector == vector2, digest == digest2)
+                    constraint &= (vector == vector2).iff(digest == digest2)
                 else:
                     constraint &= digest != digest2
             for vector2, digest2 in self.symbolic[:-1]:
                 if vector.width == vector2.width:
-                    constraint &= iff(vector == vector2, digest == digest2)
+                    constraint &= (vector == vector2).iff(digest == digest2)
                 else:
                     constraint &= digest != digest2
             for input2, digest2 in self.free:
-                constraint &= implies(
-                    input2.length != Uint256(vector.width // 8), digest != digest2
+                constraint &= (input2.length != Uint256(vector.width // 8)).implies(
+                    digest != digest2
                 )
-                constraint &= implies(
-                    digest == digest2, input2.length == Uint256(vector.width // 8)
+                constraint &= (digest == digest2).implies(
+                    input2.length == Uint256(vector.width // 8)
                 )
                 for i in range(vector.width // 8):
-                    constraint &= implies(
-                        digest == digest2, input[Uint256(i)] == input2[Uint256(i)]
+                    constraint &= (digest == digest2).implies(
+                        input[Uint256(i)] == input2[Uint256(i)]
                     )
             return (digest, constraint)
         else:
@@ -141,19 +137,19 @@ class SHA3:
                 vector, digest = self.concrete[data]
                 for vector2, digest2 in self.symbolic:
                     if vector.width == vector2.width:
-                        constraint &= iff(vector == vector2, digest == digest2)
+                        constraint &= (vector == vector2).iff(digest == digest2)
                     else:
                         constraint &= digest != digest2
                 for input2, digest2 in self.free:
-                    constraint &= implies(
-                        input2.length != Uint256(len(data)), digest != digest2
+                    constraint &= (input2.length != Uint256(len(data))).implies(
+                        digest != digest2
                     )
-                    constraint &= implies(
-                        digest == digest2, input2.length == Uint256(len(data))
+                    constraint &= (digest == digest2).implies(
+                        input2.length == Uint256(len(data))
                     )
                     for i in range(len(data)):
-                        constraint &= implies(
-                            digest == digest2, input[Uint256(i)] == input2[Uint256(i)]
+                        constraint &= (digest == digest2).implies(
+                            input[Uint256(i)] == input2[Uint256(i)]
                         )
             return (self.concrete[data][1], constraint)
 
@@ -182,13 +178,13 @@ class SHA3:
         for i, ((key, digest), length) in enumerate(zip(self.free, lengths)):
             if length == 0:
                 continue  # handled with symbolic constraints
-            vector = concat_bytes(*(key[Uint256(i)] for i in range(length)))
+            vector = Uint8.concat(*(key[Uint256(i)] for i in range(length)))
             vectors.append(vector)
             for (key2, digest2), length2 in zip(self.free[i + 1 :], lengths[i + 1 :]):
                 if length != length2:
                     continue
-                vector2 = concat_bytes(*(key2[Uint256(i)] for i in range(length)))
-                solver.add(iff(vector == vector2, digest == digest2))
+                vector2 = Uint8.concat(*(key2[Uint256(i)] for i in range(length)))
+                solver.add((vector == vector2).iff(digest == digest2))
             if not solver.check():
                 raise NarrowingError(None)
 
@@ -196,7 +192,7 @@ class SHA3:
             if not (data := key.evaluate(solver)):
                 continue  # empty digest, handled in constraining
 
-            vector1 = concat_bytes(*(BYTES[b] for b in data))
+            vector1 = Uint8.concat(*(BYTES[b] for b in data))
             digest1 = concrete_hash(data)
 
             constraint = key.length == Uint256(len(data))
@@ -206,7 +202,7 @@ class SHA3:
 
             for vector2, digest2 in concretized:
                 if vector1.width == vector2.width:
-                    constraint &= iff(vector1 == vector2, digest1 == digest2)
+                    constraint &= (vector1 == vector2).iff(digest1 == digest2)
                 else:
                     constraint &= digest1 != digest2
 
@@ -216,3 +212,14 @@ class SHA3:
             concretized.append((vector1, digest1))
 
         return concretized
+
+
+def prequal[N: int](a: Uint[N], b: Uint[N]) -> bool:
+    """
+    Quickly check if two bitvectors are equal.
+
+    If the two nodes are equal after simplification, return True. Otherwise,
+    return False (they may still be equal, but that requires a call to the
+    solver to determine).
+    """
+    return (a == b).reveal() is True

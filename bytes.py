@@ -5,17 +5,7 @@ from __future__ import annotations
 import copy
 from typing import Any, ClassVar, Iterable, Self
 
-from smt import (
-    Array,
-    Solver,
-    Uint,
-    Uint8,
-    Uint64,
-    Uint256,
-    concat_bytes,
-    concat_words,
-    explode_bytes,
-)
+from smt import Array, Solver, Uint, Uint8, Uint64, Uint256
 
 type BytesWrite = tuple[Uint256, Uint8 | ByteSlice]
 
@@ -86,7 +76,7 @@ class Bytes:
         """Return a single, large bitvector of this instance's bytes."""
         if (n := self.length.reveal()) is None:
             raise ValueError("bigvector requires concrete length")
-        return concat_bytes(*(self[Uint256(i)] for i in range(n)))
+        return Uint8.concat(*(self[Uint256(i)] for i in range(n)))
 
     def describe(self, solver: Solver, prefix: int = 4) -> Iterable[str]:
         """Use a model to evaluate this instance as a hexadecimal string."""
@@ -152,7 +142,7 @@ class ByteSlice(Bytes):
                     words.append(self.inner.wordcache[i])
                 else:
                     return super().bigvector()
-            return concat_words(*words)
+            return Uint256.concat(*words)
         return super().bigvector()
 
 
@@ -229,7 +219,7 @@ class Memory:
             self.wordcache[i_] = v
         else:
             self.wordcache.clear()
-        for k, byte in enumerate(reversed(explode_bytes(v))):
+        for k, byte in enumerate(reversed(Uint8.explode(v))):
             n = i + Uint256(k)
             if len(self.writes) == 0:
                 self.array[n] = byte
