@@ -52,8 +52,9 @@ def check(*constraints: Constraint) -> bool:
             raise RuntimeError(out, err, smt)
 
 
+@dataclass(frozen=True, slots=True)
 class Symbolic(abc.ABC):
-    __slots__ = ()
+    op: ClassVar[bytes]
 
     # Instances of Symbolic are expected to be immutable:
     def __copy__(self) -> Self:
@@ -62,16 +63,32 @@ class Symbolic(abc.ABC):
     def __deepcopy__(self, memo: Any, /) -> Self:
         return self
 
-    @abc.abstractmethod
-    def dump(self, ctx: DumpContext) -> None: ...
+    def dump(self, ctx: DumpContext) -> None:
+        # 1. Determine Op
+        assert self.op
+        params = list[bytes]()
+        for name in self.__dataclass_fields__.keys():
+            v = self.__getattribute__(name)
+            if isinstance(v, int):
+                params.append(str(v).encode())
+        if params:
+            ctx.out.extend(b"((_ %b %s)" % (self.op, b" ".join(params)))
+        else:
+            ctx.out.extend(b"(%b" % self.op)
+        # 2. Dump Terms
+        for name in self.__dataclass_fields__.keys():
+            v = self.__getattribute__(name)
+            if isinstance(v, Symbolic):
+                ctx.out.extend(b" ")
+                v.dump(ctx)
+        ctx.out.extend(b")")
 
     @abc.abstractmethod
     def reveal(self) -> Any: ...
 
 
+@dataclass(frozen=True, slots=True)
 class Constraint(Symbolic):
-    __slots__ = ()
-
     def reveal(self) -> bool | None:
         return None
 
@@ -80,17 +97,25 @@ class Constraint(Symbolic):
 class Symbol(Constraint):
     name: bytes
 
+    @property
+    def code(self) -> bytes:
+        raise NotImplementedError
+
     def dump(self, ctx: DumpContext) -> None:
         ctx.add(self.name, (b"(declare-fun %s () Bool)" % self.name))
-        ctx.write(self.name)
+        ctx.out.extend(self.name)
 
 
 @dataclass(frozen=True, slots=True)
 class Value(Constraint):
     value: bool
 
+    @property
+    def code(self) -> bytes:
+        raise NotImplementedError
+
     def dump(self, ctx: DumpContext) -> None:
-        ctx.write(b"true" if self.value else b"false")
+        ctx.out.extend(b"true" if self.value else b"false")
 
     @override
     def reveal(self) -> bool | None:
@@ -98,87 +123,56 @@ class Value(Constraint):
 
 
 @dataclass(frozen=True, slots=True)
-class BinaryOp(Constraint):
-    op: ClassVar[bytes]
-    left: Constraint
-    right: Constraint
-
-    def dump(self, ctx: DumpContext) -> None:
-        assert self.op
-        ctx.write(b"(%b " % self.op)
-        self.left.dump(ctx)
-        ctx.write(b" ")
-        self.right.dump(ctx)
-        ctx.write(b")")
+class Not(Constraint):
+    op: ClassVar[bytes] = b"not"
+    term: Constraint
 
 
 @dataclass(frozen=True, slots=True)
-class Not(Constraint):
-    term: Constraint
-
-    def dump(self, ctx: DumpContext) -> None:
-        ctx.write(b"(not ")
-        self.term.dump(ctx)
-        ctx.write(b")")
-
-
-class Implies(BinaryOp):
-    __slots__ = ()
+class Implies(Constraint):
     op: ClassVar[bytes] = b"=>"
+    left: Constraint
+    right: Constraint
 
 
-class And(BinaryOp):
-    __slots__ = ()
+@dataclass(frozen=True, slots=True)
+class And(Constraint):
     op: ClassVar[bytes] = b"and"
+    left: Constraint
+    right: Constraint
 
 
-class Or(BinaryOp):
-    __slots__ = ()
+@dataclass(frozen=True, slots=True)
+class Or(Constraint):
     op: ClassVar[bytes] = b"or"
+    left: Constraint
+    right: Constraint
 
 
-class Xor(BinaryOp):
-    __slots__ = ()
+@dataclass(frozen=True, slots=True)
+class Xor(Constraint):
     op: ClassVar[bytes] = b"xor"
+    left: Constraint
+    right: Constraint
 
 
 @dataclass(frozen=True, slots=True)
 class Eq[S: Symbolic](Constraint):
+    op: ClassVar[bytes] = b"="
     left: S
     right: S
-
-    def dump(self, ctx: DumpContext) -> None:
-        ctx.write(b"(= ")
-        self.left.dump(ctx)
-        ctx.write(b" ")
-        self.right.dump(ctx)
-        ctx.write(b")")
 
 
 @dataclass(frozen=True, slots=True)
 class Distinct[S: Symbolic](Constraint):
+    op: ClassVar[bytes] = b"distinct"
     left: S
     right: S
-
-    def dump(self, ctx: DumpContext) -> None:
-        ctx.write(b"(distinct ")
-        self.left.dump(ctx)
-        ctx.write(b" ")
-        self.right.dump(ctx)
-        ctx.write(b")")
 
 
 @dataclass(frozen=True, slots=True)
 class Ite(Constraint):
+    op: ClassVar[bytes] = b"ite"
     cond: Constraint
     left: Constraint
     right: Constraint
-
-    def dump(self, ctx: DumpContext) -> None:
-        ctx.write(b"(ite ")
-        self.cond.dump(ctx)
-        ctx.write(b" ")
-        self.left.dump(ctx)
-        ctx.write(b" ")
-        self.right.dump(ctx)
-        ctx.write(b")")

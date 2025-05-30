@@ -15,9 +15,8 @@ from typing import ClassVar, Literal, override
 from .core import Constraint, DumpContext, Symbolic
 
 
+@dataclass(frozen=True, slots=True)
 class BitVector[N: int](Symbolic):
-    __slots__ = ()
-
     def reveal(self) -> int | None:
         return None
 
@@ -56,269 +55,213 @@ class Value[N: int](BitVector[N]):
 
 @dataclass(frozen=True, slots=True)
 class UnaryOp[N: int](BitVector[N]):
-    op: ClassVar[bytes]
     term: BitVector[N]
-
-    def dump(self, ctx: DumpContext) -> None:
-        ctx.write(b"(%b " % self.op)
-        self.term.dump(ctx)
-        ctx.write(b")")
 
 
 @dataclass(frozen=True, slots=True)
 class BinaryOp[N: int](BitVector[N]):
-    op: ClassVar[bytes]
     left: BitVector[N]
     right: BitVector[N]
-
-    def dump(self, ctx: DumpContext) -> None:
-        assert self.op
-        ctx.write(b"(%b " % self.op)
-        self.left.dump(ctx)
-        ctx.write(b" ")
-        self.right.dump(ctx)
-        ctx.write(b")")
 
 
 @dataclass(frozen=True, slots=True)
 class CompareOp[N: int](Constraint):
-    op: ClassVar[bytes]
     left: BitVector[N]
     right: BitVector[N]
-
-    def dump(self, ctx: DumpContext) -> None:
-        ctx.write(b"(%b " % self.op)
-        self.left.dump(ctx)
-        ctx.write(b" ")
-        self.right.dump(ctx)
-        ctx.write(b")")
 
 
 @dataclass(frozen=True, slots=True)
 class SingleParamOp[N: int](BitVector[N]):
-    op: ClassVar[bytes]
     i: int
     term: BitVector[int]
-
-    def __post_init__(self):
-        assert self.i >= 0
-
-    def dump(self, ctx: DumpContext) -> None:
-        ctx.write(b"((_ %b %d) " % (self.op, self.i))
-        self.term.dump(ctx)
-        ctx.write(b")")
 
 
 @dataclass(frozen=True, slots=True)
 class Concat[N: int](BitVector[N]):
+    op: ClassVar[bytes] = b"concat"
     terms: tuple[BitVector[int], ...]
-
-    def dump(self, ctx: DumpContext) -> None:
-        ctx.write(b"(concat")
-        for term in self.terms:
-            ctx.write(b" ")
-            term.dump(ctx)
-        ctx.write(b")")
 
 
 @dataclass(frozen=True, slots=True)
 class Extract[N: int](BitVector[N]):
+    op: ClassVar[bytes] = b"extract"
     i: int
     j: int
     term: BitVector[int]
 
-    def dump(self, ctx: DumpContext) -> None:
-        ctx.write(b"((_ extract %d %d) " % (self.i, self.j))
-        self.term.dump(ctx)
-        ctx.write(b")")
 
-
+@dataclass(frozen=True, slots=True)
 class Not[N: int](UnaryOp[N]):
-    __slots__ = ()
     op: ClassVar[bytes] = b"bvnot"
 
 
+@dataclass(frozen=True, slots=True)
 class And[N: int](BinaryOp[N]):
-    __slots__ = ()
     op: ClassVar[bytes] = b"bvand"
 
 
-class Or[N: int](BinaryOp[N]):
-    __slots__ = ()
+@dataclass(frozen=True, slots=True)
+class Or[N: int](BitVector[N]):
     op: ClassVar[bytes] = b"bvor"
-
-
-class Neg[N: int](UnaryOp[N]):
-    __slots__ = ()
-    op: ClassVar[bytes] = b"bvneg"
-
-
-class Add[N: int](BinaryOp[N]):
-    __slots__ = ()
-    op: ClassVar[bytes] = b"bvadd"
-
-
-class Mul[N: int](BinaryOp[N]):
-    __slots__ = ()
-    op: ClassVar[bytes] = b"bvmul"
-
-
-class Udiv[N: int](BinaryOp[N]):
-    __slots__ = ()
-    op: ClassVar[bytes] = b"bvudiv"
-
-
-class Urem[N: int](BinaryOp[N]):
-    __slots__ = ()
-    op: ClassVar[bytes] = b"bvurem"
-
-
-class Shl[N: int](BinaryOp[N]):
-    __slots__ = ()
-    op: ClassVar[bytes] = b"bvshl"
-
-
-class Lshr[N: int](BinaryOp[N]):
-    __slots__ = ()
-    op: ClassVar[bytes] = b"bvlshr"
-
-
-class Ult[N: int](CompareOp[N]):
-    __slots__ = ()
-    op: ClassVar[bytes] = b"bvult"
-
-
-class Nand[N: int](BinaryOp[N]):
-    __slots__ = ()
-    op: ClassVar[bytes] = b"bvnand"
-
-
-class Nor[N: int](BinaryOp[N]):
-    __slots__ = ()
-    op: ClassVar[bytes] = b"bvnor"
-
-
-class Xor[N: int](BinaryOp[N]):
-    __slots__ = ()
-    op: ClassVar[bytes] = b"bvxor"
-
-
-class Xnor[N: int](BinaryOp[N]):
-    __slots__ = ()
-    op: ClassVar[bytes] = b"bvxnor"
-
-
-class Comp[N: int](BitVector[Literal[1]]):
     left: BitVector[N]
     right: BitVector[N]
 
-    def dump(self, ctx: DumpContext) -> None:
-        ctx.write(b"(bvcomp ")
-        self.left.dump(ctx)
-        ctx.write(b" ")
-        self.right.dump(ctx)
-        ctx.write(b")")
+
+@dataclass(frozen=True, slots=True)
+class Neg[N: int](UnaryOp[N]):
+    op: ClassVar[bytes] = b"bvneg"
 
 
+@dataclass(frozen=True, slots=True)
+class Add[N: int](BinaryOp[N]):
+    op: ClassVar[bytes] = b"bvadd"
+
+
+@dataclass(frozen=True, slots=True)
+class Mul[N: int](BinaryOp[N]):
+    op: ClassVar[bytes] = b"bvmul"
+
+
+@dataclass(frozen=True, slots=True)
+class Udiv[N: int](BinaryOp[N]):
+    op: ClassVar[bytes] = b"bvudiv"
+
+
+@dataclass(frozen=True, slots=True)
+class Urem[N: int](BinaryOp[N]):
+    op: ClassVar[bytes] = b"bvurem"
+
+
+@dataclass(frozen=True, slots=True)
+class Shl[N: int](BinaryOp[N]):
+    op: ClassVar[bytes] = b"bvshl"
+
+
+@dataclass(frozen=True, slots=True)
+class Lshr[N: int](BinaryOp[N]):
+    op: ClassVar[bytes] = b"bvlshr"
+
+
+@dataclass(frozen=True, slots=True)
+class Ult[N: int](CompareOp[N]):
+    op: ClassVar[bytes] = b"bvult"
+
+
+@dataclass(frozen=True, slots=True)
+class Nand[N: int](BinaryOp[N]):
+    op: ClassVar[bytes] = b"bvnand"
+
+
+@dataclass(frozen=True, slots=True)
+class Nor[N: int](BinaryOp[N]):
+    op: ClassVar[bytes] = b"bvnor"
+
+
+@dataclass(frozen=True, slots=True)
+class Xor[N: int](BinaryOp[N]):
+    op: ClassVar[bytes] = b"bvxor"
+
+
+@dataclass(frozen=True, slots=True)
+class Xnor[N: int](BinaryOp[N]):
+    op: ClassVar[bytes] = b"bvxnor"
+
+
+@dataclass(frozen=True, slots=True)
+class Comp[N: int](BitVector[Literal[1]]):
+    op: ClassVar[bytes] = b"bvcomp"
+    left: BitVector[N]
+    right: BitVector[N]
+
+
+@dataclass(frozen=True, slots=True)
 class Sub[N: int](BinaryOp[N]):
-    __slots__ = ()
     op: ClassVar[bytes] = b"bvsub"
 
 
+@dataclass(frozen=True, slots=True)
 class Sdiv[N: int](BinaryOp[N]):
-    __slots__ = ()
     op: ClassVar[bytes] = b"bvsdiv"
 
 
+@dataclass(frozen=True, slots=True)
 class Srem[N: int](BinaryOp[N]):
-    __slots__ = ()
     op: ClassVar[bytes] = b"bvsrem"
 
 
+@dataclass(frozen=True, slots=True)
 class Smod[N: int](BinaryOp[N]):
-    __slots__ = ()
     op: ClassVar[bytes] = b"bvsmod"
 
 
+@dataclass(frozen=True, slots=True)
 class Ashr[N: int](BinaryOp[N]):
-    __slots__ = ()
     op: ClassVar[bytes] = b"bvashr"
 
 
+@dataclass(frozen=True, slots=True)
 class Repeat[N: int](SingleParamOp[N]):
-    __slots__ = ()
     op: ClassVar[bytes] = b"repeat"
 
-    def __post_init__(self):
-        assert self.i >= 1
 
-
+@dataclass(frozen=True, slots=True)
 class ZeroExtend[N: int](SingleParamOp[N]):
-    __slots__ = ()
     op: ClassVar[bytes] = b"zero_extend"
 
 
+@dataclass(frozen=True, slots=True)
 class SignExtend[N: int](SingleParamOp[N]):
-    __slots__ = ()
     op: ClassVar[bytes] = b"sign_extend"
 
 
+@dataclass(frozen=True, slots=True)
 class RotateLeft[N: int](SingleParamOp[N]):
-    __slots__ = ()
     op: ClassVar[bytes] = b"rotate_left"
 
 
+@dataclass(frozen=True, slots=True)
 class RotateRight[N: int](SingleParamOp[N]):
-    __slots__ = ()
     op: ClassVar[bytes] = b"rotate_right"
 
 
+@dataclass(frozen=True, slots=True)
 class Ule[N: int](CompareOp[N]):
-    __slots__ = ()
     op: ClassVar[bytes] = b"bvule"
 
 
+@dataclass(frozen=True, slots=True)
 class Ugt[N: int](CompareOp[N]):
-    __slots__ = ()
     op: ClassVar[bytes] = b"bvugt"
 
 
+@dataclass(frozen=True, slots=True)
 class Uge[N: int](CompareOp[N]):
-    __slots__ = ()
     op: ClassVar[bytes] = b"bvuge"
 
 
+@dataclass(frozen=True, slots=True)
 class Slt[N: int](CompareOp[N]):
-    __slots__ = ()
     op: ClassVar[bytes] = b"bvslt"
 
 
+@dataclass(frozen=True, slots=True)
 class Sle[N: int](CompareOp[N]):
-    __slots__ = ()
     op: ClassVar[bytes] = b"bvsle"
 
 
+@dataclass(frozen=True, slots=True)
 class Sgt[N: int](CompareOp[N]):
-    __slots__ = ()
     op: ClassVar[bytes] = b"bvsgt"
 
 
+@dataclass(frozen=True, slots=True)
 class Sge[N: int](CompareOp[N]):
-    __slots__ = ()
     op: ClassVar[bytes] = b"bvsge"
 
 
 @dataclass(frozen=True, slots=True)
 class Ite[N: int](BitVector[N]):
+    op: ClassVar[bytes] = b"ite"
     cond: Constraint
     left: BitVector[N]
     right: BitVector[N]
-
-    def dump(self, ctx: DumpContext) -> None:
-        ctx.write(b"(ite ")
-        self.cond.dump(ctx)
-        ctx.write(b" ")
-        self.left.dump(ctx)
-        ctx.write(b" ")
-        self.right.dump(ctx)
-        ctx.write(b")")

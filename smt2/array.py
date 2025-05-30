@@ -11,15 +11,14 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import override
+from typing import ClassVar, override
 
 from .core import DumpContext, Symbolic
 from . import bv
 
 
+@dataclass(frozen=True, slots=True)
 class Array[K: int, V: int](Symbolic):
-    __slots__ = ()
-
     def reveal(self) -> dict[int, int] | None:
         return None
 
@@ -64,28 +63,14 @@ class Value[K: int, V: int](Array[K, V]):
 
 @dataclass(frozen=True, slots=True)
 class Select[K: int, V: int](Array[K, V]):
+    op: ClassVar[bytes] = b"select"
     array: Array[K, V]
     key: bv.BitVector[K]
-
-    def dump(self, ctx: DumpContext) -> None:
-        ctx.write(b"(select ")
-        self.array.dump(ctx)
-        ctx.write(b" ")
-        self.key.dump(ctx)
-        ctx.write(b")")
 
 
 @dataclass(frozen=True, slots=True)
 class Store[K: int, V: int](Array[K, V]):
+    op: ClassVar[bytes] = b"store"
     array: Array[K, V]
     key: bv.BitVector[K]
     value: bv.BitVector[V]
-
-    def dump(self, ctx: DumpContext) -> None:
-        ctx.write(b"(store ")
-        self.array.dump(ctx)
-        ctx.write(b" ")
-        self.key.dump(ctx)
-        ctx.write(b" ")
-        self.value.dump(ctx)
-        ctx.write(b")")
