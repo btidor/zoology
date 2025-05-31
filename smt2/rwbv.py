@@ -112,7 +112,7 @@ def rewrite_bitvector[N: int](term: BitVector[N], width: N) -> BitVector[N]:
 
         # Arithmetic
         case Add(Value(a), Value(b)):
-            """addzero"""
+            """addval"""
             return Value((a + b) % modulus, width)
         case Add(Value(0), x) | Add(x, Value(0)):
             """addzero: X + 0 <=> X"""

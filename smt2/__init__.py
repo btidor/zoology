@@ -317,13 +317,13 @@ class Int[N: int](BitVector[N]):
         elif self.width < other.width:
             k._term = bv.SignExtend(other.width - self.width, self._term)
         else:
-            raise NotImplementedError
+            raise NotImplementedError("cannot truncate signed bitvector")
         return k
 
     def reveal(self) -> int | None:
         match self._term:
-            case bv.Value(value):
-                raise NotImplementedError(value)
+            case bv.Value(_):
+                raise NotImplementedError
             case _:
                 return None
 
@@ -378,7 +378,7 @@ class Array[K: Uint[Any] | Int[Any], V: Uint[Any] | Int[Any]](
 
     _key: Final[type[K]]  # pyright: ignore[reportGeneralTypeIssues]
     _value: Final[type[V]]  # pyright: ignore[reportGeneralTypeIssues]
-    _term: array.Array[int, int]
+    _term: array.Symbol[int, int] | array.Value[int, int] | array.Store[int, int]
 
     __hash__: ClassVar[None] = None  # pyright: ignore[reportIncompatibleMethodOverride]
 
@@ -400,8 +400,42 @@ class Array[K: Uint[Any] | Int[Any], V: Uint[Any] | Int[Any]](
     ) -> Never:
         raise TypeError("arrays cannot be compared for equality.")
 
+    def _mk_value(self, term: bv.BitVector[Any]) -> V:
+        k = self._value.__new__(self._value)
+        k._term = term  # pyright: ignore[reportPrivateUsage]
+        return k
+
     def __getitem__(self, key: K) -> V:
+        kterm = key._term  # pyright: ignore[reportPrivateUsage]
+        match self._term:
+            case array.Symbol():
+                return self._value._apply(array.Select, self, key)
+            case array.Value(default):
+                return self._mk_value(default)
+            case array.Store(default, lower, upper):
+                if upper:
+                    p, q = upper[0]
+                    if kterm == p:
+                        return self._mk_value(q)
+                elif isinstance(kterm, bv.Value):
+                    lower = dict(lower)
+                    if kterm.value in lower:
+                        return self._mk_value(lower[kterm.value])
+                    elif isinstance(self._term, array.Symbol):
+                        return self._value._apply(array.Select, self, key)
+                    else:
+                        return self._mk_value(self._term.default)  # pyright: ignore[reportArgumentType]
         return self._value._apply(array.Select, self, key)
 
     def __setitem__(self, key: K, value: V) -> None:
-        self._term = array.Store(self._term, key._term, value._term)  # pyright: ignore
+        match self._term:
+            case array.Symbol() | array.Value():
+                default = self._term
+                lower, upper = {}, []
+            case array.Store(default, lower, upper):
+                lower, upper = dict(lower), list(upper)
+        if upper or (k := key.reveal()) is None:
+            upper.append((key._term, value._term))  # pyright: ignore[reportPrivateUsage]
+        else:
+            lower[k] = value._term  # pyright: ignore[reportPrivateUsage]
+        self._term = array.Store(default, frozenset(lower.items()), tuple(upper))  # pyright: ignore[reportIncompatibleVariableOverride]
