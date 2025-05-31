@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import ast
-import copy
 import inspect
 from dataclasses import dataclass, fields
 from random import randint
@@ -46,7 +45,7 @@ class Casette:
                 raise SyntaxError("every case should begin with a docstring")
 
     @classmethod
-    def from_function(cls, fn: Callable[..., Any]) -> list[Self]:
+    def from_function(cls, fn: Callable[..., Any]) -> Generator[Self]:
         """Parse the given rewrite function into cases."""
         match ast.parse(inspect.getsource(fn)):
             case ast.Module([ast.FunctionDef(_, arguments, body)]):
@@ -70,9 +69,19 @@ class Casette:
         # statement should begin with a docstring.
         match body[-1]:
             case ast.Match(ast.Name("term"), cases):
-                return [cls(c, body[:-1]) for c in cases]
+                pass
             case _:
                 raise SyntaxError("rewrite should end with `match term`")
+
+        for case in cases:
+            match case.pattern:
+                case ast.MatchOr(patterns):  # split or-ed cases into separate tests
+                    for pattern in patterns:
+                        yield cls(
+                            ast.match_case(pattern, case.guard, case.body), body[:-1]
+                        )
+                case _:
+                    yield cls(case, body[:-1])
 
 
 class CaseParser:
@@ -82,7 +91,6 @@ class CaseParser:
         """Create a new CaseParser."""
         self.case = pre.case
         self.assertions = list[Constraint]()
-        self.term1, self.guard, self.term2 = None, None, None
         self.pyvars = dict[str, PythonType]()
         self.svars = dict[str, SymbolicType]()
         self.sort = ConstraintSort() if width is None else BitVectorSort(width)
@@ -102,86 +110,60 @@ class CaseParser:
                 case _:
                     raise SyntaxError("expected assignment")
 
-    def parse_pattern(self) -> Generator[Self]:
+    def is_equivalent(self) -> bool:
         """
-        Step One: parse the case's pattern.
-
-        Example: `case Not(Value(v)): ...`:
-        * define a new bool/int named "v"
-        * return the input (original) term: Not(Symbol("v"))
-
-        Yields a new CaseParser, or in the case of an "or" pattern, multiple
-        CaseParsers.
-        """
-        assert not self.term1 and not self.guard and not self.term2, "out of order"
-        match self.case.pattern:
-            case ast.MatchOr(patterns):
-                for pattern in patterns:
-                    ctx = copy.deepcopy(self)
-                    ctx.term1 = ctx._match(pattern, self.sort)  # may define new vars
-                    yield ctx
-            case pattern:
-                self.term1 = self._match(pattern, self.sort)  # may define new vars
-                yield self
-
-    def parse_guard(self) -> None:
-        """
-        Step Two: parse the case's guard, if present.
+        Parse the rewrite case and check its validity.
 
         Example: `case <pattern> if <guard>: <body>`.
-
-        This must occur after parse_pattern() because the guard expression
-        typically uses variables defined in the pattern.
         """
-        assert self.term1 and not self.guard and not self.term2, "out of order"
+        # 1. Parse the pattern (and add vars to local scope). This tells us the
+        #    structure of the input term.
+        #
+        #    Example: `case Not(Value(v)): ...`:
+        #    * define a new bool/int named "v"
+        #    * return the input (original) term: Not(Symbol("v"))
+        #
+        term1 = self._match(self.case.pattern, self.sort)
+
+        # 2. Parse the guard, if present. (Relies on vars defined in #1).
         match self.case.guard:
             case None:
-                self.guard = core.Value(True)
+                guard = core.Value(True)
             case ast.Compare(ast.Name(name), [ast.Eq()], [right]) if name in self.svars:
-                # Comparing symbolic types (special!). If two ASTs are
-                # equal, the expressions must be equal.
+                # Comparing symbolic types (special!). If two ASTs are equal,
+                # the expressions must be equal.
                 #
-                # Note: the opposite is not true, and this substitution may
-                # not be safe in other contexts.
+                # Note: the opposite is not true, and this substitution may not
+                # be safe in other contexts.
                 #
                 # Note: it's unsafe to implement != because if two ASTs are
                 # distinct, that tells us nothing about whether or not the
                 # expressions are equal.
-                #
-                self.guard = Eq(self.svars[name], self._sexpr(right))
+                guard = Eq(self.svars[name], self._sexpr(right))
             case normal:
                 # Assume we're comparing Python types, proceed as usual.
                 expr = self._pyexpr(normal)
                 assert isinstance(expr, Constraint)
-                self.guard = expr
+                guard = expr
 
-    def parse_body(self) -> None:
-        """
-        Step Three: parse the case's body.
-
-        Returns a symbolic term representing the value returned from the body,
-        i.e. the rewritten term.
-        """
-        assert self.term1 and self.guard and not self.term2, "out of order"
+        # 3. Parse the body. This tells us the value of the rewritten term.s
         for stmt in self.case.body:
             match stmt:
                 case ast.Expr(ast.Constant(str())):
                     pass  # skip docstring
                 case ast.Return(ast.expr() as expr):
-                    self.term2 = self._sexpr(expr)
-                    return
+                    term2 = self._sexpr(expr)
+                    break
                 case _:
                     raise NotImplementedError("unknown statement", stmt)
         else:
             raise SyntaxError("expected trailing return")
 
-    def equivalent(self) -> bool:
-        """Step Four: check equivalence."""
-        assert self.term1 and self.guard and self.term2, "out of order"
-        goal = Eq(self.term1, self.term2)
+        # 4. Check!
+        goal = Eq(term1, term2)
         for a in self.assertions:
             goal = core.And(goal, a)
-        return not check(core.Not(goal), self.guard)
+        return not check(core.Not(goal), guard)
 
     def _match(self, pattern: ast.pattern, sort: Sort) -> SymbolicType:
         """Recursively parse a case statement pattern."""

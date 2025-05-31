@@ -43,13 +43,6 @@ def test_simple_rewrite():
 MAX_WIDTH = 65
 
 
-def check_case(ctx: CaseParser) -> None:
-    for ctx in ctx.parse_pattern():
-        ctx.parse_guard()
-        ctx.parse_body()
-        assert ctx.equivalent()
-
-
 def parameterize(rw: Callable[..., Any]) -> Any:
     return pytest.mark.parametrize(
         "case", map(lambda c: pytest.param(c, id=c.id), Casette.from_function(rw))
@@ -58,16 +51,16 @@ def parameterize(rw: Callable[..., Any]) -> Any:
 
 @parameterize(rewrite_constraint)
 def test_rewrite_constraint(case: Casette):
-    check_case(CaseParser(case, None))
+    assert CaseParser(case, None).is_equivalent()
 
 
 @parameterize(rewrite_bitvector)
 def test_rewrite_bitvector(case: Casette):
     for width in range(1, MAX_WIDTH):
-        check_case(CaseParser(case, width))
+        assert CaseParser(case, width).is_equivalent()
 
 
 @parameterize(rewrite_mixed)
 def test_rewrite_mixed(case: Casette):
     for width in range(1, MAX_WIDTH):
-        check_case(CaseParser(case, width))
+        assert CaseParser(case, width).is_equivalent()
