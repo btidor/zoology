@@ -9,7 +9,6 @@ See: https://smt-lib.org/theories-ArraysEx.shtml
 
 from __future__ import annotations
 
-from collections import defaultdict
 from dataclasses import dataclass
 from typing import ClassVar, override
 
@@ -18,9 +17,7 @@ from . import bv
 
 
 @dataclass(frozen=True, slots=True)
-class Array[K: int, V: int](Symbolic):
-    def reveal(self) -> dict[int, int] | None:
-        return None
+class Array[K: int, V: int](Symbolic): ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,12 +52,6 @@ class Value[K: int, V: int](Array[K, V]):
         )
         self.default.dump(ctx)
         ctx.write(b")")
-
-    @override
-    def reveal(self) -> dict[int, int] | None:
-        if (d := self.default.reveal()) is None:
-            return None
-        return defaultdict(lambda: d)
 
 
 @dataclass(frozen=True, slots=True)

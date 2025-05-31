@@ -16,9 +16,7 @@ from .core import Constraint, DumpContext, Symbolic
 
 
 @dataclass(frozen=True, slots=True)
-class BitVector[N: int](Symbolic):
-    def reveal(self) -> int | None:
-        return None
+class BitVector[N: int](Symbolic): ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,10 +47,6 @@ class Value[N: int](BitVector[N]):
             ctx.write(b"#x" + self.value.to_bytes(self.width // 8).hex().encode())
         else:
             ctx.write(b"#b" + bin(self.value)[2:].zfill(self.width).encode())
-
-    @override
-    def reveal(self) -> int | None:
-        return self.value
 
 
 @dataclass(frozen=True, slots=True)

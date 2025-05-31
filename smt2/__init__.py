@@ -135,7 +135,11 @@ class Constraint(Symbolic):
         return ~(self & ~other)
 
     def reveal(self) -> bool | None:
-        return self._term.reveal()
+        match self._term:
+            case core.Value(value):
+                return value
+            case _:
+                return None
 
 
 class BitVector[N: int](
@@ -271,7 +275,11 @@ class Uint[N: int](BitVector[N]):
         return r
 
     def reveal(self) -> int | None:
-        return self._term.reveal()
+        match self._term:
+            case bv.Value(value):
+                return value
+            case _:
+                return None
 
 
 class Int[N: int](BitVector[N]):
@@ -313,7 +321,11 @@ class Int[N: int](BitVector[N]):
         return k
 
     def reveal(self) -> int | None:
-        raise NotImplementedError
+        match self._term:
+            case bv.Value(value):
+                raise NotImplementedError(value)
+            case _:
+                return None
 
 
 class ArrayMeta(abc.ABCMeta):

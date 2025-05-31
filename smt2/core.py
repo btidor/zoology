@@ -83,14 +83,9 @@ class Symbolic(abc.ABC):
                 v.dump(ctx)
         ctx.out.extend(b")")
 
-    @abc.abstractmethod
-    def reveal(self) -> Any: ...
-
 
 @dataclass(frozen=True, slots=True)
-class Constraint(Symbolic):
-    def reveal(self) -> bool | None:
-        return None
+class Constraint(Symbolic): ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,10 +105,6 @@ class Value(Constraint):
     @override
     def dump(self, ctx: DumpContext) -> None:
         ctx.out.extend(b"true" if self.value else b"false")
-
-    @override
-    def reveal(self) -> bool | None:
-        return self.value
 
 
 @dataclass(frozen=True, slots=True)
