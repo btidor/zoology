@@ -10,7 +10,7 @@ See: https://smt-lib.org/theories-Core.shtml
 from __future__ import annotations
 
 import abc
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from subprocess import PIPE, Popen
 from typing import Any, ClassVar, Self, override
 
@@ -64,23 +64,27 @@ class Symbolic(abc.ABC):
         return self
 
     def dump(self, ctx: DumpContext) -> None:
-        # 1. Determine Op
-        assert self.op
+        # 0. Gather Arguments
         params = list[bytes]()
-        for name in self.__dataclass_fields__.keys():
-            v = self.__getattribute__(name)
+        terms = list[Symbolic]()
+        for field in fields(self):
+            if not field.init or field.kw_only:
+                continue
+            v = getattr(self, field.name)
             if isinstance(v, int):
                 params.append(str(v).encode())
+            elif isinstance(v, Symbolic):
+                terms.append(v)
+        # 1. Determine Op
+        assert self.op
         if params:
             ctx.out.extend(b"((_ %b %s)" % (self.op, b" ".join(params)))
         else:
             ctx.out.extend(b"(%b" % self.op)
         # 2. Dump Terms
-        for name in self.__dataclass_fields__.keys():
-            v = self.__getattribute__(name)
-            if isinstance(v, Symbolic):
-                ctx.out.extend(b" ")
-                v.dump(ctx)
+        for term in terms:
+            ctx.out.extend(b" ")
+            term.dump(ctx)
         ctx.out.extend(b")")
 
 

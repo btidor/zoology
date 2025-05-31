@@ -61,12 +61,20 @@ class Select[K: int, V: int](BitVector[V]):
     array: Array[K, V]
     key: BitVector[K]
 
+    @override
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "width", self.array.value)  # pyright: ignore
+
 
 @dataclass(frozen=True, slots=True)
 class Store[K: int, V: int](Array[K, V]):
     default: Symbol[K, V] | Value[K, V]
     lower: frozenset[tuple[int, BitVector[V]]] = frozenset()
     upper: tuple[tuple[BitVector[K], BitVector[V]], ...] = ()
+
+    @property
+    def value(self) -> V:  # pyright: ignore[reportIncompatibleVariableOverride]
+        return self.default.value
 
     @override
     def dump(self, ctx: DumpContext) -> None:

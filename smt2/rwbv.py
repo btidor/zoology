@@ -38,13 +38,15 @@ from .bv import (
 from .core import Constraint
 
 # pyright: reportUnknownArgumentType=false
+# pyright: reportUnknownMemberType=false
 # pyright: reportUnknownVariableType=false
 
 
-def rewrite_bitvector[N: int](term: BitVector[N], width: N) -> BitVector[N]:
+def rewrite_bitvector[N: int](term: BitVector[N]) -> BitVector[N]:
     """Simplify the given bitvector."""
-    mask = (1 << width) - 1
-    modulus = 1 << width
+    width = term.width
+    mask = (1 << term.width) - 1
+    modulus = 1 << term.width
     match term:
         # Boolean Logic
         case Not(Value(val)):
@@ -206,9 +208,8 @@ def rewrite_bitvector[N: int](term: BitVector[N], width: N) -> BitVector[N]:
             return term
 
 
-def rewrite_mixed(term: Constraint, width: int) -> Constraint:
+def rewrite_mixed(term: Constraint) -> Constraint:
     """Simplify the given bitvector-containing constraint."""
-    mask = (1 << width) - 1
     match term:
         # Core Generics (Eq, Distinct)
         case core.Eq(Value(a), Value(b)):
@@ -229,13 +230,14 @@ def rewrite_mixed(term: Constraint, width: int) -> Constraint:
         # Boolean Propagation over Eq
         case core.Eq(Value(a), Not(x)) | core.Eq(Not(x), Value(a)):
             """eqnotval: A = ~X <=> ~A = X"""
-            return core.Eq(Value(mask ^ a, width), x)
+            mask = (1 << x.width) - 1
+            return core.Eq(Value(mask ^ a, x.width), x)
         case (
             core.Eq(Value(a), And(x, Value(b)))
             | core.Eq(Value(a), And(Value(b), x))
             | core.Eq(And(x, Value(b)), Value(a))
             | core.Eq(And(Value(b), x), Value(a))
-        ) if a & (b ^ mask) != 0:
+        ) if a & (b ^ ((1 << x.width) - 1)) != 0:
             """eqandval"""
             return core.Value(False)
         case (
@@ -243,7 +245,7 @@ def rewrite_mixed(term: Constraint, width: int) -> Constraint:
             | core.Eq(Value(a), Or(Value(b), x))
             | core.Eq(Or(x, Value(b)), Value(a))
             | core.Eq(Or(Value(b), x), Value(a))
-        ) if (a ^ mask) & b != 0:
+        ) if (a ^ (1 << x.width) - 1) & b != 0:
             """eqorval"""
             return core.Value(False)
         case (
@@ -253,7 +255,7 @@ def rewrite_mixed(term: Constraint, width: int) -> Constraint:
             | core.Eq(Xor(Value(b), x), Value(a))
         ):
             """eqxorval: A = X ^ B <=> A ^ B = X"""
-            return core.Eq(Value(a ^ b, width), x)
+            return core.Eq(Value(a ^ b, x.width), x)
 
         # Bitvector Comparators
         case Ult(Value(a), Value(b)):
@@ -264,16 +266,16 @@ def rewrite_mixed(term: Constraint, width: int) -> Constraint:
             return core.Value(False)
         case Ult(Value(0), x):
             """zeroult: 0 < X <=> X != 0"""
-            return core.Distinct(x, Value(0, width))
+            return core.Distinct(x, Value(0, x.width))
         case Ult(x, Value(1)):
             """ultone: X < 1 <=> X = 0"""
-            return core.Eq(x, Value(0, width))
+            return core.Eq(x, Value(0, x.width))
         case Ule(Value(a), Value(b)):
             """uleval"""
             return core.Value(a <= b)
         case Ule(x, Value(0)):
             """ulezero: X <= 0 <=> X = 0"""
-            return core.Eq(x, Value(0, width))
+            return core.Eq(x, Value(0, x.width))
         case Ule(Value(0), x):
             """zeroule: 0 <= X <=> True"""
             return core.Value(True)

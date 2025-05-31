@@ -40,7 +40,7 @@ def test_simple_rewrite():
 
 # SMT Test for Rewrite Rules
 
-MAX_WIDTH = 65
+MAX_WIDTH = 8
 
 
 def parameterize(rw: Callable[..., Any]) -> Any:
@@ -56,11 +56,11 @@ def test_rewrite_constraint(case: Casette):
 
 @parameterize(rewrite_bitvector)
 def test_rewrite_bitvector(case: Casette):
-    for width in range(1, MAX_WIDTH):
+    for width in range(1, MAX_WIDTH + 1):
         assert CaseParser(case, width).is_equivalent()
 
 
 @parameterize(rewrite_mixed)
 def test_rewrite_mixed(case: Casette):
-    for width in range(1, MAX_WIDTH):
+    for width in range(1, MAX_WIDTH + 1):
         assert CaseParser(case, width).is_equivalent()

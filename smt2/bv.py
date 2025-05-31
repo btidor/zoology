@@ -9,20 +9,36 @@ See: https://smt-lib.org/logics-all.shtml#QF_BV
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import InitVar, dataclass, field, fields
+from functools import reduce
 from typing import ClassVar, Literal, override
 
 from .core import Constraint, DumpContext, Symbolic
 
 
 @dataclass(frozen=True, slots=True)
-class BitVector[N: int](Symbolic): ...
+class BitVector[N: int](Symbolic):
+    width: N = field(init=False)
+
+    def __post_init__(self) -> None:
+        # By default, inherit width from inner term.
+        for field in fields(self):
+            if field.type == "BitVector[N]":
+                term = getattr(self, field.name)
+                object.__setattr__(self, "width", term.width)
+                break
+        else:
+            raise TypeError(f"could not find inner term for {self.__class__.__name__}")
 
 
 @dataclass(frozen=True, slots=True)
 class Symbol[N: int](BitVector[N]):
     name: bytes
-    width: N
+    w: InitVar[N]
+
+    @override
+    def __post_init__(self, w: N) -> None:
+        object.__setattr__(self, "width", w)
 
     @override
     def dump(self, ctx: DumpContext) -> None:
@@ -36,10 +52,12 @@ class Symbol[N: int](BitVector[N]):
 @dataclass(frozen=True, slots=True)
 class Value[N: int](BitVector[N]):
     value: int
-    width: N
+    w: InitVar[N]
 
-    def __post_init__(self):
-        assert 0 <= self.value < (1 << self.width)
+    @override
+    def __post_init__(self, w: N) -> None:
+        assert 0 <= self.value < (1 << w)
+        object.__setattr__(self, "width", w)
 
     @override
     def dump(self, ctx: DumpContext) -> None:
@@ -77,6 +95,11 @@ class Concat[N: int](BitVector[N]):
     terms: tuple[BitVector[int], ...]
 
     @override
+    def __post_init__(self) -> None:
+        w = reduce(lambda p, q: p + q.width, self.terms, 0)
+        object.__setattr__(self, "width", w)
+
+    @override
     def dump(self, ctx: DumpContext) -> None:
         ctx.write(b"(concat")
         for term in self.terms:
@@ -91,6 +114,12 @@ class Extract[N: int](BitVector[N]):
     i: int
     j: int
     term: BitVector[int]
+
+    @override
+    def __post_init__(self) -> None:
+        assert self.term.width > self.i >= self.j >= 0
+        w = self.i - self.j + 1
+        object.__setattr__(self, "width", w)
 
 
 @dataclass(frozen=True, slots=True)
@@ -206,15 +235,33 @@ class Ashr[N: int](BinaryOp[N]):
 class Repeat[N: int](SingleParamOp[N]):
     op: ClassVar[bytes] = b"repeat"
 
+    @override
+    def __post_init__(self) -> None:
+        assert self.i > 0
+        w = self.term.width * self.i
+        object.__setattr__(self, "width", w)
+
 
 @dataclass(frozen=True, slots=True)
 class ZeroExtend[N: int](SingleParamOp[N]):
     op: ClassVar[bytes] = b"zero_extend"
 
+    @override
+    def __post_init__(self) -> None:
+        assert self.i >= 0
+        w = self.term.width + self.i
+        object.__setattr__(self, "width", w)
+
 
 @dataclass(frozen=True, slots=True)
 class SignExtend[N: int](SingleParamOp[N]):
     op: ClassVar[bytes] = b"sign_extend"
+
+    @override
+    def __post_init__(self) -> None:
+        assert self.i >= 0
+        w = self.term.width + self.i
+        object.__setattr__(self, "width", w)
 
 
 @dataclass(frozen=True, slots=True)

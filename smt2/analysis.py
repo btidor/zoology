@@ -53,13 +53,9 @@ class Casette:
             case _:
                 raise SyntaxError("unexpected function structure")
 
-        # Assumed function signature: `rewrite(term[, width])`.
+        # Assumed function signature: `rewrite(term)`.
         match arguments:
             case ast.arguments([], [ast.arg("term")], None, [], [], None, []):
-                pass
-            case ast.arguments(
-                [], [ast.arg("term"), ast.arg("width")], None, [], [], None, []
-            ):
                 pass
             case _:
                 raise SyntaxError("unexpected function signature")
@@ -90,25 +86,11 @@ class CaseParser:
     def __init__(self, pre: Casette, width: int | None) -> None:
         """Create a new CaseParser."""
         self.case = pre.case
+        self.prefix = pre.prefix
         self.assertions = list[Constraint]()
         self.pyvars = dict[str, PythonType]()
         self.svars = dict[str, SymbolicType]()
         self.sort = ConstraintSort() if width is None else BitVectorSort(width)
-
-        # For BitVectors, rewrite() takes `width` as its second parameter
-        if width is not None:
-            assert width < MAX_WIDTH
-            self.pyvars["width"] = PythonType(bv.Value(width, MAX_WIDTH))
-
-        # Handle any assignments in the prefix
-        for stmt in pre.prefix:
-            match stmt:
-                case ast.Assign([ast.Name(name)], expr):
-                    self.pyvars[name] = self._pyexpr(expr)
-                case ast.Expr(ast.Constant(str())):
-                    pass  # function docstring, just ignore
-                case _:
-                    raise SyntaxError("expected assignment")
 
     def is_equivalent(self) -> bool:
         """
@@ -124,6 +106,17 @@ class CaseParser:
         #    * return the input (original) term: Not(Symbol("v"))
         #
         term1 = self._match(self.case.pattern, self.sort)
+        self.svars["term"] = term1
+
+        # 1.5. Handle any assignments in the prefix.
+        for stmt in self.prefix:
+            match stmt:
+                case ast.Expr(ast.Constant(str())):
+                    pass  # function docstring, just ignore
+                case ast.Assign([ast.Name(name)], expr):
+                    self.pyvars[name] = self._pyexpr(expr)
+                case _:
+                    raise SyntaxError("expected assignment")
 
         # 2. Parse the guard, if present. (Relies on vars defined in #1).
         match self.case.guard:
@@ -151,6 +144,8 @@ class CaseParser:
             match stmt:
                 case ast.Expr(ast.Constant(str())):
                     pass  # skip docstring
+                case ast.Assign([ast.Name(name)], expr):
+                    self.pyvars[name] = self._pyexpr(expr)
                 case ast.Return(ast.expr() as expr):
                     term2 = self._sexpr(expr)
                     break
@@ -226,7 +221,8 @@ class CaseParser:
                 # annotations to determine the type of the inner expressions.
                 cls = sort.operator(name)
                 args = list[SymbolicType]()
-                for field, pattern in zip(fields(cls), patterns, strict=True):
+                filtered = filter(lambda f: f.init and not f.kw_only, fields(cls))
+                for field, pattern in zip(filtered, patterns, strict=True):
                     if field.type == "Constraint":
                         arg = self._match(pattern, ConstraintSort())
                     elif field.type == "BitVector[N]" or field.type == "BitVector[int]":
@@ -334,6 +330,10 @@ class CaseParser:
                         return PythonType(core.Or(left, right))
                     case _:
                         raise NotImplementedError(op)
+            case ast.Attribute(ast.Name(name), attr):
+                val = getattr(self.svars[name], attr)
+                assert isinstance(val, int)
+                return PythonType(bv.Value(val, MAX_WIDTH))
             case _:
                 raise NotImplementedError(expr)
 
@@ -354,17 +354,17 @@ class CaseParser:
                 return SymbolicType(self._pyexpr(args[0]))
             case ast.Call(ast.Name("Value"), args), BitVectorSort():
                 assert len(args) == 2
-                # No width-changing operations for now...
-                assert isinstance(args[1], ast.Name) and args[1].id == "width"
                 inner = self._pyexpr(args[0])
                 assert isinstance(inner, BitVector)
+                width = self._pyexpr(args[1])
+                assert isinstance(width, bv.Value)
                 # Note that Value(...) converts an inner Python type to an outer
                 # symbolic type. We assert that the conversion does not
                 # overflow.
                 self.assertions.append(
-                    bv.Ult(inner, bv.Value(1 << self.sort.width, MAX_WIDTH))
+                    bv.Ult(inner, bv.Value(1 << width.value, MAX_WIDTH))
                 )
-                return SymbolicType(bv.Extract[int](self.sort.width - 1, 0, inner))
+                return SymbolicType(bv.Extract[int](width.value - 1, 0, inner))
             case ast.Call(func, args), _:  # Not(...), etc.
                 if isinstance(func, ast.Subscript):
                     func = func.value  # ignore type annotations, e.g. Ult[int]

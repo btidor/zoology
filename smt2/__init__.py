@@ -72,7 +72,7 @@ class Symbolic(abc.ABC):
             k._term = rewrite_constraint(k._term)
         elif isinstance(k._term, bv.BitVector):
             assert issubclass(cls, BitVector)
-            k._term = rewrite_bitvector(k._term, cls.width)  # pyright: ignore
+            k._term = rewrite_bitvector(k._term)  # pyright: ignore[reportUnknownArgumentType,reportUnknownMemberType]
         return k
 
     # Implementation Note: Symbolic instances are immutable. For performance,
