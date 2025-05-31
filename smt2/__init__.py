@@ -261,7 +261,10 @@ class Uint[N: int](BitVector[N]):
     def concat[M: int](cls, *terms: Uint[M]) -> Uint[N]:
         assert terms and cls.width == reduce(lambda s, t: s + t.width, terms, 0)
         k = cls.__new__(cls)
-        k._term = bv.Concat(tuple(t._term for t in terms))  # pyright: ignore[reportPrivateUsage]
+        x = terms[0]._term
+        for t in terms[1:]:
+            x = bv.Concat[int](x, t._term)
+        k._term = x  # pyright: ignore[reportAttributeAccessIssue]
         return k
 
     @classmethod

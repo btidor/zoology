@@ -10,7 +10,6 @@ See: https://smt-lib.org/logics-all.shtml#QF_BV
 from __future__ import annotations
 
 from dataclasses import InitVar, dataclass, field, fields
-from functools import reduce
 from typing import ClassVar, Literal, override
 
 from .core import Constraint, DumpContext, Symbolic
@@ -92,20 +91,13 @@ class SingleParamOp[N: int](BitVector[N]):
 
 @dataclass(frozen=True, slots=True)
 class Concat[N: int](BitVector[N]):
-    terms: tuple[BitVector[int], ...]
+    op: ClassVar[bytes] = b"concat"
+    left: BitVector[int]
+    right: BitVector[int]
 
     @override
     def __post_init__(self) -> None:
-        w = reduce(lambda p, q: p + q.width, self.terms, 0)
-        object.__setattr__(self, "width", w)
-
-    @override
-    def dump(self, ctx: DumpContext) -> None:
-        ctx.write(b"(concat")
-        for term in self.terms:
-            ctx.write(b" ")
-            term.dump(ctx)
-        ctx.write(b")")
+        object.__setattr__(self, "width", self.left.width + self.right.width)
 
 
 @dataclass(frozen=True, slots=True)

@@ -9,6 +9,7 @@ from .bv import (
     Add,
     And,
     BitVector,
+    Concat,
     Ite,
     Lshr,
     Mul,
@@ -151,6 +152,9 @@ def rewrite_bitvector[N: int](term: BitVector[N]) -> BitVector[N]:
         case Sub(x, y):
             """rwsub: X - Y <=> X + ~Y + 1"""
             return Add(Add(x, Not(y)), Value(1, width))
+        case Not(Add(x, y)):
+            """notadd: ~(X + Y) <=> ~X + ~Y + 1"""
+            return Add(Add(Not(x), Not(y)), Value(1, width))
 
         # Bit-shifting
         case Shl(Value(a), Value(b)):
@@ -177,6 +181,10 @@ def rewrite_bitvector[N: int](term: BitVector[N]) -> BitVector[N]:
         case SignExtend(0, x):
             """sextzero"""
             return cast(BitVector[N], x)
+        case Concat(Value(a) as x, Value(b) as y):
+            """concatval"""
+            # Warning: SMT validation assumes that x and y are the same width.
+            return Value((a << y.width) | b, x.width + y.width)  # pyright: ignore[reportReturnType]
 
         # Core Generics (Ite)
         case Ite(core.Value(True), x, y):
@@ -256,6 +264,14 @@ def rewrite_mixed(term: Constraint) -> Constraint:
         ):
             """eqxorval: A = X ^ B <=> A ^ B = X"""
             return core.Eq(Value(a ^ b, x.width), x)
+        case (
+            core.Eq(Value(a), Add(x, Value(b)))
+            | core.Eq(Value(a), Add(Value(b), x))
+            | core.Eq(Add(x, Value(b)), Value(a))
+            | core.Eq(Add(Value(b), x), Value(a))
+        ):
+            """eqaddval"""
+            return core.Eq(Add(Value(a, x.width), Neg(Value(b, x.width))), x)
 
         # Bitvector Comparators
         case Ult(Value(a), Value(b)):

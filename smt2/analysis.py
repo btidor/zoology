@@ -6,7 +6,7 @@ import ast
 import inspect
 from dataclasses import dataclass, fields
 from random import randint
-from typing import Any, Callable, Generator, NewType, Self
+from typing import Any, Callable, Generator, NewType, Self, cast
 
 from . import bv, core
 from .bv import BitVector
@@ -163,13 +163,22 @@ class CaseParser:
     def _match(self, pattern: ast.pattern, sort: Sort) -> SymbolicType:
         """Recursively parse a case statement pattern."""
         match pattern:
-            case ast.MatchAs(_, None):
-                # Underscore name. Generate random label.
+            case ast.MatchAs(None, None):
+                # Underscore name, e.g. `Ite(_, x, y)`. Generate random label.
                 return SymbolicType(sort.symbol(f"_{randint(0, 2**16)}"))
-            case ast.MatchAs(_, str() as name):
-                # Proper name. Generate symbol and add to locals.
-                assert name not in self.pyvars, "duplicate name"
+            case (
+                ast.MatchAs(None, str() as name)
+                | ast.MatchAs(ast.MatchClass(ast.Name("Constraint"), []), str() as name)
+                | ast.MatchAs(ast.MatchClass(ast.Name("BitVector"), []), str() as name)
+            ):
+                # Proper name, e.g. `Neg(x)` (possibly qualified with a simple
+                # type). Generate symbol and add to locals.
                 self.svars[name] = SymbolicType(sort.symbol(name))
+                return self.svars[name]
+            case ast.MatchAs(cls, str() as name) if cls:
+                # Named sub-expression, e.g. `Value(a) as x`. Process as usual,
+                # then add to locals.
+                self.svars[name] = self._match(cls, sort)
                 return self.svars[name]
             case ast.MatchClass(ast.Name(name), patterns):
                 # Simple class, e.g. `Not(...)`. Assumed to be from the same
@@ -356,15 +365,18 @@ class CaseParser:
                 assert len(args) == 2
                 inner = self._pyexpr(args[0])
                 assert isinstance(inner, BitVector)
-                width = self._pyexpr(args[1])
-                assert isinstance(width, bv.Value)
+                match cast(Symbolic, self._pyexpr(args[1])):
+                    case bv.Value(width):
+                        pass
+                    case bv.Add(bv.Value(a), bv.Value(b)):
+                        width = a + b
+                    case other:
+                        raise NotImplementedError(other)
                 # Note that Value(...) converts an inner Python type to an outer
                 # symbolic type. We assert that the conversion does not
                 # overflow.
-                self.assertions.append(
-                    bv.Ult(inner, bv.Value(1 << width.value, MAX_WIDTH))
-                )
-                return SymbolicType(bv.Extract[int](width.value - 1, 0, inner))
+                self.assertions.append(bv.Ult(inner, bv.Value(1 << width, MAX_WIDTH)))
+                return SymbolicType(bv.Extract[int](width - 1, 0, inner))
             case ast.Call(func, args), _:  # Not(...), etc.
                 if isinstance(func, ast.Subscript):
                     func = func.value  # ignore type annotations, e.g. Ult[int]
