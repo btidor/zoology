@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import cast
-
 from . import core
 from .bv import (
     Add,
@@ -43,7 +41,7 @@ from .core import Constraint
 # pyright: reportUnknownVariableType=false
 
 
-def rewrite_bitvector[N: int](term: BitVector[N]) -> BitVector[N]:
+def rewrite_bitvector[N: int](term: BitVector) -> BitVector:
     """Simplify the given bitvector."""
     width = term.width
     mask = (1 << term.width) - 1
@@ -177,14 +175,14 @@ def rewrite_bitvector[N: int](term: BitVector[N]) -> BitVector[N]:
             return Lshr(x, Value(a + b, width))
         case ZeroExtend(0, x):
             """zextzero"""
-            return cast(BitVector[N], x)
+            return x
         case SignExtend(0, x):
             """sextzero"""
-            return cast(BitVector[N], x)
+            return x
         case Concat(Value(a) as x, Value(b) as y):
             """concatval"""
             # Warning: SMT validation assumes that x and y are the same width.
-            return Value((a << y.width) | b, x.width + y.width)  # pyright: ignore[reportReturnType]
+            return Value((a << y.width) | b, x.width + y.width)
 
         # Core Generics (Ite)
         case Ite(core.Value(True), x, y):
@@ -299,16 +297,16 @@ def rewrite_mixed(term: Constraint) -> Constraint:
         # Normalize *gt, *ge to *lt, *le
         case Ugt(x, y):
             """rwugt"""
-            return Ult[int](y, x)
+            return Ult(y, x)
         case Uge(x, y):
             """rwuge"""
-            return Ule[int](y, x)
+            return Ule(y, x)
         case Sgt(x, y):
             """rwsgt"""
-            return Slt[int](y, x)
+            return Slt(y, x)
         case Sge(x, y):
             """rwsge"""
-            return Sle[int](y, x)
+            return Sle(y, x)
 
         case term:
             """fallthrough"""

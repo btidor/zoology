@@ -10,19 +10,19 @@ See: https://smt-lib.org/logics-all.shtml#QF_BV
 from __future__ import annotations
 
 from dataclasses import InitVar, dataclass, field, fields
-from typing import ClassVar, Literal, override
+from typing import ClassVar, override
 
 from .core import Constraint, DumpContext, Symbolic
 
 
 @dataclass(frozen=True, slots=True)
-class BitVector[N: int](Symbolic):
-    width: N = field(init=False)
+class BitVector(Symbolic):
+    width: int = field(init=False)
 
     def __post_init__(self) -> None:
         # By default, inherit width from inner term.
         for field in fields(self):
-            if field.type == "BitVector[N]":
+            if field.type == "BitVector":
                 term = getattr(self, field.name)
                 object.__setattr__(self, "width", term.width)
                 break
@@ -31,12 +31,12 @@ class BitVector[N: int](Symbolic):
 
 
 @dataclass(frozen=True, slots=True)
-class Symbol[N: int](BitVector[N]):
+class Symbol(BitVector):
     name: bytes
-    w: InitVar[N]
+    w: InitVar[int]
 
     @override
-    def __post_init__(self, w: N) -> None:
+    def __post_init__(self, w: int) -> None:
         object.__setattr__(self, "width", w)
 
     @override
@@ -49,12 +49,12 @@ class Symbol[N: int](BitVector[N]):
 
 
 @dataclass(frozen=True, slots=True)
-class Value[N: int](BitVector[N]):
+class Value(BitVector):
     value: int
-    w: InitVar[N]
+    w: InitVar[int]
 
     @override
-    def __post_init__(self, w: N) -> None:
+    def __post_init__(self, w: int) -> None:
         assert 0 <= self.value < (1 << w)
         object.__setattr__(self, "width", w)
 
@@ -67,33 +67,33 @@ class Value[N: int](BitVector[N]):
 
 
 @dataclass(frozen=True, slots=True)
-class UnaryOp[N: int](BitVector[N]):
-    term: BitVector[N]
+class UnaryOp(BitVector):
+    term: BitVector
 
 
 @dataclass(frozen=True, slots=True)
-class BinaryOp[N: int](BitVector[N]):
-    left: BitVector[N]
-    right: BitVector[N]
+class BinaryOp(BitVector):
+    left: BitVector
+    right: BitVector
 
 
 @dataclass(frozen=True, slots=True)
-class CompareOp[N: int](Constraint):
-    left: BitVector[N]
-    right: BitVector[N]
+class CompareOp(Constraint):
+    left: BitVector
+    right: BitVector
 
 
 @dataclass(frozen=True, slots=True)
-class SingleParamOp[N: int](BitVector[N]):
+class SingleParamOp(BitVector):
     i: int
-    term: BitVector[int]
+    term: BitVector
 
 
 @dataclass(frozen=True, slots=True)
-class Concat[N: int](BitVector[N]):
+class Concat(BitVector):
     op: ClassVar[bytes] = b"concat"
-    left: BitVector[int]
-    right: BitVector[int]
+    left: BitVector
+    right: BitVector
 
     @override
     def __post_init__(self) -> None:
@@ -101,11 +101,11 @@ class Concat[N: int](BitVector[N]):
 
 
 @dataclass(frozen=True, slots=True)
-class Extract[N: int](BitVector[N]):
+class Extract(BitVector):
     op: ClassVar[bytes] = b"extract"
     i: int
     j: int
-    term: BitVector[int]
+    term: BitVector
 
     @override
     def __post_init__(self) -> None:
@@ -115,116 +115,116 @@ class Extract[N: int](BitVector[N]):
 
 
 @dataclass(frozen=True, slots=True)
-class Not[N: int](UnaryOp[N]):
+class Not(UnaryOp):
     op: ClassVar[bytes] = b"bvnot"
 
 
 @dataclass(frozen=True, slots=True)
-class And[N: int](BinaryOp[N]):
+class And(BinaryOp):
     op: ClassVar[bytes] = b"bvand"
 
 
 @dataclass(frozen=True, slots=True)
-class Or[N: int](BitVector[N]):
+class Or(BitVector):
     op: ClassVar[bytes] = b"bvor"
-    left: BitVector[N]
-    right: BitVector[N]
+    left: BitVector
+    right: BitVector
 
 
 @dataclass(frozen=True, slots=True)
-class Neg[N: int](UnaryOp[N]):
+class Neg(UnaryOp):
     op: ClassVar[bytes] = b"bvneg"
 
 
 @dataclass(frozen=True, slots=True)
-class Add[N: int](BinaryOp[N]):
+class Add(BinaryOp):
     op: ClassVar[bytes] = b"bvadd"
 
 
 @dataclass(frozen=True, slots=True)
-class Mul[N: int](BinaryOp[N]):
+class Mul(BinaryOp):
     op: ClassVar[bytes] = b"bvmul"
 
 
 @dataclass(frozen=True, slots=True)
-class Udiv[N: int](BinaryOp[N]):
+class Udiv(BinaryOp):
     op: ClassVar[bytes] = b"bvudiv"
 
 
 @dataclass(frozen=True, slots=True)
-class Urem[N: int](BinaryOp[N]):
+class Urem(BinaryOp):
     op: ClassVar[bytes] = b"bvurem"
 
 
 @dataclass(frozen=True, slots=True)
-class Shl[N: int](BinaryOp[N]):
+class Shl(BinaryOp):
     op: ClassVar[bytes] = b"bvshl"
 
 
 @dataclass(frozen=True, slots=True)
-class Lshr[N: int](BinaryOp[N]):
+class Lshr(BinaryOp):
     op: ClassVar[bytes] = b"bvlshr"
 
 
 @dataclass(frozen=True, slots=True)
-class Ult[N: int](CompareOp[N]):
+class Ult(CompareOp):
     op: ClassVar[bytes] = b"bvult"
 
 
 @dataclass(frozen=True, slots=True)
-class Nand[N: int](BinaryOp[N]):
+class Nand(BinaryOp):
     op: ClassVar[bytes] = b"bvnand"
 
 
 @dataclass(frozen=True, slots=True)
-class Nor[N: int](BinaryOp[N]):
+class Nor(BinaryOp):
     op: ClassVar[bytes] = b"bvnor"
 
 
 @dataclass(frozen=True, slots=True)
-class Xor[N: int](BinaryOp[N]):
+class Xor(BinaryOp):
     op: ClassVar[bytes] = b"bvxor"
 
 
 @dataclass(frozen=True, slots=True)
-class Xnor[N: int](BinaryOp[N]):
+class Xnor(BinaryOp):
     op: ClassVar[bytes] = b"bvxnor"
 
 
 @dataclass(frozen=True, slots=True)
-class Comp[N: int](BitVector[Literal[1]]):
+class Comp(BitVector):  # width-1 result
     op: ClassVar[bytes] = b"bvcomp"
-    left: BitVector[N]
-    right: BitVector[N]
+    left: BitVector
+    right: BitVector
 
 
 @dataclass(frozen=True, slots=True)
-class Sub[N: int](BinaryOp[N]):
+class Sub(BinaryOp):
     op: ClassVar[bytes] = b"bvsub"
 
 
 @dataclass(frozen=True, slots=True)
-class Sdiv[N: int](BinaryOp[N]):
+class Sdiv(BinaryOp):
     op: ClassVar[bytes] = b"bvsdiv"
 
 
 @dataclass(frozen=True, slots=True)
-class Srem[N: int](BinaryOp[N]):
+class Srem(BinaryOp):
     op: ClassVar[bytes] = b"bvsrem"
 
 
 @dataclass(frozen=True, slots=True)
-class Smod[N: int](BinaryOp[N]):
+class Smod(BinaryOp):
     op: ClassVar[bytes] = b"bvsmod"
 
 
 @dataclass(frozen=True, slots=True)
-class Ashr[N: int](BinaryOp[N]):
+class Ashr(BinaryOp):
     op: ClassVar[bytes] = b"bvashr"
 
 
 @dataclass(frozen=True, slots=True)
-class Repeat[N: int](SingleParamOp[N]):
+class Repeat(SingleParamOp):
     op: ClassVar[bytes] = b"repeat"
 
     @override
@@ -235,7 +235,7 @@ class Repeat[N: int](SingleParamOp[N]):
 
 
 @dataclass(frozen=True, slots=True)
-class ZeroExtend[N: int](SingleParamOp[N]):
+class ZeroExtend(SingleParamOp):
     op: ClassVar[bytes] = b"zero_extend"
 
     @override
@@ -246,7 +246,7 @@ class ZeroExtend[N: int](SingleParamOp[N]):
 
 
 @dataclass(frozen=True, slots=True)
-class SignExtend[N: int](SingleParamOp[N]):
+class SignExtend(SingleParamOp):
     op: ClassVar[bytes] = b"sign_extend"
 
     @override
@@ -257,53 +257,53 @@ class SignExtend[N: int](SingleParamOp[N]):
 
 
 @dataclass(frozen=True, slots=True)
-class RotateLeft[N: int](SingleParamOp[N]):
+class RotateLeft(SingleParamOp):
     op: ClassVar[bytes] = b"rotate_left"
 
 
 @dataclass(frozen=True, slots=True)
-class RotateRight[N: int](SingleParamOp[N]):
+class RotateRight(SingleParamOp):
     op: ClassVar[bytes] = b"rotate_right"
 
 
 @dataclass(frozen=True, slots=True)
-class Ule[N: int](CompareOp[N]):
+class Ule(CompareOp):
     op: ClassVar[bytes] = b"bvule"
 
 
 @dataclass(frozen=True, slots=True)
-class Ugt[N: int](CompareOp[N]):
+class Ugt(CompareOp):
     op: ClassVar[bytes] = b"bvugt"
 
 
 @dataclass(frozen=True, slots=True)
-class Uge[N: int](CompareOp[N]):
+class Uge(CompareOp):
     op: ClassVar[bytes] = b"bvuge"
 
 
 @dataclass(frozen=True, slots=True)
-class Slt[N: int](CompareOp[N]):
+class Slt(CompareOp):
     op: ClassVar[bytes] = b"bvslt"
 
 
 @dataclass(frozen=True, slots=True)
-class Sle[N: int](CompareOp[N]):
+class Sle(CompareOp):
     op: ClassVar[bytes] = b"bvsle"
 
 
 @dataclass(frozen=True, slots=True)
-class Sgt[N: int](CompareOp[N]):
+class Sgt(CompareOp):
     op: ClassVar[bytes] = b"bvsgt"
 
 
 @dataclass(frozen=True, slots=True)
-class Sge[N: int](CompareOp[N]):
+class Sge(CompareOp):
     op: ClassVar[bytes] = b"bvsge"
 
 
 @dataclass(frozen=True, slots=True)
-class Ite[N: int](BitVector[N]):
+class Ite(BitVector):
     op: ClassVar[bytes] = b"ite"
     cond: Constraint
-    left: BitVector[N]
-    right: BitVector[N]
+    left: BitVector
+    right: BitVector

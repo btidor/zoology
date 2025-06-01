@@ -218,7 +218,7 @@ class CaseParser:
                     case BitVectorSort(width):
                         sym = sort.symbol(name)
                         self.pyvars[name] = PythonType(
-                            bv.ZeroExtend[int](MAX_WIDTH - width, sym)
+                            bv.ZeroExtend(MAX_WIDTH - width, sym)
                         )
                         return SymbolicType(sym)
             case "Value", [pattern]:
@@ -234,7 +234,7 @@ class CaseParser:
                 for field, pattern in zip(filtered, patterns, strict=True):
                     if field.type == "Constraint":
                         arg = self._match(pattern, ConstraintSort())
-                    elif field.type == "BitVector[N]" or field.type == "BitVector[int]":
+                    elif field.type == "BitVector[N]" or field.type == "BitVector":
                         assert isinstance(sort, BitVectorSort)
                         arg = self._match(pattern, sort)
                     elif field.type == "S":
@@ -283,32 +283,32 @@ class CaseParser:
                 nonneg = core.And(bv.Sge(left, ZERO), bv.Sge(right, ZERO))
                 match op:
                     case ast.Add():
-                        return PythonType(bv.Add[int](left, right))
+                        return PythonType(bv.Add(left, right))
                     case ast.Sub():
-                        return PythonType(bv.Sub[int](left, right))
+                        return PythonType(bv.Sub(left, right))
                     case ast.Mult():
-                        return PythonType(bv.Mul[int](left, right))
+                        return PythonType(bv.Mul(left, right))
                     case ast.FloorDiv():
                         self.assertions.append(rnonzero)  # else ZeroDivisionError
-                        return PythonType(bv.Sdiv[int](left, right))
+                        return PythonType(bv.Sdiv(left, right))
                     case ast.Mod():
                         self.assertions.append(rnonzero)  # else ZeroDivisionError
-                        return PythonType(bv.Smod[int](left, right))
+                        return PythonType(bv.Smod(left, right))
                     case ast.BitAnd():
                         self.assertions.append(nonneg)  # else incorrect result
-                        return PythonType(bv.And[int](left, right))
+                        return PythonType(bv.And(left, right))
                     case ast.BitOr():
                         self.assertions.append(nonneg)  # else incorrect result
-                        return PythonType(bv.Or[int](left, right))
+                        return PythonType(bv.Or(left, right))
                     case ast.BitXor():
                         self.assertions.append(nonneg)  # else incorrect result
-                        return PythonType(bv.Xor[int](left, right))
+                        return PythonType(bv.Xor(left, right))
                     case ast.LShift():
                         self.assertions.append(nonneg)  # else incorrect result
-                        return PythonType(bv.Shl[int](left, right))
+                        return PythonType(bv.Shl(left, right))
                     case ast.RShift():
                         self.assertions.append(nonneg)  # else incorrect result
-                        return PythonType(bv.Lshr[int](left, right))
+                        return PythonType(bv.Lshr(left, right))
                     case _:
                         raise NotImplementedError(op)
             case ast.Compare(left, [op], [right]):
@@ -320,13 +320,13 @@ class CaseParser:
                     case ast.NotEq():
                         return PythonType(Distinct(left, right))
                     case ast.Lt():
-                        return PythonType(bv.Slt[int](left, right))
+                        return PythonType(bv.Slt(left, right))
                     case ast.LtE():
-                        return PythonType(bv.Sle[int](left, right))
+                        return PythonType(bv.Sle(left, right))
                     case ast.Gt():
-                        return PythonType(bv.Sgt[int](left, right))
+                        return PythonType(bv.Sgt(left, right))
                     case ast.GtE():
-                        return PythonType(bv.Sge[int](left, right))
+                        return PythonType(bv.Sge(left, right))
                     case _:
                         raise NotImplementedError(op)
             case ast.BoolOp(op, [left, right]):
@@ -376,10 +376,10 @@ class CaseParser:
                 # symbolic type. We assert that the conversion does not
                 # overflow.
                 self.assertions.append(bv.Ult(inner, bv.Value(1 << width, MAX_WIDTH)))
-                return SymbolicType(bv.Extract[int](width - 1, 0, inner))
+                return SymbolicType(bv.Extract(width - 1, 0, inner))
             case ast.Call(func, args), _:  # Not(...), etc.
                 if isinstance(func, ast.Subscript):
-                    func = func.value  # ignore type annotations, e.g. Ult[int]
+                    func = func.value  # ignore type annotations, e.g. Ult
                 match func:
                     case ast.Name(name):
                         cls = self.sort.operator(name)
@@ -418,11 +418,11 @@ class BitVectorSort[N: int]:
 
     width: N
 
-    def symbol(self, name: str) -> BitVector[N]:
+    def symbol(self, name: str) -> BitVector:
         """Create a Symbol with the given name."""
         return bv.Symbol(name.encode(), self.width)
 
-    def value(self, val: int) -> BitVector[N]:
+    def value(self, val: int) -> BitVector:
         """Create a concrete Value."""
         assert 0 <= val < (1 << self.width)
         return bv.Value(val, self.width)

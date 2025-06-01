@@ -9,6 +9,7 @@ See: https://smt-lib.org/theories-ArraysEx.shtml
 
 from __future__ import annotations
 
+import abc
 from dataclasses import dataclass
 from typing import ClassVar, override
 
@@ -18,14 +19,19 @@ from . import bv
 
 
 @dataclass(frozen=True, slots=True)
-class Array[K: int, V: int](Symbolic): ...
+class Array(Symbolic):
+    @abc.abstractmethod
+    def value_width(self) -> int: ...
 
 
 @dataclass(frozen=True, slots=True)
-class Symbol[K: int, V: int](Array[K, V]):
+class Symbol(Array):
     name: bytes
-    key: K
-    value: V
+    key: int
+    value: int
+
+    def value_width(self) -> int:
+        return self.value
 
     @override
     def dump(self, ctx: DumpContext) -> None:
@@ -40,45 +46,46 @@ class Symbol[K: int, V: int](Array[K, V]):
 
 
 @dataclass(frozen=True, slots=True)
-class Value[K: int, V: int](Array[K, V]):
-    default: BitVector[V]
-    key: K
-    value: V
+class Value(Array):
+    default: BitVector
+    key: int
+
+    def value_width(self) -> int:
+        return self.default.width
 
     @override
     def dump(self, ctx: DumpContext) -> None:
         ctx.write(
             b"((_ as const (Array (_ BitVec %d) (_ BitVec %d)))"
-            % (self.key, self.value)
+            % (self.key, self.default.width)
         )
         self.default.dump(ctx)
         ctx.write(b")")
 
 
 @dataclass(frozen=True, slots=True)
-class Select[K: int, V: int](BitVector[V]):
+class Select(BitVector):
     op: ClassVar[bytes] = b"select"
-    array: Array[K, V]
-    key: BitVector[K]
+    array: Array
+    key: BitVector
 
     @override
     def __post_init__(self) -> None:
-        object.__setattr__(self, "width", self.array.value)  # pyright: ignore
+        object.__setattr__(self, "width", self.array.value_width())
 
 
 @dataclass(frozen=True, slots=True)
-class Store[K: int, V: int](Array[K, V]):
-    default: Symbol[K, V] | Value[K, V]
-    lower: frozenset[tuple[int, BitVector[V]]] = frozenset()
-    upper: tuple[tuple[BitVector[K], BitVector[V]], ...] = ()
+class Store(Array):
+    default: Symbol | Value
+    lower: frozenset[tuple[int, BitVector]] = frozenset()
+    upper: tuple[tuple[BitVector, BitVector], ...] = ()
 
-    @property
-    def value(self) -> V:  # pyright: ignore[reportIncompatibleVariableOverride]
-        return self.default.value
+    def value_width(self) -> int:
+        return self.default.value_width()
 
     @override
     def dump(self, ctx: DumpContext) -> None:
-        writes = list[tuple[BitVector[K], BitVector[V]]](
+        writes = list[tuple[BitVector, BitVector]](
             [(bv.Value(k, self.default.key), v) for k, v in self.lower]
         )
         writes.extend(self.upper)

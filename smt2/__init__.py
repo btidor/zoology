@@ -21,9 +21,8 @@ from typing import (
     overload,
 )
 
-from smt2.rwbv import rewrite_bitvector
-from smt2.rwcore import rewrite_constraint
-
+from .rwbv import rewrite_bitvector
+from .rwcore import rewrite_constraint
 from . import array, bv, core
 
 
@@ -72,7 +71,7 @@ class Symbolic(abc.ABC):
             k._term = rewrite_constraint(k._term)
         elif isinstance(k._term, bv.BitVector):
             assert issubclass(cls, BitVector)
-            k._term = rewrite_bitvector(k._term)  # pyright: ignore[reportUnknownArgumentType,reportUnknownMemberType]
+            k._term = rewrite_bitvector(k._term)
         return k
 
     # Implementation Note: Symbolic instances are immutable. For performance,
@@ -147,7 +146,7 @@ class BitVector[N: int](
 ):
     __slots__ = ()
     width: Final[N]  # pyright: ignore[reportGeneralTypeIssues]
-    _term: bv.BitVector[N]
+    _term: bv.BitVector
 
     def __init__(self, value: int | str, /) -> None:
         match value:
@@ -250,7 +249,7 @@ class Uint[N: int](BitVector[N]):
     def into[M: int](self, other: type[BitVector[M]], /) -> BitVector[M]:
         k = other.__new__(other)
         if self.width == other.width:
-            k._term = self._term  # pyright: ignore[reportAttributeAccessIssue]
+            k._term = self._term
         elif self.width < other.width:
             k._term = bv.ZeroExtend(other.width - self.width, self._term)
         else:
@@ -261,10 +260,7 @@ class Uint[N: int](BitVector[N]):
     def concat[M: int](cls, *terms: Uint[M]) -> Uint[N]:
         assert terms and cls.width == reduce(lambda s, t: s + t.width, terms, 0)
         k = cls.__new__(cls)
-        x = terms[0]._term
-        for t in terms[1:]:
-            x = bv.Concat[int](x, t._term)
-        k._term = x  # pyright: ignore[reportAttributeAccessIssue]
+        k._term = reduce(bv.Concat, (t._term for t in terms))
         return k
 
     @classmethod
@@ -316,7 +312,7 @@ class Int[N: int](BitVector[N]):
     def into[M: int](self, other: type[BitVector[M]], /) -> BitVector[M]:
         k = other.__new__(other)
         if self.width == other.width:
-            k._term = self._term  # pyright: ignore[reportAttributeAccessIssue]
+            k._term = self._term
         elif self.width < other.width:
             k._term = bv.SignExtend(other.width - self.width, self._term)
         else:
@@ -381,17 +377,18 @@ class Array[K: Uint[Any] | Int[Any], V: Uint[Any] | Int[Any]](
 
     _key: Final[type[K]]  # pyright: ignore[reportGeneralTypeIssues]
     _value: Final[type[V]]  # pyright: ignore[reportGeneralTypeIssues]
-    _term: array.Symbol[int, int] | array.Value[int, int] | array.Store[int, int]
+    _term: array.Symbol | array.Value | array.Store
 
     __hash__: ClassVar[None] = None  # pyright: ignore[reportIncompatibleMethodOverride]
 
     def __init__(self, value: V | str, /) -> None:
-        width: tuple[int, int] = (self._key.width, self._value.width)
         match value:
             case BitVector():
-                self._term = array.Value(value._term, *width)  # pyright: ignore[reportPrivateUsage]
+                self._term = array.Value(value._term, self._key.width)  # pyright: ignore[reportPrivateUsage]
             case str():
-                self._term = array.Symbol(value.encode(), *width)
+                self._term = array.Symbol(
+                    value.encode(), self._key.width, self._value.width
+                )
 
     def __eq__(  # pyright: ignore[reportIncompatibleMethodOverride]
         self, other: Never, /
@@ -403,7 +400,7 @@ class Array[K: Uint[Any] | Int[Any], V: Uint[Any] | Int[Any]](
     ) -> Never:
         raise TypeError("arrays cannot be compared for equality.")
 
-    def _mk_value(self, term: bv.BitVector[Any]) -> V:
+    def _mk_value(self, term: bv.BitVector) -> V:
         k = self._value.__new__(self._value)
         k._term = term  # pyright: ignore[reportPrivateUsage]
         return k
