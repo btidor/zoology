@@ -8,9 +8,10 @@ from dataclasses import dataclass, fields
 from random import randint
 from typing import Any, Callable, Generator, NewType, Self, cast
 
-from . import bv, core
-from .bv import BitVector
-from .core import Constraint, Distinct, Eq, Symbolic, check
+from . import theory_bitvec as bv
+from . import theory_core as core
+from .theory_bitvec import BitVector
+from .theory_core import Constraint, Distinct, Eq, Symbolic, check
 
 # During analysis, all values are symbolic (type Constraint, etc.). This
 # includes values that are symbolic at runtime (e.g. Not(...)) and those that

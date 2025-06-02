@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from . import core
-from .bv import (
+from . import theory_core as core
+from .theory_bitvec import (
     Add,
     And,
     BitVector,
@@ -34,7 +34,7 @@ from .bv import (
     Xor,
     ZeroExtend,
 )
-from .core import Constraint
+from .theory_core import Constraint
 
 # pyright: reportUnknownArgumentType=false
 # pyright: reportUnknownMemberType=false

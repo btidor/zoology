@@ -21,9 +21,11 @@ from typing import (
     overload,
 )
 
-from .rwbv import rewrite_bitvector
-from .rwcore import rewrite_constraint
-from . import array, bv, core
+from .rewrite_bitvec import rewrite_bitvector
+from .rewrite_core import rewrite_constraint
+from . import theory_array as array
+from . import theory_bitvec as bv
+from . import theory_core as core
 
 
 class BitVectorMeta(abc.ABCMeta):

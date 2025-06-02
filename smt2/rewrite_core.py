@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .core import (
+from .theory_core import (
     And,
     Constraint,
     Distinct,

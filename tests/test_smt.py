@@ -7,9 +7,9 @@ import pytest
 from bytes import Bytes
 from smt import Array, Uint8, Uint256
 from smt2.analysis import CaseParser, Casette
-from smt2.core import Distinct, Not, Symbol, check
-from smt2.rwbv import rewrite_bitvector, rewrite_mixed
-from smt2.rwcore import rewrite_constraint
+from smt2.rewrite_bitvec import rewrite_bitvector, rewrite_mixed
+from smt2.rewrite_core import rewrite_constraint
+from smt2.theory_core import Distinct, Not, Symbol, check
 
 
 def test_bvlshr_harder():

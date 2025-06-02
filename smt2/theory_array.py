@@ -13,9 +13,9 @@ import abc
 from dataclasses import dataclass
 from typing import ClassVar, override
 
-from .core import DumpContext, Symbolic
-from .bv import BitVector
-from . import bv
+from .theory_core import DumpContext, Symbolic
+from .theory_bitvec import BitVector
+from . import theory_bitvec as bv
 
 
 @dataclass(frozen=True, slots=True)

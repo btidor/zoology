@@ -11,7 +11,7 @@ from subprocess import Popen, PIPE
 from typing import Any, Literal, overload
 
 from smt2 import Array, Constraint, Int, Symbolic, Uint
-from smt2.core import DumpContext
+from smt2.theory_core import DumpContext
 
 
 Uint8 = Uint[Literal[8]]

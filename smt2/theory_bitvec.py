@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import InitVar, dataclass, field, fields
 from typing import ClassVar, override
 
-from .core import Constraint, DumpContext, Symbolic
+from .theory_core import Constraint, DumpContext, Symbolic
 
 
 @dataclass(frozen=True, slots=True)
