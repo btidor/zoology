@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import ast
 import inspect
+import re
+import subprocess
 from dataclasses import dataclass, fields
+from pathlib import Path
 from random import randint
+from types import ModuleType
 from typing import Any, Callable, Generator, NewType, Self, cast
 
-from smt2 import theory_bitvec, theory_core
-
+from . import theory_array, theory_bitvec, theory_core
+from .rewrite import RewriteMeta, rewrite_bitvector, rewrite_constraint
 from .theory_bitvec import (
     Add,
     BAnd,
@@ -447,3 +451,72 @@ def operator(name: str) -> Any:
         return getattr(theory_bitvec, name)
     else:
         raise KeyError(f"operator not found: {name}")
+
+
+COMPOSITE_PY = Path(__file__).parent / "composite.py"
+
+
+class Compositor:
+    """Produces a high-level SMT library by composing low-level components."""
+
+    @classmethod
+    def dump(cls) -> str:
+        """Write out `composite.py`."""
+        cls.out = bytearray()
+        cls._dump()
+        formatted = subprocess.check_output(["ruff", "format", "-"], input=cls.out)
+        return formatted.decode()
+
+    @classmethod
+    def _dump(cls) -> None:
+        cls.out.extend(b"""\"""
+High-level SMT library with full term rewriting.
+
+Warning: do not edit! To regenerate, run:
+
+    $ python -m smt2.analysis
+
+\"""
+# ruff: noqa: D101, D102, D103
+
+from __future__ import annotations
+
+import abc
+from dataclasses import InitVar, dataclass, field, fields
+from typing import Any, ClassVar, override
+
+from .theory_core import Base, DumpContext
+
+
+""")
+        cls._source(RewriteMeta)
+        cls._module(theory_core)
+        cls._source(rewrite_constraint)
+        cls._module(theory_bitvec)
+        cls._source(rewrite_bitvector)
+        cls._module(theory_array)
+
+    @classmethod
+    def _module(cls, module: ModuleType) -> None:
+        for item in vars(module).values():
+            if not isinstance(item, type) or not issubclass(item, Base):
+                continue
+            elif item == Base or inspect.getmodule(item) != module:
+                continue
+            cls._source(item)
+
+    @classmethod
+    def _source(cls, object: type | Callable[..., Any]) -> None:
+        s = inspect.getsource(object)
+        # s = s.replace("(Base)", "(Base, metaclass=RewriteMeta)")
+        s = re.sub(
+            r"(Constraint|BitVector)\(Base", r"\1(Base, metaclass=RewriteMeta", s
+        )
+        s = re.sub(r'\n*\s*("""[^"]*"""| #.*)\n+', "\n", s)
+        cls.out.extend(s.encode())
+        cls.out.extend(b"\n")
+
+
+if __name__ == "__main__":
+    with open(COMPOSITE_PY, "wt") as f:
+        f.write(Compositor().dump())

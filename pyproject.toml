@@ -6,9 +6,9 @@ filterwarnings = [
     "ignore:the imp module :DeprecationWarning",
 ]
 
-[tool.ruff]
+[tool.ruff.lint]
 extend-select = ["D"]
 ignore = ["D105", "D203", "D212"]
 
-[tool.ruff.per-file-ignores]
+[tool.ruff.lint.per-file-ignores]
 "tests/*" = ["D"]

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import abc
+from typing import Any
+
 from .theory_bitvec import (
     Add,
     BAnd,
@@ -45,6 +48,21 @@ from .theory_core import (
     Or,
     Xor,
 )
+
+
+class RewriteMeta(abc.ABCMeta):
+    """Performs term rewriting."""
+
+    def __call__(self, *args: Any, **kwds: Any) -> Any:
+        """Construct the requested term, then rewrite it."""
+        instance = super(RewriteMeta, self).__call__(*args, **kwds)
+        match instance:
+            case Constraint():
+                return rewrite_constraint(instance)
+            case BitVector():
+                return rewrite_bitvector(instance)
+            case _:
+                raise NotImplementedError(instance)
 
 
 def rewrite_constraint(term: Constraint) -> Constraint:
@@ -198,7 +216,6 @@ def rewrite_constraint(term: Constraint) -> Constraint:
         case Sge(x, y):
             """rwsge"""
             return Sle(y, x)
-
         case term:
             """fallthrough"""
             return term
@@ -371,7 +388,6 @@ def rewrite_bitvector(term: BitVector) -> BitVector:
         case BXor(Ite(c, x, y), z) | BXor(z, Ite(c, x, y)):
             """pushxorite"""
             return Ite(c, BXor(x, z), BXor(y, z))
-
         case term:
             """fallthrough"""
             return term

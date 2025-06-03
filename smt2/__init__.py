@@ -28,13 +28,11 @@ from .composite import (
     ASymbol,
     AValue,
     BAnd,
-    BitVecSymbol,
     BNot,
     BOr,
+    BSymbol,
     BValue,
     BXor,
-    CompositeBitVector,
-    CompositeConstraint,
     Concat,
     CSymbol,
     CValue,
@@ -61,6 +59,8 @@ from .composite import (
     Xor,
     ZeroExtend,
 )
+from .composite import BitVector as BitVectorTerm
+from .composite import Constraint as ConstraintTerm
 from .theory_core import Base as CoreSymbolic
 from .theory_core import DumpContext
 
@@ -127,7 +127,7 @@ class Symbolic(abc.ABC):
 
 class Constraint(Symbolic):
     __slots__ = ()
-    _term: CompositeConstraint
+    _term: ConstraintTerm
 
     def __init__(self, value: bool | str, /):
         match value:
@@ -180,14 +180,14 @@ class BitVector[N: int](
 ):
     __slots__ = ()
     width: Final[N]  # pyright: ignore[reportGeneralTypeIssues]
-    _term: CompositeBitVector
+    _term: BitVectorTerm
 
     def __init__(self, value: int | str, /) -> None:
         match value:
             case int():
                 self._term = BValue(value, self.width)
             case str():
-                self._term = BitVecSymbol(value.encode(), self.width)  # pyright: ignore[reportIncompatibleVariableOverride]
+                self._term = BSymbol(value.encode(), self.width)  # pyright: ignore[reportIncompatibleVariableOverride]
 
     @abc.abstractmethod
     def __lt__(self, other: Self, /) -> Constraint: ...
@@ -432,7 +432,7 @@ class Array[K: Uint[Any] | Int[Any], V: Uint[Any] | Int[Any]](
     ) -> Never:
         raise TypeError("Array cannot be compared for equality.")
 
-    def _mk_value(self, term: CompositeBitVector) -> V:
+    def _mk_value(self, term: BitVectorTerm) -> V:
         k = self._value.__new__(self._value)
         k._term = term  # pyright: ignore[reportPrivateUsage]
         return k

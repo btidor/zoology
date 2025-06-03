@@ -6,7 +6,7 @@ import pytest
 
 from bytes import Bytes
 from smt import Array, Uint8, Uint256
-from smt2.analysis import CaseParser, Casette
+from smt2.analysis import COMPOSITE_PY, CaseParser, Casette, Compositor
 from smt2.rewrite import rewrite_bitvector, rewrite_constraint
 from smt2.theory_core import CSymbol, Distinct, Not, check
 
@@ -58,3 +58,10 @@ def test_rewrite_constraint(case: Casette):
 def test_rewrite_bitvector(case: Casette):
     for width in range(1, MAX_WIDTH + 1):
         assert CaseParser(case, width).is_equivalent()
+
+
+def test_codegen():
+    with open(COMPOSITE_PY) as f:
+        actual = f.read()
+    expected = Compositor.dump()
+    assert actual == expected, "please run `python3 -m smt2.analysis`"

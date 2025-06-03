@@ -1,4 +1,11 @@
-"""Higher-level SMT library incorporating rewrite rules."""
+"""
+High-level SMT library with full term rewriting.
+
+Warning: do not edit! To regenerate, run:
+
+    $ python -m smt2.analysis
+
+"""
 # ruff: noqa: D101, D102, D103
 
 from __future__ import annotations
@@ -14,20 +21,20 @@ class RewriteMeta(abc.ABCMeta):
     def __call__(self, *args: Any, **kwds: Any) -> Any:
         instance = super(RewriteMeta, self).__call__(*args, **kwds)
         match instance:
-            case CompositeConstraint():
+            case Constraint():
                 return rewrite_constraint(instance)
-            case CompositeBitVector():
+            case BitVector():
                 return rewrite_bitvector(instance)
             case _:
                 raise NotImplementedError(instance)
 
 
 @dataclass(frozen=True, slots=True)
-class CompositeConstraint(Base, metaclass=RewriteMeta): ...
+class Constraint(Base, metaclass=RewriteMeta): ...
 
 
 @dataclass(frozen=True, slots=True)
-class CSymbol(CompositeConstraint):
+class CSymbol(Constraint):
     name: bytes
 
     @override
@@ -37,71 +44,71 @@ class CSymbol(CompositeConstraint):
 
 
 @dataclass(frozen=True, slots=True)
-class CValue(CompositeConstraint):
-    CoreValue: bool
+class CValue(Constraint):
+    value: bool
 
     @override
     def dump(self, ctx: DumpContext) -> None:
-        ctx.out.extend(b"true" if self.CoreValue else b"false")
+        ctx.out.extend(b"true" if self.value else b"false")
 
 
 @dataclass(frozen=True, slots=True)
-class Not(CompositeConstraint):
+class Not(Constraint):
     op: ClassVar[bytes] = b"not"
-    term: CompositeConstraint
+    term: Constraint
 
 
 @dataclass(frozen=True, slots=True)
-class Implies(CompositeConstraint):
+class Implies(Constraint):
     op: ClassVar[bytes] = b"=>"
-    left: CompositeConstraint
-    right: CompositeConstraint
+    left: Constraint
+    right: Constraint
 
 
 @dataclass(frozen=True, slots=True)
-class And(CompositeConstraint):
+class And(Constraint):
     op: ClassVar[bytes] = b"and"
-    left: CompositeConstraint
-    right: CompositeConstraint
+    left: Constraint
+    right: Constraint
 
 
 @dataclass(frozen=True, slots=True)
-class Or(CompositeConstraint):
+class Or(Constraint):
     op: ClassVar[bytes] = b"or"
-    left: CompositeConstraint
-    right: CompositeConstraint
+    left: Constraint
+    right: Constraint
 
 
 @dataclass(frozen=True, slots=True)
-class Xor(CompositeConstraint):
+class Xor(Constraint):
     op: ClassVar[bytes] = b"xor"
-    left: CompositeConstraint
-    right: CompositeConstraint
+    left: Constraint
+    right: Constraint
 
 
 @dataclass(frozen=True, slots=True)
-class Eq[S: Base](CompositeConstraint):
+class Eq[S: Base](Constraint):
     op: ClassVar[bytes] = b"="
     left: S
     right: S
 
 
 @dataclass(frozen=True, slots=True)
-class Distinct[S: Base](CompositeConstraint):
+class Distinct[S: Base](Constraint):
     op: ClassVar[bytes] = b"distinct"
     left: S
     right: S
 
 
 @dataclass(frozen=True, slots=True)
-class CIte(CompositeConstraint):
+class CIte(Constraint):
     op: ClassVar[bytes] = b"ite"
-    cond: CompositeConstraint
-    left: CompositeConstraint
-    right: CompositeConstraint
+    cond: Constraint
+    left: Constraint
+    right: Constraint
 
 
-def rewrite_constraint(term: CompositeConstraint) -> CompositeConstraint:
+def rewrite_constraint(term: Constraint) -> Constraint:
     match term:
         case Not(CValue(val)):
             return CValue(not val)
@@ -133,26 +140,23 @@ def rewrite_constraint(term: CompositeConstraint) -> CompositeConstraint:
             return CValue(False)
         case Xor(x, Not(y)) | Xor(Not(y), x) if x == y:
             return CValue(True)
-        case Eq(CompositeConstraint() as x, CompositeConstraint() as y):
+
+        case Eq(Constraint() as x, Constraint() as y):
             return Not(Xor(x, y))
-        case Distinct(CompositeConstraint() as x, CompositeConstraint() as y):
+        case Eq(BitVector() as x, BitVector() as y) if x == y:
+            return CValue(True)
+        case Eq(BitVector() as x, BNot(y)) | Eq(BNot(y), BitVector() as x) if x == y:
+            return CValue(False)
+        case Distinct(Constraint() as x, Constraint() as y):
             return Xor(x, y)
+        case Distinct(BitVector() as x, BitVector() as y):
+            return Not(Eq(x, y))
         case CIte(CValue(True), x, y):
             return x
         case CIte(CValue(False), x, y):
             return y
         case CIte(_, x, y) if x == y:
             return x
-        case Eq(BValue(a), BValue(b)):
-            return CValue(a == b)
-        case Eq(CompositeBitVector() as x, CompositeBitVector() as y) if x == y:
-            return CValue(True)
-        case Eq(CompositeBitVector() as x, BNot(y)) | Eq(
-            BNot(y), CompositeBitVector() as x
-        ) if x == y:
-            return CValue(False)
-        case Distinct(CompositeBitVector() as x, CompositeBitVector() as y):
-            return Not(Eq(x, y))
         case Eq(BValue(a), BNot(x)) | Eq(BNot(x), BValue(a)):
             mask = (1 << x.width) - 1
             return Eq(BValue(mask ^ a, x.width), x)
@@ -183,10 +187,7 @@ def rewrite_constraint(term: CompositeConstraint) -> CompositeConstraint:
             | Eq(Add(x, BValue(b)), BValue(a))
             | Eq(Add(BValue(b), x), BValue(a))
         ):
-            return Eq(
-                Add(BValue(a, x.width), Neg(BValue(b, x.width))),
-                x,
-            )
+            return Eq(Add(BValue(a, x.width), Neg(BValue(b, x.width))), x)
         case Ult(BValue(a), BValue(b)):
             return CValue(a < b)
         case Ult(x, BValue(0)):
@@ -214,13 +215,12 @@ def rewrite_constraint(term: CompositeConstraint) -> CompositeConstraint:
 
 
 @dataclass(frozen=True, slots=True)
-class CompositeBitVector(Base, metaclass=RewriteMeta):
+class BitVector(Base, metaclass=RewriteMeta):
     width: int = field(init=False)
 
     def __post_init__(self) -> None:
-        # By default, inherit width from inner term.
         for fld in fields(self):
-            if fld.type == "CompositeBitVector":
+            if fld.type == "BitVector":
                 term = getattr(self, fld.name)
                 object.__setattr__(self, "width", term.width)
                 break
@@ -229,7 +229,7 @@ class CompositeBitVector(Base, metaclass=RewriteMeta):
 
 
 @dataclass(frozen=True, slots=True)
-class BitVecSymbol(CompositeBitVector):
+class BSymbol(BitVector):
     name: bytes
     w: InitVar[int]
 
@@ -247,7 +247,7 @@ class BitVecSymbol(CompositeBitVector):
 
 
 @dataclass(frozen=True, slots=True)
-class BValue(CompositeBitVector):
+class BValue(BitVector):
     value: int
     w: InitVar[int]
 
@@ -265,33 +265,33 @@ class BValue(CompositeBitVector):
 
 
 @dataclass(frozen=True, slots=True)
-class UnaryOp(CompositeBitVector):
-    term: CompositeBitVector
+class UnaryOp(BitVector):
+    term: BitVector
 
 
 @dataclass(frozen=True, slots=True)
-class BinaryOp(CompositeBitVector):
-    left: CompositeBitVector
-    right: CompositeBitVector
+class BinaryOp(BitVector):
+    left: BitVector
+    right: BitVector
 
 
 @dataclass(frozen=True, slots=True)
-class CompareOp(CompositeConstraint):
-    left: CompositeBitVector
-    right: CompositeBitVector
+class CompareOp(Constraint):
+    left: BitVector
+    right: BitVector
 
 
 @dataclass(frozen=True, slots=True)
-class SingleParamOp(CompositeBitVector):
+class SingleParamOp(BitVector):
     i: int
-    term: CompositeBitVector
+    term: BitVector
 
 
 @dataclass(frozen=True, slots=True)
-class Concat(CompositeBitVector):
+class Concat(BitVector):
     op: ClassVar[bytes] = b"concat"
-    left: CompositeBitVector
-    right: CompositeBitVector
+    left: BitVector
+    right: BitVector
 
     @override
     def __post_init__(self) -> None:
@@ -299,11 +299,11 @@ class Concat(CompositeBitVector):
 
 
 @dataclass(frozen=True, slots=True)
-class Extract(CompositeBitVector):
+class Extract(BitVector):
     op: ClassVar[bytes] = b"extract"
     i: int
     j: int
-    term: CompositeBitVector
+    term: BitVector
 
     @override
     def __post_init__(self) -> None:
@@ -323,10 +323,10 @@ class BAnd(BinaryOp):
 
 
 @dataclass(frozen=True, slots=True)
-class BOr(CompositeBitVector):
+class BOr(BitVector):
     op: ClassVar[bytes] = b"bvor"
-    left: CompositeBitVector
-    right: CompositeBitVector
+    left: BitVector
+    right: BitVector
 
 
 @dataclass(frozen=True, slots=True)
@@ -390,10 +390,10 @@ class Xnor(BinaryOp):
 
 
 @dataclass(frozen=True, slots=True)
-class Comp(CompositeBitVector):  # width-1 result
+class Comp(BitVector):
     op: ClassVar[bytes] = b"bvcomp"
-    left: CompositeBitVector
-    right: CompositeBitVector
+    left: BitVector
+    right: BitVector
 
 
 @dataclass(frozen=True, slots=True)
@@ -412,7 +412,7 @@ class Srem(BinaryOp):
 
 
 @dataclass(frozen=True, slots=True)
-class Smot(BinaryOp):
+class Smod(BinaryOp):
     op: ClassVar[bytes] = b"bvsmod"
 
 
@@ -500,14 +500,14 @@ class Sge(CompareOp):
 
 
 @dataclass(frozen=True, slots=True)
-class Ite(CompositeBitVector):
+class Ite(BitVector):
     op: ClassVar[bytes] = b"ite"
-    cond: CompositeConstraint
-    left: CompositeBitVector
-    right: CompositeBitVector
+    cond: Constraint
+    left: BitVector
+    right: BitVector
 
 
-def rewrite_bitvector(term: CompositeBitVector) -> CompositeBitVector:
+def rewrite_bitvector(term: BitVector) -> BitVector:
     width = term.width
     mask = (1 << term.width) - 1
     modulus = 1 << term.width
@@ -615,13 +615,13 @@ def rewrite_bitvector(term: CompositeBitVector) -> CompositeBitVector:
 
 
 @dataclass(frozen=True, slots=True)
-class CompositeArray(Base):
+class Array(Base):
     @abc.abstractmethod
     def value_width(self) -> int: ...
 
 
 @dataclass(frozen=True, slots=True)
-class ASymbol(CompositeArray):
+class ASymbol(Array):
     name: bytes
     key: int
     value: int
@@ -642,8 +642,8 @@ class ASymbol(CompositeArray):
 
 
 @dataclass(frozen=True, slots=True)
-class AValue(CompositeArray):
-    default: CompositeBitVector
+class AValue(Array):
+    default: BitVector
     key: int
 
     def value_width(self) -> int:
@@ -660,10 +660,10 @@ class AValue(CompositeArray):
 
 
 @dataclass(frozen=True, slots=True)
-class Select(CompositeBitVector):
+class Select(BitVector):
     op: ClassVar[bytes] = b"select"
-    array: CompositeArray
-    key: CompositeBitVector
+    array: Array
+    key: BitVector
 
     @override
     def __post_init__(self) -> None:
@@ -671,17 +671,17 @@ class Select(CompositeBitVector):
 
 
 @dataclass(frozen=True, slots=True)
-class Store(CompositeArray):
+class Store(Array):
     default: ASymbol | AValue
-    lower: frozenset[tuple[int, CompositeBitVector]] = frozenset()
-    upper: tuple[tuple[CompositeBitVector, CompositeBitVector], ...] = ()
+    lower: frozenset[tuple[int, BitVector]] = frozenset()
+    upper: tuple[tuple[BitVector, BitVector], ...] = ()
 
     def value_width(self) -> int:
         return self.default.value_width()
 
     @override
     def dump(self, ctx: DumpContext) -> None:
-        writes = list[tuple[CompositeBitVector, CompositeBitVector]](
+        writes = list[tuple[BitVector, BitVector]](
             [(BValue(k, self.default.key), v) for k, v in self.lower]
         )
         writes.extend(self.upper)
