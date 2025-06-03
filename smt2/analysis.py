@@ -8,22 +8,54 @@ from dataclasses import dataclass, fields
 from random import randint
 from typing import Any, Callable, Generator, NewType, Self, cast
 
-from . import theory_bitvec as bv
-from . import theory_core as core
-from .theory_bitvec import BitVector
-from .theory_core import Constraint, Distinct, Eq, Symbolic, check
+from smt2 import theory_bitvec, theory_core
+
+from .theory_bitvec import (
+    Add,
+    BAnd,
+    BitVector,
+    BOr,
+    BSymbol,
+    BValue,
+    BXor,
+    Extract,
+    Lshr,
+    Mul,
+    Sdiv,
+    Sge,
+    Sgt,
+    Shl,
+    Sle,
+    Slt,
+    Smod,
+    Sub,
+    Ult,
+    ZeroExtend,
+)
+from .theory_core import (
+    And,
+    Base,
+    Constraint,
+    CSymbol,
+    CValue,
+    Distinct,
+    Eq,
+    Not,
+    Or,
+    check,
+)
 
 # During analysis, all values are symbolic (type Constraint, etc.). This
 # includes values that are symbolic at runtime (e.g. Not(...)) and those that
 # are instances of concrete Python types (e.g. True). We want to be explicit
 # about which context we're operating in, and these type wrappers force us to
 # convert between the two explicitly.
-PythonType = NewType("PythonType", Symbolic)
-SymbolicType = NewType("SymbolicType", Symbolic)
+PythonType = NewType("PythonType", Base)
+SymbolicType = NewType("SymbolicType", Base)
 
 # When handling Python ints, assume they fit in a fixed (large) number of bytes.
 MAX_WIDTH = 128
-ZERO = bv.Value(0, MAX_WIDTH)
+ZERO = BValue(0, MAX_WIDTH)
 
 
 class Casette:
@@ -122,7 +154,7 @@ class CaseParser:
         # 2. Parse the guard, if present. (Relies on vars defined in #1).
         match self.case.guard:
             case None:
-                guard = core.Value(True)
+                guard = CValue(True)
             case ast.Compare(ast.Name(name), [ast.Eq()], [right]) if name in self.svars:
                 # Comparing symbolic types (special!). If two ASTs are equal,
                 # the expressions must be equal.
@@ -158,8 +190,8 @@ class CaseParser:
         # 4. Check!
         goal = Eq(term1, term2)
         for a in self.assertions:
-            goal = core.And(goal, a)
-        return not check(core.Not(goal), guard)
+            goal = And(goal, a)
+        return not check(Not(goal), guard)
 
     def _match(self, pattern: ast.pattern, sort: Sort) -> SymbolicType:
         """Recursively parse a case statement pattern."""
@@ -185,10 +217,6 @@ class CaseParser:
                 # Simple class, e.g. `Not(...)`. Assumed to be from the same
                 # theory as the test case.
                 return self._match_symbolic(name, patterns, self.sort)
-            case ast.MatchClass(ast.Attribute(ast.Name("core"), name), patterns):
-                # Qualified class, e.g. `core.Not(...)`. Used in BitVector
-                # rewrites to access logic from the core theory.
-                return self._match_symbolic(name, patterns, ConstraintSort())
             case _:
                 raise NotImplementedError("unsupported pattern", pattern)
 
@@ -199,37 +227,35 @@ class CaseParser:
         match name, patterns:
             case "Symbol", _:
                 raise SyntaxError("Symbol is not supported")
-            case "Value", [ast.MatchSingleton(bool() as b)]:
-                # Constant value, e.g. `core.Value(True)`.
-                assert isinstance(sort, ConstraintSort)
-                return SymbolicType(sort.value(b))
-            case "Value", [ast.MatchValue(ast.Constant(int() as i))]:
-                # Constant value, e.g. `bv.Value(1)`.
+            case "CValue", [ast.MatchSingleton(bool() as b)]:
+                return SymbolicType(ConstraintSort().value(b))
+            case "BValue", [ast.MatchValue(ast.Constant(int() as i))]:
                 assert isinstance(sort, BitVectorSort)
                 return SymbolicType(sort.value(i))
-            case "Value", [ast.MatchAs(_, str() as name)]:
+            case "CValue" | "BValue" as kind, [ast.MatchAs(_, str() as name)]:
                 # Named value, e.g. `Value(foo)`. Note that `foo` is defined as
                 # a Python type, while `Value(foo)` is a symbolic type. We know
                 # that `foo` fits in the given width, though.
                 assert name not in self.svars, "duplicate name"
-                match sort:
-                    case ConstraintSort():
-                        self.pyvars[name] = PythonType(sort.symbol(name))
+                match kind:
+                    case "CValue":
+                        self.pyvars[name] = PythonType(ConstraintSort().symbol(name))
                         return SymbolicType(self.pyvars[name])
-                    case BitVectorSort(width):
+                    case "BValue":
+                        assert isinstance(sort, BitVectorSort)
                         sym = sort.symbol(name)
                         self.pyvars[name] = PythonType(
-                            bv.ZeroExtend(MAX_WIDTH - width, sym)
+                            ZeroExtend(MAX_WIDTH - sort.width, sym)
                         )
                         return SymbolicType(sym)
-            case "Value", [pattern]:
+            case "CValue" | "BValue", [pattern]:
                 raise TypeError("unexpected match on Value(...)", pattern)
-            case "Value", _:
+            case "CValue" | "BValue", _:
                 raise TypeError("may only match on single-argument `Value(...)`")
             case _, _:
                 # Class from theory, e.g. `Not(...)`. Parse the field
                 # annotations to determine the type of the inner expressions.
-                cls = sort.operator(name)
+                cls = operator(name)
                 args = list[SymbolicType]()
                 filtered = filter(lambda f: f.init and not f.kw_only, fields(cls))
                 for field, pattern in zip(filtered, patterns, strict=True):
@@ -266,50 +292,50 @@ class CaseParser:
             case ast.Name(name):
                 return self.pyvars[name]
             case ast.Constant(bool() as b):
-                return PythonType(core.Value(b))
+                return PythonType(CValue(b))
             case ast.Constant(int() as i):
-                return PythonType(bv.Value(i, MAX_WIDTH))
+                return PythonType(BValue(i, MAX_WIDTH))
             case ast.UnaryOp(op, operand):
                 operand = self._pyexpr(operand)
                 match op:
                     case ast.Not():
                         assert isinstance(operand, Constraint)
-                        return PythonType(core.Not(operand))
+                        return PythonType(Not(operand))
                     case _:
                         raise NotImplementedError(op)
             case ast.BinOp(left, op, right):
                 left, right = self._pyexpr(left), self._pyexpr(right)
                 assert isinstance(left, BitVector) and isinstance(right, BitVector)
                 rnonzero = Distinct(right, ZERO)
-                nonneg = core.And(bv.Sge(left, ZERO), bv.Sge(right, ZERO))
+                nonneg = And(Sge(left, ZERO), Sge(right, ZERO))
                 match op:
                     case ast.Add():
-                        return PythonType(bv.Add(left, right))
+                        return PythonType(Add(left, right))
                     case ast.Sub():
-                        return PythonType(bv.Sub(left, right))
+                        return PythonType(Sub(left, right))
                     case ast.Mult():
-                        return PythonType(bv.Mul(left, right))
+                        return PythonType(Mul(left, right))
                     case ast.FloorDiv():
                         self.assertions.append(rnonzero)  # else ZeroDivisionError
-                        return PythonType(bv.Sdiv(left, right))
+                        return PythonType(Sdiv(left, right))
                     case ast.Mod():
                         self.assertions.append(rnonzero)  # else ZeroDivisionError
-                        return PythonType(bv.Smod(left, right))
+                        return PythonType(Smod(left, right))
                     case ast.BitAnd():
                         self.assertions.append(nonneg)  # else incorrect result
-                        return PythonType(bv.And(left, right))
+                        return PythonType(BAnd(left, right))
                     case ast.BitOr():
                         self.assertions.append(nonneg)  # else incorrect result
-                        return PythonType(bv.Or(left, right))
+                        return PythonType(BOr(left, right))
                     case ast.BitXor():
                         self.assertions.append(nonneg)  # else incorrect result
-                        return PythonType(bv.Xor(left, right))
+                        return PythonType(BXor(left, right))
                     case ast.LShift():
                         self.assertions.append(nonneg)  # else incorrect result
-                        return PythonType(bv.Shl(left, right))
+                        return PythonType(Shl(left, right))
                     case ast.RShift():
                         self.assertions.append(nonneg)  # else incorrect result
-                        return PythonType(bv.Lshr(left, right))
+                        return PythonType(Lshr(left, right))
                     case _:
                         raise NotImplementedError(op)
             case ast.Compare(left, [op], [right]):
@@ -321,13 +347,13 @@ class CaseParser:
                     case ast.NotEq():
                         return PythonType(Distinct(left, right))
                     case ast.Lt():
-                        return PythonType(bv.Slt(left, right))
+                        return PythonType(Slt(left, right))
                     case ast.LtE():
-                        return PythonType(bv.Sle(left, right))
+                        return PythonType(Sle(left, right))
                     case ast.Gt():
-                        return PythonType(bv.Sgt(left, right))
+                        return PythonType(Sgt(left, right))
                     case ast.GtE():
-                        return PythonType(bv.Sge(left, right))
+                        return PythonType(Sge(left, right))
                     case _:
                         raise NotImplementedError(op)
             case ast.BoolOp(op, [left, right]):
@@ -335,59 +361,47 @@ class CaseParser:
                 assert isinstance(left, Constraint) and isinstance(right, Constraint)
                 match op:
                     case ast.And():
-                        return PythonType(core.And(left, right))
+                        return PythonType(And(left, right))
                     case ast.Or():
-                        return PythonType(core.Or(left, right))
+                        return PythonType(Or(left, right))
                     case _:
                         raise NotImplementedError(op)
             case ast.Attribute(ast.Name(name), attr):
                 val = getattr(self.svars[name], attr)
                 assert isinstance(val, int)
-                return PythonType(bv.Value(val, MAX_WIDTH))
+                return PythonType(BValue(val, MAX_WIDTH))
             case _:
                 raise NotImplementedError(expr)
 
     def _sexpr(self, expr: ast.expr) -> SymbolicType:
         """Recursively parse a symbolic expression."""
-        match expr, self.sort:
-            case ast.Name(name), _:
+        match expr:
+            case ast.Name(name):
                 return self.svars[name]
-            case ast.Call(ast.Name("cast"), [_, arg]), _:
+            case ast.Call(ast.Name("cast"), [_, arg]):
                 return self._sexpr(arg)  # ignore casts
-            case ast.Call(ast.Name("Symbol")), _:
+            case ast.Call(ast.Name("Symbol")):
                 raise SyntaxError("Symbol is not supported")
-            case (ast.Call(ast.Name("Value"), args), ConstraintSort()) | (
-                ast.Call(ast.Attribute(ast.Name("core"), "Value"), args),
-                _,
-            ):
-                assert len(args) == 1
-                return SymbolicType(self._pyexpr(args[0]))
-            case ast.Call(ast.Name("Value"), args), BitVectorSort():
-                assert len(args) == 2
-                inner = self._pyexpr(args[0])
+            case ast.Call(ast.Name("CValue"), [arg]):
+                return SymbolicType(self._pyexpr(arg))
+            case ast.Call(ast.Name("BValue"), [arg, width]):
+                inner = self._pyexpr(arg)
                 assert isinstance(inner, BitVector)
-                match cast(Symbolic, self._pyexpr(args[1])):
-                    case bv.Value(width):
+                match cast(Base, self._pyexpr(width)):
+                    case BValue(width):
                         pass
-                    case bv.Add(bv.Value(a), bv.Value(b)):
+                    case Add(BValue(a), BValue(b)):
                         width = a + b
                     case other:
                         raise NotImplementedError(other)
                 # Note that Value(...) converts an inner Python type to an outer
                 # symbolic type. We assert that the conversion does not
                 # overflow.
-                self.assertions.append(bv.Ult(inner, bv.Value(1 << width, MAX_WIDTH)))
-                return SymbolicType(bv.Extract(width - 1, 0, inner))
-            case ast.Call(func, args), _:  # Not(...), etc.
-                if isinstance(func, ast.Subscript):
-                    func = func.value  # ignore type annotations, e.g. Ult
-                match func:
-                    case ast.Name(name):
-                        cls = self.sort.operator(name)
-                    case ast.Attribute(ast.Name("core"), name):
-                        cls = ConstraintSort().operator(name)
-                    case _:
-                        raise NotImplementedError(func)
+                self.assertions.append(Ult(inner, BValue(1 << width, MAX_WIDTH)))
+                return SymbolicType(Extract(width - 1, 0, inner))
+            case ast.Call(ast.Name(name), args):  # Not(...), etc.
+                assert "Value" not in name, "unhandled CValue or BValue"
+                cls = operator(name)
                 return cls(*(self._sexpr(a) for a in args))
             case _:
                 raise NotImplementedError(expr)
@@ -402,15 +416,11 @@ class ConstraintSort:
 
     def symbol(self, name: str) -> Constraint:
         """Create a Symbol with the given name."""
-        return core.Symbol(name.encode())
+        return CSymbol(name.encode())
 
     def value(self, val: bool) -> Constraint:
         """Create a concrete Value."""
-        return core.Value(val)
-
-    def operator(self, name: str) -> Any:
-        """Return the given operator from the theory."""
-        return core.__dict__[name]
+        return CValue(val)
 
 
 @dataclass(frozen=True, slots=True)
@@ -421,13 +431,19 @@ class BitVectorSort[N: int]:
 
     def symbol(self, name: str) -> BitVector:
         """Create a Symbol with the given name."""
-        return bv.Symbol(name.encode(), self.width)
+        return BSymbol(name.encode(), self.width)
 
     def value(self, val: int) -> BitVector:
         """Create a concrete Value."""
         assert 0 <= val < (1 << self.width)
-        return bv.Value(val, self.width)
+        return BValue(val, self.width)
 
-    def operator(self, name: str) -> Any:
-        """Return the given operator from the theory."""
-        return bv.__dict__[name]
+
+def operator(name: str) -> Any:
+    """Extract the given named operator from the theories."""
+    if hasattr(theory_core, name):
+        return getattr(theory_core, name)
+    elif hasattr(theory_bitvec, name):
+        return getattr(theory_bitvec, name)
+    else:
+        raise KeyError(f"operator not found: {name}")

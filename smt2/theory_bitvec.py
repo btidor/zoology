@@ -5,25 +5,25 @@ Up-to-date with SMT-LIB version 2.7, QF_BV logic.
 
 See: https://smt-lib.org/logics-all.shtml#QF_BV
 """
-# ruff: noqa
+# ruff: noqa: D101, D102, D103
 
 from __future__ import annotations
 
 from dataclasses import InitVar, dataclass, field, fields
 from typing import ClassVar, override
 
-from .theory_core import Constraint, DumpContext, Symbolic
+from .theory_core import Base, Constraint, DumpContext
 
 
 @dataclass(frozen=True, slots=True)
-class BitVector(Symbolic):
+class BitVector(Base):
     width: int = field(init=False)
 
     def __post_init__(self) -> None:
         # By default, inherit width from inner term.
-        for field in fields(self):
-            if field.type == "BitVector":
-                term = getattr(self, field.name)
+        for fld in fields(self):
+            if fld.type == "BitVector":
+                term = getattr(self, fld.name)
                 object.__setattr__(self, "width", term.width)
                 break
         else:
@@ -31,7 +31,7 @@ class BitVector(Symbolic):
 
 
 @dataclass(frozen=True, slots=True)
-class Symbol(BitVector):
+class BSymbol(BitVector):
     name: bytes
     w: InitVar[int]
 
@@ -49,7 +49,7 @@ class Symbol(BitVector):
 
 
 @dataclass(frozen=True, slots=True)
-class Value(BitVector):
+class BValue(BitVector):
     value: int
     w: InitVar[int]
 
@@ -115,17 +115,17 @@ class Extract(BitVector):
 
 
 @dataclass(frozen=True, slots=True)
-class Not(UnaryOp):
+class BNot(UnaryOp):
     op: ClassVar[bytes] = b"bvnot"
 
 
 @dataclass(frozen=True, slots=True)
-class And(BinaryOp):
+class BAnd(BinaryOp):
     op: ClassVar[bytes] = b"bvand"
 
 
 @dataclass(frozen=True, slots=True)
-class Or(BitVector):
+class BOr(BitVector):
     op: ClassVar[bytes] = b"bvor"
     left: BitVector
     right: BitVector
@@ -182,7 +182,7 @@ class Nor(BinaryOp):
 
 
 @dataclass(frozen=True, slots=True)
-class Xor(BinaryOp):
+class BXor(BinaryOp):
     op: ClassVar[bytes] = b"bvxor"
 
 

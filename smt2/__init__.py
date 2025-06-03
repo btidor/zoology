@@ -1,5 +1,5 @@
 """A pure-Python term-rewriting SMT frontend."""
-# ruff: noqa
+# ruff: noqa: D101, D102, D103, D107
 
 from __future__ import annotations
 
@@ -22,46 +22,47 @@ from typing import (
 )
 
 from .composite import (
-    ArraySelect,
-    ArrayStore,
-    ArraySymbol,
-    ArrayValue,
-    BitVecAdd,
-    BitVecAnd,
-    BitVecAshr,
-    BitVecConcat,
-    BitVecExtract,
-    BitVecIte,
-    BitVecLshr,
-    BitVecMul,
-    BitVecNot,
-    BitVecOr,
-    BitVecSdiv,
-    BitVecShl,
-    BitVecSignExtend,
-    BitVecSle,
-    BitVecSrem,
-    BitVecSub,
+    Add,
+    And,
+    Ashr,
+    ASymbol,
+    AValue,
+    BAnd,
     BitVecSymbol,
-    BitVecUdiv,
-    BitVecUle,
-    BitVecUlt,
-    BitVecUrem,
-    BitVecValue,
-    BitVecXor,
-    BitVecZeroExtend,
+    BNot,
+    BOr,
+    BValue,
+    BXor,
     CompositeBitVector,
-    CoreAnd,
     CompositeConstraint,
-    CoreDistinct,
-    CoreEq,
-    CoreNot,
-    CoreOr,
-    CoreSymbol,
-    CoreValue,
-    CoreXor,
+    Concat,
+    CSymbol,
+    CValue,
+    Distinct,
+    Eq,
+    Extract,
+    Ite,
+    Lshr,
+    Mul,
+    Not,
+    Or,
+    Sdiv,
+    Select,
+    Shl,
+    SignExtend,
+    Sle,
+    Srem,
+    Store,
+    Sub,
+    Udiv,
+    Ule,
+    Ult,
+    Urem,
+    Xor,
+    ZeroExtend,
 )
-from .theory_core import DumpContext, Symbolic as CoreSymbolic
+from .theory_core import Base as CoreSymbolic
+from .theory_core import DumpContext
 
 
 class BitVectorMeta(abc.ABCMeta):
@@ -131,21 +132,21 @@ class Constraint(Symbolic):
     def __init__(self, value: bool | str, /):
         match value:
             case bool():
-                self._term = CoreValue(value)
+                self._term = CValue(value)
             case str():
-                self._term = CoreSymbol(value.encode())  # pyright: ignore[reportIncompatibleVariableOverride]
+                self._term = CSymbol(value.encode())  # pyright: ignore[reportIncompatibleVariableOverride]
 
     def __invert__(self) -> Self:
-        return self._apply(CoreNot, self)
+        return self._apply(Not, self)
 
     def __and__(self, other: Self, /) -> Self:
-        return self._apply(CoreAnd, self, other)
+        return self._apply(And, self, other)
 
     def __or__(self, other: Self, /) -> Self:
-        return self._apply(CoreOr, self, other)
+        return self._apply(Or, self, other)
 
     def __xor__(self, other: Self, /) -> Self:
-        return self._apply(CoreXor, self, other)
+        return self._apply(Xor, self, other)
 
     def __bool__(self) -> Never:
         raise TypeError("cannot use Constraint in a boolean context")
@@ -158,7 +159,7 @@ class Constraint(Symbolic):
 
     def ite[N: int](self, then: BitVector[N], else_: BitVector[N], /) -> BitVector[N]:
         assert then.width == else_.width
-        return then._apply(BitVecIte, self, then, else_)
+        return then._apply(Ite, self, then, else_)
 
     def iff(self, other: Constraint) -> Constraint:
         return ~(self ^ other)
@@ -168,7 +169,7 @@ class Constraint(Symbolic):
 
     def reveal(self) -> bool | None:
         match self._term:
-            case CoreValue(value):
+            case CValue(value):
                 return value
             case _:
                 return None
@@ -184,7 +185,7 @@ class BitVector[N: int](
     def __init__(self, value: int | str, /) -> None:
         match value:
             case int():
-                self._term = BitVecValue(value, self.width)
+                self._term = BValue(value, self.width)
             case str():
                 self._term = BitVecSymbol(value.encode(), self.width)  # pyright: ignore[reportIncompatibleVariableOverride]
 
@@ -195,31 +196,31 @@ class BitVector[N: int](
     def __le__(self, other: Self, /) -> Constraint: ...
 
     def __invert__(self) -> Self:
-        return self._apply(BitVecNot, self)
+        return self._apply(BNot, self)
 
     def __and__(self, other: Self, /) -> Self:
         assert self.width == other.width
-        return self._apply(BitVecAnd, self, other)
+        return self._apply(BAnd, self, other)
 
     def __or__(self, other: Self, /) -> Self:
         assert self.width == other.width
-        return self._apply(BitVecOr, self, other)
+        return self._apply(BOr, self, other)
 
     def __xor__(self, other: Self, /) -> Self:
         assert self.width == other.width
-        return self._apply(BitVecXor, self, other)
+        return self._apply(BXor, self, other)
 
     def __add__(self, other: Self, /) -> Self:
         assert self.width == other.width
-        return self._apply(BitVecAdd, self, other)
+        return self._apply(Add, self, other)
 
     def __sub__(self, other: Self, /) -> Self:
         assert self.width == other.width
-        return self._apply(BitVecSub, self, other)
+        return self._apply(Sub, self, other)
 
     def __mul__(self, other: Self, /) -> Self:
         assert self.width == other.width
-        return self._apply(BitVecMul, self, other)
+        return self._apply(Mul, self, other)
 
     @abc.abstractmethod
     def __truediv__(self, other: Self, /) -> Self: ...
@@ -229,7 +230,7 @@ class BitVector[N: int](
 
     def __lshift__(self, other: Uint[N], /) -> Self:
         assert self.width == other.width
-        return self._apply(BitVecShl, self, other)
+        return self._apply(Shl, self, other)
 
     @abc.abstractmethod
     def __rshift__(self, other: Uint[N], /) -> Self: ...
@@ -238,13 +239,13 @@ class BitVector[N: int](
         self, other: Self, /
     ) -> Constraint:
         assert self.width == other.width
-        return Constraint._apply(CoreEq, self, other)
+        return Constraint._apply(Eq, self, other)
 
     def __ne__(  # pyright: ignore[reportIncompatibleMethodOverride]
         self, other: Self, /
     ) -> Constraint:
         assert self.width == other.width
-        return Constraint._apply(CoreDistinct, self, other)
+        return Constraint._apply(Distinct, self, other)
 
     def __hash__(self) -> int:
         return self._term.__hash__()
@@ -255,23 +256,23 @@ class Uint[N: int](BitVector[N]):
 
     def __lt__(self, other: Self, /) -> Constraint:  # pyright: ignore[reportIncompatibleMethodOverride]
         assert self.width == other.width
-        return Constraint._apply(BitVecUlt, self, other)
+        return Constraint._apply(Ult, self, other)
 
     def __le__(self, other: Self, /) -> Constraint:  # pyright: ignore[reportIncompatibleMethodOverride]
         assert self.width == other.width
-        return Constraint._apply(BitVecUle, self, other)
+        return Constraint._apply(Ule, self, other)
 
     def __truediv__(self, other: Self, /) -> Self:  # pyright: ignore[reportIncompatibleMethodOverride]
         assert self.width == other.width
-        return self._apply(BitVecUdiv, self, other)
+        return self._apply(Udiv, self, other)
 
     def __mod__(self, other: Self, /) -> Self:  # pyright: ignore[reportIncompatibleMethodOverride]
         assert self.width == other.width
-        return self._apply(BitVecUrem, self, other)
+        return self._apply(Urem, self, other)
 
     def __rshift__(self, other: Uint[N], /) -> Self:
         assert self.width == other.width
-        return self._apply(BitVecLshr, self, other)
+        return self._apply(Lshr, self, other)
 
     @overload
     def into[M: int](self: Uint[N], other: type[Int[N]], /) -> Int[N]: ...
@@ -284,16 +285,16 @@ class Uint[N: int](BitVector[N]):
         if self.width == other.width:
             k._term = self._term
         elif self.width < other.width:
-            k._term = BitVecZeroExtend(other.width - self.width, self._term)
+            k._term = ZeroExtend(other.width - self.width, self._term)
         else:
-            k._term = BitVecExtract(other.width - 1, 0, self._term)
+            k._term = Extract(other.width - 1, 0, self._term)
         return k
 
     @classmethod
     def concat[M: int](cls, *terms: Uint[M]) -> Uint[N]:
         assert terms and cls.width == reduce(lambda s, t: s + t.width, terms, 0)
         k = cls.__new__(cls)
-        k._term = reduce(BitVecConcat, (t._term for t in terms))
+        k._term = reduce(Concat, (t._term for t in terms))
         return k
 
     @classmethod
@@ -308,7 +309,7 @@ class Uint[N: int](BitVector[N]):
 
     def reveal(self) -> int | None:
         match self._term:
-            case BitVecValue(value):
+            case BValue(value):
                 return value
             case _:
                 return None
@@ -319,22 +320,22 @@ class Int[N: int](BitVector[N]):
 
     def __lt__(self, other: Self, /) -> Constraint:  # pyright: ignore[reportIncompatibleMethodOverride]
         assert self.width == other.width
-        return Constraint._apply(BitVecSle, self, other)
+        return Constraint._apply(Sle, self, other)
 
     def __le__(self, other: Self, /) -> Constraint:  # pyright: ignore[reportIncompatibleMethodOverride]
-        return Constraint._apply(BitVecSle, self, other)
+        return Constraint._apply(Sle, self, other)
 
     def __truediv__(self, other: Self, /) -> Self:  # pyright: ignore[reportIncompatibleMethodOverride]
         assert self.width == other.width
-        return self._apply(BitVecSdiv, self, other)
+        return self._apply(Sdiv, self, other)
 
     def __mod__(self, other: Self, /) -> Self:  # pyright: ignore[reportIncompatibleMethodOverride]
         assert self.width == other.width
-        return self._apply(BitVecSrem, self, other)
+        return self._apply(Srem, self, other)
 
     def __rshift__(self, other: Uint[N], /) -> Self:
         assert self.width == other.width
-        return self._apply(BitVecAshr, self, other)
+        return self._apply(Ashr, self, other)
 
     @overload
     def into[M: int](self: Int[N], other: type[Uint[N]], /) -> Uint[N]: ...
@@ -347,14 +348,14 @@ class Int[N: int](BitVector[N]):
         if self.width == other.width:
             k._term = self._term
         elif self.width < other.width:
-            k._term = BitVecSignExtend(other.width - self.width, self._term)
+            k._term = SignExtend(other.width - self.width, self._term)
         else:
             raise NotImplementedError("cannot truncate signed bitvector")
         return k
 
     def reveal(self) -> int | None:
         match self._term:
-            case BitVecValue(_):
+            case BValue(_):
                 raise NotImplementedError
             case _:
                 return None
@@ -410,18 +411,16 @@ class Array[K: Uint[Any] | Int[Any], V: Uint[Any] | Int[Any]](
 
     _key: Final[type[K]]  # pyright: ignore[reportGeneralTypeIssues]
     _value: Final[type[V]]  # pyright: ignore[reportGeneralTypeIssues]
-    _term: ArraySymbol | ArrayValue | ArrayStore
+    _term: ASymbol | AValue | Store
 
     __hash__: ClassVar[None] = None  # pyright: ignore[reportIncompatibleMethodOverride]
 
     def __init__(self, value: V | str, /) -> None:
         match value:
             case BitVector():
-                self._term = ArrayValue(value._term, self._key.width)  # pyright: ignore[reportPrivateUsage]
+                self._term = AValue(value._term, self._key.width)  # pyright: ignore[reportPrivateUsage]
             case str():
-                self._term = ArraySymbol(
-                    value.encode(), self._key.width, self._value.width
-                )
+                self._term = ASymbol(value.encode(), self._key.width, self._value.width)
 
     def __eq__(  # pyright: ignore[reportIncompatibleMethodOverride]
         self, other: Never, /
@@ -441,34 +440,34 @@ class Array[K: Uint[Any] | Int[Any], V: Uint[Any] | Int[Any]](
     def __getitem__(self, key: K) -> V:
         kterm = key._term  # pyright: ignore[reportPrivateUsage]
         match self._term:
-            case ArraySymbol():
-                return self._value._apply(ArraySelect, self, key)
-            case ArrayValue(default):
+            case ASymbol():
+                return self._value._apply(Select, self, key)
+            case AValue(default):
                 return self._mk_value(default)
-            case ArrayStore(default, lower, upper):
+            case Store(default, lower, upper):
                 if upper:
                     p, q = upper[0]
                     if kterm == p:
                         return self._mk_value(q)
-                elif isinstance(kterm, BitVecValue):
+                elif isinstance(kterm, BValue):
                     lower = dict(lower)
                     if kterm.value in lower:
                         return self._mk_value(lower[kterm.value])
-                    elif isinstance(self._term, ArraySymbol):
-                        return self._value._apply(ArraySelect, self, key)
+                    elif isinstance(self._term, ASymbol):
+                        return self._value._apply(Select, self, key)
                     else:
                         return self._mk_value(self._term.default)  # pyright: ignore[reportArgumentType]
-        return self._value._apply(ArraySelect, self, key)
+        return self._value._apply(Select, self, key)
 
     def __setitem__(self, key: K, value: V) -> None:
         match self._term:
-            case ArraySymbol() | ArrayValue():
+            case ASymbol() | AValue():
                 default = self._term
                 lower, upper = {}, []
-            case ArrayStore(default, lower, upper):
+            case Store(default, lower, upper):
                 lower, upper = dict(lower), list(upper)
         if upper or (k := key.reveal()) is None:
             upper.append((key._term, value._term))  # pyright: ignore[reportPrivateUsage]
         else:
             lower[k] = value._term  # pyright: ignore[reportPrivateUsage]
-        self._term = ArrayStore(default, frozenset(lower.items()), tuple(upper))  # pyright: ignore[reportIncompatibleVariableOverride]
+        self._term = Store(default, frozenset(lower.items()), tuple(upper))  # pyright: ignore[reportIncompatibleVariableOverride]

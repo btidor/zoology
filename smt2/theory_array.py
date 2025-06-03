@@ -5,7 +5,7 @@ Up-to-date with SMT-LIB version 2.7, QF_ABV logic.
 
 See: https://smt-lib.org/theories-ArraysEx.shtml
 """
-# ruff: noqa
+# ruff: noqa: D101, D102, D103
 
 from __future__ import annotations
 
@@ -13,19 +13,18 @@ import abc
 from dataclasses import dataclass
 from typing import ClassVar, override
 
-from .theory_core import DumpContext, Symbolic
-from .theory_bitvec import BitVector
-from . import theory_bitvec as bv
+from .theory_bitvec import BitVector, BValue
+from .theory_core import Base, DumpContext
 
 
 @dataclass(frozen=True, slots=True)
-class Array(Symbolic):
+class Array(Base):
     @abc.abstractmethod
     def value_width(self) -> int: ...
 
 
 @dataclass(frozen=True, slots=True)
-class Symbol(Array):
+class ASymbol(Array):
     name: bytes
     key: int
     value: int
@@ -46,7 +45,7 @@ class Symbol(Array):
 
 
 @dataclass(frozen=True, slots=True)
-class Value(Array):
+class AValue(Array):
     default: BitVector
     key: int
 
@@ -76,7 +75,7 @@ class Select(BitVector):
 
 @dataclass(frozen=True, slots=True)
 class Store(Array):
-    default: Symbol | Value
+    default: ASymbol | AValue
     lower: frozenset[tuple[int, BitVector]] = frozenset()
     upper: tuple[tuple[BitVector, BitVector], ...] = ()
 
@@ -86,7 +85,7 @@ class Store(Array):
     @override
     def dump(self, ctx: DumpContext) -> None:
         writes = list[tuple[BitVector, BitVector]](
-            [(bv.Value(k, self.default.key), v) for k, v in self.lower]
+            [(BValue(k, self.default.key), v) for k, v in self.lower]
         )
         writes.extend(self.upper)
         ctx.write(b"(store " * len(writes))

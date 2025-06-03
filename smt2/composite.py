@@ -1,5 +1,5 @@
 """Higher-level SMT library incorporating rewrite rules."""
-# ruff: noqa
+# ruff: noqa: D101, D102, D103
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import abc
 from dataclasses import InitVar, dataclass, field, fields
 from typing import Any, ClassVar, override
 
-from .theory_core import DumpContext, Symbolic
+from .theory_core import Base, DumpContext
 
 
 class RewriteMeta(abc.ABCMeta):
@@ -23,11 +23,11 @@ class RewriteMeta(abc.ABCMeta):
 
 
 @dataclass(frozen=True, slots=True)
-class CompositeConstraint(Symbolic, metaclass=RewriteMeta): ...
+class CompositeConstraint(Base, metaclass=RewriteMeta): ...
 
 
 @dataclass(frozen=True, slots=True)
-class CoreSymbol(CompositeConstraint):
+class CSymbol(CompositeConstraint):
     name: bytes
 
     @override
@@ -37,7 +37,7 @@ class CoreSymbol(CompositeConstraint):
 
 
 @dataclass(frozen=True, slots=True)
-class CoreValue(CompositeConstraint):
+class CValue(CompositeConstraint):
     CoreValue: bool
 
     @override
@@ -46,55 +46,55 @@ class CoreValue(CompositeConstraint):
 
 
 @dataclass(frozen=True, slots=True)
-class CoreNot(CompositeConstraint):
-    op: ClassVar[bytes] = b"CoreNot"
+class Not(CompositeConstraint):
+    op: ClassVar[bytes] = b"not"
     term: CompositeConstraint
 
 
 @dataclass(frozen=True, slots=True)
-class CoreImplies(CompositeConstraint):
+class Implies(CompositeConstraint):
     op: ClassVar[bytes] = b"=>"
     left: CompositeConstraint
     right: CompositeConstraint
 
 
 @dataclass(frozen=True, slots=True)
-class CoreAnd(CompositeConstraint):
-    op: ClassVar[bytes] = b"CoreAnd"
+class And(CompositeConstraint):
+    op: ClassVar[bytes] = b"and"
     left: CompositeConstraint
     right: CompositeConstraint
 
 
 @dataclass(frozen=True, slots=True)
-class CoreOr(CompositeConstraint):
-    op: ClassVar[bytes] = b"CoreOr"
+class Or(CompositeConstraint):
+    op: ClassVar[bytes] = b"or"
     left: CompositeConstraint
     right: CompositeConstraint
 
 
 @dataclass(frozen=True, slots=True)
-class CoreXor(CompositeConstraint):
-    op: ClassVar[bytes] = b"CoreXor"
+class Xor(CompositeConstraint):
+    op: ClassVar[bytes] = b"xor"
     left: CompositeConstraint
     right: CompositeConstraint
 
 
 @dataclass(frozen=True, slots=True)
-class CoreEq[S: Symbolic](CompositeConstraint):
+class Eq[S: Base](CompositeConstraint):
     op: ClassVar[bytes] = b"="
     left: S
     right: S
 
 
 @dataclass(frozen=True, slots=True)
-class CoreDistinct[S: Symbolic](CompositeConstraint):
+class Distinct[S: Base](CompositeConstraint):
     op: ClassVar[bytes] = b"distinct"
     left: S
     right: S
 
 
 @dataclass(frozen=True, slots=True)
-class CoreIte(CompositeConstraint):
+class CIte(CompositeConstraint):
     op: ClassVar[bytes] = b"ite"
     cond: CompositeConstraint
     left: CompositeConstraint
@@ -103,128 +103,125 @@ class CoreIte(CompositeConstraint):
 
 def rewrite_constraint(term: CompositeConstraint) -> CompositeConstraint:
     match term:
-        case CoreNot(CoreValue(val)):
-            return CoreValue(not val)
-        case CoreNot(CoreNot(inner)):
+        case Not(CValue(val)):
+            return CValue(not val)
+        case Not(Not(inner)):
             return inner
-        case CoreImplies(x, y):
-            return CoreOr(y, CoreNot(x))
-        case CoreAnd(CoreValue(True), x) | CoreAnd(x, CoreValue(True)):
+        case Implies(x, y):
+            return Or(y, Not(x))
+        case And(CValue(True), x) | And(x, CValue(True)):
             return x
-        case CoreAnd(CoreValue(False), x) | CoreAnd(x, CoreValue(False)):
-            return CoreValue(False)
-        case CoreAnd(x, y) if x == y:
+        case And(CValue(False), x) | And(x, CValue(False)):
+            return CValue(False)
+        case And(x, y) if x == y:
             return x
-        case CoreAnd(x, CoreNot(y)) | CoreAnd(CoreNot(y), x) if x == y:
-            return CoreValue(False)
-        case CoreOr(CoreValue(True), x) | CoreOr(x, CoreValue(True)):
-            return CoreValue(True)
-        case CoreOr(CoreValue(False), x) | CoreOr(x, CoreValue(False)):
+        case And(x, Not(y)) | And(Not(y), x) if x == y:
+            return CValue(False)
+        case Or(CValue(True), x) | Or(x, CValue(True)):
+            return CValue(True)
+        case Or(CValue(False), x) | Or(x, CValue(False)):
             return x
-        case CoreOr(x, y) if x == y:
+        case Or(x, y) if x == y:
             return x
-        case CoreOr(x, CoreNot(y)) | CoreOr(CoreNot(y), x) if x == y:
-            return CoreValue(True)
-        case CoreXor(CoreValue(True), x) | CoreXor(x, CoreValue(True)):
-            return CoreNot(x)
-        case CoreXor(CoreValue(False), x) | CoreXor(x, CoreValue(False)):
+        case Or(x, Not(y)) | Or(Not(y), x) if x == y:
+            return CValue(True)
+        case Xor(CValue(True), x) | Xor(x, CValue(True)):
+            return Not(x)
+        case Xor(CValue(False), x) | Xor(x, CValue(False)):
             return x
-        case CoreXor(x, y) if x == y:
-            return CoreValue(False)
-        case CoreXor(x, CoreNot(y)) | CoreXor(CoreNot(y), x) if x == y:
-            return CoreValue(True)
-        case CoreEq(CompositeConstraint() as x, CompositeConstraint() as y):
-            return CoreNot(CoreXor(x, y))
-        case CoreDistinct(CompositeConstraint() as x, CompositeConstraint() as y):
-            return CoreXor(x, y)
-        case CoreIte(CoreValue(True), x, y):
+        case Xor(x, y) if x == y:
+            return CValue(False)
+        case Xor(x, Not(y)) | Xor(Not(y), x) if x == y:
+            return CValue(True)
+        case Eq(CompositeConstraint() as x, CompositeConstraint() as y):
+            return Not(Xor(x, y))
+        case Distinct(CompositeConstraint() as x, CompositeConstraint() as y):
+            return Xor(x, y)
+        case CIte(CValue(True), x, y):
             return x
-        case CoreIte(CoreValue(False), x, y):
+        case CIte(CValue(False), x, y):
             return y
-        case CoreIte(_, x, y) if x == y:
+        case CIte(_, x, y) if x == y:
             return x
-        # From rewrite_mixed:
-        case CoreEq(BitVecValue(a), BitVecValue(b)):
-            return CoreValue(a == b)
-        case CoreEq(CompositeBitVector() as x, CompositeBitVector() as y) if x == y:
-            return CoreValue(True)
-        case CoreEq(CompositeBitVector() as x, BitVecNot(y)) | CoreEq(
-            BitVecNot(y), CompositeBitVector() as x
+        case Eq(BValue(a), BValue(b)):
+            return CValue(a == b)
+        case Eq(CompositeBitVector() as x, CompositeBitVector() as y) if x == y:
+            return CValue(True)
+        case Eq(CompositeBitVector() as x, BNot(y)) | Eq(
+            BNot(y), CompositeBitVector() as x
         ) if x == y:
-            return CoreValue(False)
-        case CoreDistinct(CompositeBitVector() as x, CompositeBitVector() as y):
-            return CoreNot(CoreEq(x, y))
-        case CoreEq(BitVecValue(a), BitVecNot(x)) | CoreEq(
-            BitVecNot(x), BitVecValue(a)
-        ):
+            return CValue(False)
+        case Distinct(CompositeBitVector() as x, CompositeBitVector() as y):
+            return Not(Eq(x, y))
+        case Eq(BValue(a), BNot(x)) | Eq(BNot(x), BValue(a)):
             mask = (1 << x.width) - 1
-            return CoreEq(BitVecValue(mask ^ a, x.width), x)
+            return Eq(BValue(mask ^ a, x.width), x)
         case (
-            CoreEq(BitVecValue(a), BitVecAnd(x, BitVecValue(b)))
-            | CoreEq(BitVecValue(a), BitVecAnd(BitVecValue(b), x))
-            | CoreEq(BitVecAnd(x, BitVecValue(b)), BitVecValue(a))
-            | CoreEq(BitVecAnd(BitVecValue(b), x), BitVecValue(a))
+            Eq(BValue(a), BAnd(x, BValue(b)))
+            | Eq(BValue(a), BAnd(BValue(b), x))
+            | Eq(BAnd(x, BValue(b)), BValue(a))
+            | Eq(BAnd(BValue(b), x), BValue(a))
         ) if a & (b ^ ((1 << x.width) - 1)) != 0:
-            return CoreValue(False)
+            return CValue(False)
         case (
-            CoreEq(BitVecValue(a), BitVecOr(x, BitVecValue(b)))
-            | CoreEq(BitVecValue(a), BitVecOr(BitVecValue(b), x))
-            | CoreEq(BitVecOr(x, BitVecValue(b)), BitVecValue(a))
-            | CoreEq(BitVecOr(BitVecValue(b), x), BitVecValue(a))
+            Eq(BValue(a), BOr(x, BValue(b)))
+            | Eq(BValue(a), BOr(BValue(b), x))
+            | Eq(BOr(x, BValue(b)), BValue(a))
+            | Eq(BOr(BValue(b), x), BValue(a))
         ) if (a ^ (1 << x.width) - 1) & b != 0:
-            return CoreValue(False)
+            return CValue(False)
         case (
-            CoreEq(BitVecValue(a), BitVecXor(x, BitVecValue(b)))
-            | CoreEq(BitVecValue(a), BitVecXor(BitVecValue(b), x))
-            | CoreEq(BitVecXor(x, BitVecValue(b)), BitVecValue(a))
-            | CoreEq(BitVecXor(BitVecValue(b), x), BitVecValue(a))
+            Eq(BValue(a), BXor(x, BValue(b)))
+            | Eq(BValue(a), BXor(BValue(b), x))
+            | Eq(BXor(x, BValue(b)), BValue(a))
+            | Eq(BXor(BValue(b), x), BValue(a))
         ):
-            return CoreEq(BitVecValue(a ^ b, x.width), x)
+            return Eq(BValue(a ^ b, x.width), x)
         case (
-            CoreEq(BitVecValue(a), BitVecAdd(x, BitVecValue(b)))
-            | CoreEq(BitVecValue(a), BitVecAdd(BitVecValue(b), x))
-            | CoreEq(BitVecAdd(x, BitVecValue(b)), BitVecValue(a))
-            | CoreEq(BitVecAdd(BitVecValue(b), x), BitVecValue(a))
+            Eq(BValue(a), Add(x, BValue(b)))
+            | Eq(BValue(a), Add(BValue(b), x))
+            | Eq(Add(x, BValue(b)), BValue(a))
+            | Eq(Add(BValue(b), x), BValue(a))
         ):
-            return CoreEq(
-                BitVecAdd(BitVecValue(a, x.width), BitVecNeg(BitVecValue(b, x.width))),
+            return Eq(
+                Add(BValue(a, x.width), Neg(BValue(b, x.width))),
                 x,
             )
-        case BitVecUlt(BitVecValue(a), BitVecValue(b)):
-            return CoreValue(a < b)
-        case BitVecUlt(x, BitVecValue(0)):
-            return CoreValue(False)
-        case BitVecUlt(BitVecValue(0), x):
-            return CoreDistinct(x, BitVecValue(0, x.width))
-        case BitVecUlt(x, BitVecValue(1)):
-            return CoreEq(x, BitVecValue(0, x.width))
-        case BitVecUle(BitVecValue(a), BitVecValue(b)):
-            return CoreValue(a <= b)
-        case BitVecUle(x, BitVecValue(0)):
-            return CoreEq(x, BitVecValue(0, x.width))
-        case BitVecUle(BitVecValue(0), x):
-            return CoreValue(True)
-        case BitVecUgt(x, y):
-            return BitVecUlt(y, x)
-        case BitVecUge(x, y):
-            return BitVecUle(y, x)
-        case BitVecSgt(x, y):
-            return BitVecSlt(y, x)
-        case BitVecSge(x, y):
-            return BitVecSle(y, x)
+        case Ult(BValue(a), BValue(b)):
+            return CValue(a < b)
+        case Ult(x, BValue(0)):
+            return CValue(False)
+        case Ult(BValue(0), x):
+            return Distinct(x, BValue(0, x.width))
+        case Ult(x, BValue(1)):
+            return Eq(x, BValue(0, x.width))
+        case Ule(BValue(a), BValue(b)):
+            return CValue(a <= b)
+        case Ule(x, BValue(0)):
+            return Eq(x, BValue(0, x.width))
+        case Ule(BValue(0), x):
+            return CValue(True)
+        case Ugt(x, y):
+            return Ult(y, x)
+        case Uge(x, y):
+            return Ule(y, x)
+        case Sgt(x, y):
+            return Slt(y, x)
+        case Sge(x, y):
+            return Sle(y, x)
         case term:
             return term
 
 
 @dataclass(frozen=True, slots=True)
-class CompositeBitVector(Symbolic, metaclass=RewriteMeta):
+class CompositeBitVector(Base, metaclass=RewriteMeta):
     width: int = field(init=False)
 
     def __post_init__(self) -> None:
         # By default, inherit width from inner term.
-        for field in fields(self):
-            if field.type == "CompositeBitVector":
-                term = getattr(self, field.name)
+        for fld in fields(self):
+            if fld.type == "CompositeBitVector":
+                term = getattr(self, fld.name)
                 object.__setattr__(self, "width", term.width)
                 break
         else:
@@ -250,7 +247,7 @@ class BitVecSymbol(CompositeBitVector):
 
 
 @dataclass(frozen=True, slots=True)
-class BitVecValue(CompositeBitVector):
+class BValue(CompositeBitVector):
     value: int
     w: InitVar[int]
 
@@ -291,7 +288,7 @@ class SingleParamOp(CompositeBitVector):
 
 
 @dataclass(frozen=True, slots=True)
-class BitVecConcat(CompositeBitVector):
+class Concat(CompositeBitVector):
     op: ClassVar[bytes] = b"concat"
     left: CompositeBitVector
     right: CompositeBitVector
@@ -302,7 +299,7 @@ class BitVecConcat(CompositeBitVector):
 
 
 @dataclass(frozen=True, slots=True)
-class BitVecExtract(CompositeBitVector):
+class Extract(CompositeBitVector):
     op: ClassVar[bytes] = b"extract"
     i: int
     j: int
@@ -316,116 +313,116 @@ class BitVecExtract(CompositeBitVector):
 
 
 @dataclass(frozen=True, slots=True)
-class BitVecNot(UnaryOp):
+class BNot(UnaryOp):
     op: ClassVar[bytes] = b"bvnot"
 
 
 @dataclass(frozen=True, slots=True)
-class BitVecAnd(BinaryOp):
+class BAnd(BinaryOp):
     op: ClassVar[bytes] = b"bvand"
 
 
 @dataclass(frozen=True, slots=True)
-class BitVecOr(CompositeBitVector):
+class BOr(CompositeBitVector):
     op: ClassVar[bytes] = b"bvor"
     left: CompositeBitVector
     right: CompositeBitVector
 
 
 @dataclass(frozen=True, slots=True)
-class BitVecNeg(UnaryOp):
+class Neg(UnaryOp):
     op: ClassVar[bytes] = b"bvneg"
 
 
 @dataclass(frozen=True, slots=True)
-class BitVecAdd(BinaryOp):
+class Add(BinaryOp):
     op: ClassVar[bytes] = b"bvadd"
 
 
 @dataclass(frozen=True, slots=True)
-class BitVecMul(BinaryOp):
+class Mul(BinaryOp):
     op: ClassVar[bytes] = b"bvmul"
 
 
 @dataclass(frozen=True, slots=True)
-class BitVecUdiv(BinaryOp):
+class Udiv(BinaryOp):
     op: ClassVar[bytes] = b"bvudiv"
 
 
 @dataclass(frozen=True, slots=True)
-class BitVecUrem(BinaryOp):
+class Urem(BinaryOp):
     op: ClassVar[bytes] = b"bvurem"
 
 
 @dataclass(frozen=True, slots=True)
-class BitVecShl(BinaryOp):
+class Shl(BinaryOp):
     op: ClassVar[bytes] = b"bvshl"
 
 
 @dataclass(frozen=True, slots=True)
-class BitVecLshr(BinaryOp):
+class Lshr(BinaryOp):
     op: ClassVar[bytes] = b"bvlshr"
 
 
 @dataclass(frozen=True, slots=True)
-class BitVecUlt(CompareOp):
+class Ult(CompareOp):
     op: ClassVar[bytes] = b"bvult"
 
 
 @dataclass(frozen=True, slots=True)
-class BitVecNand(BinaryOp):
+class Nand(BinaryOp):
     op: ClassVar[bytes] = b"bvnand"
 
 
 @dataclass(frozen=True, slots=True)
-class BitVecNor(BinaryOp):
+class Nor(BinaryOp):
     op: ClassVar[bytes] = b"bvnor"
 
 
 @dataclass(frozen=True, slots=True)
-class BitVecXor(BinaryOp):
+class BXor(BinaryOp):
     op: ClassVar[bytes] = b"bvxor"
 
 
 @dataclass(frozen=True, slots=True)
-class BitVecXnor(BinaryOp):
+class Xnor(BinaryOp):
     op: ClassVar[bytes] = b"bvxnor"
 
 
 @dataclass(frozen=True, slots=True)
-class BitVecComp(CompositeBitVector):  # width-1 result
+class Comp(CompositeBitVector):  # width-1 result
     op: ClassVar[bytes] = b"bvcomp"
     left: CompositeBitVector
     right: CompositeBitVector
 
 
 @dataclass(frozen=True, slots=True)
-class BitVecSub(BinaryOp):
+class Sub(BinaryOp):
     op: ClassVar[bytes] = b"bvsub"
 
 
 @dataclass(frozen=True, slots=True)
-class BitVecSdiv(BinaryOp):
+class Sdiv(BinaryOp):
     op: ClassVar[bytes] = b"bvsdiv"
 
 
 @dataclass(frozen=True, slots=True)
-class BitVecSrem(BinaryOp):
+class Srem(BinaryOp):
     op: ClassVar[bytes] = b"bvsrem"
 
 
 @dataclass(frozen=True, slots=True)
-class BitVecSmod(BinaryOp):
+class Smot(BinaryOp):
     op: ClassVar[bytes] = b"bvsmod"
 
 
 @dataclass(frozen=True, slots=True)
-class BitVecAshr(BinaryOp):
+class Ashr(BinaryOp):
     op: ClassVar[bytes] = b"bvashr"
 
 
 @dataclass(frozen=True, slots=True)
-class BitVecRepeat(SingleParamOp):
+class Repeat(SingleParamOp):
     op: ClassVar[bytes] = b"repeat"
 
     @override
@@ -436,7 +433,7 @@ class BitVecRepeat(SingleParamOp):
 
 
 @dataclass(frozen=True, slots=True)
-class BitVecZeroExtend(SingleParamOp):
+class ZeroExtend(SingleParamOp):
     op: ClassVar[bytes] = b"zero_extend"
 
     @override
@@ -447,7 +444,7 @@ class BitVecZeroExtend(SingleParamOp):
 
 
 @dataclass(frozen=True, slots=True)
-class BitVecSignExtend(SingleParamOp):
+class SignExtend(SingleParamOp):
     op: ClassVar[bytes] = b"sign_extend"
 
     @override
@@ -458,52 +455,52 @@ class BitVecSignExtend(SingleParamOp):
 
 
 @dataclass(frozen=True, slots=True)
-class BitVecRotateLeft(SingleParamOp):
+class RotateLeft(SingleParamOp):
     op: ClassVar[bytes] = b"rotate_left"
 
 
 @dataclass(frozen=True, slots=True)
-class BitVecRotateRight(SingleParamOp):
+class RotateRight(SingleParamOp):
     op: ClassVar[bytes] = b"rotate_right"
 
 
 @dataclass(frozen=True, slots=True)
-class BitVecUle(CompareOp):
+class Ule(CompareOp):
     op: ClassVar[bytes] = b"bvule"
 
 
 @dataclass(frozen=True, slots=True)
-class BitVecUgt(CompareOp):
+class Ugt(CompareOp):
     op: ClassVar[bytes] = b"bvugt"
 
 
 @dataclass(frozen=True, slots=True)
-class BitVecUge(CompareOp):
+class Uge(CompareOp):
     op: ClassVar[bytes] = b"bvuge"
 
 
 @dataclass(frozen=True, slots=True)
-class BitVecSlt(CompareOp):
+class Slt(CompareOp):
     op: ClassVar[bytes] = b"bvslt"
 
 
 @dataclass(frozen=True, slots=True)
-class BitVecSle(CompareOp):
+class Sle(CompareOp):
     op: ClassVar[bytes] = b"bvsle"
 
 
 @dataclass(frozen=True, slots=True)
-class BitVecSgt(CompareOp):
+class Sgt(CompareOp):
     op: ClassVar[bytes] = b"bvsgt"
 
 
 @dataclass(frozen=True, slots=True)
-class BitVecSge(CompareOp):
+class Sge(CompareOp):
     op: ClassVar[bytes] = b"bvsge"
 
 
 @dataclass(frozen=True, slots=True)
-class BitVecIte(CompositeBitVector):
+class Ite(CompositeBitVector):
     op: ClassVar[bytes] = b"ite"
     cond: CompositeConstraint
     left: CompositeBitVector
@@ -515,122 +512,116 @@ def rewrite_bitvector(term: CompositeBitVector) -> CompositeBitVector:
     mask = (1 << term.width) - 1
     modulus = 1 << term.width
     match term:
-        case BitVecNot(BitVecValue(val)):
-            return BitVecValue(mask ^ val, width)
-        case BitVecNot(BitVecNot(inner)):
+        case BNot(BValue(val)):
+            return BValue(mask ^ val, width)
+        case BNot(BNot(inner)):
             return inner
-        case BitVecAnd(BitVecValue(a), BitVecValue(b)):
-            return BitVecValue(a & b, width)
-        case BitVecAnd(BitVecValue(0), x) | BitVecAnd(x, BitVecValue(0)):
-            return BitVecValue(0, width)
-        case BitVecAnd(BitVecValue(m), x) | BitVecAnd(x, BitVecValue(m)) if m == mask:
+        case BAnd(BValue(a), BValue(b)):
+            return BValue(a & b, width)
+        case BAnd(BValue(0), x) | BAnd(x, BValue(0)):
+            return BValue(0, width)
+        case BAnd(BValue(m), x) | BAnd(x, BValue(m)) if m == mask:
             return x
-        case BitVecAnd(x, y) if x == y:
+        case BAnd(x, y) if x == y:
             return x
-        case BitVecAnd(x, BitVecNot(y)) | BitVecAnd(BitVecNot(y), x) if x == y:
-            return BitVecValue(0, width)
-        case BitVecOr(BitVecValue(a), BitVecValue(b)):
-            return BitVecValue(a | b, width)
-        case BitVecOr(BitVecValue(0), x) | BitVecOr(x, BitVecValue(0)):
+        case BAnd(x, BNot(y)) | BAnd(BNot(y), x) if x == y:
+            return BValue(0, width)
+        case BOr(BValue(a), BValue(b)):
+            return BValue(a | b, width)
+        case BOr(BValue(0), x) | BOr(x, BValue(0)):
             return x
-        case BitVecOr(BitVecValue(m), x) | BitVecOr(x, BitVecValue(m)) if m == mask:
-            return BitVecValue(mask, width)
-        case BitVecOr(x, y) if x == y:
+        case BOr(BValue(m), x) | BOr(x, BValue(m)) if m == mask:
+            return BValue(mask, width)
+        case BOr(x, y) if x == y:
             return x
-        case BitVecOr(x, BitVecNot(y)) | BitVecOr(BitVecNot(y), x) if x == y:
-            return BitVecValue(mask, width)
-        case BitVecXor(BitVecValue(a), BitVecValue(b)):
-            return BitVecValue(a ^ b, width)
-        case BitVecXor(BitVecValue(0), x) | BitVecXor(x, BitVecValue(0)):
+        case BOr(x, BNot(y)) | BOr(BNot(y), x) if x == y:
+            return BValue(mask, width)
+        case BXor(BValue(a), BValue(b)):
+            return BValue(a ^ b, width)
+        case BXor(BValue(0), x) | BXor(x, BValue(0)):
             return x
-        case BitVecXor(BitVecValue(m), x) | BitVecXor(x, BitVecValue(m)) if m == mask:
-            return BitVecNot(x)
-        case BitVecXor(x, y) if x == y:
-            return BitVecValue(0, width)
-        case BitVecXor(x, BitVecNot(y)) | BitVecXor(BitVecNot(y), x) if x == y:
-            return BitVecValue(mask, width)
-        case BitVecNand(x, y):
-            return BitVecNot(BitVecAnd(x, y))
-        case BitVecNor(x, y):
-            return BitVecNot(BitVecOr(x, y))
-        case BitVecXnor(x, y):
-            return BitVecNot(BitVecXor(x, y))
-        case BitVecAdd(BitVecValue(a), BitVecValue(b)):
-            return BitVecValue((a + b) % modulus, width)
-        case BitVecAdd(BitVecValue(0), x) | BitVecAdd(x, BitVecValue(0)):
+        case BXor(BValue(m), x) | BXor(x, BValue(m)) if m == mask:
+            return BNot(x)
+        case BXor(x, y) if x == y:
+            return BValue(0, width)
+        case BXor(x, BNot(y)) | BXor(BNot(y), x) if x == y:
+            return BValue(mask, width)
+        case Nand(x, y):
+            return BNot(BAnd(x, y))
+        case Nor(x, y):
+            return BNot(BOr(x, y))
+        case Xnor(x, y):
+            return BNot(BXor(x, y))
+        case Add(BValue(a), BValue(b)):
+            return BValue((a + b) % modulus, width)
+        case Add(BValue(0), x) | Add(x, BValue(0)):
             return x
-        case BitVecMul(BitVecValue(a), BitVecValue(b)):
-            return BitVecValue((a * b) % modulus, width)
-        case BitVecMul(BitVecValue(0), x) | BitVecMul(x, BitVecValue(0)):
-            return BitVecValue(0, width)
-        case BitVecMul(BitVecValue(1), x) | BitVecMul(x, BitVecValue(1)):
+        case Mul(BValue(a), BValue(b)):
+            return BValue((a * b) % modulus, width)
+        case Mul(BValue(0), x) | Mul(x, BValue(0)):
+            return BValue(0, width)
+        case Mul(BValue(1), x) | Mul(x, BValue(1)):
             return x
-        case BitVecUdiv(BitVecValue(a), BitVecValue(b)) if b != 0:
-            return BitVecValue(a // b, width)
-        case BitVecUdiv(x, BitVecValue(0)):
-            return BitVecValue(mask, width)
-        case BitVecUdiv(x, BitVecValue(1)):
+        case Udiv(BValue(a), BValue(b)) if b != 0:
+            return BValue(a // b, width)
+        case Udiv(x, BValue(0)):
+            return BValue(mask, width)
+        case Udiv(x, BValue(1)):
             return x
-        case BitVecUrem(BitVecValue(a), BitVecValue(b)) if b != 0:
-            return BitVecValue((a % b) % modulus, width)
-        case BitVecUrem(x, BitVecValue(0)):
+        case Urem(BValue(a), BValue(b)) if b != 0:
+            return BValue((a % b) % modulus, width)
+        case Urem(x, BValue(0)):
             return x
-        case BitVecNeg(x):
-            return BitVecAdd(BitVecNot(x), BitVecValue(1, width))
-        case BitVecSub(x, y):
-            return BitVecAdd(BitVecAdd(x, BitVecNot(y)), BitVecValue(1, width))
-        case BitVecNot(BitVecAdd(x, y)):
-            return BitVecAdd(
-                BitVecAdd(BitVecNot(x), BitVecNot(y)), BitVecValue(1, width)
-            )
-        case BitVecShl(BitVecValue(a), BitVecValue(b)):
-            return BitVecValue((a << b) % modulus, width)
-        case BitVecShl(x, BitVecValue(val)) if val >= width:
-            return BitVecValue(0, width)
-        case BitVecShl(BitVecShl(x, BitVecValue(a)), BitVecValue(b)) if (
-            a < width and b < width
-        ):
-            return BitVecShl(x, BitVecValue(a + b, width))
-        case BitVecLshr(BitVecValue(a), BitVecValue(b)):
-            return BitVecValue((a >> b) % modulus, width)
-        case BitVecLshr(x, BitVecValue(val)) if val >= width:
-            return BitVecValue(0, width)
-        case BitVecLshr(BitVecLshr(x, BitVecValue(a)), BitVecValue(b)) if (
-            a < width and b < width
-        ):
-            return BitVecLshr(x, BitVecValue(a + b, width))
-        case BitVecZeroExtend(0, x):
+        case Neg(x):
+            return Add(BNot(x), BValue(1, width))
+        case Sub(x, y):
+            return Add(Add(x, BNot(y)), BValue(1, width))
+        case BNot(Add(x, y)):
+            return Add(Add(BNot(x), BNot(y)), BValue(1, width))
+        case Shl(BValue(a), BValue(b)):
+            return BValue((a << b) % modulus, width)
+        case Shl(x, BValue(val)) if val >= width:
+            return BValue(0, width)
+        case Shl(Shl(x, BValue(a)), BValue(b)) if a < width and b < width:
+            return Shl(x, BValue(a + b, width))
+        case Lshr(BValue(a), BValue(b)):
+            return BValue((a >> b) % modulus, width)
+        case Lshr(x, BValue(val)) if val >= width:
+            return BValue(0, width)
+        case Lshr(Lshr(x, BValue(a)), BValue(b)) if a < width and b < width:
+            return Lshr(x, BValue(a + b, width))
+        case ZeroExtend(0, x):
             return x
-        case BitVecSignExtend(0, x):
+        case SignExtend(0, x):
             return x
-        case BitVecConcat(BitVecValue(a) as x, BitVecValue(b) as y):
-            return BitVecValue((a << y.width) | b, x.width + y.width)
-        case BitVecIte(CoreValue(True), x, y):
+        case Concat(BValue(a) as x, BValue(b) as y):
+            return BValue((a << y.width) | b, x.width + y.width)
+        case Ite(CValue(True), x, y):
             return x
-        case BitVecIte(CoreValue(False), x, y):
+        case Ite(CValue(False), x, y):
             return y
-        case BitVecIte(_, x, y) if x == y:
+        case Ite(_, x, y) if x == y:
             return x
-        case BitVecNot(BitVecIte(c, x, y)):
-            return BitVecIte(c, BitVecNot(x), BitVecNot(y))
-        case BitVecAnd(BitVecIte(c, x, y), z) | BitVecAnd(z, BitVecIte(c, x, y)):
-            return BitVecIte(c, BitVecAnd(x, z), BitVecAnd(y, z))
-        case BitVecOr(BitVecIte(c, x, y), z) | BitVecOr(z, BitVecIte(c, x, y)):
-            return BitVecIte(c, BitVecOr(x, z), BitVecOr(y, z))
-        case BitVecXor(BitVecIte(c, x, y), z) | BitVecXor(z, BitVecIte(c, x, y)):
-            return BitVecIte(c, BitVecXor(x, z), BitVecXor(y, z))
+        case BNot(Ite(c, x, y)):
+            return Ite(c, BNot(x), BNot(y))
+        case BAnd(Ite(c, x, y), z) | BAnd(z, Ite(c, x, y)):
+            return Ite(c, BAnd(x, z), BAnd(y, z))
+        case BOr(Ite(c, x, y), z) | BOr(z, Ite(c, x, y)):
+            return Ite(c, BOr(x, z), BOr(y, z))
+        case BXor(Ite(c, x, y), z) | BXor(z, Ite(c, x, y)):
+            return Ite(c, BXor(x, z), BXor(y, z))
         case term:
             return term
 
 
 @dataclass(frozen=True, slots=True)
-class CompositeArray(Symbolic):
+class CompositeArray(Base):
     @abc.abstractmethod
     def value_width(self) -> int: ...
 
 
 @dataclass(frozen=True, slots=True)
-class ArraySymbol(CompositeArray):
+class ASymbol(CompositeArray):
     name: bytes
     key: int
     value: int
@@ -651,7 +642,7 @@ class ArraySymbol(CompositeArray):
 
 
 @dataclass(frozen=True, slots=True)
-class ArrayValue(CompositeArray):
+class AValue(CompositeArray):
     default: CompositeBitVector
     key: int
 
@@ -669,7 +660,7 @@ class ArrayValue(CompositeArray):
 
 
 @dataclass(frozen=True, slots=True)
-class ArraySelect(CompositeBitVector):
+class Select(CompositeBitVector):
     op: ClassVar[bytes] = b"select"
     array: CompositeArray
     key: CompositeBitVector
@@ -680,8 +671,8 @@ class ArraySelect(CompositeBitVector):
 
 
 @dataclass(frozen=True, slots=True)
-class ArrayStore(CompositeArray):
-    default: ArraySymbol | ArrayValue
+class Store(CompositeArray):
+    default: ASymbol | AValue
     lower: frozenset[tuple[int, CompositeBitVector]] = frozenset()
     upper: tuple[tuple[CompositeBitVector, CompositeBitVector], ...] = ()
 
@@ -691,7 +682,7 @@ class ArrayStore(CompositeArray):
     @override
     def dump(self, ctx: DumpContext) -> None:
         writes = list[tuple[CompositeBitVector, CompositeBitVector]](
-            [(BitVecValue(k, self.default.key), v) for k, v in self.lower]
+            [(BValue(k, self.default.key), v) for k, v in self.lower]
         )
         writes.extend(self.upper)
         ctx.write(b"(store " * len(writes))

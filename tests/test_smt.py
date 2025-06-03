@@ -7,9 +7,8 @@ import pytest
 from bytes import Bytes
 from smt import Array, Uint8, Uint256
 from smt2.analysis import CaseParser, Casette
-from smt2.rewrite_bitvec import rewrite_bitvector, rewrite_mixed
-from smt2.rewrite_core import rewrite_constraint
-from smt2.theory_core import Distinct, Not, Symbol, check
+from smt2.rewrite import rewrite_bitvector, rewrite_constraint
+from smt2.theory_core import CSymbol, Distinct, Not, check
 
 
 def test_bvlshr_harder():
@@ -33,8 +32,8 @@ def test_bvlshr_harder():
 
 
 def test_simple_rewrite():
-    term1 = Not(Not(Symbol(b"X")))
-    term2 = Symbol(b"X")
+    term1 = Not(Not(CSymbol(b"X")))
+    term2 = CSymbol(b"X")
     assert not check(Distinct(term1, term2))
 
 
@@ -51,16 +50,11 @@ def parameterize(rw: Callable[..., Any]) -> Any:
 
 @parameterize(rewrite_constraint)
 def test_rewrite_constraint(case: Casette):
-    assert CaseParser(case, None).is_equivalent()
-
-
-@parameterize(rewrite_bitvector)
-def test_rewrite_bitvector(case: Casette):
     for width in range(1, MAX_WIDTH + 1):
         assert CaseParser(case, width).is_equivalent()
 
 
-@parameterize(rewrite_mixed)
-def test_rewrite_mixed(case: Casette):
+@parameterize(rewrite_bitvector)
+def test_rewrite_bitvector(case: Casette):
     for width in range(1, MAX_WIDTH + 1):
         assert CaseParser(case, width).is_equivalent()

@@ -5,7 +5,7 @@ Up-to-date with SMT-LIB version 2.7.
 
 See: https://smt-lib.org/theories-Core.shtml
 """
-# ruff: noqa
+# ruff: noqa: D101, D102, D103
 
 from __future__ import annotations
 
@@ -53,7 +53,7 @@ def check(*constraints: Constraint) -> bool:
 
 
 @dataclass(frozen=True, slots=True)
-class Symbolic(abc.ABC):
+class Base(abc.ABC):
     op: ClassVar[bytes]
 
     # Instances of Symbolic are expected to be immutable:
@@ -66,14 +66,14 @@ class Symbolic(abc.ABC):
     def dump(self, ctx: DumpContext) -> None:
         # 0. Gather Arguments
         params = list[bytes]()
-        terms = list[Symbolic]()
-        for field in fields(self):
-            if not field.init or field.kw_only:
+        terms = list[Base]()
+        for fld in fields(self):
+            if not fld.init or fld.kw_only:
                 continue
-            v = getattr(self, field.name)
+            v = getattr(self, fld.name)
             if isinstance(v, int):
                 params.append(str(v).encode())
-            elif isinstance(v, Symbolic):
+            elif isinstance(v, Base):
                 terms.append(v)
         # 1. Determine Op
         assert self.op
@@ -89,11 +89,11 @@ class Symbolic(abc.ABC):
 
 
 @dataclass(frozen=True, slots=True)
-class Constraint(Symbolic): ...
+class Constraint(Base): ...
 
 
 @dataclass(frozen=True, slots=True)
-class Symbol(Constraint):
+class CSymbol(Constraint):
     name: bytes
 
     @override
@@ -103,7 +103,7 @@ class Symbol(Constraint):
 
 
 @dataclass(frozen=True, slots=True)
-class Value(Constraint):
+class CValue(Constraint):
     value: bool
 
     @override
@@ -146,21 +146,21 @@ class Xor(Constraint):
 
 
 @dataclass(frozen=True, slots=True)
-class Eq[S: Symbolic](Constraint):
+class Eq[S: Base](Constraint):
     op: ClassVar[bytes] = b"="
     left: S
     right: S
 
 
 @dataclass(frozen=True, slots=True)
-class Distinct[S: Symbolic](Constraint):
+class Distinct[S: Base](Constraint):
     op: ClassVar[bytes] = b"distinct"
     left: S
     right: S
 
 
 @dataclass(frozen=True, slots=True)
-class Ite(Constraint):
+class CIte(Constraint):
     op: ClassVar[bytes] = b"ite"
     cond: Constraint
     left: Constraint
