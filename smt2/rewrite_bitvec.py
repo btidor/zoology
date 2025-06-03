@@ -41,7 +41,7 @@ from .theory_core import Constraint
 # pyright: reportUnknownVariableType=false
 
 
-def rewrite_bitvector[N: int](term: BitVector) -> BitVector:
+def rewrite_bitvector(term: BitVector) -> BitVector:
     """Simplify the given bitvector."""
     width = term.width
     mask = (1 << term.width) - 1
@@ -188,11 +188,11 @@ def rewrite_bitvector[N: int](term: BitVector) -> BitVector:
         case Ite(core.Value(True), x, y):
             """itetrue: True ? X : Y <=> X"""
             return x
-        case Ite(core.Value(False), x, y):  # False ? X : Y <=> Y
-            """itefalse"""
+        case Ite(core.Value(False), x, y):
+            """itefalse: False ? X : Y <=> Y"""
             return y
-        case Ite(_, x, y) if x == y:  # C ? X : X <=> X
-            """itself"""
+        case Ite(_, x, y) if x == y:
+            """itself: C ? X : X <=> X"""
             return x
 
         # Push boolean expressions down over ITEs
