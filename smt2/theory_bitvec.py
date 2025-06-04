@@ -55,8 +55,17 @@ class BValue(BitVector):
 
     @override
     def __post_init__(self, w: int) -> None:
+        if self.value < 0:  # convert negative values
+            object.__setattr__(self, "value", self.value + (1 << w))
         assert 0 <= self.value < (1 << w)
         object.__setattr__(self, "width", w)
+
+    @property
+    def sval(self) -> int:
+        # https://stackoverflow.com/a/9147327 (CC BY-SA 3.0)
+        if self.value & (1 << (self.width - 1)):
+            return self.value - (1 << self.width)
+        return self.value
 
     @override
     def dump(self, ctx: DumpContext) -> None:

@@ -151,8 +151,16 @@ class BValue(BitVector):
 
     @override
     def __post_init__(self, w: int) -> None:
+        if self.value < 0:
+            object.__setattr__(self, "value", self.value + (1 << w))
         assert 0 <= self.value < (1 << w)
         object.__setattr__(self, "width", w)
+
+    @property
+    def sval(self) -> int:
+        if self.value & (1 << (self.width - 1)):
+            return self.value - (1 << self.width)
+        return self.value
 
     @override
     def dump(self, ctx: DumpContext) -> None:
@@ -526,6 +534,10 @@ def constraint_folding(term: Constraint) -> Constraint:
             return CValue(a < b)
         case Ule(BValue(a), BValue(b)):
             return CValue(a <= b)
+        case Slt(BValue() as x, BValue() as y):
+            return CValue(x.sval < y.sval)
+        case Sle(BValue() as x, BValue() as y):
+            return CValue(x.sval <= y.sval)
         case term:
             return term
 
@@ -628,7 +640,7 @@ def bitvector_reduction(term: BitVector) -> BitVector:
 def bitvector_folding(term: BitVector) -> BitVector:
     width = term.width
     mask = (1 << width) - 1
-    modulus = 1 << term.width
+    modulus = 1 << width
     match term:
         case Concat(BValue(a), BValue(b) as right):
             return BValue((a << right.width) | b, width)
@@ -654,8 +666,20 @@ def bitvector_folding(term: BitVector) -> BitVector:
             return BValue((a << b) % modulus, width)
         case Lshr(BValue(a), BValue(b)):
             return BValue((a >> b) % modulus, width)
+        case Sdiv(BValue() as x, BValue(b) as y) if b != 0:
+            return BValue(x.sval // y.sval, width)
+        case Srem(BValue() as x, BValue(b) as y) if b != 0:
+            r = abs(x.sval % y.sval)
+            r = r if x.sval >= 0 else -r
+            return BValue(r, width)
+        case Smod(BValue() as x, BValue(b) as y) if b != 0:
+            return BValue(x.sval % y.sval, width)
+        case Ashr(BValue() as x, BValue(b)):
+            return BValue(x.sval >> b, width)
         case ZeroExtend(_, BValue(a)):
-            return BValue(a, term.width)
+            return BValue(a, width)
+        case SignExtend(_, BValue() as x):
+            return BValue(x.sval, width)
         case Ite(CValue(True), x, _):
             return x
         case Ite(CValue(False), _, y):
@@ -666,7 +690,7 @@ def bitvector_folding(term: BitVector) -> BitVector:
 
 def bitvector_logic(term: BitVector) -> BitVector:
     width = term.width
-    mask = (1 << term.width) - 1
+    mask = (1 << width) - 1
     match term:
         case BNot(BNot(inner)):
             return inner
@@ -706,6 +730,8 @@ def bitvector_logic(term: BitVector) -> BitVector:
             return BValue(mask, width)
         case Udiv(x, BValue(1)):
             return x
+        case Sdiv(x, BValue(0)):
+            return Ite(Sge(x, BValue(0, width)), BValue(mask, width), BValue(1, width))
         case Sdiv(x, BValue(1)):
             return x
         case Urem(x, BValue(0)):

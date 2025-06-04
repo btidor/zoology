@@ -145,12 +145,12 @@ def constraint_folding(term: Constraint) -> Constraint:
         case Ule(BValue(a), BValue(b)):
             """ule"""
             return CValue(a <= b)
-        case Slt(BValue(a), BValue(b)):
+        case Slt(BValue() as x, BValue() as y):
             """slt"""
-            raise NotImplementedError
-        case Sle(BValue(a), BValue(b)):
+            return CValue(x.sval < y.sval)
+        case Sle(BValue() as x, BValue() as y):
             """sle"""
-            raise NotImplementedError
+            return CValue(x.sval <= y.sval)
         case term:
             """fallthrough"""
             return term
@@ -295,7 +295,7 @@ def bitvector_folding(term: BitVector) -> BitVector:
     """Perform constant folding on the given bitvector."""
     width = term.width
     mask = (1 << width) - 1
-    modulus = 1 << term.width
+    modulus = 1 << width
     match term:
         case Concat(BValue(a), BValue(b) as right):
             """concat"""
@@ -333,27 +333,29 @@ def bitvector_folding(term: BitVector) -> BitVector:
         case Lshr(BValue(a), BValue(b)):
             """lshr"""
             return BValue((a >> b) % modulus, width)
-        case Sdiv(BValue(a), BValue(b)):
+        case Sdiv(BValue() as x, BValue(b) as y) if b != 0:
             """sdiv"""
-            raise NotImplementedError
-        case Srem(BValue(a), BValue(b)):
+            return BValue(x.sval // y.sval, width)
+        case Srem(BValue() as x, BValue(b) as y) if b != 0:
             """srem"""
-            raise NotImplementedError
-        case Smod(BValue(a), BValue(b)):
+            r = abs(x.sval % y.sval)
+            r = r if x.sval >= 0 else -r
+            return BValue(r, width)
+        case Smod(BValue() as x, BValue(b) as y) if b != 0:
             """smod"""
-            raise NotImplementedError
-        case Ashr(BValue(a), BValue(b)):
+            return BValue(x.sval % y.sval, width)
+        case Ashr(BValue() as x, BValue(b)):
             """ashr"""
-            raise NotImplementedError
+            return BValue(x.sval >> b, width)
         case Repeat(_, BValue(a)):
             """repeat"""
             raise NotImplementedError
         case ZeroExtend(_, BValue(a)):
             """zero_extend"""
-            return BValue(a, term.width)
-        case SignExtend(_, BValue(a)):
+            return BValue(a, width)
+        case SignExtend(_, BValue() as x):
             """sign_extend"""
-            raise NotImplementedError
+            return BValue(x.sval, width)
         case RotateLeft(_, BValue(a)):
             """rotate_left"""
             raise NotImplementedError
@@ -374,7 +376,7 @@ def bitvector_folding(term: BitVector) -> BitVector:
 def bitvector_logic(term: BitVector) -> BitVector:
     """Perform more logical rewrites, mostly involving a constant."""
     width = term.width
-    mask = (1 << term.width) - 1
+    mask = (1 << width) - 1
     match term:
         # Boolean Logic.
         case BNot(BNot(inner)):
@@ -438,7 +440,7 @@ def bitvector_logic(term: BitVector) -> BitVector:
             return x
         case Sdiv(x, BValue(0)):
             """sdiv.z: X // 0 <=> ?"""
-            raise NotImplementedError
+            return Ite(Sge(x, BValue(0, width)), BValue(mask, width), BValue(1, width))
         case Sdiv(x, BValue(1)):
             """sdiv.w: X // 1 <=> X"""
             return x

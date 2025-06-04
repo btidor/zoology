@@ -49,6 +49,7 @@ from .composite import (
     Shl,
     SignExtend,
     Sle,
+    Slt,
     Srem,
     Store,
     Sub,
@@ -313,7 +314,7 @@ class Int[N: int](BitVector[N]):
 
     def __lt__(self, other: Self, /) -> Constraint:  # pyright: ignore[reportIncompatibleMethodOverride]
         assert self.width == other.width
-        return Constraint._apply(Sle, self, other)
+        return Constraint._apply(Slt, self, other)
 
     def __le__(self, other: Self, /) -> Constraint:  # pyright: ignore[reportIncompatibleMethodOverride]
         return Constraint._apply(Sle, self, other)
