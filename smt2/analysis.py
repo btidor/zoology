@@ -543,5 +543,5 @@ from .theory_core import Base, DumpContext
 
 
 if __name__ == "__main__":
-    with open(COMPOSITE_PY, "wt") as f:
+    with open(COMPOSITE_PY, "w") as f:
         f.write(Compositor().dump())

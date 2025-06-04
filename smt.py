@@ -6,7 +6,6 @@ from __future__ import annotations
 from collections import defaultdict
 import copy
 from functools import reduce
-from itertools import chain
 from subprocess import Popen, PIPE
 from typing import Any, Literal, overload
 
@@ -57,10 +56,12 @@ class Solver:
             return b
 
         ctx = DumpContext()
-        constraint._term.dump(ctx)  # pyright: ignore[reportPrivateUsage]
-        smt = b"\n".join(
-            chain(ctx.defs.values(), (b"(assert %b)" % bytes(ctx.out), b"(check-sat)"))
-        )
+        for c in constraint.destructure():
+            ctx.write(b"(assert ")
+            c.dump(ctx)
+            ctx.write(b")\n")
+        ctx.write(b"(check-sat)")
+        smt = b"\n".join(ctx.defs.values()) + b"\n" + bytes(ctx.out)
 
         p = Popen(["z3", "-model", "/dev/stdin"], stdin=PIPE, stdout=PIPE, stderr=PIPE)
         out, err = p.communicate(smt)
@@ -72,7 +73,9 @@ class Solver:
             case "unsat":
                 return False
             case _:
-                raise RuntimeError(out, err, smt)
+                with open("tmp.smt2", "w") as f:
+                    f.write(smt.decode())
+                raise RuntimeError(out, err)
 
     @overload
     def evaluate(self, s: Constraint, /) -> bool: ...
@@ -113,7 +116,7 @@ class Solver:
                         self._model[name] = self._parse_array(value, self._model)
                     case _:
                         raise NotImplementedError(f"unexpected term: {fun}")
-        raise NotImplementedError(sym)
+        raise NotImplementedError("evaluate")
 
     @classmethod
     def _read_from_tokens(cls, tokens: list[str]) -> Any:
@@ -178,14 +181,11 @@ def underflow_safe(a: Uint256, b: Uint256) -> Constraint:
 
 
 def get_constants(s: Symbolic | Array[Any, Any]) -> set[str]:
-    raise NotImplementedError
+    raise NotImplementedError("get_constants")
 
 
 def substitute[S: Symbolic](s: S, model: dict[str, Symbolic | Array[Any, Any]]) -> S:
-    subs = dict[str, Any]()
-    for k, v in model.items():
-        subs[k] = v._term  # pyright: ignore[reportPrivateUsage]
-    raise NotImplementedError(s)
+    raise NotImplementedError("substitute")
 
 
 def to_signed(width: int, value: int) -> int:

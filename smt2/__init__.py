@@ -117,8 +117,11 @@ class Symbolic(abc.ABC):
 
     def __repr__(self) -> str:
         ctx = DumpContext()
-        self._term.dump(ctx)
+        self.dump(ctx)
         return f"{self.__class__.__name__}({ctx.out.decode()})"
+
+    def dump(self, ctx: DumpContext) -> None:
+        self._term.dump(ctx)
 
 
 class Constraint(Symbolic):
@@ -169,6 +172,19 @@ class Constraint(Symbolic):
                 return value
             case _:
                 return None
+
+    def destructure(self) -> list[Constraint]:
+        queue = [self._term]
+        res = list[Constraint]()
+        while queue:
+            match queue.pop(0):
+                case And(x, y):
+                    queue.extend((x, y))
+                case other:
+                    k = self.__class__.__new__(self.__class__)
+                    k._term = other
+                    res.append(k)
+        return res
 
 
 class BitVector[N: int](

@@ -49,7 +49,8 @@ def check(*constraints: Constraint) -> bool:
         case "unsat":
             return False
         case _:
-            raise RuntimeError(out, err, smt)
+            print(smt)
+            raise RuntimeError(out, err)
 
 
 @dataclass(frozen=True, slots=True)
