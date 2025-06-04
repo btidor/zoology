@@ -81,15 +81,13 @@ class Casette:
 class CaseParser:
     """Handles parsing and validation of a single rewrite case."""
 
-    def __init__(self, pre: Casette, width: int | None) -> None:
+    def __init__(self, width: int | None) -> None:
         """Create a new CaseParser."""
-        self.case = pre.case
-        self.prefix = pre.prefix
         self.assertions = list[CTerm]()
         self.vars = dict[str, BaseTerm]()
         self.sort = ConstraintSort() if width is None else BitVectorSort(width)
 
-    def is_equivalent(self) -> bool:
+    def is_equivalent(self, casette: Casette) -> bool:
         """
         Parse the rewrite case and check its validity.
 
@@ -102,11 +100,11 @@ class CaseParser:
         #    * define a new bool/int named "v"
         #    * return the input (original) term: Not(Symbol("v"))
         #
-        term1 = self._match(self.case.pattern, self.sort)
+        term1 = self._match(casette.case.pattern, self.sort)
         self.vars["term"] = term1
 
         # 1.5. Handle any assignments in the prefix.
-        for stmt in self.prefix:
+        for stmt in casette.prefix:
             match stmt:
                 case ast.Expr(ast.Constant(str())):
                     pass  # function docstring, just ignore
@@ -116,14 +114,14 @@ class CaseParser:
                     raise SyntaxError("expected assignment")
 
         # 2. Parse the guard, if present. (Relies on vars defined in #1).
-        if self.case.guard is None:
+        if casette.case.guard is None:
             guard = CValue(True)
         else:
-            guard = self._pyexpr(self.case.guard)
+            guard = self._pyexpr(casette.case.guard)
         assert isinstance(guard, CTerm)
 
         # 3. Parse the body. This tells us the value of the rewritten term.s
-        for stmt in self.case.body:
+        for stmt in casette.case.body:
             match stmt:
                 case ast.Expr(ast.Constant(str())):
                     pass  # skip docstring
