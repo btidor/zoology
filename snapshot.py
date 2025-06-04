@@ -153,7 +153,7 @@ def is_sibling_contract(slot: int, value: int) -> bool:
 if __name__ == "__main__":
     snapshot: Snapshot = {}
     for i, address in enumerate(LEVEL_FACTORIES):
-        print(f"Downloading level {i} of {COUNT-1}")
+        print(f"Downloading level {i} of {COUNT - 1}")
         download_contract(snapshot, address)
     with open(_ROOT / "snapshot.json", "w") as f:
         json.dump(snapshot, f, indent=4)

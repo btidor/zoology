@@ -216,7 +216,7 @@ def check_candidate(
     """Check whether a sequence ."""
     if verbose:
         vprint(f"- {candidate.pz()} ({candidate.states[-1].cost})\n")
-        vprint(f"  {":".join(candidate.states[-1].trace)}\n")
+        vprint(f"  {':'.join(candidate.states[-1].trace)}\n")
     else:
         global count
         if count > 0:
@@ -224,7 +224,7 @@ def check_candidate(
                 vprint("\n")
             if count % (32 * 16) == 0:
                 vprint("\n")
-        vprint(f"{len(candidate.states)-1:X}")
+        vprint(f"{len(candidate.states) - 1:X}")
         count += 1
 
     # We consider a state "changed" if a write to storage has occurred *or* if
@@ -295,7 +295,7 @@ def handle_level(factory: Uint160, args: argparse.Namespace) -> None:
 
     newline = True
     indent = 0
-    vprint(f"\nResult    | {int(time.time())-TSTART:06}\n")
+    vprint(f"\nResult    | {int(time.time()) - TSTART:06}\n")
     indent = 2
     for part in solution.describe():
         if newline:
