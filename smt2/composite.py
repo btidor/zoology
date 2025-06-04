@@ -739,6 +739,13 @@ def bitvector_logic(term: BitVector) -> BitVector:
             return Add(Add(BNot(x), BNot(y)), BValue(1, width))
         case Add(BValue(0), x) | Add(x, BValue(0)):
             return x
+        case (
+            Add(BValue(a), Add(x, BValue(b)))
+            | Add(BValue(a), Add(BValue(b), x))
+            | Add(Add(x, BValue(b)), BValue(a))
+            | Add(Add(BValue(b), x), BValue(a))
+        ):
+            return Add(Add(BValue(a, width), BValue(b, width)), x)
         case Mul(BValue(0), x) | Mul(x, BValue(0)):
             return BValue(0, width)
         case Mul(BValue(1), x) | Mul(x, BValue(1)):
@@ -767,14 +774,20 @@ def bitvector_logic(term: BitVector) -> BitVector:
             return ZeroExtend(z.width, Concat(tuple(rest)))
         case Concat([single]):
             return single
+        case Shl(x, BValue(0)):
+            return x
         case Shl(x, BValue(val)) if val >= width:
             return BValue(0, width)
         case Shl(Shl(x, BValue(a)), BValue(b)) if a < width and b < width:
             return Shl(x, BValue(a + b, width))
+        case Lshr(x, BValue(0)):
+            return x
         case Lshr(x, BValue(val)) if val >= width:
             return BValue(0, width)
         case Lshr(Lshr(x, BValue(a)), BValue(b)) if a < width and b < width:
             return Lshr(x, BValue(a + b, width))
+        case Ashr(x, BValue(0)):
+            return x
         case ZeroExtend(0, x):
             return x
         case ZeroExtend(i, ZeroExtend(j, x)):
@@ -783,6 +796,17 @@ def bitvector_logic(term: BitVector) -> BitVector:
             return x
         case SignExtend(i, SignExtend(j, x)):
             return SignExtend(i + j, x)
+        case Shl(Concat([x, *rest]), BValue(a)) if a >= x.width:
+            return Concat(
+                (
+                    Shl(Concat(tuple(rest)), BValue(a - x.width, width - x.width)),
+                    BValue(0, x.width),
+                )
+            )
+        case Lshr(Concat([*rest, x]), BValue(a)) if a >= x.width:
+            return ZeroExtend(
+                x.width, Lshr(Concat(tuple(rest)), BValue(a - x.width, width - x.width))
+            )
         case Ite(_, x, y) if x == y:
             return x
         case BNot(Ite(c, x, y)):

@@ -299,6 +299,7 @@ def bitvector_folding(term: BitVector) -> BitVector:
     modulus = 1 << width
     match term:
         case Concat(terms) if all(isinstance(t, BValue) for t in terms):
+            """concat"""
             s = reduce(lambda p, q: (p << q.width) | cast(BValue, q).value, terms, 0)
             return BValue(s, term.width)
         case Extract(i, j, BValue(a)):
@@ -427,6 +428,14 @@ def bitvector_logic(term: BitVector) -> BitVector:
         case Add(BValue(0), x) | Add(x, BValue(0)):
             """add.z: X + 0 <=> X"""
             return x
+        case (
+            Add(BValue(a), Add(x, BValue(b)))
+            | Add(BValue(a), Add(BValue(b), x))
+            | Add(Add(x, BValue(b)), BValue(a))
+            | Add(Add(BValue(b), x), BValue(a))
+        ):
+            """add.add: A + (B + X) <=> (A + B) + X"""
+            return Add(Add(BValue(a, width), BValue(b, width)), x)
         case Mul(BValue(0), x) | Mul(x, BValue(0)):
             """mul.z: X * 0 <=> 0"""
             return BValue(0, width)
@@ -471,18 +480,27 @@ def bitvector_logic(term: BitVector) -> BitVector:
         case Concat([single]):
             """concat.w"""
             return single
+        case Shl(x, BValue(0)):
+            """shl.z"""
+            return x
         case Shl(x, BValue(val)) if val >= width:
             """shl.o"""
             return BValue(0, width)
         case Shl(Shl(x, BValue(a)), BValue(b)) if a < width and b < width:
             """shl.shl"""
             return Shl(x, BValue(a + b, width))
+        case Lshr(x, BValue(0)):
+            """lshr.z"""
+            return x
         case Lshr(x, BValue(val)) if val >= width:
             """lshr.o"""
             return BValue(0, width)
         case Lshr(Lshr(x, BValue(a)), BValue(b)) if a < width and b < width:
             """lshr.lshr"""
             return Lshr(x, BValue(a + b, width))
+        case Ashr(x, BValue(0)):
+            """ashr.z"""
+            return x
         case ZeroExtend(0, x):
             """zext.z"""
             return x
@@ -495,6 +513,19 @@ def bitvector_logic(term: BitVector) -> BitVector:
         case SignExtend(i, SignExtend(j, x)):
             """sext.sext"""
             return SignExtend(i + j, x)
+        case Shl(Concat([x, *rest]), BValue(a)) if a >= x.width:
+            """shl.concat"""
+            return Concat(
+                (
+                    Shl(Concat(tuple(rest)), BValue(a - x.width, width - x.width)),
+                    BValue(0, x.width),
+                )
+            )
+        case Lshr(Concat([*rest, x]), BValue(a)) if a >= x.width:
+            """lshr.concat"""
+            return ZeroExtend(
+                x.width, Lshr(Concat(tuple(rest)), BValue(a - x.width, width - x.width))
+            )
 
         # Push boolean expressions down over ITEs.
         case Ite(_, x, y) if x == y:
