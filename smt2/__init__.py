@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import abc
-from functools import reduce
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -285,9 +284,9 @@ class Uint[N: int](BitVector[N]):
 
     @classmethod
     def concat[M: int](cls, *terms: Uint[M]) -> Uint[N]:
-        assert terms and cls.width == reduce(lambda s, t: s + t.width, terms, 0)
         k = cls.__new__(cls)
-        k._term = reduce(Concat, (t._term for t in terms))
+        k._term = Concat(tuple(t._term for t in terms))
+        assert k.width == cls.width
         return k
 
     @classmethod

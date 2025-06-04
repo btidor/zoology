@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import abc
-from typing import Any
+from functools import reduce
+from typing import Any, cast
 
 from .theory_bitvec import (
     Add,
@@ -297,9 +298,9 @@ def bitvector_folding(term: BitVector) -> BitVector:
     mask = (1 << width) - 1
     modulus = 1 << width
     match term:
-        case Concat(BValue(a), BValue(b) as right):
-            """concat"""
-            return BValue((a << right.width) | b, width)
+        case Concat(terms) if all(isinstance(t, BValue) for t in terms):
+            s = reduce(lambda p, q: (p << q.width) | cast(BValue, q).value, terms, 0)
+            return BValue(s, term.width)
         case Extract(i, j, BValue(a)):
             """extract"""
             return BValue((a >> j) & ((1 << (i - j + 1)) - 1), i - j + 1)
@@ -463,10 +464,13 @@ def bitvector_logic(term: BitVector) -> BitVector:
             """Smod.w: X % 1 <=> 0"""
             return BValue(0, width)
 
-        # Bit-shifting.
-        case Concat(BValue(0) as z, x):
+        # Concat & Shift.
+        case Concat([BValue(0) as z, *rest]):
             """concat.z"""
-            return ZeroExtend(z.width, x)
+            return ZeroExtend(z.width, Concat(tuple(rest)))
+        case Concat([single]):
+            """concat.w"""
+            return single
         case Shl(x, BValue(val)) if val >= width:
             """shl.o"""
             return BValue(0, width)

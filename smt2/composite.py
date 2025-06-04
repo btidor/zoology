@@ -12,7 +12,8 @@ from __future__ import annotations
 
 import abc
 from dataclasses import InitVar, dataclass, field, fields
-from typing import Any, ClassVar, override
+from functools import reduce
+from typing import Any, ClassVar, cast, override
 
 from .theory_core import Base, DumpContext
 
@@ -117,13 +118,17 @@ class BitVector(Base, metaclass=RewriteMeta):
     width: int = field(init=False)
 
     def __post_init__(self) -> None:
+        w = None
         for fld in fields(self):
             if fld.type == "BitVector":
                 term = getattr(self, fld.name)
-                object.__setattr__(self, "width", term.width)
-                break
-        else:
+                if w is None:
+                    w = term.width
+                else:
+                    assert w == term.width, "inconsistent term widths"
+        if w is None:
             raise TypeError(f"could not find inner term for {self.__class__.__name__}")
+        object.__setattr__(self, "width", w)
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,6 +138,7 @@ class BSymbol(BitVector):
 
     @override
     def __post_init__(self, w: int) -> None:
+        assert w > 0, "width must be positive"
         object.__setattr__(self, "width", w)
 
     @override
@@ -151,6 +157,7 @@ class BValue(BitVector):
 
     @override
     def __post_init__(self, w: int) -> None:
+        assert w > 0, "width must be positive"
         if self.value < 0:
             object.__setattr__(self, "value", self.value + (1 << w))
         assert 0 <= self.value < (1 << w)
@@ -196,12 +203,21 @@ class SingleParamOp(BitVector):
 @dataclass(frozen=True, slots=True)
 class Concat(BitVector):
     op: ClassVar[bytes] = b"concat"
-    left: BitVector
-    right: BitVector
+    terms: tuple[BitVector, ...]
 
     @override
     def __post_init__(self) -> None:
-        object.__setattr__(self, "width", self.left.width + self.right.width)
+        assert len(self.terms) > 0, "width must be positive"
+        w = reduce(lambda p, q: p + q.width, self.terms, 0)
+        object.__setattr__(self, "width", w)
+
+    @override
+    def dump(self, ctx: DumpContext) -> None:
+        ctx.write(b"(concat")
+        for term in self.terms:
+            ctx.write(b" ")
+            term.dump(ctx)
+        ctx.write(b")")
 
 
 @dataclass(frozen=True, slots=True)
@@ -642,8 +658,9 @@ def bitvector_folding(term: BitVector) -> BitVector:
     mask = (1 << width) - 1
     modulus = 1 << width
     match term:
-        case Concat(BValue(a), BValue(b) as right):
-            return BValue((a << right.width) | b, width)
+        case Concat(terms) if all(isinstance(t, BValue) for t in terms):
+            s = reduce(lambda p, q: (p << q.width) | cast(BValue, q).value, terms, 0)
+            return BValue(s, term.width)
         case Extract(i, j, BValue(a)):
             return BValue((a >> j) & ((1 << (i - j + 1)) - 1), i - j + 1)
         case BNot(BValue(a)):
@@ -746,8 +763,10 @@ def bitvector_logic(term: BitVector) -> BitVector:
             return x
         case Smod(x, BValue(1)):
             return BValue(0, width)
-        case Concat(BValue(0) as z, x):
-            return ZeroExtend(z.width, x)
+        case Concat([BValue(0) as z, *rest]):
+            return ZeroExtend(z.width, Concat(tuple(rest)))
+        case Concat([single]):
+            return single
         case Shl(x, BValue(val)) if val >= width:
             return BValue(0, width)
         case Shl(Shl(x, BValue(a)), BValue(b)) if a < width and b < width:

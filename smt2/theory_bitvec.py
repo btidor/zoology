@@ -10,6 +10,7 @@ See: https://smt-lib.org/logics-all.shtml#QF_BV
 from __future__ import annotations
 
 from dataclasses import InitVar, dataclass, field, fields
+from functools import reduce
 from typing import ClassVar, override
 
 from .theory_core import Base, Constraint, DumpContext
@@ -21,13 +22,17 @@ class BitVector(Base):
 
     def __post_init__(self) -> None:
         # By default, inherit width from inner term.
+        w = None
         for fld in fields(self):
             if fld.type == "BitVector":
                 term = getattr(self, fld.name)
-                object.__setattr__(self, "width", term.width)
-                break
-        else:
+                if w is None:
+                    w = term.width
+                else:
+                    assert w == term.width, "inconsistent term widths"
+        if w is None:
             raise TypeError(f"could not find inner term for {self.__class__.__name__}")
+        object.__setattr__(self, "width", w)
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,6 +42,7 @@ class BSymbol(BitVector):
 
     @override
     def __post_init__(self, w: int) -> None:
+        assert w > 0, "width must be positive"
         object.__setattr__(self, "width", w)
 
     @override
@@ -55,7 +61,8 @@ class BValue(BitVector):
 
     @override
     def __post_init__(self, w: int) -> None:
-        if self.value < 0:  # convert negative values
+        assert w > 0, "width must be positive"
+        if self.value < 0:  # convert to two's complement
             object.__setattr__(self, "value", self.value + (1 << w))
         assert 0 <= self.value < (1 << w)
         object.__setattr__(self, "width", w)
@@ -101,12 +108,21 @@ class SingleParamOp(BitVector):
 @dataclass(frozen=True, slots=True)
 class Concat(BitVector):
     op: ClassVar[bytes] = b"concat"
-    left: BitVector
-    right: BitVector
+    terms: tuple[BitVector, ...]
 
     @override
     def __post_init__(self) -> None:
-        object.__setattr__(self, "width", self.left.width + self.right.width)
+        assert len(self.terms) > 0, "width must be positive"
+        w = reduce(lambda p, q: p + q.width, self.terms, 0)
+        object.__setattr__(self, "width", w)
+
+    @override
+    def dump(self, ctx: DumpContext) -> None:
+        ctx.write(b"(concat")
+        for term in self.terms:
+            ctx.write(b" ")
+            term.dump(ctx)
+        ctx.write(b")")
 
 
 @dataclass(frozen=True, slots=True)

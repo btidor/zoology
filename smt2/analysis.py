@@ -498,7 +498,8 @@ from __future__ import annotations
 
 import abc
 from dataclasses import InitVar, dataclass, field, fields
-from typing import Any, ClassVar, override
+from functools import reduce
+from typing import Any, ClassVar, cast, override
 
 from .theory_core import Base, DumpContext
 
@@ -522,7 +523,7 @@ from .theory_core import Base, DumpContext
     @classmethod
     def _rewrites(cls, module: ModuleType) -> None:
         for item in vars(module).values():
-            if not inspect.isfunction(item):
+            if not inspect.isfunction(item) or inspect.getmodule(item) != module:
                 continue
             cls._source(item)
 
