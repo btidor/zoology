@@ -7,7 +7,14 @@ import pytest
 from bytes import Bytes
 from smt import Array, Uint8, Uint256
 from smt2.analysis import COMPOSITE_PY, CaseParser, Casette, Compositor
-from smt2.rewrite import rewrite_bitvector, rewrite_constraint
+from smt2.rewrite import (
+    bitvector_folding,
+    bitvector_logic,
+    bitvector_reduction,
+    constraint_folding,
+    constraint_logic,
+    constraint_reduction,
+)
 from smt2.theory_core import CSymbol, Distinct, Not, check
 
 
@@ -48,14 +55,38 @@ def parameterize(rw: Callable[..., Any]) -> Any:
     )
 
 
-@parameterize(rewrite_constraint)
-def test_rewrite_constraint(case: Casette):
+@parameterize(constraint_reduction)
+def test_constraint_reduction(case: Casette):
     for width in range(1, MAX_WIDTH + 1):
         assert CaseParser(case, width).is_equivalent()
 
 
-@parameterize(rewrite_bitvector)
-def test_rewrite_bitvector(case: Casette):
+@parameterize(constraint_folding)
+def test_constraint_folding(case: Casette):
+    for width in range(1, MAX_WIDTH + 1):
+        assert CaseParser(case, width).is_equivalent()
+
+
+@parameterize(constraint_logic)
+def test_constraint_logic(case: Casette):
+    for width in range(1, MAX_WIDTH + 1):
+        assert CaseParser(case, width).is_equivalent()
+
+
+@parameterize(bitvector_reduction)
+def test_bitvector_reduction(case: Casette):
+    for width in range(1, MAX_WIDTH + 1):
+        assert CaseParser(case, width).is_equivalent()
+
+
+@parameterize(bitvector_folding)
+def test_bitvector_folding(case: Casette):
+    for width in range(1, MAX_WIDTH + 1):
+        assert CaseParser(case, width).is_equivalent()
+
+
+@parameterize(bitvector_logic)
+def test_bitvector_logic(case: Casette):
     for width in range(1, MAX_WIDTH + 1):
         assert CaseParser(case, width).is_equivalent()
 

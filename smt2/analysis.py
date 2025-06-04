@@ -5,15 +5,15 @@ from __future__ import annotations
 import ast
 import inspect
 import re
-import subprocess
 from dataclasses import dataclass, fields
 from pathlib import Path
 from random import randint
+from subprocess import check_output
 from types import ModuleType
 from typing import Any, Callable, Generator, NewType, Self, cast
 
-from . import theory_array, theory_bitvec, theory_core
-from .rewrite import RewriteMeta, rewrite_bitvector, rewrite_constraint
+from . import rewrite, theory_array, theory_bitvec, theory_core
+from .rewrite import RewriteMeta
 from .theory_bitvec import (
     Add,
     BAnd,
@@ -186,6 +186,8 @@ class CaseParser:
                 case ast.Return(ast.expr() as expr):
                     term2 = self._sexpr(expr)
                     break
+                case ast.Raise(ast.Name("NotImplementedError")):
+                    raise NotImplementedError  # passthrough for unimplemented cases
                 case _:
                     raise NotImplementedError("unknown statement", stmt)
         else:
@@ -283,6 +285,8 @@ class CaseParser:
                         match pattern:
                             case ast.MatchValue(ast.Constant(k)):
                                 arg = k
+                            case ast.MatchAs(None, _):
+                                raise NotImplementedError("parameterized ops")
                             case _:
                                 raise NotImplementedError("unknown constant", pattern)
                     else:
@@ -344,19 +348,30 @@ class CaseParser:
                         raise NotImplementedError(op)
             case ast.Compare(left, [op], [right]):
                 left, right = self._pyexpr(left), self._pyexpr(right)
-                assert isinstance(left, BitVector) and isinstance(right, BitVector)
                 match op:
                     case ast.Eq():
                         return PythonType(Eq(left, right))
                     case ast.NotEq():
                         return PythonType(Distinct(left, right))
                     case ast.Lt():
+                        assert isinstance(left, BitVector) and isinstance(
+                            right, BitVector
+                        )
                         return PythonType(Slt(left, right))
                     case ast.LtE():
+                        assert isinstance(left, BitVector) and isinstance(
+                            right, BitVector
+                        )
                         return PythonType(Sle(left, right))
                     case ast.Gt():
+                        assert isinstance(left, BitVector) and isinstance(
+                            right, BitVector
+                        )
                         return PythonType(Sgt(left, right))
                     case ast.GtE():
+                        assert isinstance(left, BitVector) and isinstance(
+                            right, BitVector
+                        )
                         return PythonType(Sge(left, right))
                     case _:
                         raise NotImplementedError(op)
@@ -464,7 +479,7 @@ class Compositor:
         """Write out `composite.py`."""
         cls.out = bytearray()
         cls._dump()
-        formatted = subprocess.check_output(["ruff", "format", "-"], input=cls.out)
+        formatted = check_output(["ruff", "format", "-"], input=cls.out)
         return formatted.decode()
 
     @classmethod
@@ -490,14 +505,13 @@ from .theory_core import Base, DumpContext
 
 """)
         cls._source(RewriteMeta)
-        cls._module(theory_core)
-        cls._source(rewrite_constraint)
-        cls._module(theory_bitvec)
-        cls._source(rewrite_bitvector)
-        cls._module(theory_array)
+        cls._theory(theory_core)
+        cls._theory(theory_bitvec)
+        cls._theory(theory_array)
+        cls._rewrites(rewrite)
 
     @classmethod
-    def _module(cls, module: ModuleType) -> None:
+    def _theory(cls, module: ModuleType) -> None:
         for item in vars(module).values():
             if not isinstance(item, type) or not issubclass(item, Base):
                 continue
@@ -506,13 +520,23 @@ from .theory_core import Base, DumpContext
             cls._source(item)
 
     @classmethod
+    def _rewrites(cls, module: ModuleType) -> None:
+        for item in vars(module).values():
+            if not inspect.isfunction(item):
+                continue
+            cls._source(item)
+
+    @classmethod
     def _source(cls, object: type | Callable[..., Any]) -> None:
         s = inspect.getsource(object)
-        # s = s.replace("(Base)", "(Base, metaclass=RewriteMeta)")
+        # Inject metaclass for Constraint, BitVector
         s = re.sub(
             r"(Constraint|BitVector)\(Base", r"\1(Base, metaclass=RewriteMeta", s
         )
+        # Delete docstrings, comments
         s = re.sub(r'\n*\s*("""[^"]*"""| #.*)\n+', "\n", s)
+        # Skip unimplemented rewrite cases
+        s = re.sub(r"\n*\s*case [^_].*\n\s*raise NotImplementedError", "", s)
         cls.out.extend(s.encode())
         cls.out.extend(b"\n")
 
