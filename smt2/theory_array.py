@@ -55,7 +55,7 @@ class AValue(Array):
     @override
     def dump(self, ctx: DumpContext) -> None:
         ctx.write(
-            b"((_ as const (Array (_ BitVec %d) (_ BitVec %d)))"
+            b"((_ as const (Array (_ BitVec %d) (_ BitVec %d))) "
             % (self.key, self.default.width)
         )
         self.default.dump(ctx)

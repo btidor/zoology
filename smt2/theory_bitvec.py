@@ -147,13 +147,13 @@ class BNot(UnaryOp):
 @dataclass(frozen=True, slots=True)
 class BAnd(BinaryOp):
     op: ClassVar[bytes] = b"bvand"
+    commutative: ClassVar[bool] = True
 
 
 @dataclass(frozen=True, slots=True)
-class BOr(BitVector):
+class BOr(BinaryOp):
     op: ClassVar[bytes] = b"bvor"
-    left: BitVector
-    right: BitVector
+    commutative: ClassVar[bool] = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -164,11 +164,13 @@ class Neg(UnaryOp):
 @dataclass(frozen=True, slots=True)
 class Add(BinaryOp):
     op: ClassVar[bytes] = b"bvadd"
+    commutative: ClassVar[bool] = True
 
 
 @dataclass(frozen=True, slots=True)
 class Mul(BinaryOp):
     op: ClassVar[bytes] = b"bvmul"
+    commutative: ClassVar[bool] = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -209,6 +211,7 @@ class Nor(BinaryOp):
 @dataclass(frozen=True, slots=True)
 class BXor(BinaryOp):
     op: ClassVar[bytes] = b"bvxor"
+    commutative: ClassVar[bool] = True
 
 
 @dataclass(frozen=True, slots=True)

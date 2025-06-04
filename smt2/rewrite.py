@@ -48,6 +48,7 @@ from .theory_bitvec import (
 )
 from .theory_core import (
     And,
+    Base,
     CIte,
     Constraint,
     CValue,
@@ -65,6 +66,20 @@ class RewriteMeta(abc.ABCMeta):
 
     def __call__(self, *args: Any, **kwds: Any) -> Any:
         """Construct the requested term, then rewrite it."""
+        assert issubclass(self, Base)
+        if self.commutative:
+            # Swap Values to right-hand side, Nots to left-hand side.
+            match args:
+                case (x, CValue() as y) if not isinstance(x, CValue):
+                    args = (y, x)
+                case (Not() as x, y) if not isinstance(y, Not):
+                    args = (y, x)
+                case (x, BValue() as y) if not isinstance(x, BValue):
+                    args = (y, x)
+                case (BNot() as x, y) if not isinstance(y, BNot):
+                    args = (y, x)
+                case _:
+                    pass
         term = super(RewriteMeta, self).__call__(*args, **kwds)
         match term:
             case Constraint():
@@ -164,40 +179,40 @@ def constraint_logic(term: Constraint) -> Constraint:
         case Not(Not(inner)):
             """not.not: ~(~X) <=> X"""
             return inner
-        case And(CValue(True), x) | And(x, CValue(True)):
+        case And(CValue(True), x):
             """and.t: X & True <=> X"""
             return x
-        case And(CValue(False), x) | And(x, CValue(False)):
+        case And(CValue(False), x):
             """and.f: X & False <=> False"""
             return CValue(False)
         case And(x, y) if x == y:
             """and.x: X & X <=> X"""
             return x
-        case And(x, Not(y)) | And(Not(y), x) if x == y:
+        case And(x, Not(y)) if x == y:
             """and.ix: X & ~X <=> False"""
             return CValue(False)
-        case Or(CValue(True), x) | Or(x, CValue(True)):
+        case Or(CValue(True), x):
             """or.t: X | True <=> True"""
             return CValue(True)
-        case Or(CValue(False), x) | Or(x, CValue(False)):
+        case Or(CValue(False), x):
             """or.f: X | False <=> X"""
             return x
         case Or(x, y) if x == y:
             """or.x: X | X <=> X"""
             return x
-        case Or(x, Not(y)) | Or(Not(y), x) if x == y:
+        case Or(x, Not(y)) if x == y:
             """or.ix: X | ~X <=> True"""
             return CValue(True)
-        case Xor(CValue(True), x) | Xor(x, CValue(True)):
+        case Xor(CValue(True), x):
             """xor.t: X ^ True <=> ~X"""
             return Not(x)
-        case Xor(CValue(False), x) | Xor(x, CValue(False)):
+        case Xor(CValue(False), x):
             """xor.f: X ^ False <=> X"""
             return x
         case Xor(x, y) if x == y:
             """xor.x: X ^ X <=> False"""
             return CValue(False)
-        case Xor(x, Not(y)) | Xor(Not(y), x) if x == y:
+        case Xor(x, Not(y)) if x == y:
             """xor.ix: X ^ ~X <=> True"""
             return CValue(True)
 
@@ -205,43 +220,23 @@ def constraint_logic(term: Constraint) -> Constraint:
         case Eq(BitVector() as x, BitVector() as y) if x == y:
             """beq.x: X = X <=> True"""
             return CValue(True)
-        case Eq(BitVector() as x, BNot(y)) | Eq(BNot(y), BitVector() as x) if x == y:
+        case Eq(BitVector() as x, BNot(y)) if x == y:
             """beq.ix: X = ~X <=> False"""
             return CValue(False)
-        case Eq(BValue(a), BNot(x)) | Eq(BNot(x), BValue(a)):
+        case Eq(BValue(a), BNot(x)):
             """beq.vnot: A = ~X <=> ~A = X"""
             mask = (1 << x.width) - 1
             return Eq(BValue(mask ^ a, x.width), x)
-        case (
-            Eq(BValue(a), BAnd(x, BValue(b)))
-            | Eq(BValue(a), BAnd(BValue(b), x))
-            | Eq(BAnd(x, BValue(b)), BValue(a))
-            | Eq(BAnd(BValue(b), x), BValue(a))
-        ) if a & (b ^ ((1 << x.width) - 1)) != 0:
+        case Eq(BValue(a), BAnd(BValue(b), x)) if a & (b ^ ((1 << x.width) - 1)) != 0:
             """beq.vand"""
             return CValue(False)
-        case (
-            Eq(BValue(a), BOr(x, BValue(b)))
-            | Eq(BValue(a), BOr(BValue(b), x))
-            | Eq(BOr(x, BValue(b)), BValue(a))
-            | Eq(BOr(BValue(b), x), BValue(a))
-        ) if (a ^ ((1 << x.width) - 1)) & b != 0:
+        case Eq(BValue(a), BOr(BValue(b), x)) if (a ^ ((1 << x.width) - 1)) & b != 0:
             """beq.vor"""
             return CValue(False)
-        case (
-            Eq(BValue(a), BXor(x, BValue(b)))
-            | Eq(BValue(a), BXor(BValue(b), x))
-            | Eq(BXor(x, BValue(b)), BValue(a))
-            | Eq(BXor(BValue(b), x), BValue(a))
-        ):
+        case Eq(BValue(a), BXor(BValue(b), x)):
             """bveq.vxor: A = X ^ B <=> A ^ B = X"""
             return Eq(BValue(a ^ b, x.width), x)
-        case (
-            Eq(BValue(a), Add(x, BValue(b)))
-            | Eq(BValue(a), Add(BValue(b), x))
-            | Eq(Add(x, BValue(b)), BValue(a))
-            | Eq(Add(BValue(b), x), BValue(a))
-        ):
+        case Eq(BValue(a), Add(BValue(b), x)):
             """beq.vadd: A = X + B <=> A - B = X"""
             return Eq(Add(BValue(a, x.width), Neg(BValue(b, x.width))), x)
 
@@ -261,6 +256,23 @@ def constraint_logic(term: Constraint) -> Constraint:
         case Ule(BValue(0), x):
             """z.ule: 0 <= X <=> True"""
             return CValue(True)
+
+        # Comparators with ZeroExtend.
+        case Eq(BValue(a), ZeroExtend(_, x)) if a >= (1 << x.width):
+            """eq.zv"""
+            return CValue(False)
+        case Ult(ZeroExtend(_, x), BValue(a)) if a >= (1 << x.width):
+            """ult.zv"""
+            return CValue(True)
+        case Ult(BValue(a), ZeroExtend(_, x)) if a >= (1 << x.width):
+            """ult.vz"""
+            return CValue(False)
+        case Ule(ZeroExtend(_, x), BValue(a)) if a >= (1 << x.width):
+            """ule.zv"""
+            return CValue(True)
+        case Ule(BValue(a), ZeroExtend(_, x)) if a >= (1 << x.width):
+            """ule.vz"""
+            return CValue(False)
         case term:
             """fallthrough"""
             return term
@@ -271,7 +283,7 @@ def bitvector_reduction(term: BitVector) -> BitVector:
     match term:
         case Neg(x):
             """neg: negate(X) <=> ~X + 1"""
-            return Add(BNot(x), BValue(1, term.width))
+            return Add(BValue(1, term.width), BNot(x))
         case Nand(x, y):
             """nand: X nand Y <=> ~(X & Y)"""
             return BNot(BAnd(x, y))
@@ -379,67 +391,69 @@ def bitvector_logic(term: BitVector) -> BitVector:
     """Perform more logical rewrites, mostly involving a constant."""
     width = term.width
     mask = (1 << width) - 1
+    modulus = 1 << width
     match term:
         # Boolean Logic.
         case BNot(BNot(inner)):
             """bnot.bnot: ~(~X) <=> X"""
             return inner
-        case BAnd(BValue(0), x) | BAnd(x, BValue(0)):
+        case BAnd(BValue(0), x):
             """band.f: X & 0000 <=> 0000"""
             return BValue(0, width)
-        case BAnd(BValue(m), x) | BAnd(x, BValue(m)) if m == mask:
+        case BAnd(BValue(m), x) if m == mask:
             """band.t: X & 1111 <=> X"""
             return x
         case BAnd(x, y) if x == y:
             """band.x: X & X <=> X"""
             return x
-        case BAnd(x, BNot(y)) | BAnd(BNot(y), x) if x == y:
+        case BAnd(x, BNot(y)) if x == y:
             """band.ix: X & ~X <=> 0000"""
             return BValue(0, width)
-        case BOr(BValue(0), x) | BOr(x, BValue(0)):
+        case BOr(BValue(0), x):
             """bor.f: X | 0000 => X"""
             return x
-        case BOr(BValue(m), x) | BOr(x, BValue(m)) if m == mask:
+        case BOr(BValue(m), x) if m == mask:
             """bor.t: X | 1111 <=> 1111"""
             return BValue(mask, width)
         case BOr(x, y) if x == y:
             """bor.x: X | X => X"""
             return x
-        case BOr(x, BNot(y)) | BOr(BNot(y), x) if x == y:
+        case BOr(x, BNot(y)) if x == y:
             """bor.ix: X | ~X => 1111"""
             return BValue(mask, width)
-        case BXor(BValue(0), x) | BXor(x, BValue(0)):
+        case BXor(BValue(0), x):
             """bxor.f: X ^ 0000 <=> X"""
             return x
-        case BXor(BValue(m), x) | BXor(x, BValue(m)) if m == mask:
+        case BXor(BValue(m), x) if m == mask:
             """bxor.t: X ^ 1111 <=> ~X"""
             return BNot(x)
         case BXor(x, y) if x == y:
             """bxor.x: X ^ X <=> 0000"""
             return BValue(0, width)
-        case BXor(x, BNot(y)) | BXor(BNot(y), x) if x == y:
+        case BXor(x, BNot(y)) if x == y:
             """bxor.ix: X ^ ~X <=> 1111"""
             return BValue(mask, width)
 
         # Arithmetic.
         case BNot(Add(x, y)):
             """bnot.add: ~(X + Y) <=> ~X + ~Y + 1"""
-            return Add(Add(BNot(x), BNot(y)), BValue(1, width))
-        case Add(BValue(0), x) | Add(x, BValue(0)):
+            return Add(BValue(1, width), Add(BNot(x), BNot(y)))
+        case Add(BValue(0), x):
             """add.z: X + 0 <=> X"""
             return x
-        case (
-            Add(BValue(a), Add(x, BValue(b)))
-            | Add(BValue(a), Add(BValue(b), x))
-            | Add(Add(x, BValue(b)), BValue(a))
-            | Add(Add(BValue(b), x), BValue(a))
-        ):
+        case Add(x, BNot(y)) if x == y:
+            """add.bnot: X + ~X <=> """
+            return BValue(mask, width)
+        case Add(BValue(a), Add(BValue(b), x)):
             """add.add: A + (B + X) <=> (A + B) + X"""
-            return Add(Add(BValue(a, width), BValue(b, width)), x)
-        case Mul(BValue(0), x) | Mul(x, BValue(0)):
+            return Add(BValue((a + b) % modulus, width), x)
+        case Add(Add(BValue(a), x), Add(BValue(b), y)):
+            """add.add: (A + X) + (B + Y) <=> (A + B) + (X + Y)"""
+            return Add(BValue((a + b) % modulus, width), Add(x, y))
+        case Mul(BValue(0), x):
             """mul.z: X * 0 <=> 0"""
             return BValue(0, width)
-        case Mul(BValue(1), x) | Mul(x, BValue(1)):
+        case Mul(BValue(1), x):
             """mul.w: X * 1 <=> X"""
             return x
         case Udiv(x, BValue(0)):
@@ -470,7 +484,7 @@ def bitvector_logic(term: BitVector) -> BitVector:
             """smod.z: X % 0 <=> X"""
             return x
         case Smod(x, BValue(1)):
-            """Smod.w: X % 1 <=> 0"""
+            """smod.w: X % 1 <=> 0"""
             return BValue(0, width)
 
         # Concat & Shift.

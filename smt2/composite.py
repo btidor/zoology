@@ -20,6 +20,19 @@ from .theory_core import Base, DumpContext
 
 class RewriteMeta(abc.ABCMeta):
     def __call__(self, *args: Any, **kwds: Any) -> Any:
+        assert issubclass(self, Base)
+        if self.commutative:
+            match args:
+                case (x, CValue() as y) if not isinstance(x, CValue):
+                    args = (y, x)
+                case (Not() as x, y) if not isinstance(y, Not):
+                    args = (y, x)
+                case (x, BValue() as y) if not isinstance(x, BValue):
+                    args = (y, x)
+                case (BNot() as x, y) if not isinstance(y, BNot):
+                    args = (y, x)
+                case _:
+                    pass
         term = super(RewriteMeta, self).__call__(*args, **kwds)
         match term:
             case Constraint():
@@ -73,6 +86,7 @@ class Implies(Constraint):
 @dataclass(frozen=True, slots=True)
 class And(Constraint):
     op: ClassVar[bytes] = b"and"
+    commutative: ClassVar[bool] = True
     left: Constraint
     right: Constraint
 
@@ -80,6 +94,7 @@ class And(Constraint):
 @dataclass(frozen=True, slots=True)
 class Or(Constraint):
     op: ClassVar[bytes] = b"or"
+    commutative: ClassVar[bool] = True
     left: Constraint
     right: Constraint
 
@@ -87,6 +102,7 @@ class Or(Constraint):
 @dataclass(frozen=True, slots=True)
 class Xor(Constraint):
     op: ClassVar[bytes] = b"xor"
+    commutative: ClassVar[bool] = True
     left: Constraint
     right: Constraint
 
@@ -94,6 +110,7 @@ class Xor(Constraint):
 @dataclass(frozen=True, slots=True)
 class Eq[S: Base](Constraint):
     op: ClassVar[bytes] = b"="
+    commutative: ClassVar[bool] = True
     left: S
     right: S
 
@@ -242,13 +259,13 @@ class BNot(UnaryOp):
 @dataclass(frozen=True, slots=True)
 class BAnd(BinaryOp):
     op: ClassVar[bytes] = b"bvand"
+    commutative: ClassVar[bool] = True
 
 
 @dataclass(frozen=True, slots=True)
-class BOr(BitVector):
+class BOr(BinaryOp):
     op: ClassVar[bytes] = b"bvor"
-    left: BitVector
-    right: BitVector
+    commutative: ClassVar[bool] = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -259,11 +276,13 @@ class Neg(UnaryOp):
 @dataclass(frozen=True, slots=True)
 class Add(BinaryOp):
     op: ClassVar[bytes] = b"bvadd"
+    commutative: ClassVar[bool] = True
 
 
 @dataclass(frozen=True, slots=True)
 class Mul(BinaryOp):
     op: ClassVar[bytes] = b"bvmul"
+    commutative: ClassVar[bool] = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -304,6 +323,7 @@ class Nor(BinaryOp):
 @dataclass(frozen=True, slots=True)
 class BXor(BinaryOp):
     op: ClassVar[bytes] = b"bvxor"
+    commutative: ClassVar[bool] = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -467,7 +487,7 @@ class AValue(Array):
     @override
     def dump(self, ctx: DumpContext) -> None:
         ctx.write(
-            b"((_ as const (Array (_ BitVec %d) (_ BitVec %d)))"
+            b"((_ as const (Array (_ BitVec %d) (_ BitVec %d))) "
             % (self.key, self.default.width)
         )
         self.default.dump(ctx)
@@ -562,64 +582,44 @@ def constraint_logic(term: Constraint) -> Constraint:
     match term:
         case Not(Not(inner)):
             return inner
-        case And(CValue(True), x) | And(x, CValue(True)):
+        case And(CValue(True), x):
             return x
-        case And(CValue(False), x) | And(x, CValue(False)):
+        case And(CValue(False), x):
             return CValue(False)
         case And(x, y) if x == y:
             return x
-        case And(x, Not(y)) | And(Not(y), x) if x == y:
+        case And(x, Not(y)) if x == y:
             return CValue(False)
-        case Or(CValue(True), x) | Or(x, CValue(True)):
+        case Or(CValue(True), x):
             return CValue(True)
-        case Or(CValue(False), x) | Or(x, CValue(False)):
+        case Or(CValue(False), x):
             return x
         case Or(x, y) if x == y:
             return x
-        case Or(x, Not(y)) | Or(Not(y), x) if x == y:
+        case Or(x, Not(y)) if x == y:
             return CValue(True)
-        case Xor(CValue(True), x) | Xor(x, CValue(True)):
+        case Xor(CValue(True), x):
             return Not(x)
-        case Xor(CValue(False), x) | Xor(x, CValue(False)):
+        case Xor(CValue(False), x):
             return x
         case Xor(x, y) if x == y:
             return CValue(False)
-        case Xor(x, Not(y)) | Xor(Not(y), x) if x == y:
+        case Xor(x, Not(y)) if x == y:
             return CValue(True)
         case Eq(BitVector() as x, BitVector() as y) if x == y:
             return CValue(True)
-        case Eq(BitVector() as x, BNot(y)) | Eq(BNot(y), BitVector() as x) if x == y:
+        case Eq(BitVector() as x, BNot(y)) if x == y:
             return CValue(False)
-        case Eq(BValue(a), BNot(x)) | Eq(BNot(x), BValue(a)):
+        case Eq(BValue(a), BNot(x)):
             mask = (1 << x.width) - 1
             return Eq(BValue(mask ^ a, x.width), x)
-        case (
-            Eq(BValue(a), BAnd(x, BValue(b)))
-            | Eq(BValue(a), BAnd(BValue(b), x))
-            | Eq(BAnd(x, BValue(b)), BValue(a))
-            | Eq(BAnd(BValue(b), x), BValue(a))
-        ) if a & (b ^ ((1 << x.width) - 1)) != 0:
+        case Eq(BValue(a), BAnd(BValue(b), x)) if a & (b ^ ((1 << x.width) - 1)) != 0:
             return CValue(False)
-        case (
-            Eq(BValue(a), BOr(x, BValue(b)))
-            | Eq(BValue(a), BOr(BValue(b), x))
-            | Eq(BOr(x, BValue(b)), BValue(a))
-            | Eq(BOr(BValue(b), x), BValue(a))
-        ) if (a ^ ((1 << x.width) - 1)) & b != 0:
+        case Eq(BValue(a), BOr(BValue(b), x)) if (a ^ ((1 << x.width) - 1)) & b != 0:
             return CValue(False)
-        case (
-            Eq(BValue(a), BXor(x, BValue(b)))
-            | Eq(BValue(a), BXor(BValue(b), x))
-            | Eq(BXor(x, BValue(b)), BValue(a))
-            | Eq(BXor(BValue(b), x), BValue(a))
-        ):
+        case Eq(BValue(a), BXor(BValue(b), x)):
             return Eq(BValue(a ^ b, x.width), x)
-        case (
-            Eq(BValue(a), Add(x, BValue(b)))
-            | Eq(BValue(a), Add(BValue(b), x))
-            | Eq(Add(x, BValue(b)), BValue(a))
-            | Eq(Add(BValue(b), x), BValue(a))
-        ):
+        case Eq(BValue(a), Add(BValue(b), x)):
             return Eq(Add(BValue(a, x.width), Neg(BValue(b, x.width))), x)
         case Ult(x, BValue(0)):
             return CValue(False)
@@ -631,6 +631,16 @@ def constraint_logic(term: Constraint) -> Constraint:
             return Eq(x, BValue(0, x.width))
         case Ule(BValue(0), x):
             return CValue(True)
+        case Eq(BValue(a), ZeroExtend(_, x)) if a >= (1 << x.width):
+            return CValue(False)
+        case Ult(ZeroExtend(_, x), BValue(a)) if a >= (1 << x.width):
+            return CValue(True)
+        case Ult(BValue(a), ZeroExtend(_, x)) if a >= (1 << x.width):
+            return CValue(False)
+        case Ule(ZeroExtend(_, x), BValue(a)) if a >= (1 << x.width):
+            return CValue(True)
+        case Ule(BValue(a), ZeroExtend(_, x)) if a >= (1 << x.width):
+            return CValue(False)
         case term:
             return term
 
@@ -638,7 +648,7 @@ def constraint_logic(term: Constraint) -> Constraint:
 def bitvector_reduction(term: BitVector) -> BitVector:
     match term:
         case Neg(x):
-            return Add(BNot(x), BValue(1, term.width))
+            return Add(BValue(1, term.width), BNot(x))
         case Nand(x, y):
             return BNot(BAnd(x, y))
         case Nor(x, y):
@@ -708,47 +718,47 @@ def bitvector_folding(term: BitVector) -> BitVector:
 def bitvector_logic(term: BitVector) -> BitVector:
     width = term.width
     mask = (1 << width) - 1
+    modulus = 1 << width
     match term:
         case BNot(BNot(inner)):
             return inner
-        case BAnd(BValue(0), x) | BAnd(x, BValue(0)):
+        case BAnd(BValue(0), x):
             return BValue(0, width)
-        case BAnd(BValue(m), x) | BAnd(x, BValue(m)) if m == mask:
+        case BAnd(BValue(m), x) if m == mask:
             return x
         case BAnd(x, y) if x == y:
             return x
-        case BAnd(x, BNot(y)) | BAnd(BNot(y), x) if x == y:
+        case BAnd(x, BNot(y)) if x == y:
             return BValue(0, width)
-        case BOr(BValue(0), x) | BOr(x, BValue(0)):
+        case BOr(BValue(0), x):
             return x
-        case BOr(BValue(m), x) | BOr(x, BValue(m)) if m == mask:
+        case BOr(BValue(m), x) if m == mask:
             return BValue(mask, width)
         case BOr(x, y) if x == y:
             return x
-        case BOr(x, BNot(y)) | BOr(BNot(y), x) if x == y:
+        case BOr(x, BNot(y)) if x == y:
             return BValue(mask, width)
-        case BXor(BValue(0), x) | BXor(x, BValue(0)):
+        case BXor(BValue(0), x):
             return x
-        case BXor(BValue(m), x) | BXor(x, BValue(m)) if m == mask:
+        case BXor(BValue(m), x) if m == mask:
             return BNot(x)
         case BXor(x, y) if x == y:
             return BValue(0, width)
-        case BXor(x, BNot(y)) | BXor(BNot(y), x) if x == y:
+        case BXor(x, BNot(y)) if x == y:
             return BValue(mask, width)
         case BNot(Add(x, y)):
-            return Add(Add(BNot(x), BNot(y)), BValue(1, width))
-        case Add(BValue(0), x) | Add(x, BValue(0)):
+            return Add(BValue(1, width), Add(BNot(x), BNot(y)))
+        case Add(BValue(0), x):
             return x
-        case (
-            Add(BValue(a), Add(x, BValue(b)))
-            | Add(BValue(a), Add(BValue(b), x))
-            | Add(Add(x, BValue(b)), BValue(a))
-            | Add(Add(BValue(b), x), BValue(a))
-        ):
-            return Add(Add(BValue(a, width), BValue(b, width)), x)
-        case Mul(BValue(0), x) | Mul(x, BValue(0)):
+        case Add(x, BNot(y)) if x == y:
+            return BValue(mask, width)
+        case Add(BValue(a), Add(BValue(b), x)):
+            return Add(BValue((a + b) % modulus, width), x)
+        case Add(Add(BValue(a), x), Add(BValue(b), y)):
+            return Add(BValue((a + b) % modulus, width), Add(x, y))
+        case Mul(BValue(0), x):
             return BValue(0, width)
-        case Mul(BValue(1), x) | Mul(x, BValue(1)):
+        case Mul(BValue(1), x):
             return x
         case Udiv(x, BValue(0)):
             return BValue(mask, width)

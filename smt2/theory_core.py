@@ -56,6 +56,7 @@ def check(*constraints: Constraint) -> bool:
 @dataclass(frozen=True, slots=True)
 class Base(abc.ABC):
     op: ClassVar[bytes]
+    commutative: ClassVar[bool] = False
 
     # Instances of Symbolic are expected to be immutable:
     def __copy__(self) -> Self:
@@ -128,6 +129,7 @@ class Implies(Constraint):
 @dataclass(frozen=True, slots=True)
 class And(Constraint):
     op: ClassVar[bytes] = b"and"
+    commutative: ClassVar[bool] = True
     left: Constraint
     right: Constraint
 
@@ -135,6 +137,7 @@ class And(Constraint):
 @dataclass(frozen=True, slots=True)
 class Or(Constraint):
     op: ClassVar[bytes] = b"or"
+    commutative: ClassVar[bool] = True
     left: Constraint
     right: Constraint
 
@@ -142,6 +145,7 @@ class Or(Constraint):
 @dataclass(frozen=True, slots=True)
 class Xor(Constraint):
     op: ClassVar[bytes] = b"xor"
+    commutative: ClassVar[bool] = True
     left: Constraint
     right: Constraint
 
@@ -149,6 +153,7 @@ class Xor(Constraint):
 @dataclass(frozen=True, slots=True)
 class Eq[S: Base](Constraint):
     op: ClassVar[bytes] = b"="
+    commutative: ClassVar[bool] = True
     left: S
     right: S
 
