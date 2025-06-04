@@ -68,7 +68,7 @@ class BValue(BitVector):
         object.__setattr__(self, "width", w)
 
     @property
-    def sval(self) -> int:
+    def sgnd(self) -> int:
         # https://stackoverflow.com/a/9147327 (CC BY-SA 3.0)
         if self.value & (1 << (self.width - 1)):
             return self.value - (1 << self.width)
