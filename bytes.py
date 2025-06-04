@@ -76,7 +76,7 @@ class Bytes:
         """Return a single, large bitvector of this instance's bytes."""
         if (n := self.length.reveal()) is None:
             raise ValueError("bigvector requires concrete length")
-        return Uint8.concat(*(self[Uint256(i)] for i in range(n)))
+        return Uint[8 * n].concat(*(self[Uint256(i)] for i in range(n)))
 
     def describe(self, solver: Solver, prefix: int = 4) -> Iterable[str]:
         """Use a model to evaluate this instance as a hexadecimal string."""

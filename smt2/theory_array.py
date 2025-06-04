@@ -75,21 +75,21 @@ class Select(BitVector):
 
 @dataclass(frozen=True, slots=True)
 class Store(Array):
-    default: ASymbol | AValue
+    base: ASymbol | AValue
     lower: frozenset[tuple[int, BitVector]] = frozenset()
     upper: tuple[tuple[BitVector, BitVector], ...] = ()
 
     def value_width(self) -> int:
-        return self.default.value_width()
+        return self.base.value_width()
 
     @override
     def dump(self, ctx: DumpContext) -> None:
         writes = list[tuple[BitVector, BitVector]](
-            [(BValue(k, self.default.key), v) for k, v in self.lower]
+            [(BValue(k, self.base.key), v) for k, v in self.lower]
         )
         writes.extend(self.upper)
         ctx.write(b"(store " * len(writes))
-        self.default.dump(ctx)
+        self.base.dump(ctx)
         for k, v in writes:
             ctx.write(b" ")
             k.dump(ctx)

@@ -89,6 +89,8 @@ class Solver:
         self, sym: Constraint | Uint[N] | Int[N] | Array[Uint[N], Uint[M]], /
     ) -> bool | int | dict[int, int]:
         assert self._model is not None, "solver is not ready for model evaluation"
+        if not isinstance(sym, Array) and (r := sym.reveal()):
+            return r
         if isinstance(self._model, str):
             tokens = self._model.replace("(", " ( ").replace(")", " ) ").split()
             self._model = {}

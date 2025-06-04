@@ -70,24 +70,17 @@ class BitVectorMeta(abc.ABCMeta):
 
     def __getitem__(self, N: Any, /) -> type:
         if isinstance(N, int):
-            raise TypeError(
-                f"integer passed to {self.__name__}[...]; use {self.__name__}[Literal[{N}]] instead"
-            )
-
-        if get_origin(N) != Literal:
+            n = N
+        elif get_origin(N) != Literal:
             # No-op unbound type variables, unions, etc. These kind of Uint[...]
             # can be used in type signatures. Note that trying to instantiate
             # one will raise an error because width is not defined.
             return self
-
-        args = get_args(N)
-        if len(args) != 1 or not isinstance(args[0], int):
+        elif len(args := get_args(N)) != 1 or not isinstance(args[0], int):
             raise TypeError(
                 f"unsupported type parameter passed to {self.__name__}[...]"
             )
-
-        n = args[0]
-        if n <= 0:
+        elif (n := args[0]) <= 0:
             raise TypeError(f"{self.__name__} requires a positive width")
 
         name = self.__name__ + str(n)
@@ -453,10 +446,11 @@ class Array[K: Uint[Any] | Int[Any], V: Uint[Any] | Int[Any]](
                     lower = dict(lower)
                     if kterm.value in lower:
                         return self._mk_value(lower[kterm.value])
-                    elif isinstance(self._term, ASymbol):
-                        return self._value._apply(Select, self, key)
                     else:
-                        return self._mk_value(self._term.default)  # pyright: ignore[reportArgumentType]
+                        if isinstance(self._term.base, ASymbol):
+                            return self._mk_value(Select(self._term.base, kterm))
+                        else:
+                            return self._mk_value(self._term.base.default)
         return self._value._apply(Select, self, key)
 
     def __setitem__(self, key: K, value: V) -> None:
