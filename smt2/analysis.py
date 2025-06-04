@@ -1,4 +1,5 @@
 """Code analysis library for correctness checking."""
+# ruff: noqa: F403, F405
 
 from __future__ import annotations
 
@@ -14,41 +15,8 @@ from typing import Any, Callable, Generator, Self
 
 from . import rewrite, theory_array, theory_bitvec, theory_core
 from .rewrite import RewriteMeta
-from .theory_bitvec import (
-    Add,
-    BAnd,
-    BitVector,
-    BOr,
-    BSymbol,
-    BValue,
-    BXor,
-    Extract,
-    Lshr,
-    Mul,
-    Sdiv,
-    Sge,
-    Sgt,
-    Shl,
-    SignExtend,
-    Sle,
-    Slt,
-    Smod,
-    Sub,
-    Ult,
-    ZeroExtend,
-)
-from .theory_core import (
-    And,
-    Base,
-    Constraint,
-    CSymbol,
-    CValue,
-    Distinct,
-    Eq,
-    Not,
-    Or,
-    check,
-)
+from .theory_bitvec import *
+from .theory_core import *
 
 # When handling Python ints, assume they fit in a fixed (large) number of bytes.
 MAX_WIDTH = 128
@@ -117,8 +85,8 @@ class CaseParser:
         """Create a new CaseParser."""
         self.case = pre.case
         self.prefix = pre.prefix
-        self.assertions = list[Constraint]()
-        self.vars = dict[str, Base]()
+        self.assertions = list[CTerm]()
+        self.vars = dict[str, BaseTerm]()
         self.sort = ConstraintSort() if width is None else BitVectorSort(width)
 
     def is_equivalent(self) -> bool:
@@ -152,7 +120,7 @@ class CaseParser:
             guard = CValue(True)
         else:
             guard = self._pyexpr(self.case.guard)
-        assert isinstance(guard, Constraint)
+        assert isinstance(guard, CTerm)
 
         # 3. Parse the body. This tells us the value of the rewritten term.s
         for stmt in self.case.body:
@@ -177,7 +145,7 @@ class CaseParser:
             goal = And(goal, a)
         return not check(Not(goal), guard)
 
-    def _match(self, pattern: ast.pattern, sort: Sort) -> Base:
+    def _match(self, pattern: ast.pattern, sort: Sort) -> BaseTerm:
         """Recursively parse a case statement pattern."""
         match pattern:
             case ast.MatchAs(None, None):
@@ -185,8 +153,8 @@ class CaseParser:
                 return sort.symbol()
             case (
                 ast.MatchAs(None, str() as name)
-                | ast.MatchAs(ast.MatchClass(ast.Name("Constraint"), []), str() as name)
-                | ast.MatchAs(ast.MatchClass(ast.Name("BitVector"), []), str() as name)
+                | ast.MatchAs(ast.MatchClass(ast.Name("CTerm"), []), str() as name)
+                | ast.MatchAs(ast.MatchClass(ast.Name("BTerm"), []), str() as name)
             ):
                 # Proper name, e.g. `Neg(x)` (possibly qualified with a simple
                 # type). Generate symbol and add to locals.
@@ -206,7 +174,7 @@ class CaseParser:
 
     def _match_symbolic(
         self, name: str, patterns: list[ast.pattern], sort: Sort
-    ) -> Base:
+    ) -> BaseTerm:
         """Parse a symbolic term from a match statement."""
         match name, patterns:
             case "Symbol", _:
@@ -243,21 +211,21 @@ class CaseParser:
                 # Class from theory, e.g. `Not(...)`. Parse the field
                 # annotations to determine the type of the inner expressions.
                 cls = operator(name)
-                args = list[Base]()
+                args = list[BaseTerm]()
                 filtered = filter(lambda f: f.init and not f.kw_only, fields(cls))
                 for field, pattern in zip(filtered, patterns, strict=True):
-                    if field.type == "Constraint":
+                    if field.type == "CTerm":
                         arg = self._match(pattern, ConstraintSort())
-                    elif field.type == "BitVector[N]" or field.type == "BitVector":
+                    elif field.type == "BTerm":
                         assert isinstance(sort, BitVectorSort)
                         arg = self._match(pattern, sort)
                     elif field.type == "S":
                         # When matching a generic field, check if an explicit
                         # class was given in the case pattern.
                         match pattern:
-                            case ast.MatchAs(ast.MatchClass(ast.Name("Constraint"))):
+                            case ast.MatchAs(ast.MatchClass(ast.Name("CTerm"))):
                                 arg = self._match(pattern, ConstraintSort())
-                            case ast.MatchAs(ast.MatchClass(ast.Name("BitVector"))):
+                            case ast.MatchAs(ast.MatchClass(ast.Name("BTerm"))):
                                 assert isinstance(self.sort, BitVectorSort)
                                 arg = self._match(pattern, self.sort)
                             case _:
@@ -275,7 +243,7 @@ class CaseParser:
                     args.append(arg)
                 return cls(*args)
 
-    def _pyexpr(self, expr: ast.expr) -> Base:
+    def _pyexpr(self, expr: ast.expr) -> BaseTerm:
         """Recursively parse a Python expression."""
         match expr:
             case ast.Name(name):
@@ -288,13 +256,13 @@ class CaseParser:
                 operand = self._pyexpr(operand)
                 match op:
                     case ast.Not():
-                        assert isinstance(operand, Constraint)
+                        assert isinstance(operand, CTerm)
                         return Not(operand)
                     case _:
                         raise NotImplementedError(op)
             case ast.BinOp(left, op, right):
                 left, right = self._pyexpr(left), self._pyexpr(right)
-                assert isinstance(left, BitVector) and isinstance(right, BitVector)
+                assert isinstance(left, BTerm) and isinstance(right, BTerm)
                 rnonzero = Distinct(right, ZERO)
                 nonneg = And(Sge(left, ZERO), Sge(right, ZERO))
                 match op:
@@ -338,22 +306,22 @@ class CaseParser:
                     case _, ast.Eq(), _:
                         return Eq(left, right)
                     case _, ast.NotEq(), _:
-                        if isinstance(left, BitVector) and left.width < MAX_WIDTH:
+                        if isinstance(left, BTerm) and left.width < MAX_WIDTH:
                             raise SyntaxError("cannot use != on symbolic types")
                         return Distinct(left, right)
-                    case BitVector(), ast.Lt(), BitVector():
+                    case BTerm(), ast.Lt(), BTerm():
                         return Slt(left, right)
-                    case BitVector(), ast.LtE(), BitVector():
+                    case BTerm(), ast.LtE(), BTerm():
                         return Sle(left, right)
-                    case BitVector(), ast.Gt(), BitVector():
+                    case BTerm(), ast.Gt(), BTerm():
                         return Sgt(left, right)
-                    case BitVector(), ast.GtE(), BitVector():
+                    case BTerm(), ast.GtE(), BTerm():
                         return Sge(left, right)
                     case _:
                         raise NotImplementedError(op)
             case ast.BoolOp(op, [left, right]):
                 left, right = self._pyexpr(left), self._pyexpr(right)
-                assert isinstance(left, Constraint) and isinstance(right, Constraint)
+                assert isinstance(left, CTerm) and isinstance(right, CTerm)
                 match op:
                     case ast.And():
                         return And(left, right)
@@ -363,7 +331,7 @@ class CaseParser:
                         raise NotImplementedError(op)
             case ast.Attribute(ast.Name(name), "sgnd"):
                 val = self.vars[name]
-                assert isinstance(val, BitVector)
+                assert isinstance(val, BTerm)
                 return SignExtend(MAX_WIDTH - val.width, val)
             case ast.Attribute(ast.Name(name), attr):
                 val = getattr(self.vars[name], attr)
@@ -372,7 +340,7 @@ class CaseParser:
             case _:
                 raise NotImplementedError(expr)
 
-    def _sexpr(self, expr: ast.expr) -> Base:
+    def _sexpr(self, expr: ast.expr) -> BaseTerm:
         """Recursively parse a symbolic expression."""
         match expr:
             case ast.Name(name):
@@ -385,7 +353,7 @@ class CaseParser:
                 return self._pyexpr(arg)
             case ast.Call(ast.Name("BValue"), [arg, width]):
                 inner = self._pyexpr(arg)
-                assert isinstance(inner, BitVector)
+                assert isinstance(inner, BTerm)
                 match self._pyexpr(width):
                     case BValue(width):
                         pass
@@ -413,13 +381,13 @@ type Sort = ConstraintSort | BitVectorSort[int]
 class ConstraintSort:
     """Represents the boolean sort."""
 
-    def symbol(self, name: str | None = None) -> Constraint:
+    def symbol(self, name: str | None = None) -> CTerm:
         """Create a Symbol with the given name."""
         if name is None:
             name = f"_{randint(0, 2**16)}"
         return CSymbol(name.encode())
 
-    def value(self, val: bool) -> Constraint:
+    def value(self, val: bool) -> CTerm:
         """Create a concrete Value."""
         return CValue(val)
 
@@ -430,13 +398,13 @@ class BitVectorSort[N: int]:
 
     width: N
 
-    def symbol(self, name: str | None = None) -> BitVector:
+    def symbol(self, name: str | None = None) -> BTerm:
         """Create a Symbol with the given name."""
         if name is None:
             name = f"_{randint(0, 2**16)}"
         return BSymbol(name.encode(), self.width)
 
-    def value(self, val: int) -> BitVector:
+    def value(self, val: int) -> BTerm:
         """Create a concrete Value."""
         assert 0 <= val < (1 << self.width)
         return BValue(val, self.width)
@@ -485,7 +453,7 @@ from dataclasses import InitVar, dataclass, field, fields
 from functools import reduce
 from typing import Any, ClassVar, cast, override
 
-from .theory_core import Base, DumpContext
+from .theory_core import BaseTerm, DumpContext
 
 
 """)
@@ -498,9 +466,9 @@ from .theory_core import Base, DumpContext
     @classmethod
     def _theory(cls, module: ModuleType) -> None:
         for item in vars(module).values():
-            if not isinstance(item, type) or not issubclass(item, Base):
+            if not isinstance(item, type) or not issubclass(item, BaseTerm):
                 continue
-            elif item == Base or inspect.getmodule(item) != module:
+            elif item == BaseTerm or inspect.getmodule(item) != module:
                 continue
             cls._source(item)
 
@@ -514,10 +482,8 @@ from .theory_core import Base, DumpContext
     @classmethod
     def _source(cls, object: type | Callable[..., Any]) -> None:
         s = inspect.getsource(object)
-        # Inject metaclass for Constraint, BitVector
-        s = re.sub(
-            r"(Constraint|BitVector)\(Base", r"\1(Base, metaclass=RewriteMeta", s
-        )
+        # Inject metaclass for constraints & bitvectors
+        s = re.sub(r"(CTerm|BTerm)\(BaseTerm", r"\1(BaseTerm, metaclass=RewriteMeta", s)
         # Delete docstrings, comments
         s = re.sub(r'\n*\s*("""[^"]*"""| #.*)\n+', "\n", s)
         # Skip unimplemented rewrite cases

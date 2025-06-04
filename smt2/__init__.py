@@ -1,5 +1,5 @@
 """A pure-Python term-rewriting SMT frontend."""
-# ruff: noqa: D101, D102, D103, D107
+# ruff: noqa: D101, D102, D103, D107, F403, F405
 
 from __future__ import annotations
 
@@ -20,49 +20,7 @@ from typing import (
     overload,
 )
 
-from .composite import (
-    Add,
-    And,
-    Ashr,
-    ASymbol,
-    AValue,
-    BAnd,
-    BNot,
-    BOr,
-    BSymbol,
-    BValue,
-    BXor,
-    Concat,
-    CSymbol,
-    CValue,
-    Distinct,
-    Eq,
-    Extract,
-    Ite,
-    Lshr,
-    Mul,
-    Not,
-    Or,
-    Sdiv,
-    Select,
-    Shl,
-    SignExtend,
-    Sle,
-    Slt,
-    Srem,
-    Store,
-    Sub,
-    Udiv,
-    Ule,
-    Ult,
-    Urem,
-    Xor,
-    ZeroExtend,
-)
-from .composite import BitVector as BitVectorTerm
-from .composite import Constraint as ConstraintTerm
-from .theory_core import Base as CoreSymbolic
-from .theory_core import DumpContext
+from .composite import *
 
 # pyright: reportIncompatibleMethodOverride=false
 # pyright: reportIncompatibleVariableOverride=false
@@ -96,10 +54,10 @@ class BitVectorMeta(abc.ABCMeta):
 
 class Symbolic(abc.ABC):
     __slots__ = ("_term",)
-    _term: CoreSymbolic
+    _term: BaseTerm
 
     @classmethod
-    def _apply(cls, op: type[CoreSymbolic], *args: Symbolic) -> Self:
+    def _apply(cls, op: type[BaseTerm], *args: Symbolic) -> Self:
         k = cls.__new__(cls)
         k._term = op(*(a._term for a in args))
         return k
@@ -126,7 +84,7 @@ class Symbolic(abc.ABC):
 
 class Constraint(Symbolic):
     __slots__ = ()
-    _term: ConstraintTerm
+    _term: CTerm
 
     def __init__(self, value: bool | str, /):
         match value:
@@ -192,7 +150,7 @@ class BitVector[N: int](
 ):
     __slots__ = ()
     width: Final[N]  # pyright: ignore[reportGeneralTypeIssues]
-    _term: BitVectorTerm
+    _term: BTerm
 
     def __init__(self, value: int | str, /) -> None:
         match value:
@@ -444,7 +402,7 @@ class Array[K: Uint[Any] | Int[Any], V: Uint[Any] | Int[Any]](
     def __deepcopy__(self, memo: Any, /) -> Self:
         return self.__copy__()
 
-    def _mk_value(self, term: BitVectorTerm) -> V:
+    def _mk_value(self, term: BTerm) -> V:
         k = self._value.__new__(self._value)
         k._term = term  # pyright: ignore[reportPrivateUsage]
         return k

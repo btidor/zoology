@@ -13,18 +13,18 @@ from dataclasses import InitVar, dataclass, field, fields
 from functools import reduce
 from typing import ClassVar, override
 
-from .theory_core import Base, Constraint, DumpContext
+from .theory_core import BaseTerm, CTerm, DumpContext
 
 
 @dataclass(frozen=True, slots=True)
-class BitVector(Base):
+class BTerm(BaseTerm):
     width: int = field(init=False)
 
     def __post_init__(self) -> None:
         # By default, inherit width from inner term.
         w = None
         for fld in fields(self):
-            if fld.type == "BitVector":
+            if fld.type == "BTerm":
                 term = getattr(self, fld.name)
                 if w is None:
                     w = term.width
@@ -36,7 +36,7 @@ class BitVector(Base):
 
 
 @dataclass(frozen=True, slots=True)
-class BSymbol(BitVector):
+class BSymbol(BTerm):
     name: bytes
     w: InitVar[int]
 
@@ -55,7 +55,7 @@ class BSymbol(BitVector):
 
 
 @dataclass(frozen=True, slots=True)
-class BValue(BitVector):
+class BValue(BTerm):
     value: int
     w: InitVar[int]
 
@@ -83,32 +83,32 @@ class BValue(BitVector):
 
 
 @dataclass(frozen=True, slots=True)
-class UnaryOp(BitVector):
-    term: BitVector
+class UnaryOp(BTerm):
+    term: BTerm
 
 
 @dataclass(frozen=True, slots=True)
-class BinaryOp(BitVector):
-    left: BitVector
-    right: BitVector
+class BinaryOp(BTerm):
+    left: BTerm
+    right: BTerm
 
 
 @dataclass(frozen=True, slots=True)
-class CompareOp(Constraint):
-    left: BitVector
-    right: BitVector
+class CompareOp(CTerm):
+    left: BTerm
+    right: BTerm
 
 
 @dataclass(frozen=True, slots=True)
-class SingleParamOp(BitVector):
+class SingleParamOp(BTerm):
     i: int
-    term: BitVector
+    term: BTerm
 
 
 @dataclass(frozen=True, slots=True)
-class Concat(BitVector):
+class Concat(BTerm):
     op: ClassVar[bytes] = b"concat"
-    terms: tuple[BitVector, ...]
+    terms: tuple[BTerm, ...]
 
     @override
     def __post_init__(self) -> None:
@@ -126,11 +126,11 @@ class Concat(BitVector):
 
 
 @dataclass(frozen=True, slots=True)
-class Extract(BitVector):
+class Extract(BTerm):
     op: ClassVar[bytes] = b"extract"
     i: int
     j: int
-    term: BitVector
+    term: BTerm
 
     @override
     def __post_init__(self) -> None:
@@ -220,10 +220,10 @@ class Xnor(BinaryOp):
 
 
 @dataclass(frozen=True, slots=True)
-class Comp(BitVector):  # width-1 result
+class Comp(BTerm):  # width-1 result
     op: ClassVar[bytes] = b"bvcomp"
-    left: BitVector
-    right: BitVector
+    left: BTerm
+    right: BTerm
 
 
 @dataclass(frozen=True, slots=True)
@@ -330,8 +330,8 @@ class Sge(CompareOp):
 
 
 @dataclass(frozen=True, slots=True)
-class Ite(BitVector):
+class Ite(BTerm):
     op: ClassVar[bytes] = b"ite"
-    cond: Constraint
-    left: BitVector
-    right: BitVector
+    cond: CTerm
+    left: BTerm
+    right: BTerm

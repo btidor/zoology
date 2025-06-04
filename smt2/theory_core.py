@@ -30,7 +30,7 @@ class DumpContext:
         self.out.extend(b)
 
 
-def check(*constraints: Constraint) -> bool:
+def check(*constraints: CTerm) -> bool:
     ctx = DumpContext()
     for constraint in constraints:
         ctx.write(b"(assert ")
@@ -54,7 +54,7 @@ def check(*constraints: Constraint) -> bool:
 
 
 @dataclass(frozen=True, slots=True)
-class Base(abc.ABC):
+class BaseTerm(abc.ABC):
     op: ClassVar[bytes]
     commutative: ClassVar[bool] = False
 
@@ -68,14 +68,14 @@ class Base(abc.ABC):
     def dump(self, ctx: DumpContext) -> None:
         # 0. Gather Arguments
         params = list[bytes]()
-        terms = list[Base]()
+        terms = list[BaseTerm]()
         for fld in fields(self):
             if not fld.init or fld.kw_only:
                 continue
             v = getattr(self, fld.name)
             if isinstance(v, int):
                 params.append(str(v).encode())
-            elif isinstance(v, Base):
+            elif isinstance(v, BaseTerm):
                 terms.append(v)
         # 1. Determine Op
         assert self.op
@@ -91,11 +91,11 @@ class Base(abc.ABC):
 
 
 @dataclass(frozen=True, slots=True)
-class Constraint(Base): ...
+class CTerm(BaseTerm): ...
 
 
 @dataclass(frozen=True, slots=True)
-class CSymbol(Constraint):
+class CSymbol(CTerm):
     name: bytes
 
     @override
@@ -105,7 +105,7 @@ class CSymbol(Constraint):
 
 
 @dataclass(frozen=True, slots=True)
-class CValue(Constraint):
+class CValue(CTerm):
     value: bool
 
     @override
@@ -114,44 +114,44 @@ class CValue(Constraint):
 
 
 @dataclass(frozen=True, slots=True)
-class Not(Constraint):
+class Not(CTerm):
     op: ClassVar[bytes] = b"not"
-    term: Constraint
+    term: CTerm
 
 
 @dataclass(frozen=True, slots=True)
-class Implies(Constraint):
+class Implies(CTerm):
     op: ClassVar[bytes] = b"=>"
-    left: Constraint
-    right: Constraint
+    left: CTerm
+    right: CTerm
 
 
 @dataclass(frozen=True, slots=True)
-class And(Constraint):
+class And(CTerm):
     op: ClassVar[bytes] = b"and"
     commutative: ClassVar[bool] = True
-    left: Constraint
-    right: Constraint
+    left: CTerm
+    right: CTerm
 
 
 @dataclass(frozen=True, slots=True)
-class Or(Constraint):
+class Or(CTerm):
     op: ClassVar[bytes] = b"or"
     commutative: ClassVar[bool] = True
-    left: Constraint
-    right: Constraint
+    left: CTerm
+    right: CTerm
 
 
 @dataclass(frozen=True, slots=True)
-class Xor(Constraint):
+class Xor(CTerm):
     op: ClassVar[bytes] = b"xor"
     commutative: ClassVar[bool] = True
-    left: Constraint
-    right: Constraint
+    left: CTerm
+    right: CTerm
 
 
 @dataclass(frozen=True, slots=True)
-class Eq[S: Base](Constraint):
+class Eq[S: BaseTerm](CTerm):
     op: ClassVar[bytes] = b"="
     commutative: ClassVar[bool] = True
     left: S
@@ -159,15 +159,15 @@ class Eq[S: Base](Constraint):
 
 
 @dataclass(frozen=True, slots=True)
-class Distinct[S: Base](Constraint):
+class Distinct[S: BaseTerm](CTerm):
     op: ClassVar[bytes] = b"distinct"
     left: S
     right: S
 
 
 @dataclass(frozen=True, slots=True)
-class CIte(Constraint):
+class CIte(CTerm):
     op: ClassVar[bytes] = b"ite"
-    cond: Constraint
-    left: Constraint
-    right: Constraint
+    cond: CTerm
+    left: CTerm
+    right: CTerm

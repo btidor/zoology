@@ -13,18 +13,18 @@ import abc
 from dataclasses import dataclass
 from typing import ClassVar, override
 
-from .theory_bitvec import BitVector, BValue
-from .theory_core import Base, DumpContext
+from .theory_bitvec import BTerm, BValue
+from .theory_core import BaseTerm, DumpContext
 
 
 @dataclass(frozen=True, slots=True)
-class Array(Base):
+class ATerm(BaseTerm):
     @abc.abstractmethod
     def value_width(self) -> int: ...
 
 
 @dataclass(frozen=True, slots=True)
-class ASymbol(Array):
+class ASymbol(ATerm):
     name: bytes
     key: int
     value: int
@@ -45,8 +45,8 @@ class ASymbol(Array):
 
 
 @dataclass(frozen=True, slots=True)
-class AValue(Array):
-    default: BitVector
+class AValue(ATerm):
+    default: BTerm
     key: int
 
     def value_width(self) -> int:
@@ -63,10 +63,10 @@ class AValue(Array):
 
 
 @dataclass(frozen=True, slots=True)
-class Select(BitVector):
+class Select(BTerm):
     op: ClassVar[bytes] = b"select"
-    array: Array
-    key: BitVector
+    array: ATerm
+    key: BTerm
 
     @override
     def __post_init__(self) -> None:
@@ -74,17 +74,17 @@ class Select(BitVector):
 
 
 @dataclass(frozen=True, slots=True)
-class Store(Array):
+class Store(ATerm):
     base: ASymbol | AValue
-    lower: frozenset[tuple[int, BitVector]] = frozenset()
-    upper: tuple[tuple[BitVector, BitVector], ...] = ()
+    lower: frozenset[tuple[int, BTerm]] = frozenset()
+    upper: tuple[tuple[BTerm, BTerm], ...] = ()
 
     def value_width(self) -> int:
         return self.base.value_width()
 
     @override
     def dump(self, ctx: DumpContext) -> None:
-        writes = list[tuple[BitVector, BitVector]](
+        writes = list[tuple[BTerm, BTerm]](
             [(BValue(k, self.base.key), v) for k, v in self.lower]
         )
         writes.extend(self.upper)

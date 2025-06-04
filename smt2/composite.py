@@ -15,12 +15,12 @@ from dataclasses import InitVar, dataclass, field, fields
 from functools import reduce
 from typing import Any, ClassVar, cast, override
 
-from .theory_core import Base, DumpContext
+from .theory_core import BaseTerm, DumpContext
 
 
 class RewriteMeta(abc.ABCMeta):
     def __call__(self, *args: Any, **kwds: Any) -> Any:
-        assert issubclass(self, Base)
+        assert issubclass(self, BaseTerm)
         if self.commutative:
             match args:
                 case (x, CValue() as y) if not isinstance(x, CValue):
@@ -35,11 +35,11 @@ class RewriteMeta(abc.ABCMeta):
                     pass
         term = super(RewriteMeta, self).__call__(*args, **kwds)
         match term:
-            case Constraint():
+            case CTerm():
                 term = constraint_reduction(term)
                 term = constraint_folding(term)
                 return constraint_logic(term)
-            case BitVector():
+            case BTerm():
                 term = bitvector_reduction(term)
                 term = bitvector_folding(term)
                 term = bitvector_logic(term)
@@ -49,11 +49,11 @@ class RewriteMeta(abc.ABCMeta):
 
 
 @dataclass(frozen=True, slots=True)
-class Constraint(Base, metaclass=RewriteMeta): ...
+class CTerm(BaseTerm, metaclass=RewriteMeta): ...
 
 
 @dataclass(frozen=True, slots=True)
-class CSymbol(Constraint):
+class CSymbol(CTerm):
     name: bytes
 
     @override
@@ -63,7 +63,7 @@ class CSymbol(Constraint):
 
 
 @dataclass(frozen=True, slots=True)
-class CValue(Constraint):
+class CValue(CTerm):
     value: bool
 
     @override
@@ -72,44 +72,44 @@ class CValue(Constraint):
 
 
 @dataclass(frozen=True, slots=True)
-class Not(Constraint):
+class Not(CTerm):
     op: ClassVar[bytes] = b"not"
-    term: Constraint
+    term: CTerm
 
 
 @dataclass(frozen=True, slots=True)
-class Implies(Constraint):
+class Implies(CTerm):
     op: ClassVar[bytes] = b"=>"
-    left: Constraint
-    right: Constraint
+    left: CTerm
+    right: CTerm
 
 
 @dataclass(frozen=True, slots=True)
-class And(Constraint):
+class And(CTerm):
     op: ClassVar[bytes] = b"and"
     commutative: ClassVar[bool] = True
-    left: Constraint
-    right: Constraint
+    left: CTerm
+    right: CTerm
 
 
 @dataclass(frozen=True, slots=True)
-class Or(Constraint):
+class Or(CTerm):
     op: ClassVar[bytes] = b"or"
     commutative: ClassVar[bool] = True
-    left: Constraint
-    right: Constraint
+    left: CTerm
+    right: CTerm
 
 
 @dataclass(frozen=True, slots=True)
-class Xor(Constraint):
+class Xor(CTerm):
     op: ClassVar[bytes] = b"xor"
     commutative: ClassVar[bool] = True
-    left: Constraint
-    right: Constraint
+    left: CTerm
+    right: CTerm
 
 
 @dataclass(frozen=True, slots=True)
-class Eq[S: Base](Constraint):
+class Eq[S: BaseTerm](CTerm):
     op: ClassVar[bytes] = b"="
     commutative: ClassVar[bool] = True
     left: S
@@ -117,28 +117,28 @@ class Eq[S: Base](Constraint):
 
 
 @dataclass(frozen=True, slots=True)
-class Distinct[S: Base](Constraint):
+class Distinct[S: BaseTerm](CTerm):
     op: ClassVar[bytes] = b"distinct"
     left: S
     right: S
 
 
 @dataclass(frozen=True, slots=True)
-class CIte(Constraint):
+class CIte(CTerm):
     op: ClassVar[bytes] = b"ite"
-    cond: Constraint
-    left: Constraint
-    right: Constraint
+    cond: CTerm
+    left: CTerm
+    right: CTerm
 
 
 @dataclass(frozen=True, slots=True)
-class BitVector(Base, metaclass=RewriteMeta):
+class BTerm(BaseTerm, metaclass=RewriteMeta):
     width: int = field(init=False)
 
     def __post_init__(self) -> None:
         w = None
         for fld in fields(self):
-            if fld.type == "BitVector":
+            if fld.type == "BTerm":
                 term = getattr(self, fld.name)
                 if w is None:
                     w = term.width
@@ -150,7 +150,7 @@ class BitVector(Base, metaclass=RewriteMeta):
 
 
 @dataclass(frozen=True, slots=True)
-class BSymbol(BitVector):
+class BSymbol(BTerm):
     name: bytes
     w: InitVar[int]
 
@@ -169,7 +169,7 @@ class BSymbol(BitVector):
 
 
 @dataclass(frozen=True, slots=True)
-class BValue(BitVector):
+class BValue(BTerm):
     value: int
     w: InitVar[int]
 
@@ -196,32 +196,32 @@ class BValue(BitVector):
 
 
 @dataclass(frozen=True, slots=True)
-class UnaryOp(BitVector):
-    term: BitVector
+class UnaryOp(BTerm):
+    term: BTerm
 
 
 @dataclass(frozen=True, slots=True)
-class BinaryOp(BitVector):
-    left: BitVector
-    right: BitVector
+class BinaryOp(BTerm):
+    left: BTerm
+    right: BTerm
 
 
 @dataclass(frozen=True, slots=True)
-class CompareOp(Constraint):
-    left: BitVector
-    right: BitVector
+class CompareOp(CTerm):
+    left: BTerm
+    right: BTerm
 
 
 @dataclass(frozen=True, slots=True)
-class SingleParamOp(BitVector):
+class SingleParamOp(BTerm):
     i: int
-    term: BitVector
+    term: BTerm
 
 
 @dataclass(frozen=True, slots=True)
-class Concat(BitVector):
+class Concat(BTerm):
     op: ClassVar[bytes] = b"concat"
-    terms: tuple[BitVector, ...]
+    terms: tuple[BTerm, ...]
 
     @override
     def __post_init__(self) -> None:
@@ -239,11 +239,11 @@ class Concat(BitVector):
 
 
 @dataclass(frozen=True, slots=True)
-class Extract(BitVector):
+class Extract(BTerm):
     op: ClassVar[bytes] = b"extract"
     i: int
     j: int
-    term: BitVector
+    term: BTerm
 
     @override
     def __post_init__(self) -> None:
@@ -333,10 +333,10 @@ class Xnor(BinaryOp):
 
 
 @dataclass(frozen=True, slots=True)
-class Comp(BitVector):
+class Comp(BTerm):
     op: ClassVar[bytes] = b"bvcomp"
-    left: BitVector
-    right: BitVector
+    left: BTerm
+    right: BTerm
 
 
 @dataclass(frozen=True, slots=True)
@@ -443,21 +443,21 @@ class Sge(CompareOp):
 
 
 @dataclass(frozen=True, slots=True)
-class Ite(BitVector):
+class Ite(BTerm):
     op: ClassVar[bytes] = b"ite"
-    cond: Constraint
-    left: BitVector
-    right: BitVector
+    cond: CTerm
+    left: BTerm
+    right: BTerm
 
 
 @dataclass(frozen=True, slots=True)
-class Array(Base):
+class ATerm(BaseTerm):
     @abc.abstractmethod
     def value_width(self) -> int: ...
 
 
 @dataclass(frozen=True, slots=True)
-class ASymbol(Array):
+class ASymbol(ATerm):
     name: bytes
     key: int
     value: int
@@ -478,8 +478,8 @@ class ASymbol(Array):
 
 
 @dataclass(frozen=True, slots=True)
-class AValue(Array):
-    default: BitVector
+class AValue(ATerm):
+    default: BTerm
     key: int
 
     def value_width(self) -> int:
@@ -496,10 +496,10 @@ class AValue(Array):
 
 
 @dataclass(frozen=True, slots=True)
-class Select(BitVector):
+class Select(BTerm):
     op: ClassVar[bytes] = b"select"
-    array: Array
-    key: BitVector
+    array: ATerm
+    key: BTerm
 
     @override
     def __post_init__(self) -> None:
@@ -507,17 +507,17 @@ class Select(BitVector):
 
 
 @dataclass(frozen=True, slots=True)
-class Store(Array):
+class Store(ATerm):
     base: ASymbol | AValue
-    lower: frozenset[tuple[int, BitVector]] = frozenset()
-    upper: tuple[tuple[BitVector, BitVector], ...] = ()
+    lower: frozenset[tuple[int, BTerm]] = frozenset()
+    upper: tuple[tuple[BTerm, BTerm], ...] = ()
 
     def value_width(self) -> int:
         return self.base.value_width()
 
     @override
     def dump(self, ctx: DumpContext) -> None:
-        writes = list[tuple[BitVector, BitVector]](
+        writes = list[tuple[BTerm, BTerm]](
             [(BValue(k, self.base.key), v) for k, v in self.lower]
         )
         writes.extend(self.upper)
@@ -531,15 +531,15 @@ class Store(Array):
             ctx.write(b")")
 
 
-def constraint_reduction(term: Constraint) -> Constraint:
+def constraint_reduction(term: CTerm) -> CTerm:
     match term:
         case Implies(x, y):
             return Or(y, Not(x))
-        case Eq(Constraint() as x, Constraint() as y):
+        case Eq(CTerm() as x, CTerm() as y):
             return Not(Xor(x, y))
-        case Distinct(Constraint() as x, Constraint() as y):
+        case Distinct(CTerm() as x, CTerm() as y):
             return Xor(x, y)
-        case Distinct(BitVector() as x, BitVector() as y):
+        case Distinct(BTerm() as x, BTerm() as y):
             return Not(Eq(x, y))
         case CIte(c, x, y):
             return Or(And(c, x), And(Not(c), y))
@@ -555,7 +555,7 @@ def constraint_reduction(term: Constraint) -> Constraint:
             return term
 
 
-def constraint_folding(term: Constraint) -> Constraint:
+def constraint_folding(term: CTerm) -> CTerm:
     match term:
         case Not(CValue(a)):
             return CValue(not a)
@@ -579,7 +579,7 @@ def constraint_folding(term: Constraint) -> Constraint:
             return term
 
 
-def constraint_logic(term: Constraint) -> Constraint:
+def constraint_logic(term: CTerm) -> CTerm:
     match term:
         case Not(Not(inner)):
             return inner
@@ -607,9 +607,9 @@ def constraint_logic(term: Constraint) -> Constraint:
             return CValue(False)
         case Xor(x, Not(y)) if x == y:
             return CValue(True)
-        case Eq(BitVector() as x, BitVector() as y) if x == y:
+        case Eq(BTerm() as x, BTerm() as y) if x == y:
             return CValue(True)
-        case Eq(BitVector() as x, BNot(y)) if x == y:
+        case Eq(BTerm() as x, BNot(y)) if x == y:
             return CValue(False)
         case Eq(BValue(a), BNot(x)):
             mask = (1 << x.width) - 1
@@ -646,7 +646,7 @@ def constraint_logic(term: Constraint) -> Constraint:
             return term
 
 
-def bitvector_reduction(term: BitVector) -> BitVector:
+def bitvector_reduction(term: BTerm) -> BTerm:
     match term:
         case Neg(x):
             return Add(BValue(1, term.width), BNot(x))
@@ -664,7 +664,7 @@ def bitvector_reduction(term: BitVector) -> BitVector:
             return term
 
 
-def bitvector_folding(term: BitVector) -> BitVector:
+def bitvector_folding(term: BTerm) -> BTerm:
     width = term.width
     mask = (1 << width) - 1
     modulus = 1 << width
@@ -713,7 +713,7 @@ def bitvector_folding(term: BitVector) -> BitVector:
             return term
 
 
-def bitvector_logic(term: BitVector) -> BitVector:
+def bitvector_logic(term: BTerm) -> BTerm:
     width = term.width
     mask = (1 << width) - 1
     modulus = 1 << width
@@ -814,7 +814,7 @@ def bitvector_logic(term: BitVector) -> BitVector:
             return term
 
 
-def bitvector_yolo(term: BitVector) -> BitVector:
+def bitvector_yolo(term: BTerm) -> BTerm:
     match term:
         case Concat(terms) if all(isinstance(t, BValue) for t in terms):
             s = reduce(lambda p, q: (p << q.width) | cast(BValue, q).value, terms, 0)

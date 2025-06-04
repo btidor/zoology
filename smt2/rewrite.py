@@ -1,4 +1,5 @@
 """Library of term-rewriting rules, all theories."""
+# ruff: noqa: F403, F405
 
 from __future__ import annotations
 
@@ -6,59 +7,8 @@ import abc
 from functools import reduce
 from typing import Any, cast
 
-from .theory_bitvec import (
-    Add,
-    Ashr,
-    BAnd,
-    BitVector,
-    BNot,
-    BOr,
-    BValue,
-    BXor,
-    Comp,
-    Concat,
-    Extract,
-    Ite,
-    Lshr,
-    Mul,
-    Nand,
-    Neg,
-    Nor,
-    Repeat,
-    RotateLeft,
-    RotateRight,
-    Sdiv,
-    Sge,
-    Sgt,
-    Shl,
-    SignExtend,
-    Sle,
-    Slt,
-    Smod,
-    Srem,
-    Sub,
-    Udiv,
-    Uge,
-    Ugt,
-    Ule,
-    Ult,
-    Urem,
-    Xnor,
-    ZeroExtend,
-)
-from .theory_core import (
-    And,
-    Base,
-    CIte,
-    Constraint,
-    CValue,
-    Distinct,
-    Eq,
-    Implies,
-    Not,
-    Or,
-    Xor,
-)
+from .theory_bitvec import *
+from .theory_core import *
 
 
 class RewriteMeta(abc.ABCMeta):
@@ -66,7 +16,7 @@ class RewriteMeta(abc.ABCMeta):
 
     def __call__(self, *args: Any, **kwds: Any) -> Any:
         """Construct the requested term, then rewrite it."""
-        assert issubclass(self, Base)
+        assert issubclass(self, BaseTerm)
         if self.commutative:
             # Swap Values to right-hand side, Nots to left-hand side.
             match args:
@@ -82,11 +32,11 @@ class RewriteMeta(abc.ABCMeta):
                     pass
         term = super(RewriteMeta, self).__call__(*args, **kwds)
         match term:
-            case Constraint():
+            case CTerm():
                 term = constraint_reduction(term)
                 term = constraint_folding(term)
                 return constraint_logic(term)
-            case BitVector():
+            case BTerm():
                 term = bitvector_reduction(term)
                 term = bitvector_folding(term)
                 term = bitvector_logic(term)
@@ -100,19 +50,19 @@ class RewriteMeta(abc.ABCMeta):
 # tests won't be complete!
 
 
-def constraint_reduction(term: Constraint) -> Constraint:
+def constraint_reduction(term: CTerm) -> CTerm:
     """Rewrite fancy constraint ops into simple ones."""
     match term:
         case Implies(x, y):
             """implies: (X => Y) <=> (Y | ~X)"""
             return Or(y, Not(x))
-        case Eq(Constraint() as x, Constraint() as y):
+        case Eq(CTerm() as x, CTerm() as y):
             """eq: X = Y <=> ~(X ^ Y)"""
             return Not(Xor(x, y))
-        case Distinct(Constraint() as x, Constraint() as y):
+        case Distinct(CTerm() as x, CTerm() as y):
             """distinct: X != Y <=> X ^ Y"""
             return Xor(x, y)
-        case Distinct(BitVector() as x, BitVector() as y):
+        case Distinct(BTerm() as x, BTerm() as y):
             """distinct: X != Y <=> ~(X = Y)"""
             return Not(Eq(x, y))
         case CIte(c, x, y):
@@ -135,7 +85,7 @@ def constraint_reduction(term: Constraint) -> Constraint:
             return term
 
 
-def constraint_folding(term: Constraint) -> Constraint:
+def constraint_folding(term: CTerm) -> CTerm:
     """Perform constant folding on the given constraint."""
     match term:
         case Not(CValue(a)):
@@ -170,7 +120,7 @@ def constraint_folding(term: Constraint) -> Constraint:
             return term
 
 
-def constraint_logic(term: Constraint) -> Constraint:
+def constraint_logic(term: CTerm) -> CTerm:
     """Perform more logical rewrites, mostly involving a constant."""
     match term:
         # Core Boolean Logic.
@@ -215,10 +165,10 @@ def constraint_logic(term: Constraint) -> Constraint:
             return CValue(True)
 
         # Bitvector Eq.
-        case Eq(BitVector() as x, BitVector() as y) if x == y:
+        case Eq(BTerm() as x, BTerm() as y) if x == y:
             """beq.x: X = X <=> True"""
             return CValue(True)
-        case Eq(BitVector() as x, BNot(y)) if x == y:
+        case Eq(BTerm() as x, BNot(y)) if x == y:
             """beq.ix: X = ~X <=> False"""
             return CValue(False)
         case Eq(BValue(a), BNot(x)):
@@ -276,7 +226,7 @@ def constraint_logic(term: Constraint) -> Constraint:
             return term
 
 
-def bitvector_reduction(term: BitVector) -> BitVector:
+def bitvector_reduction(term: BTerm) -> BTerm:
     """Rewrite fancy bitvector ops into simple ones."""
     match term:
         case Neg(x):
@@ -302,7 +252,7 @@ def bitvector_reduction(term: BitVector) -> BitVector:
             return term
 
 
-def bitvector_folding(term: BitVector) -> BitVector:
+def bitvector_folding(term: BTerm) -> BTerm:
     """Perform constant folding on the given bitvector."""
     width = term.width
     mask = (1 << width) - 1
@@ -381,7 +331,7 @@ def bitvector_folding(term: BitVector) -> BitVector:
             return term
 
 
-def bitvector_logic(term: BitVector) -> BitVector:
+def bitvector_logic(term: BTerm) -> BTerm:
     """Perform more logical rewrites, mostly involving a constant."""
     width = term.width
     mask = (1 << width) - 1
@@ -537,7 +487,7 @@ def bitvector_logic(term: BitVector) -> BitVector:
             return term
 
 
-def bitvector_yolo(term: BitVector) -> BitVector:
+def bitvector_yolo(term: BTerm) -> BTerm:
     """
     Additional logical rewrites involving unsupported ops (i.e. Concat).
 
