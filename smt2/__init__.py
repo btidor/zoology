@@ -65,6 +65,9 @@ from .composite import Constraint as ConstraintTerm
 from .theory_core import Base as CoreSymbolic
 from .theory_core import DumpContext
 
+# pyright: reportIncompatibleMethodOverride=false
+# pyright: reportIncompatibleVariableOverride=false
+
 
 class BitVectorMeta(abc.ABCMeta):
     _ccache: dict[str, type] = {}
@@ -102,8 +105,8 @@ class Symbolic(abc.ABC):
         k._term = op(*(a._term for a in args))
         return k
 
-    # Implementation Note: Symbolic instances are immutable. For performance,
-    # don't copy them.
+    # Implementation Note: Symbolic instances (except Arrays) are immutable. For
+    # performance, don't copy them.
     def __copy__(self) -> Self:
         return self
 
@@ -128,7 +131,7 @@ class Constraint(Symbolic):
             case bool():
                 self._term = CValue(value)
             case str():
-                self._term = CSymbol(value.encode())  # pyright: ignore[reportIncompatibleVariableOverride]
+                self._term = CSymbol(value.encode())
 
     def __invert__(self) -> Self:
         return self._apply(Not, self)
@@ -181,7 +184,7 @@ class BitVector[N: int](
             case int():
                 self._term = BValue(value, self.width)
             case str():
-                self._term = BSymbol(value.encode(), self.width)  # pyright: ignore[reportIncompatibleVariableOverride]
+                self._term = BSymbol(value.encode(), self.width)
 
     @abc.abstractmethod
     def __lt__(self, other: Self, /) -> Constraint: ...
@@ -229,15 +232,11 @@ class BitVector[N: int](
     @abc.abstractmethod
     def __rshift__(self, other: Uint[N], /) -> Self: ...
 
-    def __eq__(  # pyright: ignore[reportIncompatibleMethodOverride]
-        self, other: Self, /
-    ) -> Constraint:
+    def __eq__(self, other: Self, /) -> Constraint:
         assert self.width == other.width
         return Constraint._apply(Eq, self, other)
 
-    def __ne__(  # pyright: ignore[reportIncompatibleMethodOverride]
-        self, other: Self, /
-    ) -> Constraint:
+    def __ne__(self, other: Self, /) -> Constraint:
         assert self.width == other.width
         return Constraint._apply(Distinct, self, other)
 
@@ -248,19 +247,19 @@ class BitVector[N: int](
 class Uint[N: int](BitVector[N]):
     __slots__ = ()
 
-    def __lt__(self, other: Self, /) -> Constraint:  # pyright: ignore[reportIncompatibleMethodOverride]
+    def __lt__(self, other: Self, /) -> Constraint:
         assert self.width == other.width
         return Constraint._apply(Ult, self, other)
 
-    def __le__(self, other: Self, /) -> Constraint:  # pyright: ignore[reportIncompatibleMethodOverride]
+    def __le__(self, other: Self, /) -> Constraint:
         assert self.width == other.width
         return Constraint._apply(Ule, self, other)
 
-    def __truediv__(self, other: Self, /) -> Self:  # pyright: ignore[reportIncompatibleMethodOverride]
+    def __truediv__(self, other: Self, /) -> Self:
         assert self.width == other.width
         return self._apply(Udiv, self, other)
 
-    def __mod__(self, other: Self, /) -> Self:  # pyright: ignore[reportIncompatibleMethodOverride]
+    def __mod__(self, other: Self, /) -> Self:
         assert self.width == other.width
         return self._apply(Urem, self, other)
 
@@ -312,18 +311,18 @@ class Uint[N: int](BitVector[N]):
 class Int[N: int](BitVector[N]):
     __slots__ = ()
 
-    def __lt__(self, other: Self, /) -> Constraint:  # pyright: ignore[reportIncompatibleMethodOverride]
+    def __lt__(self, other: Self, /) -> Constraint:
         assert self.width == other.width
         return Constraint._apply(Slt, self, other)
 
-    def __le__(self, other: Self, /) -> Constraint:  # pyright: ignore[reportIncompatibleMethodOverride]
+    def __le__(self, other: Self, /) -> Constraint:
         return Constraint._apply(Sle, self, other)
 
-    def __truediv__(self, other: Self, /) -> Self:  # pyright: ignore[reportIncompatibleMethodOverride]
+    def __truediv__(self, other: Self, /) -> Self:
         assert self.width == other.width
         return self._apply(Sdiv, self, other)
 
-    def __mod__(self, other: Self, /) -> Self:  # pyright: ignore[reportIncompatibleMethodOverride]
+    def __mod__(self, other: Self, /) -> Self:
         assert self.width == other.width
         return self._apply(Srem, self, other)
 
@@ -407,7 +406,7 @@ class Array[K: Uint[Any] | Int[Any], V: Uint[Any] | Int[Any]](
     _value: Final[type[V]]  # pyright: ignore[reportGeneralTypeIssues]
     _term: ASymbol | AValue | Store
 
-    __hash__: ClassVar[None] = None  # pyright: ignore[reportIncompatibleMethodOverride]
+    __hash__: ClassVar[None] = None
 
     def __init__(self, value: V | str, /) -> None:
         match value:
@@ -416,15 +415,19 @@ class Array[K: Uint[Any] | Int[Any], V: Uint[Any] | Int[Any]](
             case str():
                 self._term = ASymbol(value.encode(), self._key.width, self._value.width)
 
-    def __eq__(  # pyright: ignore[reportIncompatibleMethodOverride]
-        self, other: Never, /
-    ) -> Never:
+    def __eq__(self, other: Never, /) -> Never:
         raise TypeError("Array cannot be compared for equality.")
 
-    def __ne__(  # pyright: ignore[reportIncompatibleMethodOverride]
-        self, other: Never, /
-    ) -> Never:
+    def __ne__(self, other: Never, /) -> Never:
         raise TypeError("Array cannot be compared for equality.")
+
+    def __copy__(self) -> Self:
+        k = self.__class__.__new__(self.__class__)
+        k._term = self._term
+        return k
+
+    def __deepcopy__(self, memo: Any, /) -> Self:
+        return self.__copy__()
 
     def _mk_value(self, term: BitVectorTerm) -> V:
         k = self._value.__new__(self._value)
@@ -465,4 +468,4 @@ class Array[K: Uint[Any] | Int[Any], V: Uint[Any] | Int[Any]](
             upper.append((key._term, value._term))  # pyright: ignore[reportPrivateUsage]
         else:
             lower[k] = value._term  # pyright: ignore[reportPrivateUsage]
-        self._term = Store(default, frozenset(lower.items()), tuple(upper))  # pyright: ignore[reportIncompatibleVariableOverride]
+        self._term = Store(default, frozenset(lower.items()), tuple(upper))
