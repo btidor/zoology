@@ -29,6 +29,7 @@ from .theory_bitvec import (
     Sge,
     Sgt,
     Shl,
+    SignExtend,
     Sle,
     Slt,
     Smod,
@@ -388,6 +389,10 @@ class CaseParser:
                         return PythonType(Or(left, right))
                     case _:
                         raise NotImplementedError(op)
+            case ast.Attribute(ast.Name(name), "sgnd"):
+                val = self.svars[name]
+                assert isinstance(val, BitVector)
+                return PythonType(SignExtend(MAX_WIDTH - val.width, val))
             case ast.Attribute(ast.Name(name), attr):
                 val = getattr(self.svars[name], attr)
                 assert isinstance(val, int)
