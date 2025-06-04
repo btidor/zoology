@@ -42,7 +42,8 @@ class RewriteMeta(abc.ABCMeta):
             case BitVector():
                 term = bitvector_reduction(term)
                 term = bitvector_folding(term)
-                return bitvector_logic(term)
+                term = bitvector_logic(term)
+                return bitvector_yolo(term)
             case _:
                 raise TypeError("unknown term", term)
 
@@ -668,9 +669,6 @@ def bitvector_folding(term: BitVector) -> BitVector:
     mask = (1 << width) - 1
     modulus = 1 << width
     match term:
-        case Concat(terms) if all(isinstance(t, BValue) for t in terms):
-            s = reduce(lambda p, q: (p << q.width) | cast(BValue, q).value, terms, 0)
-            return BValue(s, term.width)
         case Extract(i, j, BValue(a)):
             return BValue((a >> j) & ((1 << (i - j + 1)) - 1), i - j + 1)
         case BNot(BValue(a)):
@@ -780,10 +778,6 @@ def bitvector_logic(term: BitVector) -> BitVector:
             return x
         case Smod(x, BValue(1)):
             return BValue(0, width)
-        case Concat([BValue(0) as z, *rest]):
-            return ZeroExtend(z.width, Concat(tuple(rest)))
-        case Concat([single]):
-            return single
         case Shl(x, BValue(0)):
             return x
         case Shl(x, BValue(val)) if val >= width:
@@ -806,17 +800,6 @@ def bitvector_logic(term: BitVector) -> BitVector:
             return x
         case SignExtend(i, SignExtend(j, x)):
             return SignExtend(i + j, x)
-        case Shl(Concat([x, *rest]), BValue(a)) if a >= x.width:
-            return Concat(
-                (
-                    Shl(Concat(tuple(rest)), BValue(a - x.width, width - x.width)),
-                    BValue(0, x.width),
-                )
-            )
-        case Lshr(Concat([*rest, x]), BValue(a)) if a >= x.width:
-            return ZeroExtend(
-                x.width, Lshr(Concat(tuple(rest)), BValue(a - x.width, width - x.width))
-            )
         case Ite(_, x, y) if x == y:
             return x
         case BNot(Ite(c, x, y)):
@@ -827,5 +810,30 @@ def bitvector_logic(term: BitVector) -> BitVector:
             return Ite(c, BOr(x, z), BOr(y, z))
         case BXor(Ite(c, x, y), z) | BXor(z, Ite(c, x, y)):
             return Ite(c, BXor(x, z), BXor(y, z))
+        case term:
+            return term
+
+
+def bitvector_yolo(term: BitVector) -> BitVector:
+    match term:
+        case Concat(terms) if all(isinstance(t, BValue) for t in terms):
+            s = reduce(lambda p, q: (p << q.width) | cast(BValue, q).value, terms, 0)
+            return BValue(s, term.width)
+        case Concat([BValue(0) as z, *rest]):
+            return ZeroExtend(z.width, Concat(tuple(rest)))
+        case Concat([single]):
+            return single
+        case Shl(Concat([x, *rest]), BValue(a)) if a >= x.width:
+            return Concat(
+                (
+                    Shl(Concat(tuple(rest)), BValue(a - x.width, term.width - x.width)),
+                    BValue(0, x.width),
+                )
+            )
+        case Lshr(Concat([*rest, x]), BValue(a)) if a >= x.width:
+            return ZeroExtend(
+                x.width,
+                Lshr(Concat(tuple(rest)), BValue(a - x.width, term.width - x.width)),
+            )
         case term:
             return term

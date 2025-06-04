@@ -89,7 +89,8 @@ class RewriteMeta(abc.ABCMeta):
             case BitVector():
                 term = bitvector_reduction(term)
                 term = bitvector_folding(term)
-                return bitvector_logic(term)
+                term = bitvector_logic(term)
+                return bitvector_yolo(term)
             case _:
                 raise TypeError("unknown term", term)
 
@@ -97,9 +98,6 @@ class RewriteMeta(abc.ABCMeta):
 # Warning: when writing rules for generic operations (Eq, Distinct), make sure
 # to explicitly specify the type of the arguments. Otherwise, the equivalence
 # tests won't be complete!
-
-# TODO: the two arguments to Concat may have different widths, but the
-# equivalence tests assume they have the same width.
 
 
 def constraint_reduction(term: Constraint) -> Constraint:
@@ -310,10 +308,6 @@ def bitvector_folding(term: BitVector) -> BitVector:
     mask = (1 << width) - 1
     modulus = 1 << width
     match term:
-        case Concat(terms) if all(isinstance(t, BValue) for t in terms):
-            """concat"""
-            s = reduce(lambda p, q: (p << q.width) | cast(BValue, q).value, terms, 0)
-            return BValue(s, term.width)
         case Extract(i, j, BValue(a)):
             """extract"""
             return BValue((a >> j) & ((1 << (i - j + 1)) - 1), i - j + 1)
@@ -487,13 +481,7 @@ def bitvector_logic(term: BitVector) -> BitVector:
             """smod.w: X % 1 <=> 0"""
             return BValue(0, width)
 
-        # Concat & Shift.
-        case Concat([BValue(0) as z, *rest]):
-            """concat.z"""
-            return ZeroExtend(z.width, Concat(tuple(rest)))
-        case Concat([single]):
-            """concat.w"""
-            return single
+        # Shifts.
         case Shl(x, BValue(0)):
             """shl.z"""
             return x
@@ -527,19 +515,6 @@ def bitvector_logic(term: BitVector) -> BitVector:
         case SignExtend(i, SignExtend(j, x)):
             """sext.sext"""
             return SignExtend(i + j, x)
-        case Shl(Concat([x, *rest]), BValue(a)) if a >= x.width:
-            """shl.concat"""
-            return Concat(
-                (
-                    Shl(Concat(tuple(rest)), BValue(a - x.width, width - x.width)),
-                    BValue(0, x.width),
-                )
-            )
-        case Lshr(Concat([*rest, x]), BValue(a)) if a >= x.width:
-            """lshr.concat"""
-            return ZeroExtend(
-                x.width, Lshr(Concat(tuple(rest)), BValue(a - x.width, width - x.width))
-            )
 
         # Push boolean expressions down over ITEs.
         case Ite(_, x, y) if x == y:
@@ -559,4 +534,39 @@ def bitvector_logic(term: BitVector) -> BitVector:
             return Ite(c, BXor(x, z), BXor(y, z))
         case term:
             """fallthrough"""
+            return term
+
+
+def bitvector_yolo(term: BitVector) -> BitVector:
+    """
+    Additional logical rewrites involving unsupported ops (i.e. Concat).
+
+    Warning: these rewrites are *not* covered by the test suite!
+    """
+    match term:
+        case Concat(terms) if all(isinstance(t, BValue) for t in terms):
+            """concat"""
+            s = reduce(lambda p, q: (p << q.width) | cast(BValue, q).value, terms, 0)
+            return BValue(s, term.width)
+        case Concat([BValue(0) as z, *rest]):
+            """concat.z"""
+            return ZeroExtend(z.width, Concat(tuple(rest)))
+        case Concat([single]):
+            """concat.w"""
+            return single
+        case Shl(Concat([x, *rest]), BValue(a)) if a >= x.width:
+            """shl.concat"""
+            return Concat(
+                (
+                    Shl(Concat(tuple(rest)), BValue(a - x.width, term.width - x.width)),
+                    BValue(0, x.width),
+                )
+            )
+        case Lshr(Concat([*rest, x]), BValue(a)) if a >= x.width:
+            """lshr.concat"""
+            return ZeroExtend(
+                x.width,
+                Lshr(Concat(tuple(rest)), BValue(a - x.width, term.width - x.width)),
+            )
+        case term:
             return term
