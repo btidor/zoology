@@ -204,7 +204,7 @@ class CaseParser:
         match pattern:
             case ast.MatchAs(None, None):
                 # Underscore name, e.g. `Ite(_, x, y)`. Generate random label.
-                return SymbolicType(sort.symbol(f"_{randint(0, 2**16)}"))
+                return SymbolicType(sort.symbol())
             case (
                 ast.MatchAs(None, str() as name)
                 | ast.MatchAs(ast.MatchClass(ast.Name("Constraint"), []), str() as name)
@@ -238,22 +238,25 @@ class CaseParser:
             case "BValue", [ast.MatchValue(ast.Constant(int() as i))]:
                 assert isinstance(sort, BitVectorSort)
                 return SymbolicType(sort.value(i))
-            case "CValue" | "BValue" as kind, [ast.MatchAs(_, str() as name)]:
+            case "CValue", [ast.MatchAs(_, str() as name)]:
                 # Named value, e.g. `Value(foo)`. Note that `foo` is defined as
                 # a Python type, while `Value(foo)` is a symbolic type. We know
                 # that `foo` fits in the given width, though.
                 assert name not in self.svars, "duplicate name"
-                match kind:
-                    case "CValue":
-                        self.pyvars[name] = PythonType(ConstraintSort().symbol(name))
-                        return SymbolicType(self.pyvars[name])
-                    case "BValue":
-                        assert isinstance(sort, BitVectorSort)
-                        sym = sort.symbol(name)
-                        self.pyvars[name] = PythonType(
-                            ZeroExtend(MAX_WIDTH - sort.width, sym)
-                        )
-                        return SymbolicType(sym)
+                self.pyvars[name] = PythonType(ConstraintSort().symbol(name))
+                return SymbolicType(self.pyvars[name])
+            case "CValue", []:
+                # Unnamed value, e.g. `Value() [as bar]`.
+                return SymbolicType(ConstraintSort().symbol())
+            case "BValue", [ast.MatchAs(_, str() as name)]:
+                assert isinstance(sort, BitVectorSort)
+                assert name not in self.svars, "duplicate name"
+                sym = sort.symbol(name)
+                self.pyvars[name] = PythonType(ZeroExtend(MAX_WIDTH - sort.width, sym))
+                return SymbolicType(sym)
+            case "BValue", []:
+                assert isinstance(sort, BitVectorSort)
+                return SymbolicType(sort.symbol())
             case "CValue" | "BValue", [pattern]:
                 raise TypeError("unexpected match on Value(...)", pattern)
             case "CValue" | "BValue", _:
@@ -433,8 +436,10 @@ type Sort = ConstraintSort | BitVectorSort[int]
 class ConstraintSort:
     """Represents the boolean sort."""
 
-    def symbol(self, name: str) -> Constraint:
+    def symbol(self, name: str | None = None) -> Constraint:
         """Create a Symbol with the given name."""
+        if name is None:
+            name = f"_{randint(0, 2**16)}"
         return CSymbol(name.encode())
 
     def value(self, val: bool) -> Constraint:
@@ -448,8 +453,10 @@ class BitVectorSort[N: int]:
 
     width: N
 
-    def symbol(self, name: str) -> BitVector:
+    def symbol(self, name: str | None = None) -> BitVector:
         """Create a Symbol with the given name."""
+        if name is None:
+            name = f"_{randint(0, 2**16)}"
         return BSymbol(name.encode(), self.width)
 
     def value(self, val: int) -> BitVector:
