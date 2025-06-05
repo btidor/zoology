@@ -257,12 +257,12 @@ class CaseParser:
                         case "S":
                             arg = cls.match(pat, None)
                         case "int":
-                            raise NotImplementedError
+                            arg = cls.match_param(pat)
                         case typ:
                             raise SyntaxError(f"unsupported field type: {typ}")
                     args.append(arg)
                 for parts in product(*args):
-                    terms = list[BaseTerm]()
+                    terms = list[BaseTerm | int]()
                     vars = list[tuple[str, BaseTerm]]()
                     for term, var in parts:
                         terms.append(term)
@@ -271,6 +271,21 @@ class CaseParser:
                         yield op(*terms), tuple(vars)
                     except AssertionError:
                         pass
+
+    @classmethod
+    def match_param(cls, pattern: ast.pattern) -> Iterable[tuple[int, Vars]]:
+        """Parse a match pattern where a param (raw Python int) is expected."""
+        match pattern:
+            case ast.MatchAs(None, str() as name):
+                # AS pattern, e.g. "i" in `ZeroExtend(i, x)`. Enumerate all
+                # possibilities.
+                for i in range(0, MAX_WIDTH + 1):
+                    yield i, ((name, BValue(i, NATIVE_WIDTH)),)
+            case ast.MatchValue(ast.Constant(int() as i)):
+                # Literal pattern, e.g. "0" in `ZeroExtend(0, x)`.
+                yield i, ()
+            case _:
+                raise SyntaxError(f"unsupported param pattern: {pattern}")
 
     def _pyexpr(self, expr: ast.expr) -> BaseTerm:
         """Recursively parse a Python expression."""
@@ -383,13 +398,8 @@ class CaseParser:
             case ast.Call(ast.Name("BValue"), [arg, width]):
                 inner = self._pyexpr(arg)
                 assert isinstance(inner, BTerm)
-                match self._pyexpr(width):
-                    case BValue(width):
-                        pass
-                    case Add(BValue(a), BValue(b)):
-                        width = a + b
-                    case other:
-                        raise NotImplementedError(other)
+
+                width = simplify(self._pyexpr(width))
                 # Note that Value(...) converts an inner Python type to an outer
                 # symbolic type. We assert that the conversion does not
                 # overflow.
@@ -401,6 +411,19 @@ class CaseParser:
                 return cls(*(self._sexpr(a) for a in args))
             case _:
                 raise NotImplementedError(expr)
+
+
+def simplify(term: BaseTerm) -> int:
+    """Turn a symbolic expression into an integer."""
+    match term:
+        case BValue(value):
+            return value
+        case Add(x, y):
+            return (simplify(x) + simplify(y)) % (1 << term.width)
+        case Sub(x, y):
+            return (simplify(x) - simplify(y)) % (1 << term.width)
+        case _:
+            raise TypeError(f"unable to simplify: {term}")
 
 
 type Sort = type[ConstraintSort] | type[BitVectorSort]
