@@ -12,7 +12,7 @@ from pathlib import Path
 from random import randint
 from subprocess import check_output
 from types import ModuleType
-from typing import Any, Callable, Iterable, Self
+from typing import Any, Callable, Iterable, Literal, Self
 
 from . import rewrite, theory_array, theory_bitvec, theory_core
 from .rewrite import RewriteMeta
@@ -204,14 +204,14 @@ class CaseParser:
         """Parse a MatchClass pattern."""
         assert isinstance(class_.cls, ast.Name)
         name, patterns = class_.cls.id, class_.patterns
-        op, sort = op_and_sort(name)
-        match op:
+        op = Op(name)
+        match op.cls:
             case theory_core.CTerm | theory_bitvec.BTerm:
                 # Abstract Term, used as a zero-argument type hint in generic
                 # ops. Return an anonymous symbol (the caller will add to
                 # locals).
                 assert len(patterns) == 0
-                for sym in sort.symbol():
+                for sym in op.sort.symbol():
                     yield sym, ()
             case theory_core.CSymbol | theory_bitvec.BSymbol:
                 # Symbol. Why would you use this in a rewrite rule?
@@ -222,20 +222,20 @@ class CaseParser:
                 match patterns:
                     case []:
                         # Anonymous: Value().
-                        for sym in sort.symbol():
+                        for sym in op.sort.symbol():
                             yield sym, ()
                     case [ast.MatchSingleton(bool() as b)]:
                         # Concrete: CValue(True).
-                        assert sort == ConstraintSort
+                        assert op.sort == ConstraintSort
                         yield CValue(b), ()
                     case [ast.MatchValue(ast.Constant(int() as i))]:
                         # Concrete: BValue(0).
-                        assert sort == BitVectorSort
+                        assert op.sort == BitVectorSort
                         for width in range(1, MAX_WIDTH + 1):
                             yield BValue(i, width), ()
                     case [ast.MatchAs(_, str() as name)]:
                         # Named: Value(a).
-                        for sym in sort.symbol(name):
+                        for sym in op.sort.symbol(name):
                             if isinstance(sym, BTerm):
                                 py = ZeroExtend(NATIVE_WIDTH - sym.width, sym)
                                 yield sym, ((name, py),)
@@ -248,18 +248,16 @@ class CaseParser:
                 # Operation. Parse type annotations to determine each field's
                 # expected sort.
                 args = list[Iterable[tuple[BaseTerm | int, Vars]]]()
-                for pat, name in zip(patterns, op.__match_args__, strict=True):
-                    match op.__dataclass_fields__[name].type:
+                for pat, field in zip(patterns, op.fields, strict=True):
+                    match field:
                         case "CTerm":
                             arg = cls.match(pat, ConstraintSort)
                         case "BTerm":
                             arg = cls.match(pat, BitVectorSort)
                         case "S":
                             arg = cls.match(pat, None)
-                        case "int":
+                        case "int" | "bool":
                             arg = cls.match_param(pat)
-                        case typ:
-                            raise SyntaxError(f"unsupported field type: {typ}")
                     args.append(arg)
                 for parts in product(*args):
                     terms = list[BaseTerm | int]()
@@ -268,7 +266,7 @@ class CaseParser:
                         terms.append(term)
                         vars.extend(var)
                     try:
-                        yield op(*terms), tuple(vars)
+                        yield op.cls(*terms), tuple(vars)
                     except AssertionError:
                         pass
 
@@ -405,8 +403,14 @@ class CaseParser:
                 return Extract(width - 1, 0, inner)
             case ast.Call(ast.Name(name), args):  # Not(...), etc.
                 assert "Value" not in name, "unhandled CValue or BValue"
-                cls, _ = op_and_sort(name)
-                return cls(*(self.sexpr(a) for a in args))
+                op = Op(name)
+                res = list[Any]()
+                for a, f in zip(args, op.fields, strict=True):
+                    if f == "int":
+                        res.append(simplify(self.pyexpr(a)))
+                    else:
+                        res.append(self.sexpr(a))
+                return Op(name).cls(*res)
             case _:
                 raise SyntaxError(f"unsupported sexpr: {expr}")
 
@@ -452,21 +456,51 @@ class BitVectorSort:
             yield BSymbol(name.encode(), width)
 
 
-def op_and_sort(name: str) -> tuple[type[BaseTerm], Sort]:
-    """Extract the named operator and its sort from the theories."""
-    if hasattr(theory_core, name):
-        op = getattr(theory_core, name)
-    elif hasattr(theory_bitvec, name):
-        op = getattr(theory_bitvec, name)
-    else:
-        raise KeyError(f"operator not found: {name}")
+type Arg = (
+    Literal["CTerm"]
+    | Literal["BTerm"]
+    | Literal["S"]
+    | Literal["int"]
+    | Literal["bool"]
+)
 
-    if issubclass(op, CTerm):
-        return op, ConstraintSort
-    elif issubclass(op, BTerm):
-        return op, BitVectorSort
-    else:
-        raise TypeError(f"unexpected operator: {op}")
+
+class Op:
+    """Represents an SMT operator, with metadata."""
+
+    name: str
+    cls: type[BaseTerm]
+    fields: tuple[Arg, ...]
+    sort: Sort
+
+    def __init__(self, name: str) -> None:
+        """Find the Op with the given name."""
+        self.name = name
+
+        if hasattr(theory_core, name):
+            self.cls = getattr(theory_core, name)
+        elif hasattr(theory_bitvec, name):
+            self.cls = getattr(theory_bitvec, name)
+        else:
+            raise KeyError(f"operator not found: {name}")
+
+        args = list[Arg]()
+        for name in self.cls.__match_args__:
+            typ: str = self.cls.__dataclass_fields__[name].type
+            if typ in ("CTerm", "BTerm", "S", "int", "bool"):
+                args.append(typ)
+            elif typ.startswith("InitVar["):
+                pass
+            else:
+                raise SyntaxError(f"unsupported field type: {typ}")
+        self.fields = tuple(args)
+
+        if issubclass(self.cls, CTerm):
+            self.sort = ConstraintSort
+        elif issubclass(self.cls, BTerm):
+            self.sort = BitVectorSort
+        else:
+            raise TypeError(f"unexpected operator: {self.cls}")
 
 
 #
