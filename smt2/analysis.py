@@ -129,7 +129,7 @@ class CaseParser:
                     case ast.Expr(ast.Constant(str())):
                         pass  # function docstring, just ignore
                     case ast.Assign([ast.Name(name)], expr):
-                        parser.vars[name] = parser._pyexpr(expr)
+                        parser.vars[name] = parser.pyexpr(expr)
                     case _:
                         raise SyntaxError("expected assignment")
 
@@ -137,7 +137,7 @@ class CaseParser:
             if casette.case.guard is None:
                 guard = CValue(True)
             else:
-                guard = parser._pyexpr(casette.case.guard)
+                guard = parser.pyexpr(casette.case.guard)
             assert isinstance(guard, CTerm)
 
             # 4. Parse the body. This tells us the value of the rewritten term.
@@ -146,9 +146,9 @@ class CaseParser:
                     case ast.Expr(ast.Constant(str())):
                         pass  # skip docstring
                     case ast.Assign([ast.Name(name)], expr):
-                        parser.vars[name] = parser._pyexpr(expr)
+                        parser.vars[name] = parser.pyexpr(expr)
                     case ast.Return(ast.expr() as expr):
-                        term2 = parser._sexpr(expr)
+                        term2 = parser.sexpr(expr)
                         break
                     case _:
                         raise SyntaxError(f"unsupported statement: {stmt}")
@@ -287,7 +287,7 @@ class CaseParser:
             case _:
                 raise SyntaxError(f"unsupported param pattern: {pattern}")
 
-    def _pyexpr(self, expr: ast.expr) -> BaseTerm:
+    def pyexpr(self, expr: ast.expr) -> BaseTerm:
         """Recursively parse a Python expression."""
         match expr:
             case ast.Name(name):
@@ -297,7 +297,7 @@ class CaseParser:
             case ast.Constant(int() as i):
                 return BValue(i, NATIVE_WIDTH)
             case ast.UnaryOp(op, operand):
-                operand = self._pyexpr(operand)
+                operand = self.pyexpr(operand)
                 match op:
                     case ast.Not():
                         assert isinstance(operand, CTerm)
@@ -305,7 +305,7 @@ class CaseParser:
                     case _:
                         raise NotImplementedError(op)
             case ast.BinOp(left, op, right):
-                left, right = self._pyexpr(left), self._pyexpr(right)
+                left, right = self.pyexpr(left), self.pyexpr(right)
                 assert isinstance(left, BTerm) and isinstance(right, BTerm)
                 rnonzero = Distinct(right, ZERO)
                 nonneg = And(Sge(left, ZERO), Sge(right, ZERO))
@@ -340,7 +340,7 @@ class CaseParser:
                     case _:
                         raise NotImplementedError(op)
             case ast.Compare(left, [op], [right]):
-                left, right = self._pyexpr(left), self._pyexpr(right)
+                left, right = self.pyexpr(left), self.pyexpr(right)
                 match left, op, right:
                     # When comparing symbolic types, (a) if two ASTs are equal,
                     # the expressions must be equal. However, the opposite is
@@ -364,7 +364,7 @@ class CaseParser:
                     case _:
                         raise NotImplementedError(op)
             case ast.BoolOp(op, [left, right]):
-                left, right = self._pyexpr(left), self._pyexpr(right)
+                left, right = self.pyexpr(left), self.pyexpr(right)
                 assert isinstance(left, CTerm) and isinstance(right, CTerm)
                 match op:
                     case ast.And():
@@ -384,22 +384,22 @@ class CaseParser:
             case _:
                 raise NotImplementedError(expr)
 
-    def _sexpr(self, expr: ast.expr) -> BaseTerm:
+    def sexpr(self, expr: ast.expr) -> BaseTerm:
         """Recursively parse a symbolic expression."""
         match expr:
             case ast.Name(name):
                 return self.vars[name]
             case ast.Call(ast.Name("cast"), [_, arg]):
-                return self._sexpr(arg)  # ignore casts
+                return self.sexpr(arg)  # ignore casts
             case ast.Call(ast.Name("Symbol")):
                 raise SyntaxError("Symbol is not supported")
             case ast.Call(ast.Name("CValue"), [arg]):
-                return self._pyexpr(arg)
+                return self.pyexpr(arg)
             case ast.Call(ast.Name("BValue"), [arg, width]):
-                inner = self._pyexpr(arg)
+                inner = self.pyexpr(arg)
                 assert isinstance(inner, BTerm)
 
-                width = simplify(self._pyexpr(width))
+                width = simplify(self.pyexpr(width))
                 # Note that Value(...) converts an inner Python type to an outer
                 # symbolic type. We assert that the conversion does not
                 # overflow.
@@ -408,7 +408,7 @@ class CaseParser:
             case ast.Call(ast.Name(name), args):  # Not(...), etc.
                 assert "Value" not in name, "unhandled CValue or BValue"
                 cls, _ = op_and_sort(name)
-                return cls(*(self._sexpr(a) for a in args))
+                return cls(*(self.sexpr(a) for a in args))
             case _:
                 raise NotImplementedError(expr)
 
