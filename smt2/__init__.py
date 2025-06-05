@@ -322,7 +322,7 @@ class Int[N: int](BitVector[N]):
     def reveal(self) -> int | None:
         match self._term:
             case BValue(_):
-                raise NotImplementedError
+                return self._term.sgnd
             case _:
                 return None
 
