@@ -9,30 +9,26 @@ See: https://smt-lib.org/logics-all.shtml#QF_BV
 
 from __future__ import annotations
 
-from dataclasses import InitVar, dataclass, field, fields
+import abc
+from dataclasses import InitVar, dataclass, field
 from functools import reduce
 from typing import ClassVar, override
 
-from .theory_core import BaseTerm, CTerm, DumpContext
+from .theory_core import BaseTerm, CTerm, DumpContext, SortException
 
 
 @dataclass(frozen=True, slots=True)
 class BTerm(BaseTerm):
     width: int = field(init=False)
 
-    def __post_init__(self) -> None:
-        # By default, inherit width from inner term.
-        w = None
-        for fld in fields(self):
-            if fld.type == "BTerm":
-                term = getattr(self, fld.name)
-                if w is None:
-                    w = term.width
-                else:
-                    assert w == term.width, "inconsistent term widths"
-        if w is None:
-            raise TypeError(f"could not find inner term for {self.__class__.__name__}")
-        object.__setattr__(self, "width", w)
+    def check(self, partner: BaseTerm) -> None:
+        if not isinstance(partner, BTerm):
+            raise SortException(self.__class__, partner.__class__)
+        elif self.width != partner.width:
+            raise SortException(self.width, partner.width)
+
+    @abc.abstractmethod
+    def __post_init__(self) -> None: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,7 +36,6 @@ class BSymbol(BTerm):
     name: bytes
     w: InitVar[int]
 
-    @override
     def __post_init__(self, w: int) -> None:
         assert w > 0, "width must be positive"
         object.__setattr__(self, "width", w)
@@ -59,7 +54,6 @@ class BValue(BTerm):
     value: int
     w: InitVar[int]
 
-    @override
     def __post_init__(self, w: int) -> None:
         assert w > 0, "width must be positive"
         if self.value < 0:  # convert to two's complement
@@ -86,17 +80,27 @@ class BValue(BTerm):
 class UnaryOp(BTerm):
     term: BTerm
 
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "width", self.term.width)
+
 
 @dataclass(frozen=True, slots=True)
 class BinaryOp(BTerm):
     left: BTerm
     right: BTerm
 
+    def __post_init__(self) -> None:
+        self.left.check(self.right)
+        object.__setattr__(self, "width", self.left.width)
+
 
 @dataclass(frozen=True, slots=True)
 class CompareOp(CTerm):
     left: BTerm
     right: BTerm
+
+    def __post_init__(self) -> None:
+        self.left.check(self.right)
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,7 +114,6 @@ class Concat(BTerm):
     op: ClassVar[bytes] = b"concat"
     terms: tuple[BTerm, ...]
 
-    @override
     def __post_init__(self) -> None:
         assert len(self.terms) > 0, "width must be positive"
         w = reduce(lambda p, q: p + q.width, self.terms, 0)
@@ -132,7 +135,6 @@ class Extract(BTerm):
     j: int
     term: BTerm
 
-    @override
     def __post_init__(self) -> None:
         assert self.term.width > self.i >= self.j >= 0
         w = self.i - self.j + 1
@@ -225,6 +227,10 @@ class Comp(BTerm):  # width-1 result
     left: BTerm
     right: BTerm
 
+    def __post_init__(self) -> None:
+        self.left.check(self.right)
+        object.__setattr__(self, "width", 1)
+
 
 @dataclass(frozen=True, slots=True)
 class Sub(BinaryOp):
@@ -255,7 +261,6 @@ class Ashr(BinaryOp):
 class Repeat(SingleParamOp):
     op: ClassVar[bytes] = b"repeat"
 
-    @override
     def __post_init__(self) -> None:
         assert self.i > 0
         w = self.term.width * self.i
@@ -266,7 +271,6 @@ class Repeat(SingleParamOp):
 class ZeroExtend(SingleParamOp):
     op: ClassVar[bytes] = b"zero_extend"
 
-    @override
     def __post_init__(self) -> None:
         assert self.i >= 0
         w = self.term.width + self.i
@@ -277,7 +281,6 @@ class ZeroExtend(SingleParamOp):
 class SignExtend(SingleParamOp):
     op: ClassVar[bytes] = b"sign_extend"
 
-    @override
     def __post_init__(self) -> None:
         assert self.i >= 0
         w = self.term.width + self.i
@@ -288,10 +291,16 @@ class SignExtend(SingleParamOp):
 class RotateLeft(SingleParamOp):
     op: ClassVar[bytes] = b"rotate_left"
 
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "width", self.term.width)
+
 
 @dataclass(frozen=True, slots=True)
 class RotateRight(SingleParamOp):
     op: ClassVar[bytes] = b"rotate_right"
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "width", self.term.width)
 
 
 @dataclass(frozen=True, slots=True)
@@ -335,3 +344,7 @@ class Ite(BTerm):
     cond: CTerm
     left: BTerm
     right: BTerm
+
+    def __post_init__(self) -> None:
+        self.left.check(self.right)
+        object.__setattr__(self, "width", self.left.width)

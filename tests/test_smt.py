@@ -46,8 +46,6 @@ def test_simple_rewrite():
 
 # SMT Test for Rewrite Rules
 
-MAX_WIDTH = 8
-
 
 def parameterize(rw: Callable[..., Any]) -> Any:
     return pytest.mark.parametrize(
@@ -57,38 +55,32 @@ def parameterize(rw: Callable[..., Any]) -> Any:
 
 @parameterize(constraint_reduction)
 def test_constraint_reduction(case: Casette):
-    for width in range(1, MAX_WIDTH + 1):
-        assert CaseParser(width).is_equivalent(case)
+    assert CaseParser.is_equivalent(case)
 
 
 @parameterize(constraint_folding)
 def test_constraint_folding(case: Casette):
-    for width in range(1, MAX_WIDTH + 1):
-        assert CaseParser(width).is_equivalent(case)
+    assert CaseParser.is_equivalent(case)
 
 
 @parameterize(constraint_logic)
 def test_constraint_logic(case: Casette):
-    for width in range(1, MAX_WIDTH + 1):
-        assert CaseParser(width).is_equivalent(case)
+    assert CaseParser.is_equivalent(case)
 
 
 @parameterize(bitvector_reduction)
 def test_bitvector_reduction(case: Casette):
-    for width in range(1, MAX_WIDTH + 1):
-        assert CaseParser(width).is_equivalent(case)
+    assert CaseParser.is_equivalent(case)
 
 
 @parameterize(bitvector_folding)
 def test_bitvector_folding(case: Casette):
-    for width in range(1, MAX_WIDTH + 1):
-        assert CaseParser(width).is_equivalent(case)
+    assert CaseParser.is_equivalent(case)
 
 
 @parameterize(bitvector_logic)
 def test_bitvector_logic(case: Casette):
-    for width in range(1, MAX_WIDTH + 1):
-        assert CaseParser(width).is_equivalent(case)
+    assert CaseParser.is_equivalent(case)
 
 
 def test_codegen():

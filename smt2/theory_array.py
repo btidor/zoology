@@ -14,13 +14,19 @@ from dataclasses import dataclass
 from typing import ClassVar, override
 
 from .theory_bitvec import BTerm, BValue
-from .theory_core import BaseTerm, DumpContext
+from .theory_core import BaseTerm, DumpContext, SortException
 
 
 @dataclass(frozen=True, slots=True)
 class ATerm(BaseTerm):
+    def check(self, partner: BaseTerm) -> None:
+        if not isinstance(partner, ATerm):
+            raise SortException(self.__class__, partner.__class__)
+        elif self.width() != partner.width():
+            raise SortException(self.width(), partner.width())
+
     @abc.abstractmethod
-    def value_width(self) -> int: ...
+    def width(self) -> tuple[int, int]: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,8 +35,8 @@ class ASymbol(ATerm):
     key: int
     value: int
 
-    def value_width(self) -> int:
-        return self.value
+    def width(self) -> tuple[int, int]:
+        return (self.key, self.value)
 
     @override
     def dump(self, ctx: DumpContext) -> None:
@@ -49,8 +55,8 @@ class AValue(ATerm):
     default: BTerm
     key: int
 
-    def value_width(self) -> int:
-        return self.default.width
+    def width(self) -> tuple[int, int]:
+        return (self.key, self.default.width)
 
     @override
     def dump(self, ctx: DumpContext) -> None:
@@ -70,7 +76,8 @@ class Select(BTerm):
 
     @override
     def __post_init__(self) -> None:
-        object.__setattr__(self, "width", self.array.value_width())
+        _, v = self.array.width()
+        object.__setattr__(self, "width", v)
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,8 +86,8 @@ class Store(ATerm):
     lower: frozenset[tuple[int, BTerm]] = frozenset()
     upper: tuple[tuple[BTerm, BTerm], ...] = ()
 
-    def value_width(self) -> int:
-        return self.base.value_width()
+    def width(self) -> tuple[int, int]:
+        return self.base.width()
 
     @override
     def dump(self, ctx: DumpContext) -> None:

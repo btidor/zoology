@@ -45,11 +45,6 @@ class RewriteMeta(abc.ABCMeta):
                 raise TypeError("unknown term", term)
 
 
-# Warning: when writing rules for generic operations (Eq, Distinct), make sure
-# to explicitly specify the type of the arguments. Otherwise, the equivalence
-# tests won't be complete!
-
-
 def constraint_reduction(term: CTerm) -> CTerm:
     """Rewrite fancy constraint ops into simple ones."""
     match term:
@@ -206,19 +201,19 @@ def constraint_logic(term: CTerm) -> CTerm:
             return CValue(True)
 
         # Comparators with ZeroExtend.
-        case Eq(BValue(a), ZeroExtend(_, x)) if a >= (1 << x.width):
+        case Eq(BValue(a), ZeroExtend(_i, x)) if a >= (1 << x.width):
             """eq.zv"""
             return CValue(False)
-        case Ult(ZeroExtend(_, x), BValue(a)) if a >= (1 << x.width):
+        case Ult(ZeroExtend(_i, x), BValue(a)) if a >= (1 << x.width):
             """ult.zv"""
             return CValue(True)
-        case Ult(BValue(a), ZeroExtend(_, x)) if a >= (1 << x.width):
+        case Ult(BValue(a), ZeroExtend(_i, x)) if a >= (1 << x.width):
             """ult.vz"""
             return CValue(False)
-        case Ule(ZeroExtend(_, x), BValue(a)) if a >= (1 << x.width):
+        case Ule(ZeroExtend(_i, x), BValue(a)) if a >= (1 << x.width):
             """ule.zv"""
             return CValue(True)
-        case Ule(BValue(a), ZeroExtend(_, x)) if a >= (1 << x.width):
+        case Ule(BValue(a), ZeroExtend(_i, x)) if a >= (1 << x.width):
             """ule.vz"""
             return CValue(False)
         case term:
@@ -305,25 +300,25 @@ def bitvector_folding(term: BTerm) -> BTerm:
         case Ashr(BValue() as x, BValue(b)):
             """ashr"""
             return BValue(x.sgnd >> b, width)
-        case Repeat(_, BValue(a)):
+        case Repeat(_i, BValue(a)):
             """repeat"""
             raise NotImplementedError
-        case ZeroExtend(_, BValue(a)):
+        case ZeroExtend(_i, BValue(a)):
             """zero_extend"""
             return BValue(a, width)
-        case SignExtend(_, BValue() as x):
+        case SignExtend(_i, BValue() as x):
             """sign_extend"""
             return BValue(x.sgnd, width)
-        case RotateLeft(_, BValue(a)):
+        case RotateLeft(_i, BValue(a)):
             """rotate_left"""
             raise NotImplementedError
-        case RotateRight(_, BValue(a)):
+        case RotateRight(_i, BValue(a)):
             """rotate_right"""
             raise NotImplementedError
-        case Ite(CValue(True), x, _):
+        case Ite(CValue(True), x, _y):
             """ite.t"""
             return x
-        case Ite(CValue(False), _, y):
+        case Ite(CValue(False), _x, y):
             """ite.f"""
             return y
         case term:
@@ -467,7 +462,7 @@ def bitvector_logic(term: BTerm) -> BTerm:
             return SignExtend(i + j, x)
 
         # Push boolean expressions down over ITEs.
-        case Ite(_, x, y) if x == y:
+        case Ite(_c, x, y) if x == y:
             """ite.x: C ? X : X <=> X"""
             return x
         case BNot(Ite(c, x, y)):

@@ -30,6 +30,9 @@ class DumpContext:
         self.out.extend(b)
 
 
+class SortException(Exception): ...
+
+
 def check(*constraints: CTerm) -> bool:
     ctx = DumpContext()
     for constraint in constraints:
@@ -65,6 +68,9 @@ class BaseTerm(abc.ABC):
     def __deepcopy__(self, memo: Any, /) -> Self:
         return self
 
+    @abc.abstractmethod
+    def check(self, partner: BaseTerm) -> None: ...
+
     def dump(self, ctx: DumpContext) -> None:
         # 0. Gather Arguments
         params = list[bytes]()
@@ -91,7 +97,10 @@ class BaseTerm(abc.ABC):
 
 
 @dataclass(frozen=True, slots=True)
-class CTerm(BaseTerm): ...
+class CTerm(BaseTerm):
+    def check(self, partner: BaseTerm) -> None:
+        if not isinstance(partner, CTerm):
+            raise SortException(self.__class__, partner.__class__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -157,12 +166,18 @@ class Eq[S: BaseTerm](CTerm):
     left: S
     right: S
 
+    def __post_init__(self) -> None:
+        self.left.check(self.right)
+
 
 @dataclass(frozen=True, slots=True)
 class Distinct[S: BaseTerm](CTerm):
     op: ClassVar[bytes] = b"distinct"
     left: S
     right: S
+
+    def __post_init__(self) -> None:
+        self.left.check(self.right)
 
 
 @dataclass(frozen=True, slots=True)

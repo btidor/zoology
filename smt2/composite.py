@@ -11,11 +11,11 @@ Warning: do not edit! To regenerate, run:
 from __future__ import annotations
 
 import abc
-from dataclasses import InitVar, dataclass, field, fields
+from dataclasses import InitVar, dataclass, field
 from functools import reduce
 from typing import Any, ClassVar, cast, override
 
-from .theory_core import BaseTerm, DumpContext
+from .theory_core import BaseTerm, DumpContext, SortException
 
 
 class RewriteMeta(abc.ABCMeta):
@@ -49,7 +49,10 @@ class RewriteMeta(abc.ABCMeta):
 
 
 @dataclass(frozen=True, slots=True)
-class CTerm(BaseTerm, metaclass=RewriteMeta): ...
+class CTerm(BaseTerm, metaclass=RewriteMeta):
+    def check(self, partner: BaseTerm) -> None:
+        if not isinstance(partner, CTerm):
+            raise SortException(self.__class__, partner.__class__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,12 +118,18 @@ class Eq[S: BaseTerm](CTerm):
     left: S
     right: S
 
+    def __post_init__(self) -> None:
+        self.left.check(self.right)
+
 
 @dataclass(frozen=True, slots=True)
 class Distinct[S: BaseTerm](CTerm):
     op: ClassVar[bytes] = b"distinct"
     left: S
     right: S
+
+    def __post_init__(self) -> None:
+        self.left.check(self.right)
 
 
 @dataclass(frozen=True, slots=True)
@@ -135,18 +144,14 @@ class CIte(CTerm):
 class BTerm(BaseTerm, metaclass=RewriteMeta):
     width: int = field(init=False)
 
-    def __post_init__(self) -> None:
-        w = None
-        for fld in fields(self):
-            if fld.type == "BTerm":
-                term = getattr(self, fld.name)
-                if w is None:
-                    w = term.width
-                else:
-                    assert w == term.width, "inconsistent term widths"
-        if w is None:
-            raise TypeError(f"could not find inner term for {self.__class__.__name__}")
-        object.__setattr__(self, "width", w)
+    def check(self, partner: BaseTerm) -> None:
+        if not isinstance(partner, BTerm):
+            raise SortException(self.__class__, partner.__class__)
+        elif self.width != partner.width:
+            raise SortException(self.width, partner.width)
+
+    @abc.abstractmethod
+    def __post_init__(self) -> None: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -154,7 +159,6 @@ class BSymbol(BTerm):
     name: bytes
     w: InitVar[int]
 
-    @override
     def __post_init__(self, w: int) -> None:
         assert w > 0, "width must be positive"
         object.__setattr__(self, "width", w)
@@ -173,7 +177,6 @@ class BValue(BTerm):
     value: int
     w: InitVar[int]
 
-    @override
     def __post_init__(self, w: int) -> None:
         assert w > 0, "width must be positive"
         if self.value < 0:
@@ -199,17 +202,27 @@ class BValue(BTerm):
 class UnaryOp(BTerm):
     term: BTerm
 
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "width", self.term.width)
+
 
 @dataclass(frozen=True, slots=True)
 class BinaryOp(BTerm):
     left: BTerm
     right: BTerm
 
+    def __post_init__(self) -> None:
+        self.left.check(self.right)
+        object.__setattr__(self, "width", self.left.width)
+
 
 @dataclass(frozen=True, slots=True)
 class CompareOp(CTerm):
     left: BTerm
     right: BTerm
+
+    def __post_init__(self) -> None:
+        self.left.check(self.right)
 
 
 @dataclass(frozen=True, slots=True)
@@ -223,7 +236,6 @@ class Concat(BTerm):
     op: ClassVar[bytes] = b"concat"
     terms: tuple[BTerm, ...]
 
-    @override
     def __post_init__(self) -> None:
         assert len(self.terms) > 0, "width must be positive"
         w = reduce(lambda p, q: p + q.width, self.terms, 0)
@@ -245,7 +257,6 @@ class Extract(BTerm):
     j: int
     term: BTerm
 
-    @override
     def __post_init__(self) -> None:
         assert self.term.width > self.i >= self.j >= 0
         w = self.i - self.j + 1
@@ -338,6 +349,10 @@ class Comp(BTerm):
     left: BTerm
     right: BTerm
 
+    def __post_init__(self) -> None:
+        self.left.check(self.right)
+        object.__setattr__(self, "width", 1)
+
 
 @dataclass(frozen=True, slots=True)
 class Sub(BinaryOp):
@@ -368,7 +383,6 @@ class Ashr(BinaryOp):
 class Repeat(SingleParamOp):
     op: ClassVar[bytes] = b"repeat"
 
-    @override
     def __post_init__(self) -> None:
         assert self.i > 0
         w = self.term.width * self.i
@@ -379,7 +393,6 @@ class Repeat(SingleParamOp):
 class ZeroExtend(SingleParamOp):
     op: ClassVar[bytes] = b"zero_extend"
 
-    @override
     def __post_init__(self) -> None:
         assert self.i >= 0
         w = self.term.width + self.i
@@ -390,7 +403,6 @@ class ZeroExtend(SingleParamOp):
 class SignExtend(SingleParamOp):
     op: ClassVar[bytes] = b"sign_extend"
 
-    @override
     def __post_init__(self) -> None:
         assert self.i >= 0
         w = self.term.width + self.i
@@ -401,10 +413,16 @@ class SignExtend(SingleParamOp):
 class RotateLeft(SingleParamOp):
     op: ClassVar[bytes] = b"rotate_left"
 
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "width", self.term.width)
+
 
 @dataclass(frozen=True, slots=True)
 class RotateRight(SingleParamOp):
     op: ClassVar[bytes] = b"rotate_right"
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "width", self.term.width)
 
 
 @dataclass(frozen=True, slots=True)
@@ -449,11 +467,21 @@ class Ite(BTerm):
     left: BTerm
     right: BTerm
 
+    def __post_init__(self) -> None:
+        self.left.check(self.right)
+        object.__setattr__(self, "width", self.left.width)
+
 
 @dataclass(frozen=True, slots=True)
 class ATerm(BaseTerm):
+    def check(self, partner: BaseTerm) -> None:
+        if not isinstance(partner, ATerm):
+            raise SortException(self.__class__, partner.__class__)
+        elif self.width() != partner.width():
+            raise SortException(self.width(), partner.width())
+
     @abc.abstractmethod
-    def value_width(self) -> int: ...
+    def width(self) -> tuple[int, int]: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -462,8 +490,8 @@ class ASymbol(ATerm):
     key: int
     value: int
 
-    def value_width(self) -> int:
-        return self.value
+    def width(self) -> tuple[int, int]:
+        return (self.key, self.value)
 
     @override
     def dump(self, ctx: DumpContext) -> None:
@@ -482,8 +510,8 @@ class AValue(ATerm):
     default: BTerm
     key: int
 
-    def value_width(self) -> int:
-        return self.default.width
+    def width(self) -> tuple[int, int]:
+        return (self.key, self.default.width)
 
     @override
     def dump(self, ctx: DumpContext) -> None:
@@ -503,7 +531,8 @@ class Select(BTerm):
 
     @override
     def __post_init__(self) -> None:
-        object.__setattr__(self, "width", self.array.value_width())
+        _, v = self.array.width()
+        object.__setattr__(self, "width", v)
 
 
 @dataclass(frozen=True, slots=True)
@@ -512,8 +541,8 @@ class Store(ATerm):
     lower: frozenset[tuple[int, BTerm]] = frozenset()
     upper: tuple[tuple[BTerm, BTerm], ...] = ()
 
-    def value_width(self) -> int:
-        return self.base.value_width()
+    def width(self) -> tuple[int, int]:
+        return self.base.width()
 
     @override
     def dump(self, ctx: DumpContext) -> None:
@@ -632,15 +661,15 @@ def constraint_logic(term: CTerm) -> CTerm:
             return Eq(x, BValue(0, x.width))
         case Ule(BValue(0), x):
             return CValue(True)
-        case Eq(BValue(a), ZeroExtend(_, x)) if a >= (1 << x.width):
+        case Eq(BValue(a), ZeroExtend(_i, x)) if a >= (1 << x.width):
             return CValue(False)
-        case Ult(ZeroExtend(_, x), BValue(a)) if a >= (1 << x.width):
+        case Ult(ZeroExtend(_i, x), BValue(a)) if a >= (1 << x.width):
             return CValue(True)
-        case Ult(BValue(a), ZeroExtend(_, x)) if a >= (1 << x.width):
+        case Ult(BValue(a), ZeroExtend(_i, x)) if a >= (1 << x.width):
             return CValue(False)
-        case Ule(ZeroExtend(_, x), BValue(a)) if a >= (1 << x.width):
+        case Ule(ZeroExtend(_i, x), BValue(a)) if a >= (1 << x.width):
             return CValue(True)
-        case Ule(BValue(a), ZeroExtend(_, x)) if a >= (1 << x.width):
+        case Ule(BValue(a), ZeroExtend(_i, x)) if a >= (1 << x.width):
             return CValue(False)
         case term:
             return term
@@ -701,13 +730,13 @@ def bitvector_folding(term: BTerm) -> BTerm:
             return BValue(x.sgnd % y.sgnd, width)
         case Ashr(BValue() as x, BValue(b)):
             return BValue(x.sgnd >> b, width)
-        case ZeroExtend(_, BValue(a)):
+        case ZeroExtend(_i, BValue(a)):
             return BValue(a, width)
-        case SignExtend(_, BValue() as x):
+        case SignExtend(_i, BValue() as x):
             return BValue(x.sgnd, width)
-        case Ite(CValue(True), x, _):
+        case Ite(CValue(True), x, _y):
             return x
-        case Ite(CValue(False), _, y):
+        case Ite(CValue(False), _x, y):
             return y
         case term:
             return term
@@ -800,7 +829,7 @@ def bitvector_logic(term: BTerm) -> BTerm:
             return x
         case SignExtend(i, SignExtend(j, x)):
             return SignExtend(i + j, x)
-        case Ite(_, x, y) if x == y:
+        case Ite(_c, x, y) if x == y:
             return x
         case BNot(Ite(c, x, y)):
             return Ite(c, BNot(x), BNot(y))

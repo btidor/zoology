@@ -6,7 +6,8 @@ from __future__ import annotations
 import ast
 import inspect
 import re
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
+from itertools import product
 from pathlib import Path
 from random import randint
 from subprocess import check_output
@@ -18,24 +19,32 @@ from .rewrite import RewriteMeta
 from .theory_bitvec import *
 from .theory_core import *
 
+#
+# Code analysis for the rewrite library.
+#
+
 # When handling Python ints, assume they fit in a fixed (large) number of bytes.
-MAX_WIDTH = 128
-ZERO = BValue(0, MAX_WIDTH)
+NATIVE_WIDTH = 128
+ZERO = BValue(0, NATIVE_WIDTH)
+
+MAX_WIDTH = 8
 
 
 class Casette:
     """
-    A single case in the rewrite_*() match statement.
+    A single case in the term-rewriting match statement.
 
-    In the test suite, we generate Casettes at load time (each one turns into a
-    test case) -- so this function should be fast and not do too much
-    validation.
+    In the test suite, we generate Casettes at import time (each one turns into
+    a test case) so this function should be fast and not do too much validation.
     """
 
-    def __init__(self, case: ast.match_case, prefix: list[ast.stmt]) -> None:
-        """Create a new ThinCase."""
+    def __init__(
+        self, case: ast.match_case, prefix: list[ast.stmt], sort: Sort
+    ) -> None:
+        """Create a new Casette."""
         self.case = case
         self.prefix = prefix
+        self.sort = sort
         match case.body:
             case [ast.Expr(ast.Constant(str() as s)), *_]:
                 self.id = s.split(":")[0]
@@ -45,49 +54,56 @@ class Casette:
     @classmethod
     def from_function(cls, fn: Callable[..., Any]) -> Generator[Self]:
         """Parse the given rewrite function into cases."""
+        # Expected function signature: `rewrite(term: FooTerm) -> FooTerm`.
         match ast.parse(inspect.getsource(fn)):
             case ast.Module([ast.FunctionDef(_, arguments, body)]):
                 pass
             case _:
                 raise SyntaxError("unexpected function structure")
-
-        # Assumed function signature: `rewrite(term)`.
         match arguments:
             case ast.arguments([], [ast.arg("term")], None, [], [], None, []):
                 pass
             case _:
-                raise SyntaxError("unexpected function signature")
+                raise SyntaxError("rewrite should take a single arg, `term`")
+        match fn.__annotations__["term"]:
+            case "CTerm":
+                sort = ConstraintSort
+            case "BTerm":
+                sort = BitVectorSort
+            case typ:
+                raise SyntaxError(f"unknown type annotation for `term`: {typ}")
 
-        # Expected format: zero or more variable assignments (to be parsed
-        # later), followed by a single match statement. Each case in the match
-        # statement should begin with a docstring.
+        # Expected body: docstring plus optional variable assignments (to be
+        # parsed later), followed by a single `match term`. Each case in the
+        # match statement should also begin with a docstring.
         match body[-1]:
             case ast.Match(ast.Name("term"), cases):
                 pass
             case _:
                 raise SyntaxError("rewrite should end with `match term`")
-
         for case in cases:
             match case.pattern:
-                case ast.MatchOr(patterns):  # split or-ed cases into separate tests
+                case ast.MatchOr(patterns):  # split OR patterns into separate tests
                     for pattern in patterns:
-                        yield cls(
-                            ast.match_case(pattern, case.guard, case.body), body[:-1]
-                        )
+                        subcase = ast.match_case(pattern, case.guard, case.body)
+                        yield cls(subcase, body[:-1], sort)
                 case _:
-                    yield cls(case, body[:-1])
+                    yield cls(case, body[:-1], sort)
+
+
+type Vars = tuple[tuple[str, BaseTerm], ...]
 
 
 class CaseParser:
     """Handles parsing and validation of a single rewrite case."""
 
-    def __init__(self, width: int | None) -> None:
+    def __init__(self) -> None:
         """Create a new CaseParser."""
         self.assertions = list[CTerm]()
         self.vars = dict[str, BaseTerm]()
-        self.sort = ConstraintSort() if width is None else BitVectorSort(width)
 
-    def is_equivalent(self, casette: Casette) -> bool:
+    @classmethod
+    def is_equivalent(cls, casette: Casette) -> bool:
         """
         Parse the rewrite case and check its validity.
 
@@ -100,146 +116,155 @@ class CaseParser:
         #    * define a new bool/int named "v"
         #    * return the input (original) term: Not(Symbol("v"))
         #
-        term1 = self._match(casette.case.pattern, self.sort)
-        self.vars["term"] = term1
+        for term1, vars in cls.match(casette.case.pattern, casette.sort):
+            parser = cls()
+            for name, value in vars:
+                assert name not in parser.vars, "duplicate definition"
+                parser.vars[name] = value
+            parser.vars["term"] = term1
 
-        # 1.5. Handle any assignments in the prefix.
-        for stmt in casette.prefix:
-            match stmt:
-                case ast.Expr(ast.Constant(str())):
-                    pass  # function docstring, just ignore
-                case ast.Assign([ast.Name(name)], expr):
-                    self.vars[name] = self._pyexpr(expr)
-                case _:
-                    raise SyntaxError("expected assignment")
+            # 2. Handle any assignments in the prefix.
+            for stmt in casette.prefix:
+                match stmt:
+                    case ast.Expr(ast.Constant(str())):
+                        pass  # function docstring, just ignore
+                    case ast.Assign([ast.Name(name)], expr):
+                        parser.vars[name] = parser._pyexpr(expr)
+                    case _:
+                        raise SyntaxError("expected assignment")
 
-        # 2. Parse the guard, if present. (Relies on vars defined in #1).
-        if casette.case.guard is None:
-            guard = CValue(True)
-        else:
-            guard = self._pyexpr(casette.case.guard)
-        assert isinstance(guard, CTerm)
+            # 3. Parse the guard, if present. (Relies on vars defined above.)
+            if casette.case.guard is None:
+                guard = CValue(True)
+            else:
+                guard = parser._pyexpr(casette.case.guard)
+            assert isinstance(guard, CTerm)
 
-        # 3. Parse the body. This tells us the value of the rewritten term.s
-        for stmt in casette.case.body:
-            match stmt:
-                case ast.Expr(ast.Constant(str())):
-                    pass  # skip docstring
-                case ast.Assign([ast.Name(name)], expr):
-                    self.vars[name] = self._pyexpr(expr)
-                case ast.Return(ast.expr() as expr):
-                    term2 = self._sexpr(expr)
-                    break
-                case ast.Raise(ast.Name("NotImplementedError")):
-                    raise NotImplementedError  # passthrough for unimplemented cases
-                case _:
-                    raise NotImplementedError("unknown statement", stmt)
-        else:
-            raise SyntaxError("expected trailing return")
+            # 4. Parse the body. This tells us the value of the rewritten term.
+            for stmt in casette.case.body:
+                match stmt:
+                    case ast.Expr(ast.Constant(str())):
+                        pass  # skip docstring
+                    case ast.Assign([ast.Name(name)], expr):
+                        parser.vars[name] = parser._pyexpr(expr)
+                    case ast.Return(ast.expr() as expr):
+                        term2 = parser._sexpr(expr)
+                        break
+                    case _:
+                        raise SyntaxError(f"unsupported statement: {stmt}")
+            else:
+                raise SyntaxError("expected trailing return")
 
-        # 4. Check!
-        goal = Eq(term1, term2)
-        for a in self.assertions:
-            goal = And(goal, a)
-        return not check(Not(goal), guard)
+            # 5. Check!
+            goal = Eq(term1, term2)
+            for a in parser.assertions:
+                goal = And(goal, a)
+            if check(Not(goal), guard):
+                return False
+        return True
 
-    def _match(self, pattern: ast.pattern, sort: Sort) -> BaseTerm:
-        """Recursively parse a case statement pattern."""
+    @classmethod
+    def match(
+        cls, pattern: ast.pattern, sort: Sort | None
+    ) -> Generator[tuple[BaseTerm, Vars]]:
+        """Parse a match pattern of unknown type."""
         match pattern:
-            case ast.MatchAs(None, None):
-                # Underscore name, e.g. `Ite(_, x, y)`. Generate random label.
-                return sort.symbol()
-            case (
-                ast.MatchAs(None, str() as name)
-                | ast.MatchAs(ast.MatchClass(ast.Name("CTerm"), []), str() as name)
-                | ast.MatchAs(ast.MatchClass(ast.Name("BTerm"), []), str() as name)
-            ):
-                # Proper name, e.g. `Neg(x)` (possibly qualified with a simple
-                # type). Generate symbol and add to locals.
-                self.vars[name] = sort.symbol(name)
-                return self.vars[name]
-            case ast.MatchAs(cls, str() as name) if cls:
-                # Named sub-expression, e.g. `Value(a) as x`. Process as usual,
-                # then add to locals.
-                self.vars[name] = self._match(cls, sort)
-                return self.vars[name]
-            case ast.MatchClass(ast.Name(name), patterns):
-                # Simple class, e.g. `Not(...)`. Assumed to be from the same
-                # theory as the test case.
-                return self._match_symbolic(name, patterns, self.sort)
+            case ast.MatchAs():
+                yield from cls.match_as(pattern, sort)
+            case ast.MatchClass():
+                yield from cls.match_class(pattern)
             case _:
-                raise NotImplementedError("unsupported pattern", pattern)
+                raise SyntaxError(f"unsupported match pattern: {pattern}")
 
-    def _match_symbolic(
-        self, name: str, patterns: list[ast.pattern], sort: Sort
-    ) -> BaseTerm:
-        """Parse a symbolic term from a match statement."""
-        match name, patterns:
-            case "Symbol", _:
-                raise SyntaxError("Symbol is not supported")
-            case "CValue", [ast.MatchSingleton(bool() as b)]:
-                return ConstraintSort().value(b)
-            case "BValue", [ast.MatchValue(ast.Constant(int() as i))]:
-                assert isinstance(sort, BitVectorSort)
-                return sort.value(i)
-            case "CValue", [ast.MatchAs(_, str() as name)]:
-                # Named value, e.g. `Value(foo)`. Note that `foo` is defined as
-                # a Python type, while `Value(foo)` is a symbolic type. We know
-                # that `foo` fits in the given width, though.
-                assert name not in self.vars, "duplicate name"
-                self.vars[name] = ConstraintSort().symbol(name)
-                return self.vars[name]
-            case "CValue", []:
-                # Unnamed value, e.g. `Value() [as bar]`.
-                return ConstraintSort().symbol()
-            case "BValue", [ast.MatchAs(_, str() as name)]:
-                assert isinstance(sort, BitVectorSort)
-                assert name not in self.vars, "duplicate name"
-                sym = sort.symbol(name)
-                self.vars[name] = ZeroExtend(MAX_WIDTH - sort.width, sym)
-                return sym
-            case "BValue", []:
-                assert isinstance(sort, BitVectorSort)
-                return sort.symbol()
-            case "CValue" | "BValue", [pattern]:
-                raise TypeError("unexpected match on Value(...)", pattern)
-            case "CValue" | "BValue", _:
-                raise TypeError("may only match on single-argument `Value(...)`")
+    @classmethod
+    def match_as(
+        cls, as_: ast.MatchAs, sort: Sort | None
+    ) -> Generator[tuple[BaseTerm, Vars]]:
+        """Parse a MatchAs pattern."""
+        match (as_.pattern, as_.name):
+            case (None, str() as name):
+                # Capture pattern, e.g. "x" in `Neg(x)`. Generate a symbol and
+                # add to locals.
+                assert sort, "capture pattern requires sort"
+                for sym in sort.symbol(name):
+                    yield sym, ((name, sym),)
+            case (ast.MatchClass() as class_, str() as name):
+                # AS pattern, e.g. `... as x`. Recurse on subject pattern, then
+                # add to locals.
+                for sym, vars in cls.match_class(class_):
+                    yield sym, (*vars, (name, sym))
             case _, _:
-                # Class from theory, e.g. `Not(...)`. Parse the field
-                # annotations to determine the type of the inner expressions.
-                cls = operator(name)
-                args = list[BaseTerm]()
-                filtered = filter(lambda f: f.init and not f.kw_only, fields(cls))
-                for field, pattern in zip(filtered, patterns, strict=True):
-                    if field.type == "CTerm":
-                        arg = self._match(pattern, ConstraintSort())
-                    elif field.type == "BTerm":
-                        assert isinstance(sort, BitVectorSort)
-                        arg = self._match(pattern, sort)
-                    elif field.type == "S":
-                        # When matching a generic field, check if an explicit
-                        # class was given in the case pattern.
-                        match pattern:
-                            case ast.MatchAs(ast.MatchClass(ast.Name("CTerm"))):
-                                arg = self._match(pattern, ConstraintSort())
-                            case ast.MatchAs(ast.MatchClass(ast.Name("BTerm"))):
-                                assert isinstance(self.sort, BitVectorSort)
-                                arg = self._match(pattern, self.sort)
-                            case _:
-                                arg = self._match(pattern, sort)
-                    elif field.type == "int":
-                        match pattern:
-                            case ast.MatchValue(ast.Constant(k)):
-                                arg = k
-                            case ast.MatchAs(None, _):
-                                raise NotImplementedError("parameterized ops")
-                            case _:
-                                raise NotImplementedError("unknown constant", pattern)
-                    else:
-                        raise NotImplementedError("unknown field type", field.type)
+                raise SyntaxError(f"unsupported MatchAs: {as_.pattern} as {as_.name}")
+
+    @classmethod
+    def match_class(cls, class_: ast.MatchClass) -> Generator[tuple[BaseTerm, Vars]]:
+        """Parse a MatchClass pattern."""
+        assert isinstance(class_.cls, ast.Name)
+        name, patterns = class_.cls.id, class_.patterns
+        match op_and_sort(name):
+            case theory_core.CTerm | theory_bitvec.BTerm, sort:
+                # Abstract Term, used as a zero-argument type hint in generic
+                # ops. Return an anonymous symbol (the caller will add to
+                # locals).
+                assert len(patterns) == 0
+                for sym in sort.symbol():
+                    yield sym, ()
+            case theory_core.CSymbol | theory_bitvec.BSymbol, sort:
+                # Symbol. Why would you use this in a rewrite rule?
+                raise SyntaxError("Symbol is not supported")
+            case theory_core.CValue | theory_bitvec.BValue, sort:
+                # Value. Note the scope change: the inner argument, if bound,
+                # is a native Python type (NATIVE_WIDTH).
+                match patterns:
+                    case []:
+                        # Anonymous: Value().
+                        for sym in sort.symbol():
+                            yield sym, ()
+                    case [ast.MatchSingleton(bool() as b)]:
+                        # Concrete: CValue(True).
+                        assert sort == ConstraintSort
+                        yield CValue(b), ()
+                    case [ast.MatchValue(ast.Constant(int() as i))]:
+                        # Concrete: BValue(0).
+                        assert sort == BitVectorSort
+                        for width in range(1, MAX_WIDTH + 1):
+                            yield BValue(i, width), ()
+                    case [ast.MatchAs(_, str() as name)]:
+                        # Named: Value(a).
+                        for sym in sort.symbol(name):
+                            if isinstance(sym, BTerm):
+                                sym = ZeroExtend(NATIVE_WIDTH - sym.width, sym)
+                            yield sym, ((name, sym),)
+                    case _:
+                        # Unsupported. (Don't try to match on width!)
+                        raise SyntaxError(f"unsupported Value(...): {patterns}")
+            case op, sort:
+                # Operation. Parse type annotations to determine each field's
+                # expected sort.
+                args = list[Generator[tuple[BaseTerm, Vars]]]()
+                for pat, name in zip(patterns, op.__match_args__, strict=True):
+                    match op.__dataclass_fields__[name].type:
+                        case "CTerm":
+                            arg = cls.match(pat, ConstraintSort)
+                        case "BTerm":
+                            arg = cls.match(pat, BitVectorSort)
+                        case "S":
+                            arg = cls.match(pat, None)
+                        case "int":
+                            raise NotImplementedError
+                        case typ:
+                            raise SyntaxError(f"unsupported field type: {typ}")
                     args.append(arg)
-                return cls(*args)
+                for parts in product(*args):
+                    terms = list[BaseTerm]()
+                    vars = list[tuple[str, BaseTerm]]()
+                    for term, var in parts:
+                        terms.append(term)
+                        vars.extend(var)
+                    try:
+                        yield op(*terms), tuple(vars)
+                    except SortException:
+                        pass
 
     def _pyexpr(self, expr: ast.expr) -> BaseTerm:
         """Recursively parse a Python expression."""
@@ -249,7 +274,7 @@ class CaseParser:
             case ast.Constant(bool() as b):
                 return CValue(b)
             case ast.Constant(int() as i):
-                return BValue(i, MAX_WIDTH)
+                return BValue(i, NATIVE_WIDTH)
             case ast.UnaryOp(op, operand):
                 operand = self._pyexpr(operand)
                 match op:
@@ -304,7 +329,7 @@ class CaseParser:
                     case _, ast.Eq(), _:
                         return Eq(left, right)
                     case _, ast.NotEq(), _:
-                        if isinstance(left, BTerm) and left.width < MAX_WIDTH:
+                        if isinstance(left, BTerm) and left.width < NATIVE_WIDTH:
                             raise SyntaxError("cannot use != on symbolic types")
                         return Distinct(left, right)
                     case BTerm(), ast.Lt(), BTerm():
@@ -330,11 +355,11 @@ class CaseParser:
             case ast.Attribute(ast.Name(name), "sgnd"):
                 val = self.vars[name]
                 assert isinstance(val, BTerm)
-                return SignExtend(MAX_WIDTH - val.width, val)
+                return SignExtend(NATIVE_WIDTH - val.width, val)
             case ast.Attribute(ast.Name(name), attr):
                 val = getattr(self.vars[name], attr)
                 assert isinstance(val, int)
-                return BValue(val, MAX_WIDTH)
+                return BValue(val, NATIVE_WIDTH)
             case _:
                 raise NotImplementedError(expr)
 
@@ -362,61 +387,74 @@ class CaseParser:
                 # Note that Value(...) converts an inner Python type to an outer
                 # symbolic type. We assert that the conversion does not
                 # overflow.
-                self.assertions.append(Ult(inner, BValue(1 << width, MAX_WIDTH)))
+                self.assertions.append(Ult(inner, BValue(1 << width, NATIVE_WIDTH)))
                 return Extract(width - 1, 0, inner)
             case ast.Call(ast.Name(name), args):  # Not(...), etc.
                 assert "Value" not in name, "unhandled CValue or BValue"
-                cls = operator(name)
+                cls, _ = op_and_sort(name)
                 return cls(*(self._sexpr(a) for a in args))
             case _:
                 raise NotImplementedError(expr)
 
 
-type Sort = ConstraintSort | BitVectorSort[int]
+type Sort = type[ConstraintSort] | type[BitVectorSort]
 
 
 @dataclass(frozen=True, slots=True)
 class ConstraintSort:
     """Represents the boolean sort."""
 
-    def symbol(self, name: str | None = None) -> CTerm:
+    @classmethod
+    def symbol(cls, name: str | None = None) -> Generator[CTerm]:
         """Create a Symbol with the given name."""
         if name is None:
             name = f"_{randint(0, 2**16)}"
-        return CSymbol(name.encode())
+        yield CSymbol(name.encode())
 
-    def value(self, val: bool) -> CTerm:
-        """Create a concrete Value."""
-        return CValue(val)
+    @classmethod
+    def check(cls, kind: str) -> None:
+        """Assert that the given Value or Term name matches the sort."""
+        assert kind == "CValue" or kind == "CTerm"
 
 
 @dataclass(frozen=True, slots=True)
-class BitVectorSort[N: int]:
-    """Represents a BitVector sort."""
+class BitVectorSort:
+    """Represents the range of possible BitVector sorts."""
 
-    width: N
-
-    def symbol(self, name: str | None = None) -> BTerm:
-        """Create a Symbol with the given name."""
+    @classmethod
+    def symbol(cls, name: str | None = None) -> Generator[BTerm]:
+        """Create Symbols with the given name, all widths."""
         if name is None:
             name = f"_{randint(0, 2**16)}"
-        return BSymbol(name.encode(), self.width)
+        for width in range(1, MAX_WIDTH + 1):
+            yield BSymbol(name.encode(), width)
 
-    def value(self, val: int) -> BTerm:
-        """Create a concrete Value."""
-        assert 0 <= val < (1 << self.width)
-        return BValue(val, self.width)
+    @classmethod
+    def check(cls, kind: str) -> None:
+        """Assert that the given Value or Term name matches the sort."""
+        assert kind == "BValue" or kind == "BTerm"
 
 
-def operator(name: str) -> Any:
-    """Extract the given named operator from the theories."""
+def op_and_sort(name: str) -> tuple[type[BaseTerm], Sort]:
+    """Extract the named operator and its sort from the theories."""
     if hasattr(theory_core, name):
-        return getattr(theory_core, name)
+        op = getattr(theory_core, name)
     elif hasattr(theory_bitvec, name):
-        return getattr(theory_bitvec, name)
+        op = getattr(theory_bitvec, name)
     else:
         raise KeyError(f"operator not found: {name}")
 
+    if issubclass(op, CTerm):
+        return op, ConstraintSort
+    elif issubclass(op, BTerm):
+        return op, BitVectorSort
+    else:
+        raise TypeError(f"unexpected operator: {op}")
+
+
+#
+# Code generation for the high-level SMT library, `composite.py`.
+#
 
 COMPOSITE_PY = Path(__file__).parent / "composite.py"
 
@@ -447,11 +485,11 @@ Warning: do not edit! To regenerate, run:
 from __future__ import annotations
 
 import abc
-from dataclasses import InitVar, dataclass, field, fields
+from dataclasses import InitVar, dataclass, field
 from functools import reduce
 from typing import Any, ClassVar, cast, override
 
-from .theory_core import BaseTerm, DumpContext
+from .theory_core import BaseTerm, DumpContext, SortException
 
 
 """)
