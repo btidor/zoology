@@ -14,17 +14,11 @@ from dataclasses import dataclass
 from typing import ClassVar, override
 
 from .theory_bitvec import BTerm, BValue
-from .theory_core import BaseTerm, DumpContext, SortException
+from .theory_core import BaseTerm, DumpContext
 
 
 @dataclass(frozen=True, slots=True)
 class ATerm(BaseTerm):
-    def check(self, partner: BaseTerm) -> None:
-        if not isinstance(partner, ATerm):
-            raise SortException(self.__class__, partner.__class__)
-        elif self.width() != partner.width():
-            raise SortException(self.width(), partner.width())
-
     @abc.abstractmethod
     def width(self) -> tuple[int, int]: ...
 
@@ -76,7 +70,8 @@ class Select(BTerm):
 
     @override
     def __post_init__(self) -> None:
-        _, v = self.array.width()
+        k, v = self.array.width()
+        assert k == self.key.width
         object.__setattr__(self, "width", v)
 
 

@@ -156,7 +156,10 @@ class CaseParser:
                 raise SyntaxError("expected trailing return")
 
             # 5. Check!
-            goal = Eq(term1, term2)
+            try:
+                goal = Eq(term1, term2)
+            except AssertionError:
+                continue
             for a in parser.assertions:
                 goal = And(goal, a)
             if check(Not(goal), guard):
@@ -201,18 +204,19 @@ class CaseParser:
         """Parse a MatchClass pattern."""
         assert isinstance(class_.cls, ast.Name)
         name, patterns = class_.cls.id, class_.patterns
-        match op_and_sort(name):
-            case theory_core.CTerm | theory_bitvec.BTerm, sort:
+        op, sort = op_and_sort(name)
+        match op:
+            case theory_core.CTerm | theory_bitvec.BTerm:
                 # Abstract Term, used as a zero-argument type hint in generic
                 # ops. Return an anonymous symbol (the caller will add to
                 # locals).
                 assert len(patterns) == 0
                 for sym in sort.symbol():
                     yield sym, ()
-            case theory_core.CSymbol | theory_bitvec.BSymbol, sort:
+            case theory_core.CSymbol | theory_bitvec.BSymbol:
                 # Symbol. Why would you use this in a rewrite rule?
                 raise SyntaxError("Symbol is not supported")
-            case theory_core.CValue | theory_bitvec.BValue, sort:
+            case theory_core.CValue | theory_bitvec.BValue:
                 # Value. Note the scope change: the inner argument, if bound,
                 # is a native Python type (NATIVE_WIDTH).
                 match patterns:
@@ -233,12 +237,14 @@ class CaseParser:
                         # Named: Value(a).
                         for sym in sort.symbol(name):
                             if isinstance(sym, BTerm):
-                                sym = ZeroExtend(NATIVE_WIDTH - sym.width, sym)
-                            yield sym, ((name, sym),)
+                                py = ZeroExtend(NATIVE_WIDTH - sym.width, sym)
+                                yield sym, ((name, py),)
+                            else:
+                                yield sym, ((name, sym),)
                     case _:
                         # Unsupported. (Don't try to match on width!)
                         raise SyntaxError(f"unsupported Value(...): {patterns}")
-            case op, sort:
+            case _:
                 # Operation. Parse type annotations to determine each field's
                 # expected sort.
                 args = list[Generator[tuple[BaseTerm, Vars]]]()
@@ -263,7 +269,7 @@ class CaseParser:
                         vars.extend(var)
                     try:
                         yield op(*terms), tuple(vars)
-                    except SortException:
+                    except AssertionError:
                         pass
 
     def _pyexpr(self, expr: ast.expr) -> BaseTerm:
@@ -411,11 +417,6 @@ class ConstraintSort:
             name = f"_{randint(0, 2**16)}"
         yield CSymbol(name.encode())
 
-    @classmethod
-    def check(cls, kind: str) -> None:
-        """Assert that the given Value or Term name matches the sort."""
-        assert kind == "CValue" or kind == "CTerm"
-
 
 @dataclass(frozen=True, slots=True)
 class BitVectorSort:
@@ -428,11 +429,6 @@ class BitVectorSort:
             name = f"_{randint(0, 2**16)}"
         for width in range(1, MAX_WIDTH + 1):
             yield BSymbol(name.encode(), width)
-
-    @classmethod
-    def check(cls, kind: str) -> None:
-        """Assert that the given Value or Term name matches the sort."""
-        assert kind == "BValue" or kind == "BTerm"
 
 
 def op_and_sort(name: str) -> tuple[type[BaseTerm], Sort]:
@@ -489,7 +485,7 @@ from dataclasses import InitVar, dataclass, field
 from functools import reduce
 from typing import Any, ClassVar, cast, override
 
-from .theory_core import BaseTerm, DumpContext, SortException
+from .theory_core import BaseTerm, DumpContext
 
 
 """)

@@ -15,7 +15,7 @@ from dataclasses import InitVar, dataclass, field
 from functools import reduce
 from typing import Any, ClassVar, cast, override
 
-from .theory_core import BaseTerm, DumpContext, SortException
+from .theory_core import BaseTerm, DumpContext
 
 
 class RewriteMeta(abc.ABCMeta):
@@ -49,10 +49,7 @@ class RewriteMeta(abc.ABCMeta):
 
 
 @dataclass(frozen=True, slots=True)
-class CTerm(BaseTerm, metaclass=RewriteMeta):
-    def check(self, partner: BaseTerm) -> None:
-        if not isinstance(partner, CTerm):
-            raise SortException(self.__class__, partner.__class__)
+class CTerm(BaseTerm, metaclass=RewriteMeta): ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -119,7 +116,7 @@ class Eq[S: BaseTerm](CTerm):
     right: S
 
     def __post_init__(self) -> None:
-        self.left.check(self.right)
+        assert getattr(self.left, "width", None) == getattr(self.right, "width", None)
 
 
 @dataclass(frozen=True, slots=True)
@@ -129,7 +126,7 @@ class Distinct[S: BaseTerm](CTerm):
     right: S
 
     def __post_init__(self) -> None:
-        self.left.check(self.right)
+        assert getattr(self.left, "width", None) == getattr(self.right, "width", None)
 
 
 @dataclass(frozen=True, slots=True)
@@ -143,12 +140,6 @@ class CIte(CTerm):
 @dataclass(frozen=True, slots=True)
 class BTerm(BaseTerm, metaclass=RewriteMeta):
     width: int = field(init=False)
-
-    def check(self, partner: BaseTerm) -> None:
-        if not isinstance(partner, BTerm):
-            raise SortException(self.__class__, partner.__class__)
-        elif self.width != partner.width:
-            raise SortException(self.width, partner.width)
 
     @abc.abstractmethod
     def __post_init__(self) -> None: ...
@@ -212,7 +203,7 @@ class BinaryOp(BTerm):
     right: BTerm
 
     def __post_init__(self) -> None:
-        self.left.check(self.right)
+        assert self.left.width == self.right.width
         object.__setattr__(self, "width", self.left.width)
 
 
@@ -222,7 +213,7 @@ class CompareOp(CTerm):
     right: BTerm
 
     def __post_init__(self) -> None:
-        self.left.check(self.right)
+        assert self.left.width == self.right.width
 
 
 @dataclass(frozen=True, slots=True)
@@ -350,8 +341,7 @@ class Comp(BTerm):
     right: BTerm
 
     def __post_init__(self) -> None:
-        self.left.check(self.right)
-        object.__setattr__(self, "width", 1)
+        assert self.left.width == self.right.width
 
 
 @dataclass(frozen=True, slots=True)
@@ -414,6 +404,7 @@ class RotateLeft(SingleParamOp):
     op: ClassVar[bytes] = b"rotate_left"
 
     def __post_init__(self) -> None:
+        assert self.i >= 0
         object.__setattr__(self, "width", self.term.width)
 
 
@@ -422,6 +413,7 @@ class RotateRight(SingleParamOp):
     op: ClassVar[bytes] = b"rotate_right"
 
     def __post_init__(self) -> None:
+        assert self.i >= 0
         object.__setattr__(self, "width", self.term.width)
 
 
@@ -468,18 +460,12 @@ class Ite(BTerm):
     right: BTerm
 
     def __post_init__(self) -> None:
-        self.left.check(self.right)
+        assert self.left.width == self.right.width
         object.__setattr__(self, "width", self.left.width)
 
 
 @dataclass(frozen=True, slots=True)
 class ATerm(BaseTerm):
-    def check(self, partner: BaseTerm) -> None:
-        if not isinstance(partner, ATerm):
-            raise SortException(self.__class__, partner.__class__)
-        elif self.width() != partner.width():
-            raise SortException(self.width(), partner.width())
-
     @abc.abstractmethod
     def width(self) -> tuple[int, int]: ...
 
@@ -531,7 +517,8 @@ class Select(BTerm):
 
     @override
     def __post_init__(self) -> None:
-        _, v = self.array.width()
+        k, v = self.array.width()
+        assert k == self.key.width
         object.__setattr__(self, "width", v)
 
 
