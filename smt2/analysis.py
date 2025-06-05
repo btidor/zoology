@@ -361,14 +361,16 @@ class CaseParser:
                         return Sge(left, right)
                     case _:
                         raise SyntaxError(f"unsupported cmpop: {op}")
-            case ast.BoolOp(op, [left, right]):
-                left, right = self.pyexpr(left), self.pyexpr(right)
-                assert isinstance(left, CTerm) and isinstance(right, CTerm)
+            case ast.BoolOp(op, values):
+                terms = list[CTerm]()
+                for v in values:
+                    assert isinstance(x := self.pyexpr(v), CTerm)
+                    terms.append(x)
                 match op:
                     case ast.And():
-                        return And(left, right)
+                        return reduce(And, terms)
                     case ast.Or():
-                        return Or(left, right)
+                        return reduce(Or, terms)
                     case _:
                         raise SyntaxError(f"unsupported boolop: {op}")
             case ast.Attribute(ast.Name(name), "sgnd"):
