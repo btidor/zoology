@@ -12,7 +12,7 @@ from pathlib import Path
 from random import randint
 from subprocess import check_output
 from types import ModuleType
-from typing import Any, Callable, Generator, Self
+from typing import Any, Callable, Iterable, Self
 
 from . import rewrite, theory_array, theory_bitvec, theory_core
 from .rewrite import RewriteMeta
@@ -52,7 +52,7 @@ class Casette:
                 raise SyntaxError("every case should begin with a docstring")
 
     @classmethod
-    def from_function(cls, fn: Callable[..., Any]) -> Generator[Self]:
+    def from_function(cls, fn: Callable[..., Any]) -> Iterable[Self]:
         """Parse the given rewrite function into cases."""
         # Expected function signature: `rewrite(term: FooTerm) -> FooTerm`.
         match ast.parse(inspect.getsource(fn)):
@@ -169,7 +169,7 @@ class CaseParser:
     @classmethod
     def match(
         cls, pattern: ast.pattern, sort: Sort | None
-    ) -> Generator[tuple[BaseTerm, Vars]]:
+    ) -> Iterable[tuple[BaseTerm, Vars]]:
         """Parse a match pattern of unknown type."""
         match pattern:
             case ast.MatchAs():
@@ -182,7 +182,7 @@ class CaseParser:
     @classmethod
     def match_as(
         cls, as_: ast.MatchAs, sort: Sort | None
-    ) -> Generator[tuple[BaseTerm, Vars]]:
+    ) -> Iterable[tuple[BaseTerm, Vars]]:
         """Parse a MatchAs pattern."""
         match (as_.pattern, as_.name):
             case (None, str() as name):
@@ -200,7 +200,7 @@ class CaseParser:
                 raise SyntaxError(f"unsupported MatchAs: {as_.pattern} as {as_.name}")
 
     @classmethod
-    def match_class(cls, class_: ast.MatchClass) -> Generator[tuple[BaseTerm, Vars]]:
+    def match_class(cls, class_: ast.MatchClass) -> Iterable[tuple[BaseTerm, Vars]]:
         """Parse a MatchClass pattern."""
         assert isinstance(class_.cls, ast.Name)
         name, patterns = class_.cls.id, class_.patterns
@@ -247,7 +247,7 @@ class CaseParser:
             case _:
                 # Operation. Parse type annotations to determine each field's
                 # expected sort.
-                args = list[Generator[tuple[BaseTerm, Vars]]]()
+                args = list[Iterable[tuple[BaseTerm | int, Vars]]]()
                 for pat, name in zip(patterns, op.__match_args__, strict=True):
                     match op.__dataclass_fields__[name].type:
                         case "CTerm":
@@ -411,7 +411,7 @@ class ConstraintSort:
     """Represents the boolean sort."""
 
     @classmethod
-    def symbol(cls, name: str | None = None) -> Generator[CTerm]:
+    def symbol(cls, name: str | None = None) -> Iterable[CTerm]:
         """Create a Symbol with the given name."""
         if name is None:
             name = f"_{randint(0, 2**16)}"
@@ -423,7 +423,7 @@ class BitVectorSort:
     """Represents the range of possible BitVector sorts."""
 
     @classmethod
-    def symbol(cls, name: str | None = None) -> Generator[BTerm]:
+    def symbol(cls, name: str | None = None) -> Iterable[BTerm]:
         """Create Symbols with the given name, all widths."""
         if name is None:
             name = f"_{randint(0, 2**16)}"
