@@ -303,7 +303,7 @@ class CaseParser:
                         assert isinstance(operand, CTerm)
                         return Not(operand)
                     case _:
-                        raise NotImplementedError(op)
+                        raise SyntaxError(f"unsupported unaryop: {op}")
             case ast.BinOp(left, op, right):
                 left, right = self.pyexpr(left), self.pyexpr(right)
                 assert isinstance(left, BTerm) and isinstance(right, BTerm)
@@ -338,7 +338,7 @@ class CaseParser:
                         self.assertions.append(nonneg)  # else incorrect result
                         return Lshr(left, right)
                     case _:
-                        raise NotImplementedError(op)
+                        raise SyntaxError(f"unsupported operator: {op}")
             case ast.Compare(left, [op], [right]):
                 left, right = self.pyexpr(left), self.pyexpr(right)
                 match left, op, right:
@@ -362,7 +362,7 @@ class CaseParser:
                     case BTerm(), ast.GtE(), BTerm():
                         return Sge(left, right)
                     case _:
-                        raise NotImplementedError(op)
+                        raise SyntaxError(f"unsupported cmpop: {op}")
             case ast.BoolOp(op, [left, right]):
                 left, right = self.pyexpr(left), self.pyexpr(right)
                 assert isinstance(left, CTerm) and isinstance(right, CTerm)
@@ -372,7 +372,7 @@ class CaseParser:
                     case ast.Or():
                         return Or(left, right)
                     case _:
-                        raise NotImplementedError(op)
+                        raise SyntaxError(f"unsupported boolop: {op}")
             case ast.Attribute(ast.Name(name), "sgnd"):
                 val = self.vars[name]
                 assert isinstance(val, BTerm)
@@ -382,15 +382,13 @@ class CaseParser:
                 assert isinstance(val, int)
                 return BValue(val, NATIVE_WIDTH)
             case _:
-                raise NotImplementedError(expr)
+                raise SyntaxError(f"unsupported pyexpr: {expr}")
 
     def sexpr(self, expr: ast.expr) -> BaseTerm:
         """Recursively parse a symbolic expression."""
         match expr:
             case ast.Name(name):
                 return self.vars[name]
-            case ast.Call(ast.Name("cast"), [_, arg]):
-                return self.sexpr(arg)  # ignore casts
             case ast.Call(ast.Name("Symbol")):
                 raise SyntaxError("Symbol is not supported")
             case ast.Call(ast.Name("CValue"), [arg]):
@@ -410,7 +408,7 @@ class CaseParser:
                 cls, _ = op_and_sort(name)
                 return cls(*(self.sexpr(a) for a in args))
             case _:
-                raise NotImplementedError(expr)
+                raise SyntaxError(f"unsupported sexpr: {expr}")
 
 
 def simplify(term: BaseTerm) -> int:
