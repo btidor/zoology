@@ -300,6 +300,9 @@ class CaseParser:
                     case ast.Not():
                         assert isinstance(operand, CTerm)
                         return Not(operand)
+                    case ast.USub():
+                        assert isinstance(operand, BTerm)
+                        return Neg(operand)
                     case _:
                         raise SyntaxError(f"unsupported unaryop: {op}")
             case ast.BinOp(left, op, right):

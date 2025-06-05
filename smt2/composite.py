@@ -709,10 +709,14 @@ def bitvector_folding(term: BTerm) -> BTerm:
             return BValue((a >> b) % modulus, width)
         case Sdiv(BValue() as x, BValue(b) as y) if b != 0:
             return BValue(x.sgnd // y.sgnd, width)
-        case Srem(BValue() as x, BValue(b) as y) if b != 0:
-            r = abs(x.sgnd % y.sgnd)
-            r = r if x.sgnd >= 0 else -r
-            return BValue(r, width)
+        case Srem(BValue() as x, BValue(b) as y) if x.sgnd >= 0 and y.sgnd > 0:
+            return BValue(x.sgnd % y.sgnd, width)
+        case Srem(BValue() as x, BValue(b) as y) if x.sgnd >= 0 and y.sgnd < 0:
+            return BValue(x.sgnd % -y.sgnd, width)
+        case Srem(BValue() as x, BValue(b) as y) if x.sgnd < 0 and y.sgnd > 0:
+            return BValue(-(x.sgnd % y.sgnd), width)
+        case Srem(BValue() as x, BValue(b) as y) if x.sgnd < 0 and y.sgnd < 0:
+            return BValue(x.sgnd % y.sgnd, width)
         case Smod(BValue() as x, BValue(b) as y) if b != 0:
             return BValue(x.sgnd % y.sgnd, width)
         case Ashr(BValue() as x, BValue(b)):
