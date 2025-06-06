@@ -568,7 +568,7 @@ from __future__ import annotations
 import abc
 from dataclasses import InitVar, dataclass, field
 from functools import reduce
-from typing import Any, ClassVar, cast, override
+from typing import Any, ClassVar, override
 
 from .theory_core import BaseTerm, DumpContext
 
