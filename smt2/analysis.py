@@ -19,9 +19,7 @@ from .rewrite import RewriteMeta
 from .theory_bitvec import *
 from .theory_core import *
 
-#
-# Code analysis for the rewrite library.
-#
+## Code analysis for the rewrite library.
 
 # When handling Python ints, assume they fit in a fixed (large) number of bytes.
 NATIVE_WIDTH = 128
@@ -408,12 +406,15 @@ class CaseParser:
             case ast.Call(ast.Name("BValue"), [arg, width]):
                 inner = self.pyexpr(arg)
                 assert isinstance(inner, BTerm)
-
                 width = simplify(self.pyexpr(width))
                 # Note that Value(...) converts an inner Python type to an outer
-                # symbolic type. We assert that the conversion does not
-                # overflow.
-                self.assertions.append(Ult(inner, BValue(1 << width, NATIVE_WIDTH)))
+                # symbolic type. We assert that the argument is within range.
+                self.assertions.append(
+                    Sle(BValue(-(1 << (width - 1)), NATIVE_WIDTH), inner)
+                )
+                self.assertions.append(
+                    Sle(inner, BValue((1 << width) - 1, NATIVE_WIDTH))
+                )
                 return Extract(width - 1, 0, inner)
             case ast.Call(ast.Name(name), args):  # Not(...), etc.
                 assert "Value" not in name, "unhandled CValue or BValue"
@@ -517,9 +518,7 @@ class Op:
             raise TypeError(f"unexpected operator: {self.cls}")
 
 
-#
-# Code generation for the high-level SMT library, `composite.py`.
-#
+## Code generation for the high-level SMT library, `composite.py`.
 
 COMPOSITE_PY = Path(__file__).parent / "composite.py"
 
