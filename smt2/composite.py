@@ -676,6 +676,23 @@ def bitvector_reduction(term: BTerm) -> BTerm:
             return Ite(Eq(x, y), BValue(1, 1), BValue(0, 1))
         case Sub(x, y):
             return Add(Add(x, BNot(y)), BValue(1, term.width))
+        case Repeat(1, x):
+            return x
+        case Repeat(i, x) if i > 1:
+            return Concat((x, Repeat(i - 1, x)))
+        case RotateLeft(0, x):
+            return x
+        case RotateLeft(i, x) if i > 0:
+            return Concat(
+                (
+                    Extract(term.width - i - 1, 0, x),
+                    Extract(term.width - 1, term.width - i, x),
+                )
+            )
+        case RotateRight(0, x):
+            return x
+        case RotateRight(i, x) if i > 0:
+            return Concat((Extract(i - 1, 0, x), Extract(term.width - 1, i, x)))
         case _:
             return term
 
@@ -709,18 +726,16 @@ def bitvector_folding(term: BTerm) -> BTerm:
             return BValue((a >> b) % modulus, width)
         case Sdiv(BValue() as x, BValue(b) as y) if b != 0:
             return BValue(x.sgnd // y.sgnd, width)
-        case Srem(BValue() as x, BValue(b) as y) if x.sgnd >= 0 and y.sgnd > 0:
+        case Srem(BValue() as x, BValue() as y) if x.sgnd >= 0 and y.sgnd > 0:
             return BValue(x.sgnd % y.sgnd, width)
-        case Srem(BValue() as x, BValue(b) as y) if x.sgnd >= 0 and y.sgnd < 0:
+        case Srem(BValue() as x, BValue() as y) if x.sgnd >= 0 and y.sgnd < 0:
             return BValue(x.sgnd % -y.sgnd, width)
-        case Srem(BValue() as x, BValue(b) as y) if x.sgnd < 0 and y.sgnd > 0:
+        case Srem(BValue() as x, BValue() as y) if x.sgnd < 0 and y.sgnd > 0:
             return BValue(-(x.sgnd % y.sgnd), width)
-        case Srem(BValue() as x, BValue(b) as y) if x.sgnd < 0 and y.sgnd < 0:
+        case Srem(BValue() as x, BValue() as y) if x.sgnd < 0 and y.sgnd < 0:
             return BValue(x.sgnd % y.sgnd, width)
         case Smod(BValue() as x, BValue(b) as y) if b != 0:
             return BValue(x.sgnd % y.sgnd, width)
-        case Ashr(BValue() as x, BValue(b)):
-            return BValue(x.sgnd >> b, width)
         case ZeroExtend(_i, BValue(a)):
             return BValue(a, width)
         case SignExtend(_i, BValue() as x):

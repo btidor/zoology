@@ -239,6 +239,29 @@ def bitvector_reduction(term: BTerm) -> BTerm:
         case Sub(x, y):
             """sub: X - Y <=> X + ~Y + 1"""
             return Add(Add(x, BNot(y)), BValue(1, term.width))
+        case Repeat(1, x):
+            """repeat.w"""
+            return x
+        case Repeat(i, x) if i > 1:
+            """repeat.n"""
+            return Concat((x, Repeat(i - 1, x)))
+        case RotateLeft(0, x):
+            """rotl.z"""
+            return x
+        case RotateLeft(i, x) if i > 0:
+            """rotl.n"""
+            return Concat(
+                (
+                    Extract(term.width - i - 1, 0, x),
+                    Extract(term.width - 1, term.width - i, x),
+                )
+            )
+        case RotateRight(0, x):
+            """rotr.z"""
+            return x
+        case RotateRight(i, x) if i > 0:
+            """rotr.n"""
+            return Concat((Extract(i - 1, 0, x), Extract(term.width - 1, i, x)))
         case _:
             return term
 
@@ -285,16 +308,16 @@ def bitvector_folding(term: BTerm) -> BTerm:
         case Sdiv(BValue() as x, BValue(b) as y) if b != 0:
             """sdiv"""
             return BValue(x.sgnd // y.sgnd, width)
-        case Srem(BValue() as x, BValue(b) as y) if x.sgnd >= 0 and y.sgnd > 0:
+        case Srem(BValue() as x, BValue() as y) if x.sgnd >= 0 and y.sgnd > 0:
             """srem"""
             return BValue(x.sgnd % y.sgnd, width)
-        case Srem(BValue() as x, BValue(b) as y) if x.sgnd >= 0 and y.sgnd < 0:
+        case Srem(BValue() as x, BValue() as y) if x.sgnd >= 0 and y.sgnd < 0:
             """srem"""
             return BValue(x.sgnd % -y.sgnd, width)
-        case Srem(BValue() as x, BValue(b) as y) if x.sgnd < 0 and y.sgnd > 0:
+        case Srem(BValue() as x, BValue() as y) if x.sgnd < 0 and y.sgnd > 0:
             """srem"""
             return BValue(-(x.sgnd % y.sgnd), width)
-        case Srem(BValue() as x, BValue(b) as y) if x.sgnd < 0 and y.sgnd < 0:
+        case Srem(BValue() as x, BValue() as y) if x.sgnd < 0 and y.sgnd < 0:
             """srem"""
             return BValue(x.sgnd % y.sgnd, width)
         case Smod(BValue() as x, BValue(b) as y) if b != 0:
@@ -302,22 +325,13 @@ def bitvector_folding(term: BTerm) -> BTerm:
             return BValue(x.sgnd % y.sgnd, width)
         case Ashr(BValue() as x, BValue(b)):
             """ashr"""
-            return BValue(x.sgnd >> b, width)
-        case Repeat(_i, BValue(a)):
-            """repeat"""
             raise NotImplementedError
         case ZeroExtend(_i, BValue(a)):
-            """zero_extend"""
+            """zext"""
             return BValue(a, width)
         case SignExtend(_i, BValue() as x):
-            """sign_extend"""
+            """sext"""
             return BValue(x.sgnd, width)
-        case RotateLeft(_i, BValue(a)):
-            """rotate_left"""
-            raise NotImplementedError
-        case RotateRight(_i, BValue(a)):
-            """rotate_right"""
-            raise NotImplementedError
         case Ite(CValue(True), x, _y):
             """ite.t"""
             return x
