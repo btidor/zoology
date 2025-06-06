@@ -269,6 +269,8 @@ class CaseParser:
                             arg = cls.match(pat, None)
                         case "int" | "bool":
                             arg = cls.match_param(pat)
+                        case "tuple[BTerm, ...]":
+                            raise SyntaxError("matching on Concat is not supported")
                     args.append(arg)
                 for parts in product(*args):
                     terms = list[BaseTerm | int]()
@@ -432,6 +434,9 @@ class CaseParser:
                 for a, f in zip(args, op.fields, strict=True):
                     if f == "int":
                         res.append(simplify(self.pyexpr(a)))
+                    elif f == "tuple[BTerm, ...]":
+                        assert isinstance(a, ast.Tuple)
+                        res.append(tuple(self.sexpr(s) for s in a.elts))
                     else:
                         res.append(self.sexpr(a))
                 return Op(name).cls(*res)
@@ -488,6 +493,7 @@ type Arg = (
     | Literal["S"]
     | Literal["int"]
     | Literal["bool"]
+    | Literal["tuple[BTerm, ...]"]
 )
 
 
@@ -513,7 +519,7 @@ class Op:
         args = list[Arg]()
         for name in self.cls.__match_args__:
             typ: str = self.cls.__dataclass_fields__[name].type
-            if typ in ("CTerm", "BTerm", "S", "int", "bool"):
+            if typ in ("CTerm", "BTerm", "S", "int", "bool", "tuple[BTerm, ...]"):
                 args.append(typ)
             elif typ.startswith("InitVar["):
                 pass
