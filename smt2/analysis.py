@@ -128,11 +128,14 @@ class CaseParser:
         #    the process, build up a list of variables bound by the match
         #    statement.
         for term1, vars in cls.match_class(rw.pattern):
+            # define the constructed input term as "term"
+            vars = (*vars, ("term", term1))
+
+            # create a new local scope, add bound variables
             parser = cls()
             for name, value in vars:
                 assert name not in parser.vars, "duplicate definition"
                 parser.vars[name] = value
-            parser.vars["term"] = term1
 
             # 2. Handle any assignments in the prefix.
             for stmt in rw.prefix:
@@ -143,14 +146,13 @@ class CaseParser:
                         raise SyntaxError("expected assignment")
 
             # 3. Parse the guard, if present. (Relies on vars defined above.)
-            #    Check it, too. If the guard is false, don't try to construct
-            #    the body.
             if rw.guard is None:
                 guard = CValue(True)
             else:
                 guard = parser.pyexpr(rw.guard)
                 assert isinstance(guard, CTerm)
 
+            # if the guard is unsatisfiable, don't try to construct the body
             if not check(guard):
                 continue
 
