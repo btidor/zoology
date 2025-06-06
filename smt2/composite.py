@@ -567,7 +567,7 @@ def constraint_reduction(term: CTerm) -> CTerm:
             return Slt(y, x)
         case Sge(x, y):
             return Sle(y, x)
-        case term:
+        case _:
             return term
 
 
@@ -591,7 +591,7 @@ def constraint_folding(term: CTerm) -> CTerm:
             return CValue(x.sgnd < y.sgnd)
         case Sle(BValue() as x, BValue() as y):
             return CValue(x.sgnd <= y.sgnd)
-        case term:
+        case _:
             return term
 
 
@@ -658,7 +658,7 @@ def constraint_logic(term: CTerm) -> CTerm:
             return CValue(True)
         case Ule(BValue(a), ZeroExtend(_i, x)) if a >= (1 << x.width):
             return CValue(False)
-        case term:
+        case _:
             return term
 
 
@@ -676,7 +676,7 @@ def bitvector_reduction(term: BTerm) -> BTerm:
             return Ite(Eq(x, y), BValue(1, 1), BValue(0, 1))
         case Sub(x, y):
             return Add(Add(x, BNot(y)), BValue(1, term.width))
-        case term:
+        case _:
             return term
 
 
@@ -729,7 +729,7 @@ def bitvector_folding(term: BTerm) -> BTerm:
             return x
         case Ite(CValue(False), _x, y):
             return y
-        case term:
+        case _:
             return term
 
 
@@ -830,7 +830,7 @@ def bitvector_logic(term: BTerm) -> BTerm:
             return Ite(c, BOr(x, z), BOr(y, z))
         case BXor(Ite(c, x, y), z) | BXor(z, Ite(c, x, y)):
             return Ite(c, BXor(x, z), BXor(y, z))
-        case term:
+        case _:
             return term
 
 
@@ -855,5 +855,5 @@ def bitvector_yolo(term: BTerm) -> BTerm:
                 x.width,
                 Lshr(Concat(tuple(rest)), BValue(a - x.width, term.width - x.width)),
             )
-        case term:
+        case _:
             return term

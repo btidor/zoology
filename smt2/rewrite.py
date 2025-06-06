@@ -75,8 +75,7 @@ def constraint_reduction(term: CTerm) -> CTerm:
         case Sge(x, y):
             """sge: X >= Y <=> Y <= X"""
             return Sle(y, x)
-        case term:
-            """fallthrough"""
+        case _:
             return term
 
 
@@ -110,8 +109,7 @@ def constraint_folding(term: CTerm) -> CTerm:
         case Sle(BValue() as x, BValue() as y):
             """sle"""
             return CValue(x.sgnd <= y.sgnd)
-        case term:
-            """fallthrough"""
+        case _:
             return term
 
 
@@ -216,8 +214,7 @@ def constraint_logic(term: CTerm) -> CTerm:
         case Ule(BValue(a), ZeroExtend(_i, x)) if a >= (1 << x.width):
             """ule.vz"""
             return CValue(False)
-        case term:
-            """fallthrough"""
+        case _:
             return term
 
 
@@ -242,8 +239,7 @@ def bitvector_reduction(term: BTerm) -> BTerm:
         case Sub(x, y):
             """sub: X - Y <=> X + ~Y + 1"""
             return Add(Add(x, BNot(y)), BValue(1, term.width))
-        case term:
-            """fallthrough"""
+        case _:
             return term
 
 
@@ -328,8 +324,7 @@ def bitvector_folding(term: BTerm) -> BTerm:
         case Ite(CValue(False), _x, y):
             """ite.f"""
             return y
-        case term:
-            """fallthrough"""
+        case _:
             return term
 
 
@@ -484,8 +479,7 @@ def bitvector_logic(term: BTerm) -> BTerm:
         case BXor(Ite(c, x, y), z) | BXor(z, Ite(c, x, y)):
             """xor.ite"""
             return Ite(c, BXor(x, z), BXor(y, z))
-        case term:
-            """fallthrough"""
+        case _:
             return term
 
 
@@ -520,5 +514,5 @@ def bitvector_yolo(term: BTerm) -> BTerm:
                 x.width,
                 Lshr(Concat(tuple(rest)), BValue(a - x.width, term.width - x.width)),
             )
-        case term:
+        case _:
             return term

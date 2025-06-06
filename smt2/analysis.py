@@ -29,34 +29,39 @@ ZERO = BValue(0, NATIVE_WIDTH)
 
 MAX_WIDTH = 8
 
+type Vars = tuple[tuple[str, BaseTerm], ...]
 
-class Casette:
+
+class RewriteCase:
     """
     A single case in the term-rewriting match statement.
 
-    In the test suite, we generate Casettes at import time (each one turns into
-    a test case) so this function should be fast and not do too much validation.
+    In the test suite, we generate RewriteCases at import time (each one turns
+    into a test case) so this function should be fast and should not perform
+    more validation than needed.
     """
 
     def __init__(
-        self, case: ast.match_case, prefix: list[ast.stmt], sort: Sort
+        self,
+        id: str,
+        pattern: ast.MatchClass,
+        guard: ast.expr | None,
+        prefix: list[ast.stmt],
+        body: list[ast.stmt],
     ) -> None:
-        """Create a new Casette."""
-        self.case = case
+        """Create a new RewriteCase."""
+        self.id = id
+        self.pattern = pattern
+        self.guard = guard
         self.prefix = prefix
-        self.sort = sort
-        match case.body:
-            case [ast.Expr(ast.Constant(str() as s)), *_]:
-                self.id = s.split(":")[0]
-            case _:
-                raise SyntaxError("every case should begin with a docstring")
+        self.body = body
 
     @classmethod
     def from_function(cls, fn: Callable[..., Any]) -> Iterable[Self]:
         """Parse the given rewrite function into cases."""
-        # Expected function signature: `rewrite(term: FooTerm) -> FooTerm`.
+        # Expected function signature: `rewrite(term)`.
         match ast.parse(inspect.getsource(fn)):
-            case ast.Module([ast.FunctionDef(_, arguments, body)]):
+            case ast.Module([ast.FunctionDef(_, arguments, fnbody)]):
                 pass
             case _:
                 raise SyntaxError("unexpected function structure")
@@ -65,33 +70,45 @@ class Casette:
                 pass
             case _:
                 raise SyntaxError("rewrite should take a single arg, `term`")
-        match fn.__annotations__["term"]:
-            case "CTerm":
-                sort = ConstraintSort
-            case "BTerm":
-                sort = BitVectorSort
-            case typ:
-                raise SyntaxError(f"unknown type annotation for `term`: {typ}")
 
-        # Expected body: docstring plus optional variable assignments (to be
-        # parsed later), followed by a single `match term`. Each case in the
-        # match statement should also begin with a docstring.
-        match body[-1]:
-            case ast.Match(ast.Name("term"), cases):
+        # Expected function body...
+        match fnbody:
+            case [
+                ast.Expr(ast.Constant(str())),  # docstring
+                *prefix,  # variable assignments (optional)
+                ast.Match(ast.Name("term"), cases),  # `match term: ...`
+            ]:
                 pass
             case _:
-                raise SyntaxError("rewrite should end with `match term`")
-        for case in cases:
-            match case.pattern:
-                case ast.MatchOr(patterns):  # split OR patterns into separate tests
-                    for pattern in patterns:
-                        subcase = ast.match_case(pattern, case.guard, case.body)
-                        yield cls(subcase, body[:-1], sort)
+                raise SyntaxError("rewrite body is malformed")
+
+        # Expected case body: docstring plus a single return statement.
+        for case in cases[:-1]:
+            match case.body:
+                case [ast.Expr(ast.Constant(str() as s)), *body]:
+                    id = s.split(":")[0]
                 case _:
-                    yield cls(case, body[:-1], sort)
+                    raise SyntaxError("every case should begin with a docstring")
+            match case.pattern:
+                case ast.MatchClass() as pattern:
+                    # Normal single case.
+                    yield cls(id, case.pattern, case.guard, prefix, body)
+                case ast.MatchOr(patterns):
+                    # OR pattern. Split into separate tests.
+                    for pattern in patterns:
+                        assert isinstance(pattern, ast.MatchClass)
+                        yield cls(id, pattern, case.guard, prefix, body)
+                case _:
+                    raise SyntaxError("malformed case body")
 
-
-type Vars = tuple[tuple[str, BaseTerm], ...]
+        # Expected final clause: `case _: return term`.
+        match cases[-1]:
+            case ast.match_case(
+                ast.MatchAs(None, None), None, [ast.Return(ast.Name("term"))]
+            ):
+                pass
+            case _:
+                raise SyntaxError("final case should be `case _: return term`")
 
 
 class CaseParser:
@@ -103,20 +120,16 @@ class CaseParser:
         self.vars = dict[str, BaseTerm]()
 
     @classmethod
-    def is_equivalent(cls, casette: Casette) -> bool:
+    def is_equivalent(cls, rw: RewriteCase) -> bool:
         """
         Parse the rewrite case and check its validity.
 
         Example: `case <pattern> if <guard>: <body>`.
         """
-        # 1. Parse the pattern (and add vars to local scope). This tells us the
-        #    structure of the input term.
-        #
-        #    Example: `case Not(Value(v)): ...`:
-        #    * define a new bool/int named "v"
-        #    * return the input (original) term: Not(Symbol("v"))
-        #
-        for term1, vars in cls.match(casette.case.pattern, casette.sort):
+        # 1. Parse the pattern to determine the structure of the input term. In
+        #    the process, build up a list of variables bound by the match
+        #    statement.
+        for term1, vars in cls.match_class(rw.pattern):
             parser = cls()
             for name, value in vars:
                 assert name not in parser.vars, "duplicate definition"
@@ -124,27 +137,23 @@ class CaseParser:
             parser.vars["term"] = term1
 
             # 2. Handle any assignments in the prefix.
-            for stmt in casette.prefix:
+            for stmt in rw.prefix:
                 match stmt:
-                    case ast.Expr(ast.Constant(str())):
-                        pass  # function docstring, just ignore
                     case ast.Assign([ast.Name(name)], expr):
                         parser.vars[name] = parser.pyexpr(expr)
                     case _:
                         raise SyntaxError("expected assignment")
 
             # 3. Parse the guard, if present. (Relies on vars defined above.)
-            if casette.case.guard is None:
+            if rw.guard is None:
                 guard = CValue(True)
             else:
-                guard = parser.pyexpr(casette.case.guard)
+                guard = parser.pyexpr(rw.guard)
             assert isinstance(guard, CTerm)
 
             # 4. Parse the body. This tells us the value of the rewritten term.
-            for stmt in casette.case.body:
+            for stmt in rw.body:
                 match stmt:
-                    case ast.Expr(ast.Constant(str())):
-                        pass  # skip docstring
                     case ast.Assign([ast.Name(name)], expr):
                         parser.vars[name] = parser.pyexpr(expr)
                     case ast.Return(ast.expr() as expr):
@@ -162,7 +171,7 @@ class CaseParser:
                 continue
             for a in parser.assertions:
                 goal = And(goal, a)
-            if check(Not(goal), guard):
+            if check(guard, Not(goal)):
                 return False
         return True
 
