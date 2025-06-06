@@ -43,6 +43,10 @@ class ASymbol(ATerm):
         )
         ctx.write(self.name)
 
+    @override
+    def substitute(self, subs: dict[str, BaseTerm]) -> BaseTerm:
+        return subs[self.name.decode()]
+
 
 @dataclass(frozen=True, slots=True)
 class AValue(ATerm):
@@ -61,6 +65,10 @@ class AValue(ATerm):
         self.default.dump(ctx)
         ctx.write(b")")
 
+    @override
+    def substitute(self, subs: dict[str, BaseTerm]) -> BaseTerm:
+        return self
+
 
 @dataclass(frozen=True, slots=True)
 class Select(BTerm):
@@ -73,6 +81,21 @@ class Select(BTerm):
         k, v = self.array.width()
         assert k == self.key.width
         object.__setattr__(self, "width", v)
+
+    @classmethod
+    def simplify(cls, array: ATerm, key: BTerm) -> BTerm | None:
+        match array, key:
+            case AValue(de), _:
+                return de
+            case Store(base, lo, up), _ if not lo and not up:
+                return cls.simplify(base, key)
+            case Store(base, lo, up), BValue(kval) if not up:
+                for k, v in lo:
+                    if k == kval:
+                        return v
+                return cls.simplify(base, key)
+            case _:
+                return None
 
 
 @dataclass(frozen=True, slots=True)

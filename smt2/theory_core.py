@@ -10,7 +10,7 @@ See: https://smt-lib.org/theories-Core.shtml
 from __future__ import annotations
 
 import abc
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field
 from subprocess import PIPE, Popen
 from typing import Any, ClassVar, Self, override
 
@@ -66,16 +66,9 @@ class BaseTerm(abc.ABC):
 
     def dump(self, ctx: DumpContext) -> None:
         # 0. Gather Arguments
-        params = list[bytes]()
-        terms = list[BaseTerm]()
-        for fld in fields(self):
-            if not fld.init or fld.kw_only:
-                continue
-            v = getattr(self, fld.name)
-            if isinstance(v, int):
-                params.append(str(v).encode())
-            elif isinstance(v, BaseTerm):
-                terms.append(v)
+        args = [getattr(self, name) for name in self.__match_args__]
+        params = [str(arg).encode() for arg in args if isinstance(arg, int)]
+        terms = [arg for arg in args if isinstance(arg, BaseTerm)]
         # 1. Determine Op
         assert self.op
         if params:
@@ -87,6 +80,22 @@ class BaseTerm(abc.ABC):
             ctx.out.extend(b" ")
             term.dump(ctx)
         ctx.out.extend(b")")
+
+    def substitute(self, subs: dict[str, BaseTerm]) -> BaseTerm:
+        args = list[Any]()
+        for name in self.__match_args__:
+            arg = getattr(self, name)
+            if isinstance(arg, BaseTerm):
+                args.append(arg.substitute(subs))
+            elif isinstance(arg, tuple):
+                s = list[BaseTerm]()
+                for a in arg:  # pyright: ignore[reportUnknownVariableType]
+                    assert isinstance(a, BaseTerm)
+                    s.append(a.substitute(subs))
+                args.append(tuple(s))
+            else:
+                args.append(arg)
+        return self.__class__(*args)
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,6 +111,10 @@ class CSymbol(CTerm):
         ctx.add(self.name, (b"(declare-fun %s () Bool)" % self.name))
         ctx.out.extend(self.name)
 
+    @override
+    def substitute(self, subs: dict[str, BaseTerm]) -> BaseTerm:
+        return subs[self.name.decode()]
+
 
 @dataclass(frozen=True, slots=True)
 class CValue(CTerm):
@@ -110,6 +123,10 @@ class CValue(CTerm):
     @override
     def dump(self, ctx: DumpContext) -> None:
         ctx.out.extend(b"true" if self.value else b"false")
+
+    @override
+    def substitute(self, subs: dict[str, BaseTerm]) -> BaseTerm:
+        return self
 
 
 @dataclass(frozen=True, slots=True)

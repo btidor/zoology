@@ -52,6 +52,9 @@ class BitVectorMeta(abc.ABCMeta):
         return self._ccache[name]
 
 
+type Model = dict[str, Constraint | Uint[Any] | Array[Any, Any]]
+
+
 class Symbolic(abc.ABC):
     __slots__ = ("_term",)
     _term: BaseTerm
@@ -80,6 +83,14 @@ class Symbolic(abc.ABC):
 
     def dump(self, ctx: DumpContext) -> None:
         self._term.dump(ctx)
+
+    @abc.abstractmethod
+    def reveal(self) -> bool | int | dict[int, int] | None: ...
+
+    def substitute(self, model: Model) -> Self:
+        k = self.__class__.__new__(self.__class__)
+        k._term = self._term.substitute({n: s._term for n, s in model.items()})  # pyright: ignore[reportPrivateUsage]
+        return k
 
 
 class Constraint(Symbolic):
@@ -401,6 +412,9 @@ class Array[K: Uint[Any] | Int[Any], V: Uint[Any] | Int[Any]](
 
     def __deepcopy__(self, memo: Any, /) -> Self:
         return self.__copy__()
+
+    def reveal(self) -> dict[int, int] | None:
+        raise NotImplementedError
 
     def _mk_value(self, term: BTerm) -> V:
         k = self._value.__new__(self._value)

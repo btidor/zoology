@@ -3,13 +3,12 @@
 
 from __future__ import annotations
 
-from collections import defaultdict
 import copy
 from functools import reduce
 from subprocess import Popen, PIPE
 from typing import Any, Literal, overload
 
-from smt2 import Array, Constraint, Int, Symbolic, Uint
+from smt2 import Array, Constraint, Int, Model, Symbolic, Uint
 from smt2.theory_core import DumpContext
 
 
@@ -31,9 +30,6 @@ class NarrowingError(Exception):
 
 class ConstrainingError(Exception):
     pass
-
-
-type Model = dict[str, bool | int | dict[int, int]]
 
 
 class Solver:
@@ -103,9 +99,9 @@ class Solver:
                         assert name not in self._model, f"duplicate term: {name}"
                         match value:
                             case "true":
-                                self._model[name] = True
+                                self._model[name] = Constraint(True)
                             case "false":
-                                self._model[name] = False
+                                self._model[name] = Constraint(False)
                             case _:
                                 raise NotImplementedError(f"unknown boolean: {value}")
                     case "define-fun", name, _, [_, "BitVec", _], value:
@@ -116,7 +112,9 @@ class Solver:
                         self._model[name] = self._parse_array(value, self._model)
                     case _:
                         raise NotImplementedError(f"unexpected term: {fun}")
-        raise NotImplementedError("evaluate")
+        sym = sym.substitute(self._model)
+        assert (r := sym.reveal()) is not None
+        return r
 
     @classmethod
     def _read_from_tokens(cls, tokens: list[str]) -> Any:
@@ -136,34 +134,42 @@ class Solver:
                 return word
 
     @classmethod
-    def _parse_numeral(cls, s: str) -> int:
+    def _parse_numeral(cls, s: str) -> Uint[Any]:
         if s.startswith("#x"):
-            return int(s[2:], 16)
+            w = (len(s) - 2) * 4
+            return Uint[w](int(s[2:], 16))
         elif s.startswith("#b"):
-            return int(s[2:], 2)
+            w = len(s) - 2
+            return Uint[w](int(s[2:], 2))
         else:
             raise SyntaxError(f"cannot parse numeral: {s}")
 
     @classmethod
-    def _parse_array(cls, parts: str | list[Any], model: Model) -> int | dict[int, int]:
+    def _parse_array(
+        cls, parts: str | list[Any], model: Model
+    ) -> Uint[Any] | Array[Any, Any]:
         match parts:
             case str():
                 if parts.startswith("#"):
                     return cls._parse_numeral(parts)
                 else:
-                    return copy.copy(model[parts])
+                    assert isinstance(arr := model[parts], Array)
+                    return copy.copy(arr)
             case "let", [[name, value]], expr:
                 assert name not in model, f"duplicate term: {name}"
                 model[name] = cls._parse_array(value, model)
                 return cls._parse_array(expr, model)
             case "store", expr, key, value:
                 array = cls._parse_array(expr, model)
-                assert isinstance(array, dict)
+                assert isinstance(array, Array)
                 array[cls._parse_numeral(key)] = cls._parse_numeral(value)
                 return array
-            case [["as", "const", _], value]:
-                default = cls._parse_numeral(value)
-                return defaultdict(lambda: default)
+            case [
+                ["as", "const", ["Array", [_, "BitVec", k], [_, "BitVec", v]]],
+                default,
+            ]:
+                default = cls._parse_numeral(default)
+                return Array[Uint[int(k)], Uint[int(v)]](default)
             case _:
                 raise NotImplementedError(f"unexpected term: {parts}")
 
