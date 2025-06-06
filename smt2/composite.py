@@ -38,7 +38,8 @@ class RewriteMeta(abc.ABCMeta):
             case CTerm():
                 term = constraint_reduction(term)
                 term = constraint_folding(term)
-                return constraint_logic(term)
+                term = constraint_logic(term)
+                return constraint_yolo(term)
             case BTerm():
                 term = bitvector_reduction(term)
                 term = bitvector_folding(term)
@@ -649,16 +650,6 @@ def constraint_logic(term: CTerm) -> CTerm:
             return Eq(x, BValue(0, x.width))
         case Ule(BValue(0), x):
             return CValue(True)
-        case Eq(BValue(a), ZeroExtend(_i, x)) if a >= (1 << x.width):
-            return CValue(False)
-        case Ult(ZeroExtend(_i, x), BValue(a)) if a >= (1 << x.width):
-            return CValue(True)
-        case Ult(BValue(a), ZeroExtend(_i, x)) if a >= (1 << x.width):
-            return CValue(False)
-        case Ule(ZeroExtend(_i, x), BValue(a)) if a >= (1 << x.width):
-            return CValue(True)
-        case Ule(BValue(a), ZeroExtend(_i, x)) if a >= (1 << x.width):
-            return CValue(False)
         case _:
             return term
 
@@ -681,6 +672,10 @@ def bitvector_reduction(term: BTerm) -> BTerm:
             return x
         case Repeat(i, x) if i > 1:
             return Concat((x, Repeat(i - 1, x)))
+        case ZeroExtend(0, x):
+            return x
+        case ZeroExtend(i, x) if i > 0:
+            return Concat((BValue(0, i), x))
         case RotateLeft(i, x) if i % term.width == 0:
             return x
         case RotateLeft(i, x) if i % term.width != 0:
@@ -741,8 +736,6 @@ def bitvector_folding(term: BTerm) -> BTerm:
             return BValue(x.sgnd % y.sgnd, width)
         case Ashr(BValue() as x, BValue(b)):
             return BValue(x.sgnd >> b, width)
-        case ZeroExtend(_i, BValue(a)):
-            return BValue(a, width)
         case SignExtend(_i, BValue() as x):
             return BValue(x.sgnd, width)
         case Ite(CValue(True), x, _y):
@@ -832,10 +825,6 @@ def bitvector_logic(term: BTerm) -> BTerm:
             return Lshr(x, BValue(a + b, width))
         case Ashr(x, BValue(0)):
             return x
-        case ZeroExtend(0, x):
-            return x
-        case ZeroExtend(i, ZeroExtend(j, x)):
-            return ZeroExtend(i + j, x)
         case SignExtend(0, x):
             return x
         case SignExtend(i, SignExtend(j, x)):
@@ -854,60 +843,71 @@ def bitvector_logic(term: BTerm) -> BTerm:
             return term
 
 
+def constraint_yolo(term: CTerm) -> CTerm:
+    match term:
+        case Eq(BValue(a), Concat([*rest, x]) as c):
+            mask = (1 << x.width) - 1
+            return And(
+                Eq(BValue(a >> x.width, c.width - x.width), Concat(tuple(rest))),
+                Eq(BValue(a & mask, x.width), x),
+            )
+        case Ult(Concat([BValue(p), x]), BValue(a)) if ((p + 1) << x.width) - 1 < a:
+            return CValue(True)
+        case Ult(BValue(a), Concat([BValue(p), x])) if a >= ((p + 1) << x.width) - 1:
+            return CValue(False)
+        case Ule(Concat([BValue(p), x]), BValue(a)) if ((p + 1) << x.width) - 1 <= a:
+            return CValue(True)
+        case Ule(BValue(a), Concat([BValue(p), x])) if a > ((p - 1) << x.width) - 1:
+            return CValue(False)
+        case _:
+            return term
+
+
 def bitvector_yolo(term: BTerm) -> BTerm:
     match term:
         case Concat([single]):
             return single
         case Concat([BValue(a) as x, BValue(b) as y, *rest]):
             return Concat((BValue(a << y.width | b, x.width + y.width), *rest))
-        case Concat([BValue(0) as z, *rest]):
-            return ZeroExtend(z.width, Concat(tuple(rest)))
-        case BNot(Concat([term, *rest])):
-            return Concat((BNot(term), BNot(Concat(tuple(rest)))))
-        case BAnd(BValue(a), Concat([*rest, x])):
+        case BAnd(BValue(a), Concat([*rest, x]) as c):
             mask = (1 << x.width) - 1
             return Concat(
                 (
-                    BAnd(
-                        BValue(a >> x.width, term.width - x.width),
-                        Concat(tuple(rest)),
-                    ),
+                    BAnd(BValue(a >> x.width, c.width - x.width), Concat(tuple(rest))),
                     BAnd(BValue(a & mask, x.width), x),
                 )
             )
-        case BOr(BValue(a), Concat([*rest, x])):
+        case BOr(BValue(a), Concat([*rest, x]) as c):
             mask = (1 << x.width) - 1
             return Concat(
                 (
-                    BOr(
-                        BValue(a >> x.width, term.width - x.width),
-                        Concat(tuple(rest)),
-                    ),
+                    BOr(BValue(a >> x.width, c.width - x.width), Concat(tuple(rest))),
                     BOr(BValue(a & mask, x.width), x),
                 )
             )
-        case BXor(BValue(a), Concat([*rest, x])):
+        case BXor(BValue(a), Concat([*rest, x]) as c):
             mask = (1 << x.width) - 1
             return Concat(
                 (
-                    BXor(
-                        BValue(a >> x.width, term.width - x.width),
-                        Concat(tuple(rest)),
-                    ),
+                    BXor(BValue(a >> x.width, c.width - x.width), Concat(tuple(rest))),
                     BXor(BValue(a & mask, x.width), x),
                 )
             )
-        case Shl(Concat([x, *rest]), BValue(a)) if a >= x.width:
+        case Shl(Concat([x, *rest]), BValue(a) as c) if a >= x.width:
             return Concat(
                 (
-                    Shl(Concat(tuple(rest)), BValue(a - x.width, term.width - x.width)),
+                    Shl(Concat(tuple(rest)), BValue(a - x.width, c.width - x.width)),
                     BValue(0, x.width),
                 )
             )
         case Lshr(Concat([*rest, x]), BValue(a)) if a >= x.width:
-            return ZeroExtend(
-                x.width,
-                Lshr(Concat(tuple(rest)), BValue(a - x.width, term.width - x.width)),
+            return Concat(
+                (
+                    BValue(0, x.width),
+                    Lshr(
+                        Concat(tuple(rest)), BValue(a - x.width, term.width - x.width)
+                    ),
+                )
             )
         case _:
             return term
