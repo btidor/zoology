@@ -245,22 +245,24 @@ def bitvector_reduction(term: BTerm) -> BTerm:
         case Repeat(i, x) if i > 1:
             """repeat.n"""
             return Concat((x, Repeat(i - 1, x)))
-        case RotateLeft(0, x):
+        case RotateLeft(i, x) if i % term.width == 0:
             """rotl.z"""
             return x
-        case RotateLeft(i, x) if i > 0:
+        case RotateLeft(i, x) if i % term.width != 0:
             """rotl.n"""
+            i = i % term.width
             return Concat(
                 (
                     Extract(term.width - i - 1, 0, x),
                     Extract(term.width - 1, term.width - i, x),
                 )
             )
-        case RotateRight(0, x):
+        case RotateRight(i, x) if i % term.width == 0:
             """rotr.z"""
             return x
-        case RotateRight(i, x) if i > 0:
+        case RotateRight(i, x) if i % term.width != 0:
             """rotr.n"""
+            i = i % term.width
             return Concat((Extract(i - 1, 0, x), Extract(term.width - 1, i, x)))
         case _:
             return term

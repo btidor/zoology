@@ -342,6 +342,7 @@ class Comp(BTerm):
 
     def __post_init__(self) -> None:
         assert self.left.width == self.right.width
+        object.__setattr__(self, "width", 1)
 
 
 @dataclass(frozen=True, slots=True)
@@ -680,18 +681,20 @@ def bitvector_reduction(term: BTerm) -> BTerm:
             return x
         case Repeat(i, x) if i > 1:
             return Concat((x, Repeat(i - 1, x)))
-        case RotateLeft(0, x):
+        case RotateLeft(i, x) if i % term.width == 0:
             return x
-        case RotateLeft(i, x) if i > 0:
+        case RotateLeft(i, x) if i % term.width != 0:
+            i = i % term.width
             return Concat(
                 (
                     Extract(term.width - i - 1, 0, x),
                     Extract(term.width - 1, term.width - i, x),
                 )
             )
-        case RotateRight(0, x):
+        case RotateRight(i, x) if i % term.width == 0:
             return x
-        case RotateRight(i, x) if i > 0:
+        case RotateRight(i, x) if i % term.width != 0:
+            i = i % term.width
             return Concat((Extract(i - 1, 0, x), Extract(term.width - 1, i, x)))
         case _:
             return term

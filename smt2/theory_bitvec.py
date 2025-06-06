@@ -223,6 +223,7 @@ class Comp(BTerm):  # width-1 result
 
     def __post_init__(self) -> None:
         assert self.left.width == self.right.width
+        object.__setattr__(self, "width", 1)
 
 
 @dataclass(frozen=True, slots=True)

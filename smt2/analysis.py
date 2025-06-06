@@ -143,11 +143,16 @@ class CaseParser:
                         raise SyntaxError("expected assignment")
 
             # 3. Parse the guard, if present. (Relies on vars defined above.)
+            #    Check it, too. If the guard is false, don't try to construct
+            #    the body.
             if rw.guard is None:
                 guard = CValue(True)
             else:
                 guard = parser.pyexpr(rw.guard)
-            assert isinstance(guard, CTerm)
+                assert isinstance(guard, CTerm)
+
+            if not check(guard):
+                continue
 
             # 4. Parse the body. This tells us the value of the rewritten term.
             for stmt in rw.body:
@@ -163,10 +168,7 @@ class CaseParser:
                 raise SyntaxError("expected trailing return")
 
             # 5. Check!
-            try:
-                goal = Eq(term1, term2)
-            except AssertionError:
-                continue
+            goal = Eq(term1, term2)
             for a in parser.assertions:
                 goal = And(goal, a)
             if check(guard, Not(goal)):
@@ -273,8 +275,13 @@ class CaseParser:
                         terms.append(term)
                         vars.extend(var)
                     try:
-                        yield op.cls(*terms), tuple(vars)
+                        sym = op.cls(*terms)
+                        if isinstance(sym, BTerm):
+                            assert sym.width <= MAX_WIDTH
+                        yield sym, tuple(vars)
                     except AssertionError:
+                        # This combination of arguments is unconstructable (and
+                        # so can never be matched). Skip!
                         pass
 
     @classmethod
@@ -283,8 +290,8 @@ class CaseParser:
         match pattern:
             case ast.MatchAs(None, str() as name):
                 # AS pattern, e.g. "i" in `ZeroExtend(i, x)`. Enumerate all
-                # possibilities.
-                for i in range(0, MAX_WIDTH + 1):
+                # possibilities up to twice the maximum width.
+                for i in range(0, 2 * MAX_WIDTH + 1):
                     yield i, ((name, BValue(i, NATIVE_WIDTH)),)
             case ast.MatchValue(ast.Constant(int() as i)):
                 # Literal pattern, e.g. "0" in `ZeroExtend(0, x)`.
@@ -439,6 +446,8 @@ def simplify(term: BaseTerm) -> int:
             return (simplify(x) + simplify(y)) % (1 << term.width)
         case Sub(x, y):
             return (simplify(x) - simplify(y)) % (1 << term.width)
+        case Smod(x, y):
+            return (simplify(x) % simplify(y)) % (1 << term.width)
         case _:
             raise TypeError(f"unable to simplify: {term}")
 
