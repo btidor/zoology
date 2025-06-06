@@ -49,7 +49,6 @@ def check(*constraints: CTerm) -> bool:
         case "unsat":
             return False
         case _:
-            print(smt)
             raise RuntimeError(out, err)
 
 

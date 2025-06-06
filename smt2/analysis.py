@@ -21,11 +21,17 @@ from .theory_core import *
 
 ## Code analysis for the rewrite library.
 
-# When handling Python ints, assume they fit in a fixed (large) number of bytes.
-NATIVE_WIDTH = 128
-ZERO = BValue(0, NATIVE_WIDTH)
-
+# Run validation on all bitvector widths in the range [1, MAX_WIDTH] and all
+# parameter values in the range [0, MAX_PARAM]. For now, these are set to low
+# values for speed.
 MAX_WIDTH = 8
+MAX_PARAM = 2 * MAX_WIDTH
+
+# Python ints must be represented as bitvectors also (because we want to perform
+# boolean operations on them). Use a special, extra-large width for this to
+# avoid overflow.
+NATIVE_WIDTH = 2 * MAX_WIDTH
+ZERO = BValue(0, NATIVE_WIDTH)
 
 type Vars = tuple[tuple[str, BaseTerm], ...]
 
@@ -151,10 +157,9 @@ class CaseParser:
             else:
                 guard = parser.pyexpr(rw.guard)
                 assert isinstance(guard, CTerm)
-
-            # if the guard is unsatisfiable, don't try to construct the body
-            if not check(guard):
-                continue
+                if not check(guard):
+                    # if the guard is false, don't try to construct the body
+                    continue
 
             # 4. Parse the body. This tells us the value of the rewritten term.
             for stmt in rw.body:
@@ -293,9 +298,8 @@ class CaseParser:
         """Parse a match pattern where a param (raw Python int) is expected."""
         match pattern:
             case ast.MatchAs(None, str() as name):
-                # AS pattern, e.g. "i" in `ZeroExtend(i, x)`. Enumerate all
-                # possibilities up to twice the maximum width.
-                for i in range(0, 2 * MAX_WIDTH + 1):
+                # AS pattern, e.g. "i" in `ZeroExtend(i, x)`.
+                for i in range(0, MAX_PARAM + 1):
                     yield i, ((name, BValue(i, NATIVE_WIDTH)),)
             case ast.MatchValue(ast.Constant(int() as i)):
                 # Literal pattern, e.g. "0" in `ZeroExtend(0, x)`.

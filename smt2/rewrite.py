@@ -307,16 +307,19 @@ def bitvector_folding(term: BTerm) -> BTerm:
             return BValue(x.sgnd % -y.sgnd, width)
         case Srem(BValue() as x, BValue() as y) if x.sgnd < 0 and y.sgnd > 0:
             """srem"""
-            return BValue(-(x.sgnd % y.sgnd), width)
+            return BValue(-(-x.sgnd % y.sgnd), width)
         case Srem(BValue() as x, BValue() as y) if x.sgnd < 0 and y.sgnd < 0:
             """srem"""
             return BValue(x.sgnd % y.sgnd, width)
         case Smod(BValue() as x, BValue(b) as y) if b != 0:
             """smod"""
             return BValue(x.sgnd % y.sgnd, width)
-        case Ashr(BValue() as x, BValue(b)):
+        case Ashr(BValue() as x, BValue(b)) if x.sgnd >= 0:
             """ashr"""
             return BValue(x.sgnd >> b, width)
+        case Ashr(BValue(a) as x, BValue(b)) if x.sgnd < 0:
+            """ashr"""
+            return BValue(((a ^ mask) >> b) ^ mask, width)
         case SignExtend(_i, BValue() as x):
             """sext"""
             return BValue(x.sgnd, width)
