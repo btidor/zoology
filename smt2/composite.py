@@ -889,6 +889,10 @@ def bitvector_logic(term: BTerm) -> BTerm:
             return x
         case SignExtend(i, SignExtend(j, x)):
             return SignExtend(i + j, x)
+        case Extract(i, j, Concat([*rest, x])) if j >= x.width:
+            return Extract(i - x.width, j - x.width, Concat((*rest,)))
+        case Extract(i, j, Concat([x, *rest])) if i < term.width - x.width:
+            return Extract(i, j, Concat((*rest,)))
         case Ite(_c, x, y) if x == y:
             return x
         case BNot(Ite(c, x, y)):

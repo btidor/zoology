@@ -490,6 +490,12 @@ def bitvector_logic(term: BTerm) -> BTerm:
         case SignExtend(i, SignExtend(j, x)):
             """sext.sext"""
             return SignExtend(i + j, x)
+        case Extract(i, j, Concat([*rest, x])) if j >= x.width:
+            """xtr.concat"""
+            return Extract(i - x.width, j - x.width, Concat((*rest,)))
+        case Extract(i, j, Concat([x, *rest])) if i < term.width - x.width:
+            """xtr.concat"""
+            return Extract(i, j, Concat((*rest,)))
 
         # Push boolean expressions down over ITEs.
         case Ite(_c, x, y) if x == y:
