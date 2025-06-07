@@ -7,7 +7,7 @@ import ast
 import inspect
 import re
 from dataclasses import dataclass
-from itertools import product
+from itertools import chain, product
 from pathlib import Path
 from random import randint
 from subprocess import check_output
@@ -34,6 +34,17 @@ NATIVE_WIDTH = 2 * MAX_WIDTH
 ZERO = BValue(0, NATIVE_WIDTH)
 
 type Vars = tuple[tuple[str, BaseTerm], ...]
+
+type FieldValue = int | BaseTerm | tuple[BaseTerm, ...]
+
+type FieldAnnotation = (
+    Literal["CTerm"]
+    | Literal["BTerm"]
+    | Literal["S"]
+    | Literal["int"]
+    | Literal["bool"]
+    | Literal["tuple[BTerm, ...]"]
+)
 
 
 class RewriteCase:
@@ -263,7 +274,7 @@ class CaseParser:
             case _:
                 # Operation. Parse type annotations to determine each field's
                 # expected sort.
-                args = list[Iterable[tuple[BaseTerm | int, Vars]]]()
+                args = list[Iterable[tuple[FieldValue, Vars]]]()
                 for pat, field in zip(patterns, op.fields, strict=True):
                     match field:
                         case "CTerm":
@@ -275,10 +286,17 @@ class CaseParser:
                         case "int" | "bool":
                             arg = cls.match_param(pat)
                         case "tuple[BTerm, ...]":
-                            raise SyntaxError("matching on Concat is not supported")
+                            assert isinstance(pat, ast.MatchSequence)
+                            arg = list[tuple[FieldValue, Vars]]()
+                            for prod in product(
+                                *(cls.match(p, BitVectorSort) for p in pat.patterns)
+                            ):
+                                term = tuple(p[0] for p in prod)
+                                vars = tuple(chain.from_iterable(p[1] for p in prod))
+                                arg.append((term, vars))
                     args.append(arg)
                 for parts in product(*args):
-                    terms = list[BaseTerm | int]()
+                    terms = list[FieldValue]()
                     vars = list[tuple[str, BaseTerm]]()
                     for term, var in parts:
                         terms.append(term)
@@ -491,22 +509,12 @@ class BitVectorSort:
             yield BSymbol(name.encode(), width)
 
 
-type Arg = (
-    Literal["CTerm"]
-    | Literal["BTerm"]
-    | Literal["S"]
-    | Literal["int"]
-    | Literal["bool"]
-    | Literal["tuple[BTerm, ...]"]
-)
-
-
 class Op:
     """Represents an SMT operator, with metadata."""
 
     name: str
     cls: type[BaseTerm]
-    fields: tuple[Arg, ...]
+    fields: tuple[FieldAnnotation, ...]
     sort: Sort
 
     def __init__(self, name: str) -> None:
@@ -520,7 +528,7 @@ class Op:
         else:
             raise KeyError(f"operator not found: {name}")
 
-        args = list[Arg]()
+        args = list[FieldAnnotation]()
         for name in self.cls.__match_args__:
             typ: str = self.cls.__dataclass_fields__[name].type
             if typ in ("CTerm", "BTerm", "S", "int", "bool", "tuple[BTerm, ...]"):

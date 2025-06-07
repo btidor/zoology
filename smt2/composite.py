@@ -692,6 +692,14 @@ def constraint_logic(term: CTerm) -> CTerm:
             return Eq(x, BValue(0, x.width))
         case Ule(BValue(0), x):
             return CValue(True)
+        case Ult(Concat([BValue(p), x]), BValue(a)) if ((p + 1) << x.width) - 1 < a:
+            return CValue(True)
+        case Ult(BValue(a), Concat([BValue(p), x])) if a >= ((p + 1) << x.width) - 1:
+            return CValue(False)
+        case Ule(Concat([BValue(p), x]), BValue(a)) if ((p + 1) << x.width) - 1 <= a:
+            return CValue(True)
+        case Ule(BValue(a), Concat([BValue(p), x])) if a > ((p + 1) << x.width) - 1:
+            return CValue(False)
         case _:
             return term
 
@@ -742,6 +750,10 @@ def bitvector_folding(term: BTerm) -> BTerm:
     mask = (1 << width) - 1
     modulus = 1 << width
     match term:
+        case Concat([single]):
+            return single
+        case Concat([BValue(a) as x, BValue(b) as y]):
+            return BValue(a << y.width | b, x.width + y.width)
         case Extract(i, j, BValue(a)):
             return BValue((a >> j) & ((1 << (i - j + 1)) - 1), i - j + 1)
         case BNot(BValue(a)):
@@ -895,22 +907,12 @@ def constraint_yolo(term: CTerm) -> CTerm:
                 Eq(BValue(a >> x.width, c.width - x.width), Concat(tuple(rest))),
                 Eq(BValue(a & mask, x.width), x),
             )
-        case Ult(Concat([BValue(p), x]), BValue(a)) if ((p + 1) << x.width) - 1 < a:
-            return CValue(True)
-        case Ult(BValue(a), Concat([BValue(p), x])) if a >= ((p + 1) << x.width) - 1:
-            return CValue(False)
-        case Ule(Concat([BValue(p), x]), BValue(a)) if ((p + 1) << x.width) - 1 <= a:
-            return CValue(True)
-        case Ule(BValue(a), Concat([BValue(p), x])) if a > ((p - 1) << x.width) - 1:
-            return CValue(False)
         case _:
             return term
 
 
 def bitvector_yolo(term: BTerm) -> BTerm:
     match term:
-        case Concat([single]):
-            return single
         case Concat([BValue(a) as x, BValue(b) as y, *rest]):
             return Concat((BValue(a << y.width | b, x.width + y.width), *rest))
         case BAnd(BValue(a), Concat([*rest, x]) as c):

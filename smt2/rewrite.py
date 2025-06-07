@@ -201,6 +201,20 @@ def constraint_logic(term: CTerm) -> CTerm:
         case Ule(BValue(0), x):
             """z.ule: 0 <= X <=> True"""
             return CValue(True)
+
+        # Comparators with zero-extended values, etc.
+        case Ult(Concat([BValue(p), x]), BValue(a)) if ((p + 1) << x.width) - 1 < a:
+            """ult.zv"""
+            return CValue(True)
+        case Ult(BValue(a), Concat([BValue(p), x])) if a >= ((p + 1) << x.width) - 1:
+            """ult.vz"""
+            return CValue(False)
+        case Ule(Concat([BValue(p), x]), BValue(a)) if ((p + 1) << x.width) - 1 <= a:
+            """ule.zv"""
+            return CValue(True)
+        case Ule(BValue(a), Concat([BValue(p), x])) if a > ((p + 1) << x.width) - 1:
+            """ule.vz"""
+            return CValue(False)
         case _:
             return term
 
@@ -236,7 +250,7 @@ def bitvector_reduction(term: BTerm) -> BTerm:
             """zext.z"""
             return x
         case ZeroExtend(i, x) if i > 0:
-            """zext"""
+            """zext.n"""
             return Concat((BValue(0, i), x))
         case RotateLeft(i, x) if i % term.width == 0:
             """rotl.z"""
@@ -267,6 +281,12 @@ def bitvector_folding(term: BTerm) -> BTerm:
     mask = (1 << width) - 1
     modulus = 1 << width
     match term:
+        case Concat([single]):
+            """concat.w"""
+            return single
+        case Concat([BValue(a) as x, BValue(b) as y]):
+            """concat.d"""
+            return BValue(a << y.width | b, x.width + y.width)
         case Extract(i, j, BValue(a)):
             """extract"""
             return BValue((a >> j) & ((1 << (i - j + 1)) - 1), i - j + 1)
@@ -494,26 +514,12 @@ def constraint_yolo(term: CTerm) -> CTerm:
     """
     match term:
         case Eq(BValue(a), Concat([*rest, x]) as c):
-            """concat"""
+            """beq.concat"""
             mask = (1 << x.width) - 1
             return And(
                 Eq(BValue(a >> x.width, c.width - x.width), Concat(tuple(rest))),
                 Eq(BValue(a & mask, x.width), x),
             )
-
-        # Comparators with zero-extended values, etc.
-        case Ult(Concat([BValue(p), x]), BValue(a)) if ((p + 1) << x.width) - 1 < a:
-            """ult.zv"""
-            return CValue(True)
-        case Ult(BValue(a), Concat([BValue(p), x])) if a >= ((p + 1) << x.width) - 1:
-            """ult.vz"""
-            return CValue(False)
-        case Ule(Concat([BValue(p), x]), BValue(a)) if ((p + 1) << x.width) - 1 <= a:
-            """ule.zv"""
-            return CValue(True)
-        case Ule(BValue(a), Concat([BValue(p), x])) if a > ((p - 1) << x.width) - 1:
-            """ule.vz"""
-            return CValue(False)
         case _:
             return term
 
@@ -525,11 +531,8 @@ def bitvector_yolo(term: BTerm) -> BTerm:
     Warning: these rewrites are *not* covered by the test suite!
     """
     match term:
-        case Concat([single]):
-            """concat.w"""
-            return single
         case Concat([BValue(a) as x, BValue(b) as y, *rest]):
-            """concat"""
+            """concat.n"""
             return Concat((BValue(a << y.width | b, x.width + y.width), *rest))
         case BNot(Concat([term, *rest])):
             """bnot.concat"""
