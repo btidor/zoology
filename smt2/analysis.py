@@ -7,7 +7,7 @@ import ast
 import inspect
 import re
 from dataclasses import dataclass
-from itertools import chain, product
+from itertools import chain, combinations, product
 from pathlib import Path
 from random import randint
 from subprocess import check_output
@@ -33,7 +33,7 @@ MAX_PARAM = 2 * MAX_WIDTH
 NATIVE_WIDTH = 2 * MAX_WIDTH
 ZERO = BValue(0, NATIVE_WIDTH)
 
-type Vars = tuple[tuple[str, BaseTerm], ...]
+type Vars = tuple[tuple[str, FieldValue], ...]
 
 type FieldValue = int | BaseTerm | tuple[BaseTerm, ...]
 
@@ -132,7 +132,7 @@ class CaseParser:
     def __init__(self) -> None:
         """Create a new CaseParser."""
         self.assertions = list[CTerm]()
-        self.vars = dict[str, BaseTerm]()
+        self.vars = dict[str, FieldValue]()
 
     @classmethod
     def is_equivalent(cls, rw: RewriteCase) -> bool:
@@ -196,20 +196,22 @@ class CaseParser:
     @classmethod
     def match(
         cls, pattern: ast.pattern, sort: Sort | None
-    ) -> Iterable[tuple[BaseTerm, Vars]]:
+    ) -> Iterable[tuple[FieldValue, Vars]]:
         """Parse a match pattern of unknown type."""
         match pattern:
             case ast.MatchAs():
                 yield from cls.match_as(pattern, sort)
             case ast.MatchClass():
                 yield from cls.match_class(pattern)
+            case ast.MatchStar():
+                yield from cls.match_star(pattern)
             case _:
                 raise SyntaxError(f"unsupported match pattern: {pattern}")
 
     @classmethod
     def match_as(
         cls, as_: ast.MatchAs, sort: Sort | None
-    ) -> Iterable[tuple[BaseTerm, Vars]]:
+    ) -> Iterable[tuple[FieldValue, Vars]]:
         """Parse a MatchAs pattern."""
         match (as_.pattern, as_.name):
             case (None, str() as name):
@@ -291,13 +293,20 @@ class CaseParser:
                             for prod in product(
                                 *(cls.match(p, BitVectorSort) for p in pat.patterns)
                             ):
-                                term = tuple(p[0] for p in prod)
-                                vars = tuple(chain.from_iterable(p[1] for p in prod))
-                                arg.append((term, vars))
+                                terms = list[BaseTerm]()
+                                vars = list[tuple[str, FieldValue]]()
+                                for t, v in prod:
+                                    if isinstance(t, tuple):
+                                        terms.extend(t)
+                                    else:
+                                        assert isinstance(t, BaseTerm)
+                                        terms.append(t)
+                                    vars.extend(v)
+                                arg.append((tuple(terms), tuple(vars)))
                     args.append(arg)
                 for parts in product(*args):
                     terms = list[FieldValue]()
-                    vars = list[tuple[str, BaseTerm]]()
+                    vars = list[tuple[str, FieldValue]]()
                     for term, var in parts:
                         terms.append(term)
                         vars.extend(var)
@@ -325,11 +334,26 @@ class CaseParser:
             case _:
                 raise SyntaxError(f"unsupported param pattern: {pattern}")
 
+    @classmethod
+    def match_star(
+        cls, pattern: ast.MatchStar
+    ) -> Iterable[tuple[tuple[BaseTerm, ...], Vars]]:
+        """Parse a star pattern, used to capture variable-length Concat args."""
+        assert pattern.name, "anonymous star not supported"
+        # https://docs.python.org/3.13/library/itertools.html#itertools-recipes
+        s = range(1, MAX_WIDTH + 1)
+        powerset = chain.from_iterable(combinations(s, r) for r in range(len(s) + 1))
+        for combo in powerset:
+            term = tuple(BSymbol(f"_{randint(0, 2**16)}".encode(), w) for w in combo)
+            yield term, ((pattern.name, term),)
+
     def pyexpr(self, expr: ast.expr) -> BaseTerm:
         """Recursively parse a Python expression."""
         match expr:
             case ast.Name(name):
-                return self.vars[name]
+                term = self.vars[name]
+                assert isinstance(term, BaseTerm)
+                return term
             case ast.Constant(bool() as b):
                 return CValue(b)
             case ast.Constant(int() as i):
@@ -424,6 +448,10 @@ class CaseParser:
                 val = getattr(self.vars[name], attr)
                 assert isinstance(val, int)
                 return BValue(val, NATIVE_WIDTH)
+            case ast.Call(ast.Name("len"), [ast.Name(name)]):
+                tup = self.vars[name]
+                assert isinstance(tup, tuple)
+                return BValue(len(tup), NATIVE_WIDTH)
             case _:
                 raise SyntaxError(f"unsupported pyexpr: {expr}")
 
@@ -431,7 +459,9 @@ class CaseParser:
         """Recursively parse a symbolic expression."""
         match expr:
             case ast.Name(name):
-                return self.vars[name]
+                term = self.vars[name]
+                assert isinstance(term, BaseTerm)
+                return term
             case ast.Call(ast.Name("Symbol")):
                 raise SyntaxError("Symbol is not supported")
             case ast.Call(ast.Name("CValue"), [arg]):
@@ -452,13 +482,22 @@ class CaseParser:
             case ast.Call(ast.Name(name), args):  # Not(...), etc.
                 assert "Value" not in name, "unhandled CValue or BValue"
                 op = Op(name)
-                res = list[Any]()
+                res = list[FieldValue]()
                 for a, f in zip(args, op.fields, strict=True):
                     if f == "int":
                         res.append(simplify(self.pyexpr(a)))
                     elif f == "tuple[BTerm, ...]":
+                        r = list[BaseTerm]()
                         assert isinstance(a, ast.Tuple)
-                        res.append(tuple(self.sexpr(s) for s in a.elts))
+                        for el in a.elts:
+                            match el:
+                                case ast.Starred(ast.Name(rest)):
+                                    term = self.vars[rest]
+                                    assert isinstance(term, tuple)
+                                    r.extend(term)
+                                case _:
+                                    r.append(self.sexpr(el))
+                        res.append(tuple(r))
                     else:
                         res.append(self.sexpr(a))
                 return Op(name).cls(*res)

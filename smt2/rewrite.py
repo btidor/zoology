@@ -38,13 +38,11 @@ class RewriteMeta(abc.ABCMeta):
             case CTerm():
                 term = constraint_reduction(term)
                 term = constraint_folding(term)
-                term = constraint_logic(term)
-                return constraint_yolo(term)
+                return constraint_logic(term)
             case BTerm():
                 term = bitvector_reduction(term)
                 term = bitvector_folding(term)
-                term = bitvector_logic(term)
-                return bitvector_yolo(term)
+                return bitvector_logic(term)
             case _:
                 raise TypeError("unknown term", term)
 
@@ -202,7 +200,14 @@ def constraint_logic(term: CTerm) -> CTerm:
             """z.ule: 0 <= X <=> True"""
             return CValue(True)
 
-        # Comparators with zero-extended values, etc.
+        # Comparators with Concat.
+        case Eq(BValue(a), Concat([*rest, x]) as c) if len(rest) > 0:
+            """beq.concat"""
+            mask = (1 << x.width) - 1
+            return And(
+                Eq(BValue(a >> x.width, c.width - x.width), Concat((*rest,))),
+                Eq(BValue(a & mask, x.width), x),
+            )
         case Ult(Concat([BValue(p), x]), BValue(a)) if ((p + 1) << x.width) - 1 < a:
             """ult.zv"""
             return CValue(True)
@@ -284,9 +289,9 @@ def bitvector_folding(term: BTerm) -> BTerm:
         case Concat([single]):
             """concat.w"""
             return single
-        case Concat([BValue(a) as x, BValue(b) as y]):
-            """concat.d"""
-            return BValue(a << y.width | b, x.width + y.width)
+        case Concat([BValue(a) as x, BValue(b) as y, *rest]):
+            """concat.n"""
+            return Concat((BValue(a << y.width | b, x.width + y.width), *rest))
         case Extract(i, j, BValue(a)):
             """extract"""
             return BValue((a >> j) & ((1 << (i - j + 1)) - 1), i - j + 1)
@@ -502,86 +507,46 @@ def bitvector_logic(term: BTerm) -> BTerm:
         case BXor(Ite(c, x, y), z) | BXor(z, Ite(c, x, y)):
             """xor.ite"""
             return Ite(c, BXor(x, z), BXor(y, z))
-        case _:
-            return term
 
-
-def constraint_yolo(term: CTerm) -> CTerm:
-    """
-    Additional logical rewrites involving unsupported ops (i.e. Concat).
-
-    Warning: these rewrites are *not* covered by the test suite!
-    """
-    match term:
-        case Eq(BValue(a), Concat([*rest, x]) as c):
-            """beq.concat"""
-            mask = (1 << x.width) - 1
-            return And(
-                Eq(BValue(a >> x.width, c.width - x.width), Concat(tuple(rest))),
-                Eq(BValue(a & mask, x.width), x),
-            )
-        case _:
-            return term
-
-
-def bitvector_yolo(term: BTerm) -> BTerm:
-    """
-    Additional logical rewrites involving unsupported ops (i.e. Concat).
-
-    Warning: these rewrites are *not* covered by the test suite!
-    """
-    match term:
-        case Concat([BValue(a) as x, BValue(b) as y, *rest]):
-            """concat.n"""
-            return Concat((BValue(a << y.width | b, x.width + y.width), *rest))
-        case BNot(Concat([term, *rest])):
-            """bnot.concat"""
-            # We *don't* do implement this one because it conflicts with the
-            # add.bnot rewrite.
-            raise NotImplementedError
-        case BAnd(BValue(a), Concat([*rest, x]) as c):
+        # Push boolean expressions down over Concat. We *don't* push down BNot,
+        # because this would conflict with "add.bnot" and similar rewrites.
+        case BAnd(BValue(a), Concat([*rest, x]) as c) if len(rest) > 0:
             """band.concat"""
             mask = (1 << x.width) - 1
             return Concat(
                 (
-                    BAnd(BValue(a >> x.width, c.width - x.width), Concat(tuple(rest))),
+                    BAnd(BValue(a >> x.width, c.width - x.width), Concat((*rest,))),
                     BAnd(BValue(a & mask, x.width), x),
                 )
             )
-        case BOr(BValue(a), Concat([*rest, x]) as c):
+        case BOr(BValue(a), Concat([*rest, x]) as c) if len(rest) > 0:
             """bor.concat"""
             mask = (1 << x.width) - 1
             return Concat(
                 (
-                    BOr(BValue(a >> x.width, c.width - x.width), Concat(tuple(rest))),
+                    BOr(BValue(a >> x.width, c.width - x.width), Concat((*rest,))),
                     BOr(BValue(a & mask, x.width), x),
                 )
             )
-        case BXor(BValue(a), Concat([*rest, x]) as c):
-            """bxor.concat"""
-            mask = (1 << x.width) - 1
-            return Concat(
-                (
-                    BXor(BValue(a >> x.width, c.width - x.width), Concat(tuple(rest))),
-                    BXor(BValue(a & mask, x.width), x),
-                )
-            )
-        case Shl(Concat([x, *rest]), BValue(a) as c) if a >= x.width:
+        # Skip BXor because it triggers a bug in Z3.
+        case Shl(Concat([x, *rest]), BValue(a)) if (
+            a < term.width and a >= x.width and len(rest) > 0
+        ):
             """shl.concat"""
             return Concat(
                 (
-                    Shl(Concat(tuple(rest)), BValue(a - x.width, c.width - x.width)),
+                    Shl(Concat((*rest,)), BValue(a - x.width, term.width - x.width)),
                     BValue(0, x.width),
                 )
             )
-        case Lshr(Concat([*rest, x]), BValue(a)) if a >= x.width:
+        case Lshr(Concat([*rest, x]), BValue(a)) if (
+            a < term.width and a >= x.width and len(rest) > 0
+        ):
             """lshr.concat"""
             return Concat(
                 (
                     BValue(0, x.width),
-                    Lshr(
-                        Concat(tuple(rest)), BValue(a - x.width, term.width - x.width)
-                    ),
+                    Lshr(Concat((*rest,)), BValue(a - x.width, term.width - x.width)),
                 )
             )
         case _:
