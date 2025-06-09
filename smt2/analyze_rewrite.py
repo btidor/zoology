@@ -1,25 +1,23 @@
-"""Code analysis library for correctness checking."""
+"""
+Code analysis of the rewrite library.
+
+This analyzer uses an SMT solver to check that each rewrite case produces a
+result that is equivalent to the matched input term.
+"""
 # ruff: noqa: F403, F405
 
 from __future__ import annotations
 
 import ast
 import inspect
-import re
 from dataclasses import dataclass
 from itertools import product
-from pathlib import Path
 from random import randint
-from subprocess import check_output
-from types import ModuleType
 from typing import Any, Callable, Iterable, Literal, Self
 
-from . import rewrite, theory_array, theory_bitvec, theory_core
-from .rewrite import RewriteMeta
+from . import theory_bitvec, theory_core
 from .theory_bitvec import *
 from .theory_core import *
-
-## Code analysis for the rewrite library.
 
 # Run validation on all bitvector widths in the range [1, MAX_WIDTH] and all
 # parameter values in the range [0, MAX_PARAM]. For now, these are set to low
@@ -590,82 +588,3 @@ class Op:
             self.sort = BitVectorSort
         else:
             raise TypeError(f"unexpected operator: {self.cls}")
-
-
-## Code generation for the high-level SMT library, `composite.py`.
-
-COMPOSITE_PY = Path(__file__).parent / "composite.py"
-
-
-class Compositor:
-    """Produces a high-level SMT library by composing low-level components."""
-
-    @classmethod
-    def dump(cls) -> str:
-        """Write out `composite.py`."""
-        cls.out = bytearray()
-        cls._dump()
-        formatted = check_output(["ruff", "format", "-"], input=cls.out)
-        return formatted.decode()
-
-    @classmethod
-    def _dump(cls) -> None:
-        cls.out.extend(b"""\"""
-High-level SMT library with full term rewriting.
-
-Warning: do not edit! To regenerate, run:
-
-    $ python -m smt2.analysis
-
-\"""
-# ruff: noqa: D101, D102, D103
-
-from __future__ import annotations
-
-import abc
-from dataclasses import InitVar, dataclass, field
-from functools import reduce
-from typing import Any, ClassVar, override
-
-from .theory_core import BaseTerm, DumpContext
-
-
-""")
-        cls._source(RewriteMeta)
-        cls._theory(theory_core)
-        cls._theory(theory_bitvec)
-        cls._theory(theory_array)
-        cls._rewrites(rewrite)
-
-    @classmethod
-    def _theory(cls, module: ModuleType) -> None:
-        for item in vars(module).values():
-            if not isinstance(item, type) or not issubclass(item, BaseTerm):
-                continue
-            elif item == BaseTerm or inspect.getmodule(item) != module:
-                continue
-            cls._source(item)
-
-    @classmethod
-    def _rewrites(cls, module: ModuleType) -> None:
-        for item in vars(module).values():
-            if not inspect.isfunction(item) or inspect.getmodule(item) != module:
-                continue
-            cls._source(item)
-
-    @classmethod
-    def _source(cls, object: type | Callable[..., Any]) -> None:
-        s = inspect.getsource(object)
-        # Inject metaclass for constraints & bitvectors
-        s = re.sub(r"(CTerm|BTerm)\(BaseTerm", r"\1(BaseTerm, metaclass=RewriteMeta", s)
-        # Delete docstrings, comments
-        s = re.sub(r'\n*\s*("""[^"]*"""| #.*)\n+', "\n", s)
-        # Skip unimplemented rewrite cases
-        s = re.sub(r"\n*\s*case [^_].*\n\s*raise NotImplementedError", "", s)
-        cls.out.extend(s.encode())
-        cls.out.extend(b"\n")
-
-
-if __name__ == "__main__":
-    with open(COMPOSITE_PY, "w") as f:
-        f.write(Compositor().dump())

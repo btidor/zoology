@@ -3,7 +3,7 @@ High-level SMT library with full term rewriting.
 
 Warning: do not edit! To regenerate, run:
 
-    $ python -m smt2.analysis
+    $ python -m smt2.analyze_composite
 
 """
 # ruff: noqa: D101, D102, D103

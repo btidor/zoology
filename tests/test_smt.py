@@ -6,7 +6,8 @@ import pytest
 
 from bytes import Bytes
 from smt import Array, Uint8, Uint256
-from smt2.analysis import COMPOSITE_PY, CaseParser, Compositor, RewriteCase
+from smt2.analyze_composite import COMPOSITE_PY, Compositor
+from smt2.analyze_rewrite import CaseParser, RewriteCase
 from smt2.rewrite import (
     bitvector_folding,
     bitvector_logic,
@@ -87,4 +88,4 @@ def test_codegen():
     with open(COMPOSITE_PY) as f:
         actual = f.read()
     expected = Compositor.dump()
-    assert actual == expected, "please run `python3 -m smt2.analysis`"
+    assert actual == expected, "please run `python3 -m smt2.analyze_composite`"
