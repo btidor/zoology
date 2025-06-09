@@ -7,7 +7,7 @@ import ast
 import inspect
 import re
 from dataclasses import dataclass
-from itertools import chain, combinations, product
+from itertools import product
 from pathlib import Path
 from random import randint
 from subprocess import check_output
@@ -340,12 +340,8 @@ class CaseParser:
     ) -> Iterable[tuple[tuple[BaseTerm, ...], Vars]]:
         """Parse a star pattern, used to capture variable-length Concat args."""
         assert pattern.name, "anonymous star not supported"
-        # https://docs.python.org/3.13/library/itertools.html#itertools-recipes
-        s = range(1, MAX_WIDTH + 1)
-        powerset = chain.from_iterable(combinations(s, r) for r in range(len(s) + 1))
-        for combo in powerset:
-            term = tuple(BSymbol(f"_{randint(0, 2**16)}".encode(), w) for w in combo)
-            yield term, ((pattern.name, term),)
+        for terms in variadic_sort(pattern.name):
+            yield (terms, ((pattern.name, terms),))
 
     def pyexpr(self, expr: ast.expr) -> BaseTerm:
         """Recursively parse a Python expression."""
@@ -546,6 +542,16 @@ class BitVectorSort:
             name = f"_{randint(0, 2**16)}"
         for width in range(1, MAX_WIDTH + 1):
             yield BSymbol(name.encode(), width)
+
+
+def variadic_sort(name: str, *prefix: BSymbol) -> Iterable[tuple[BSymbol, ...]]:
+    """Create a tuple of Symbols for Concat, all combinations of widths."""
+    yield prefix
+    iname = f"{name}{len(prefix)}"
+    pfxw = reduce(lambda p, q: p + q.width, prefix, 0)
+    for width in range(1, MAX_WIDTH + 1 - pfxw):
+        sym = BSymbol(iname.encode(), width)
+        yield from variadic_sort(name, *prefix, sym)
 
 
 class Op:
