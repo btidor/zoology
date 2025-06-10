@@ -218,6 +218,11 @@ class CaseParser:
                 assert sort, "capture pattern requires sort"
                 for sym in sort.symbol(name):
                     yield sym, ((name, sym),)
+            case (None, None):
+                # Wildcard pattern, i.e. `_`.
+                assert sort, "wildcard pattern requires sort"
+                for sym in sort.symbol():
+                    yield sym, ()
             case (ast.MatchClass() as class_, str() as name):
                 # AS pattern, e.g. `... as x`. Recurse on subject pattern, then
                 # add to locals.
@@ -438,6 +443,10 @@ class CaseParser:
                 val = self.vars[name]
                 assert isinstance(val, BTerm)
                 return SignExtend(NATIVE_WIDTH - val.width, val)
+            case ast.Attribute(ast.Name(name), "min" | "max" as attr):
+                val = self.vars[f"{name}.{attr}"]
+                assert isinstance(val, BTerm)
+                return ZeroExtend(NATIVE_WIDTH - val.width, val)
             case ast.Attribute(ast.Name(name), attr):
                 val = getattr(self.vars[name], attr)
                 assert isinstance(val, int)
@@ -446,6 +455,14 @@ class CaseParser:
                 tup = self.vars[name]
                 assert isinstance(tup, tuple)
                 return BValue(len(tup), NATIVE_WIDTH)
+            case ast.Call(ast.Name("min"), [left, right]):
+                left, right = self.pyexpr(left), self.pyexpr(right)
+                assert isinstance(left, BTerm) and isinstance(right, BTerm)
+                return Ite(Slt(left, right), left, right)
+            case ast.Call(ast.Name("max"), [left, right]):
+                left, right = self.pyexpr(left), self.pyexpr(right)
+                assert isinstance(left, BTerm) and isinstance(right, BTerm)
+                return Ite(Sgt(left, right), left, right)
             case _:
                 raise SyntaxError(f"unsupported pyexpr: {expr}")
 

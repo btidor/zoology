@@ -61,8 +61,12 @@ class MinMaxCase:
         # Expected case body: docstring plus a single return statement.
         for case in cases:
             match case.pattern:
-                case ast.MatchClass(ast.Name(name)) | ast.MatchAs(None, str() as name):
+                case ast.MatchClass(ast.Name(name)):
+                    # Normal single case.
                     yield cls(name, case.pattern, case.guard, prefix, case.body)
+                case ast.MatchAs(None, None):
+                    # Underscore case (fallthrough).
+                    yield cls("_", case.pattern, case.guard, prefix, case.body)
                 case _:
                     raise SyntaxError("malformed case body")
 
@@ -77,12 +81,24 @@ class MinMaxCaseParser(CaseParser):
         #    the process, build up a list of variables bound by the match
         #    statement.
         for term, vars in cls.match(mm.pattern, BitVectorSort):
+            parser = cls()
+            preconditions = list[CTerm]()
+
+            # define bounds for each symbolic variable
+            for name, sym in vars:
+                if not isinstance(sym, BTerm) or sym.width == NATIVE_WIDTH:
+                    continue
+                min = BSymbol(f"{name}.min".encode(), sym.width)
+                max = BSymbol(f"{name}.max".encode(), sym.width)
+                parser.vars[f"{name}.min"] = ZeroExtend(NATIVE_WIDTH - sym.width, min)
+                parser.vars[f"{name}.max"] = ZeroExtend(NATIVE_WIDTH - sym.width, max)
+                preconditions.append(And(Ule(min, sym), Ule(sym, max)))
+
             # define the constructed input term as "term"
             assert isinstance(term, BTerm)
             vars = (*vars, ("term", term))
 
             # create a new local scope, add bound variables
-            parser = cls()
             for name, value in vars:
                 assert name not in parser.vars, "duplicate definition"
                 parser.vars[name] = value
@@ -96,11 +112,10 @@ class MinMaxCaseParser(CaseParser):
                         raise SyntaxError("expected assignment")
 
             # 3. Parse the guard, if present. (Relies on vars defined above.)
-            if mm.guard is None:
-                guard = CValue(True)
-            else:
+            if mm.guard is not None:
                 guard = parser.pyexpr(mm.guard)
                 assert isinstance(guard, CTerm)
+                preconditions.append(guard)
                 if not check(guard):
                     # if the guard is false, don't try to construct the body
                     continue
@@ -120,10 +135,12 @@ class MinMaxCaseParser(CaseParser):
                 raise SyntaxError("expected trailing return")
 
             # 5. Check!
-            term = ZeroExtend(NATIVE_WIDTH - term.width, term)
-            goal = And(Ule(min, term), Ult(term, max))
-            for a in parser.assertions:
-                goal = And(goal, a)
-            if check(guard, Not(goal)):
+            zterm = ZeroExtend(NATIVE_WIDTH - term.width, term)
+            goal = And(
+                And(Sle(BValue(0, NATIVE_WIDTH), min), Sle(min, zterm)),
+                And(Sle(zterm, max), Slt(max, BValue(1 << term.width, NATIVE_WIDTH))),
+            )
+            goal = reduce(And, parser.assertions, goal)
+            if check(*preconditions, Not(goal)):
                 return False
         return True
