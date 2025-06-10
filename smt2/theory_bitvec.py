@@ -20,6 +20,8 @@ from .theory_core import BaseTerm, CTerm, DumpContext
 @dataclass(frozen=True, slots=True)
 class BTerm(BaseTerm):
     width: int = field(init=False)
+    min: int = field(init=False, default=-1)
+    max: int = field(init=False, default=-1)
 
     @abc.abstractmethod
     def __post_init__(self) -> None: ...

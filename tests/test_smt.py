@@ -7,7 +7,9 @@ import pytest
 from bytes import Bytes
 from smt import Array, Uint8, Uint256
 from smt2.analyze_composite import COMPOSITE_PY, Compositor
+from smt2.analyze_minmax import MinMaxCase, MinMaxCaseParser
 from smt2.analyze_rewrite import CaseParser, RewriteCase
+from smt2.minmax import minmax
 from smt2.rewrite import (
     bitvector_folding,
     bitvector_logic,
@@ -48,40 +50,47 @@ def test_simple_rewrite():
 # SMT Test for Rewrite Rules
 
 
-def parameterize(rw: Callable[..., Any]) -> Any:
+def parameterize_rewrite(rw: Callable[..., Any]) -> Any:
     return pytest.mark.parametrize(
         "case", map(lambda c: pytest.param(c, id=c.id), RewriteCase.from_function(rw))
     )
 
 
-@parameterize(constraint_reduction)
+@parameterize_rewrite(constraint_reduction)
 def test_constraint_reduction(case: RewriteCase):
     assert CaseParser.is_equivalent(case)
 
 
-@parameterize(constraint_folding)
+@parameterize_rewrite(constraint_folding)
 def test_constraint_folding(case: RewriteCase):
     assert CaseParser.is_equivalent(case)
 
 
-@parameterize(constraint_logic)
+@parameterize_rewrite(constraint_logic)
 def test_constraint_logic(case: RewriteCase):
     assert CaseParser.is_equivalent(case)
 
 
-@parameterize(bitvector_reduction)
+@parameterize_rewrite(bitvector_reduction)
 def test_bitvector_reduction(case: RewriteCase):
     assert CaseParser.is_equivalent(case)
 
 
-@parameterize(bitvector_folding)
+@parameterize_rewrite(bitvector_folding)
 def test_bitvector_folding(case: RewriteCase):
     assert CaseParser.is_equivalent(case)
 
 
-@parameterize(bitvector_logic)
+@parameterize_rewrite(bitvector_logic)
 def test_bitvector_logic(case: RewriteCase):
     assert CaseParser.is_equivalent(case)
+
+
+@pytest.mark.parametrize(
+    "case", map(lambda c: pytest.param(c, id=c.id), MinMaxCase.from_function(minmax))
+)
+def test_minmax(case: MinMaxCase):
+    assert MinMaxCaseParser.is_sound(case)
 
 
 def test_codegen():

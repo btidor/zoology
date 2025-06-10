@@ -103,7 +103,7 @@ class RewriteCase:
                 case _:
                     raise SyntaxError("every case should begin with a docstring")
             match case.pattern:
-                case ast.MatchClass() as pattern:
+                case ast.MatchClass():
                     # Normal single case.
                     yield cls(id, case.pattern, case.guard, prefix, body)
                 case ast.MatchOr(patterns):
