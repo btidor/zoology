@@ -3,48 +3,8 @@
 
 from __future__ import annotations
 
-import abc
-from typing import Any
-
 from .theory_bitvec import *
 from .theory_core import *
-
-
-class RewriteMeta(abc.ABCMeta):
-    """Performs term rewriting."""
-
-    def __call__(self, *args: Any, **kwds: Any) -> Any:
-        """Construct the requested term, then rewrite it."""
-        assert issubclass(self, BaseTerm)
-        if simplify := getattr(self, "simplify", None):
-            # Custom constant folding for arrays
-            if s := simplify(*args, **kwds):
-                return s
-        if self.commutative:
-            # Swap Values to right-hand side, Nots to left-hand side.
-            match args:
-                case (x, CValue() as y) if not isinstance(x, CValue):
-                    args = (y, x)
-                case (Not() as x, y) if not isinstance(y, Not):
-                    args = (y, x)
-                case (x, BValue() as y) if not isinstance(x, BValue):
-                    args = (y, x)
-                case (BNot() as x, y) if not isinstance(y, BNot):
-                    args = (y, x)
-                case _:
-                    pass
-        term = super(RewriteMeta, self).__call__(*args, **kwds)
-        match term:
-            case CTerm():
-                term = constraint_reduction(term)
-                term = constraint_folding(term)
-                return constraint_logic(term)
-            case BTerm():
-                term = bitvector_reduction(term)
-                term = bitvector_folding(term)
-                return bitvector_logic(term)
-            case _:
-                raise TypeError("unknown term", term)
 
 
 def constraint_reduction(term: CTerm) -> CTerm:

@@ -27,8 +27,9 @@ MAX_PARAM = 2 * MAX_WIDTH
 
 # Python ints must be represented as bitvectors also (because we want to perform
 # boolean operations on them). Use a special, extra-large width for this to
-# avoid overflow.
-NATIVE_WIDTH = 2 * MAX_WIDTH
+# avoid overflow (must be able to multiply two MAX_WIDTH numbers without making
+# the sign bit set).
+NATIVE_WIDTH = 2 * MAX_WIDTH + 8
 ZERO = BValue(0, NATIVE_WIDTH)
 
 type Vars = tuple[tuple[str, FieldValue], ...]
@@ -129,6 +130,7 @@ class CaseParser:
 
     def __init__(self) -> None:
         """Create a new CaseParser."""
+        self.guards = list[CTerm]()
         self.assertions = list[CTerm]()
         self.vars = dict[str, FieldValue]()
 
@@ -161,12 +163,11 @@ class CaseParser:
                         raise SyntaxError("expected assignment")
 
             # 3. Parse the guard, if present. (Relies on vars defined above.)
-            if rw.guard is None:
-                guard = CValue(True)
-            else:
+            if rw.guard:
                 guard = parser.pyexpr(rw.guard)
                 assert isinstance(guard, CTerm)
-                if not check(guard):
+                parser.guards.append(guard)
+                if not check(*parser.guards):
                     # if the guard is false, don't try to construct the body
                     continue
 
@@ -187,7 +188,7 @@ class CaseParser:
             goal = Eq(term1, term2)
             for a in parser.assertions:
                 goal = And(goal, a)
-            if check(guard, Not(goal)):
+            if check(*parser.guards, Not(goal)):
                 return False
         return True
 
@@ -443,10 +444,18 @@ class CaseParser:
                 val = self.vars[name]
                 assert isinstance(val, BTerm)
                 return SignExtend(NATIVE_WIDTH - val.width, val)
-            case ast.Attribute(ast.Name(name), "min" | "max" as attr):
-                val = self.vars[f"{name}.{attr}"]
+            case ast.Attribute(ast.Name(name), "min"):
+                val = self.vars[name]
                 assert isinstance(val, BTerm)
-                return ZeroExtend(NATIVE_WIDTH - val.width, val)
+                min = BSymbol(f"{name}.min".encode(), val.width)
+                self.guards.append(Ule(min, val))
+                return ZeroExtend(NATIVE_WIDTH - val.width, min)
+            case ast.Attribute(ast.Name(name), "max"):
+                val = self.vars[name]
+                assert isinstance(val, BTerm)
+                max = BSymbol(f"{name}.max".encode(), val.width)
+                self.guards.append(Ule(val, max))
+                return ZeroExtend(NATIVE_WIDTH - val.width, max)
             case ast.Attribute(ast.Name(name), attr):
                 val = getattr(self.vars[name], attr)
                 assert isinstance(val, int)

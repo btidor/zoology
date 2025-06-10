@@ -17,6 +17,8 @@ from typing import Any, ClassVar, override
 
 from .theory_core import BaseTerm, DumpContext
 
+type MinMax = tuple[int, int]
+
 
 class RewriteMeta(abc.ABCMeta):
     def __call__(self, *args: Any, **kwds: Any) -> Any:
@@ -41,11 +43,16 @@ class RewriteMeta(abc.ABCMeta):
             case CTerm():
                 term = constraint_reduction(term)
                 term = constraint_folding(term)
-                return constraint_logic(term)
+                term = constraint_logic(term)
+                return constraint_minmax(term)
             case BTerm():
                 term = bitvector_reduction(term)
                 term = bitvector_folding(term)
-                return bitvector_logic(term)
+                term = bitvector_logic(term)
+                min, max = propagate_minmax(term)
+                object.__setattr__(term, "min", min)
+                object.__setattr__(term, "max", max)
+                return term
             case _:
                 raise TypeError("unknown term", term)
 
@@ -940,5 +947,101 @@ def bitvector_logic(term: BTerm) -> BTerm:
                     Lshr(Concat((*rest,)), BValue(a - x.width, term.width - x.width)),
                 )
             )
+        case _:
+            return term
+
+
+def propagate_minmax(term: BTerm) -> MinMax:
+    mask = (1 << term.width) - 1
+    slimit = 1 << (term.width - 1)
+    match term:
+        case BValue(a):
+            return (a, a)
+        case Concat((BValue(0), x)):
+            return (x.min, x.max)
+        case BNot(x):
+            return (x.max ^ mask, x.min ^ mask)
+        case BAnd(x, y):
+            return (0, min(x.max, y.max))
+        case BOr(x, y):
+            return (max(x.min, y.min), mask)
+        case Add(x, y) if x.max < slimit and y.max < slimit:
+            return (x.min + y.min, x.max + y.max)
+        case Add(BValue() as x, y) if x.sgnd < 0 and y.min + x.sgnd > 0:
+            return (y.min + x.sgnd, y.max + x.sgnd)
+        case Mul(BValue(a), y) if a * y.max <= mask:
+            return (a * y.min, a * y.max)
+        case Udiv(x, BValue(a)) if a != 0:
+            return (x.min // a, x.max // a)
+        case Urem(_, y) if y.min > 0:
+            return (0, y.max - 1)
+        case Shl(x, BValue(a)) if a < term.width and (x.max << a) <= mask:
+            return (min(x.min << a, mask), min(x.max << a, mask))
+        case Shl(x, BValue(a)) if a < term.width:
+            return (0, min(x.max << a, mask))
+        case Lshr(x, BValue(a)):
+            return (x.min >> a, x.max >> a)
+        case Sdiv(x, BValue(a)) if x.max < slimit and a < slimit and a != 0:
+            return (x.min // a, x.max // a)
+        case Srem(x, y) if x.max < slimit and y.min > 0 and y.max < slimit:
+            return (0, y.max - 1)
+        case Smod(_, y) if y.min > 0 and y.max < slimit:
+            return (0, y.max - 1)
+        case Ashr(x, BValue(a)) if x.max < slimit:
+            return (x.min >> a, x.max >> a)
+        case SignExtend(_i, x) if x.max < (1 << (x.width - 1)):
+            return (x.min, x.max)
+        case Ite(_, x, y):
+            return (min(x.min, y.min), max(x.max, y.max))
+        case _:
+            return (0, mask)
+
+
+def constraint_minmax(term: CTerm) -> CTerm:
+    match term:
+        case Eq(BTerm() as x, BTerm() as y) if x.max < y.min:
+            return CValue(False)
+        case Eq(BTerm() as x, BTerm() as y) if y.max < x.min:
+            return CValue(False)
+        case Ult(x, y) if x.max < y.min:
+            return CValue(True)
+        case Ult(x, y) if y.max <= x.min:
+            return CValue(False)
+        case Ule(x, y) if x.max <= y.min:
+            return CValue(True)
+        case Ule(x, y) if y.max < x.min:
+            return CValue(False)
+        case Slt(x, y) if x.max < y.min and y.max < (1 << (y.width - 1)):
+            return CValue(True)
+        case Slt(x, y) if y.max <= x.min and x.max < (1 << (x.width - 1)):
+            return CValue(False)
+        case Slt(x, y) if y.max < (1 << (y.width - 1)) and x.min >= (
+            1 << (x.width - 1)
+        ):
+            return CValue(True)
+        case Slt(x, y) if x.max < (1 << (x.width - 1)) and y.min >= (
+            1 << (y.width - 1)
+        ):
+            return CValue(False)
+        case Slt(x, y) if x.max < y.min and x.min >= (1 << (x.width - 1)):
+            return CValue(True)
+        case Slt(x, y) if y.max <= x.min and y.min >= (1 << (y.width - 1)):
+            return CValue(False)
+        case Sle(x, y) if x.max <= y.min and y.max < (1 << (y.width - 1)):
+            return CValue(True)
+        case Sle(x, y) if y.max < x.min and x.max < (1 << (x.width - 1)):
+            return CValue(False)
+        case Sle(x, y) if y.max < (1 << (y.width - 1)) and x.min >= (
+            1 << (x.width - 1)
+        ):
+            return CValue(True)
+        case Sle(x, y) if x.max < (1 << (x.width - 1)) and y.min >= (
+            1 << (y.width - 1)
+        ):
+            return CValue(False)
+        case Sle(x, y) if x.max <= y.min and x.min >= (1 << (x.width - 1)):
+            return CValue(True)
+        case Sle(x, y) if y.max < x.min and y.min >= (1 << (y.width - 1)):
+            return CValue(False)
         case _:
             return term

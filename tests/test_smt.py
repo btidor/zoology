@@ -9,7 +9,7 @@ from smt import Array, Uint8, Uint256
 from smt2.analyze_composite import COMPOSITE_PY, Compositor
 from smt2.analyze_minmax import MinMaxCase, MinMaxCaseParser
 from smt2.analyze_rewrite import CaseParser, RewriteCase
-from smt2.minmax import minmax
+from smt2.minmax import constraint_minmax, propagate_minmax
 from smt2.rewrite import (
     bitvector_folding,
     bitvector_logic,
@@ -87,10 +87,16 @@ def test_bitvector_logic(case: RewriteCase):
 
 
 @pytest.mark.parametrize(
-    "case", map(lambda c: pytest.param(c, id=c.id), MinMaxCase.from_function(minmax))
+    "case",
+    map(lambda c: pytest.param(c, id=c.id), MinMaxCase.from_function(propagate_minmax)),
 )
-def test_minmax(case: MinMaxCase):
+def test_propagate_minmax(case: MinMaxCase):
     assert MinMaxCaseParser.is_sound(case)
+
+
+@parameterize_rewrite(constraint_minmax)
+def test_constraint_minmax(case: RewriteCase):
+    assert CaseParser.is_equivalent(case)
 
 
 def test_codegen():

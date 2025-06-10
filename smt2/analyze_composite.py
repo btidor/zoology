@@ -15,7 +15,7 @@ from types import ModuleType
 from typing import Any, Callable
 
 from . import rewrite, theory_array, theory_bitvec, theory_core
-from .rewrite import RewriteMeta
+from .minmax import RewriteMeta, constraint_minmax, propagate_minmax
 from .theory_core import BaseTerm
 
 COMPOSITE_PY = Path(__file__).parent / "composite.py"
@@ -53,6 +53,7 @@ from typing import Any, ClassVar, override
 
 from .theory_core import BaseTerm, DumpContext
 
+type MinMax = tuple[int, int]
 
 """)
         cls._source(RewriteMeta)
@@ -60,6 +61,8 @@ from .theory_core import BaseTerm, DumpContext
         cls._theory(theory_bitvec)
         cls._theory(theory_array)
         cls._rewrites(rewrite)
+        cls._source(propagate_minmax)
+        cls._source(constraint_minmax)
 
     @classmethod
     def _theory(cls, module: ModuleType) -> None:

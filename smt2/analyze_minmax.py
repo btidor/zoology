@@ -81,24 +81,12 @@ class MinMaxCaseParser(CaseParser):
         #    the process, build up a list of variables bound by the match
         #    statement.
         for term, vars in cls.match(mm.pattern, BitVectorSort):
-            parser = cls()
-            preconditions = list[CTerm]()
-
-            # define bounds for each symbolic variable
-            for name, sym in vars:
-                if not isinstance(sym, BTerm) or sym.width == NATIVE_WIDTH:
-                    continue
-                min = BSymbol(f"{name}.min".encode(), sym.width)
-                max = BSymbol(f"{name}.max".encode(), sym.width)
-                parser.vars[f"{name}.min"] = ZeroExtend(NATIVE_WIDTH - sym.width, min)
-                parser.vars[f"{name}.max"] = ZeroExtend(NATIVE_WIDTH - sym.width, max)
-                preconditions.append(And(Ule(min, sym), Ule(sym, max)))
-
             # define the constructed input term as "term"
             assert isinstance(term, BTerm)
             vars = (*vars, ("term", term))
 
             # create a new local scope, add bound variables
+            parser = cls()
             for name, value in vars:
                 assert name not in parser.vars, "duplicate definition"
                 parser.vars[name] = value
@@ -112,11 +100,11 @@ class MinMaxCaseParser(CaseParser):
                         raise SyntaxError("expected assignment")
 
             # 3. Parse the guard, if present. (Relies on vars defined above.)
-            if mm.guard is not None:
+            if mm.guard:
                 guard = parser.pyexpr(mm.guard)
                 assert isinstance(guard, CTerm)
-                preconditions.append(guard)
-                if not check(guard):
+                parser.guards.append(guard)
+                if not check(*parser.guards):
                     # if the guard is false, don't try to construct the body
                     continue
 
@@ -141,6 +129,6 @@ class MinMaxCaseParser(CaseParser):
                 And(Sle(zterm, max), Slt(max, BValue(1 << term.width, NATIVE_WIDTH))),
             )
             goal = reduce(And, parser.assertions, goal)
-            if check(*preconditions, Not(goal)):
+            if check(*parser.guards, Not(goal)):
                 return False
         return True
