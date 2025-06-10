@@ -429,19 +429,24 @@ class Array[K: Uint[Any] | Int[Any], V: Uint[Any] | Int[Any]](
             case AValue(default):
                 return self._mk_value(default)
             case Store(default, lower, upper):
-                if upper:
-                    p, q = upper[0]
-                    if kterm == p:
-                        return self._mk_value(q)
-                elif isinstance(kterm, BValue):
-                    lower = dict(lower)
-                    if kterm.value in lower:
-                        return self._mk_value(lower[kterm.value])
-                    else:
-                        if isinstance(self._term.base, ASymbol):
-                            return self._mk_value(Select(self._term.base, kterm))
+                for p, q in reversed(upper):
+                    match Eq(kterm, p):
+                        case CValue(True):
+                            return self._mk_value(q)
+                        case CValue(False):
+                            continue
+                        case _:
+                            break
+                else:
+                    if isinstance(kterm, BValue):
+                        lower = dict(lower)
+                        if kterm.value in lower:
+                            return self._mk_value(lower[kterm.value])
                         else:
-                            return self._mk_value(self._term.base.default)
+                            if isinstance(self._term.base, ASymbol):
+                                return self._mk_value(Select(self._term.base, kterm))
+                            else:
+                                return self._mk_value(self._term.base.default)
         return self._value._apply(Select, self, key)
 
     def __setitem__(self, key: K, value: V) -> None:
