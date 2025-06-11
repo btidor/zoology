@@ -35,27 +35,65 @@ class ConstrainingError(Exception):
 
 class Solver:
     def __init__(self) -> None:
-        self._constraint = Constraint(True)
+        self._constraints: set[CTerm] | None = set()
         self._model: Model | str | None = None
 
     @property
     def constraint(self) -> Constraint:
-        return self._constraint
+        if self._constraints is None:
+            return Constraint(False)
+        elif not self._constraints:
+            return Constraint(True)
+        else:
+            k = Constraint.__new__(Constraint)
+            k._term = reduce(And, self._constraints)  # pyright: ignore[reportPrivateUsage]
+            return k
 
     def add(self, assertion: Constraint, /) -> None:
-        self._constraint &= assertion
+        self._model = None
+        self._add(assertion._term)  # pyright: ignore[reportPrivateUsage]
+
+    def _add(self, term: CTerm, /) -> None:
+        if self._constraints is None:
+            # This solver is already unsatisfiable.
+            return
+        elif isinstance(term, And):
+            # Lift up And-ed terms for readability.
+            self._add(term.left)
+            self._add(term.right)
+            return
+
+        # Optimization: replace previously-asserted clauses with the value
+        # `True`, since we've already asserted them.
+        subs: dict[BaseTerm, BaseTerm] = {c: CValue(True) for c in self._constraints}
+        match term.substitute(subs):
+            case CValue(True):
+                return
+            case CValue(False):
+                self._constraints = None
+                return
+            case CTerm() as term:
+                self._constraints.add(term)
+            case other:
+                raise TypeError(f"unexpected term: {other.__class__}")
 
     def check(self, *assumptions: Constraint) -> bool:
         self._model = None
-        constraint = reduce(Constraint.__and__, assumptions, self._constraint)
-        if b := constraint.reveal():
+        backup = copy.copy(self._constraints)
+        for assumption in assumptions:
+            self.add(assumption)
+        constraints, self._constraints = self._constraints, backup
+
+        if constraints is None:
+            return False
+        elif not constraints:
             self._model = {}
-            return b
+            return True
 
         ctx = DumpContext()
-        for c in constraint.destructure():
+        for constraint in constraints:
             ctx.write(b"(assert ")
-            c.dump(ctx)
+            constraint.dump(ctx)
             ctx.write(b")\n")
         ctx.write(b"(check-sat)")
         smt = b"\n".join(ctx.defs.values()) + b"\n" + bytes(ctx.out)
