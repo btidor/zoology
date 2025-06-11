@@ -89,7 +89,17 @@ class Symbolic(abc.ABC):
 
     def substitute(self, model: Model) -> Self:
         k = self.__class__.__new__(self.__class__)
-        k._term = self._term.substitute({n: s._term for n, s in model.items()})  # pyright: ignore[reportPrivateUsage]
+        subs = dict[BaseTerm, BaseTerm]()
+        for name, sym in model.items():
+            match sym:
+                case Constraint():
+                    orig = CSymbol(name.encode())
+                case BitVector():
+                    orig = BSymbol(name.encode(), sym.width)
+                case Array():
+                    orig = ASymbol(name.encode(), sym._key.width, sym._value.width)  # pyright: ignore[reportPrivateUsage]
+            subs[orig] = sym._term  # pyright: ignore[reportPrivateUsage]
+        k._term = self._term.substitute(subs)  # pyright: ignore[reportPrivateUsage]
         return k
 
 

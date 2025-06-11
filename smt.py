@@ -9,7 +9,8 @@ from subprocess import Popen, PIPE
 from typing import Any, Literal, overload
 
 from smt2 import Array, Constraint, Int, Model, Symbolic, Uint
-from smt2.theory_core import DumpContext
+from smt2.composite import And, CTerm, CValue
+from smt2.theory_core import BaseTerm, DumpContext
 
 
 Uint8 = Uint[Literal[8]]

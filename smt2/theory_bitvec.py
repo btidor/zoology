@@ -45,8 +45,10 @@ class BSymbol(BTerm):
         ctx.write(self.name)
 
     @override
-    def substitute(self, subs: dict[str, BaseTerm]) -> BaseTerm:
-        return subs[self.name.decode()]
+    def substitute(self, subs: dict[BaseTerm, BaseTerm]) -> BaseTerm:
+        if self in subs:
+            return subs[self]
+        return self
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,7 +78,7 @@ class BValue(BTerm):
             ctx.write(b"#b" + bin(self.value)[2:].zfill(self.width).encode())
 
     @override
-    def substitute(self, subs: dict[str, BaseTerm]) -> BaseTerm:
+    def substitute(self, subs: dict[BaseTerm, BaseTerm]) -> BaseTerm:
         return self
 
 

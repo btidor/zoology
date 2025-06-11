@@ -81,17 +81,28 @@ class BaseTerm(abc.ABC):
             term.dump(ctx)
         ctx.out.extend(b")")
 
-    def substitute(self, subs: dict[str, BaseTerm]) -> BaseTerm:
+    def substitute(self, subs: dict[BaseTerm, BaseTerm]) -> BaseTerm:
+        if self in subs:
+            return subs[self]
         args = list[Any]()
         for name in self.__match_args__:
             arg = getattr(self, name)
             if isinstance(arg, BaseTerm):
                 args.append(arg.substitute(subs))
             elif isinstance(arg, tuple):
-                s = list[BaseTerm]()
+                s = list[BaseTerm | tuple[BaseTerm, ...]]()
                 for a in arg:  # pyright: ignore[reportUnknownVariableType]
-                    assert isinstance(a, BaseTerm)
-                    s.append(a.substitute(subs))
+                    match a:
+                        case BaseTerm():
+                            s.append(a.substitute(subs))
+                        case tuple():
+                            t = list[BaseTerm]()
+                            for b in a:  # pyright: ignore[reportUnknownVariableType]
+                                assert isinstance(b, BaseTerm)
+                                t.append(b.substitute(subs))
+                            s.append(tuple(t))
+                        case other:  # pyright: ignore[reportUnknownVariableType]
+                            raise TypeError(f"unexpected arg: {other}")
                 args.append(tuple(s))
             else:
                 args.append(arg)
@@ -112,8 +123,10 @@ class CSymbol(CTerm):
         ctx.out.extend(self.name)
 
     @override
-    def substitute(self, subs: dict[str, BaseTerm]) -> BaseTerm:
-        return subs[self.name.decode()]
+    def substitute(self, subs: dict[BaseTerm, BaseTerm]) -> BaseTerm:
+        if self in subs:
+            return subs[self]
+        return self
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,7 +138,7 @@ class CValue(CTerm):
         ctx.out.extend(b"true" if self.value else b"false")
 
     @override
-    def substitute(self, subs: dict[str, BaseTerm]) -> BaseTerm:
+    def substitute(self, subs: dict[BaseTerm, BaseTerm]) -> BaseTerm:
         return self
 
 

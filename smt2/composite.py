@@ -71,8 +71,10 @@ class CSymbol(CTerm):
         ctx.out.extend(self.name)
 
     @override
-    def substitute(self, subs: dict[str, BaseTerm]) -> BaseTerm:
-        return subs[self.name.decode()]
+    def substitute(self, subs: dict[BaseTerm, BaseTerm]) -> BaseTerm:
+        if self in subs:
+            return subs[self]
+        return self
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,7 +86,7 @@ class CValue(CTerm):
         ctx.out.extend(b"true" if self.value else b"false")
 
     @override
-    def substitute(self, subs: dict[str, BaseTerm]) -> BaseTerm:
+    def substitute(self, subs: dict[BaseTerm, BaseTerm]) -> BaseTerm:
         return self
 
 
@@ -182,8 +184,10 @@ class BSymbol(BTerm):
         ctx.write(self.name)
 
     @override
-    def substitute(self, subs: dict[str, BaseTerm]) -> BaseTerm:
-        return subs[self.name.decode()]
+    def substitute(self, subs: dict[BaseTerm, BaseTerm]) -> BaseTerm:
+        if self in subs:
+            return subs[self]
+        return self
 
 
 @dataclass(frozen=True, slots=True)
@@ -212,7 +216,7 @@ class BValue(BTerm):
             ctx.write(b"#b" + bin(self.value)[2:].zfill(self.width).encode())
 
     @override
-    def substitute(self, subs: dict[str, BaseTerm]) -> BaseTerm:
+    def substitute(self, subs: dict[BaseTerm, BaseTerm]) -> BaseTerm:
         return self
 
 
@@ -519,8 +523,10 @@ class ASymbol(ATerm):
         ctx.write(self.name)
 
     @override
-    def substitute(self, subs: dict[str, BaseTerm]) -> BaseTerm:
-        return subs[self.name.decode()]
+    def substitute(self, subs: dict[BaseTerm, BaseTerm]) -> BaseTerm:
+        if self in subs:
+            return subs[self]
+        return self
 
 
 @dataclass(frozen=True, slots=True)
@@ -541,7 +547,7 @@ class AValue(ATerm):
         ctx.write(b")")
 
     @override
-    def substitute(self, subs: dict[str, BaseTerm]) -> BaseTerm:
+    def substitute(self, subs: dict[BaseTerm, BaseTerm]) -> BaseTerm:
         return self
 
 
