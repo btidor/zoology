@@ -29,8 +29,8 @@ def propagate_minmax(term: BTerm) -> MinMax:
     match term:
         case BValue(a):
             return (a, a)
-        case Concat((BValue(0), x)):
-            return (x.min, x.max)
+        case Concat((BValue(a), x)):
+            return (x.min | (a << x.width), x.max | (a << x.width))
         case BNot(x):
             return (x.max ^ mask, x.min ^ mask)
         case BAnd(x, y):

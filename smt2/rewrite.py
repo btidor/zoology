@@ -94,6 +94,9 @@ def constraint_logic(term: CTerm) -> CTerm:
         case And(x, Not(y)) if x == y:
             """and.ix: X & ~X <=> False"""
             return CValue(False)
+        case Not(And(x, y)):
+            """not.and: ~(X & Y) <=> ~X | ~Y"""
+            return Or(Not(x), Not(y))
         case Or(CValue(True), x):
             """or.t: X | True <=> True"""
             return CValue(True)
@@ -106,6 +109,9 @@ def constraint_logic(term: CTerm) -> CTerm:
         case Or(x, Not(y)) if x == y:
             """or.ix: X | ~X <=> True"""
             return CValue(True)
+        case Not(Or(x, y)):
+            """not.or: ~(X | Y) <=> ~X & ~Y"""
+            return And(Not(x), Not(y))
         case Xor(CValue(True), x):
             """xor.t: X ^ True <=> ~X"""
             return Not(x)
@@ -142,44 +148,84 @@ def constraint_logic(term: CTerm) -> CTerm:
         case Eq(BValue(a), Add(BValue(b), x)):
             """beq.vadd: A = X + B <=> A - B = X"""
             return Eq(Add(BValue(a, x.width), Neg(BValue(b, x.width))), x)
+        case Eq(BTerm() as z, Ite(c, x, y)) if z == x:
+            """beq.xite"""
+            return Or(c, Eq(z, y))
+        case Eq(BTerm() as z, Ite(c, x, y)) if z == y:
+            """beq.itex"""
+            return Or(Not(c), Eq(z, x))
+        case Eq(BValue(a) as v, Ite(c, BValue(p), y)) if a != p:
+            """beq.vite"""
+            return And(Not(c), Eq(v, y))
+        case Eq(BValue(a) as v, Ite(c, x, BValue(q))) if a != q:
+            """beq.itev"""
+            return And(c, Eq(v, x))
+        case Eq(BValue(a), Concat([*rest, x]) as c) if len(rest) > 0:
+            """beq.cat"""
+            return And(
+                Eq(Concat((*rest,)), BValue(a >> x.width, c.width - x.width)),
+                Eq(BValue(a & ((1 << x.width) - 1), x.width), x),
+            )
+        case Eq(Concat([*rest, x]), Ite(c, p, q) as z) if len(rest) > 0:
+            """beq.cateite"""
+            return And(
+                Eq(
+                    Concat((*rest,)),
+                    Ite(
+                        c,
+                        Extract(z.width - 1, x.width, p),
+                        Extract(z.width - 1, x.width, q),
+                    ),
+                ),
+                Eq(x, Ite(c, Extract(x.width - 1, 0, p), Extract(x.width - 1, 0, q))),
+            )
 
         # Bitvector Comparators.
         case Ult(x, BValue(0)):
             """ult.z: X < 0 <=> False"""
             return CValue(False)
-        case Ult(BValue(0), x):
-            """z.ult: 0 < X <=> X != 0"""
-            return Distinct(x, BValue(0, x.width))
-        case Ult(x, BValue(1)):
-            """ult.w: X < 1 <=> X = 0"""
-            return Eq(x, BValue(0, x.width))
         case Ule(x, BValue(0)):
             """ule.z: X <= 0 <=> X = 0"""
             return Eq(x, BValue(0, x.width))
+        case Ult(BValue(0), x):
+            """z.ult: 0 < X <=> X != 0"""
+            return Distinct(x, BValue(0, x.width))
         case Ule(BValue(0), x):
             """z.ule: 0 <= X <=> True"""
             return CValue(True)
-
-        # Comparators with Concat.
-        case Eq(BValue(a), Concat([*rest, x]) as c) if len(rest) > 0:
-            """beq.concat"""
-            mask = (1 << x.width) - 1
-            return And(
-                Eq(BValue(a >> x.width, c.width - x.width), Concat((*rest,))),
-                Eq(BValue(a & mask, x.width), x),
-            )
-        case Ult(Concat([BValue(p), x]), BValue(a)) if ((p + 1) << x.width) - 1 < a:
-            """ult.zv"""
-            return CValue(True)
-        case Ult(BValue(a), Concat([BValue(p), x])) if a >= ((p + 1) << x.width) - 1:
-            """ult.vz"""
-            return CValue(False)
-        case Ule(Concat([BValue(p), x]), BValue(a)) if ((p + 1) << x.width) - 1 <= a:
-            """ule.zv"""
-            return CValue(True)
-        case Ule(BValue(a), Concat([BValue(p), x])) if a > ((p + 1) << x.width) - 1:
-            """ule.vz"""
-            return CValue(False)
+        case Ult(x, BValue(1)):
+            """ult.w: X < 1 <=> X = 0"""
+            return Eq(x, BValue(0, x.width))
+        case Not(Ult(x, y)):
+            """not.ult: ~(X < Y) <=> Y <= X"""
+            return Ule(y, x)
+        case Not(Ule(x, y)):
+            """not.ult: ~(X <= Y) <=> Y < X"""
+            return Ult(y, x)
+        case Ult(BValue(a), Concat([BValue(b) as x, *rest]) as c) if (
+            b == (a >> (c.width - x.width)) and len(rest) > 0
+        ):
+            """ult.vcat"""
+            rwidth = c.width - x.width
+            return Ult(BValue(a & ((1 << rwidth) - 1), rwidth), Concat((*rest,)))
+        case Ult(Concat([BValue(b) as x, *rest]) as c, BValue(a)) if (
+            b == (a >> (c.width - x.width)) and len(rest) > 0
+        ):
+            """ult.catv"""
+            rwidth = c.width - x.width
+            return Ult(Concat((*rest,)), BValue(a & ((1 << rwidth) - 1), rwidth))
+        case Ule(BValue(a), Concat([BValue(b) as x, *rest]) as c) if (
+            b == (a >> (c.width - x.width)) and len(rest) > 0
+        ):
+            """ule.vcat"""
+            rwidth = c.width - x.width
+            return Ule(BValue(a & ((1 << rwidth) - 1), rwidth), Concat((*rest,)))
+        case Ule(Concat([BValue(b) as x, *rest]) as c, BValue(a)) if (
+            b == (a >> (c.width - x.width)) and len(rest) > 0
+        ):
+            """ule.catv"""
+            rwidth = c.width - x.width
+            return Ule(Concat((*rest,)), BValue(a & ((1 << rwidth) - 1), rwidth))
         case _:
             return term
 
@@ -247,10 +293,10 @@ def bitvector_folding(term: BTerm) -> BTerm:
     modulus = 1 << width
     match term:
         case Concat([single]):
-            """concat.w"""
+            """cat.w"""
             return single
         case Concat([BValue(a) as x, BValue(b) as y, *rest]):
-            """concat.n"""
+            """cat.n"""
             return Concat((BValue(a << y.width | b, x.width + y.width), *rest))
         case Extract(i, j, BValue(a)):
             """extract"""
@@ -379,6 +425,9 @@ def bitvector_logic(term: BTerm) -> BTerm:
         case Add(x, BNot(y)) if x == y:
             """add.bnot: X + ~X <=> """
             return BValue(mask, width)
+        case Add(x, Add(y, BNot(z))) if x == z:
+            """add.bnot: X + ~X <=> """
+            return Add(BValue(mask, width), y)
         case Add(BValue(a), Add(BValue(b), x)):
             """add.add: A + (B + X) <=> (A + B) + X"""
             return Add(BValue((a + b) % modulus, width), x)
@@ -451,10 +500,10 @@ def bitvector_logic(term: BTerm) -> BTerm:
             """sext.sext"""
             return SignExtend(i + j, x)
         case Extract(i, j, Concat([*rest, x])) if j >= x.width:
-            """xtr.concat"""
+            """xtr.cat"""
             return Extract(i - x.width, j - x.width, Concat((*rest,)))
         case Extract(i, j, Concat([x, *rest])) if i < term.width - x.width:
-            """xtr.concat"""
+            """xtr.cat"""
             return Extract(i, j, Concat((*rest,)))
 
         # Push boolean expressions down over ITEs.
@@ -477,7 +526,7 @@ def bitvector_logic(term: BTerm) -> BTerm:
         # Push boolean expressions down over Concat. We *don't* push down BNot,
         # because this would conflict with "add.bnot" and similar rewrites.
         case BAnd(BValue(a), Concat([*rest, x]) as c) if len(rest) > 0:
-            """band.concat"""
+            """band.cat"""
             mask = (1 << x.width) - 1
             return Concat(
                 (
@@ -486,7 +535,7 @@ def bitvector_logic(term: BTerm) -> BTerm:
                 )
             )
         case BOr(BValue(a), Concat([*rest, x]) as c) if len(rest) > 0:
-            """bor.concat"""
+            """bor.cat"""
             mask = (1 << x.width) - 1
             return Concat(
                 (
@@ -498,7 +547,7 @@ def bitvector_logic(term: BTerm) -> BTerm:
         case Shl(Concat([x, *rest]), BValue(a)) if (
             a < term.width and a >= x.width and len(rest) > 0
         ):
-            """shl.concat"""
+            """shl.cat"""
             return Concat(
                 (
                     Shl(Concat((*rest,)), BValue(a - x.width, term.width - x.width)),
@@ -508,7 +557,7 @@ def bitvector_logic(term: BTerm) -> BTerm:
         case Lshr(Concat([*rest, x]), BValue(a)) if (
             a < term.width and a >= x.width and len(rest) > 0
         ):
-            """lshr.concat"""
+            """lshr.cat"""
             return Concat(
                 (
                     BValue(0, x.width),

@@ -658,6 +658,8 @@ def constraint_logic(term: CTerm) -> CTerm:
             return x
         case And(x, Not(y)) if x == y:
             return CValue(False)
+        case Not(And(x, y)):
+            return Or(Not(x), Not(y))
         case Or(CValue(True), x):
             return CValue(True)
         case Or(CValue(False), x):
@@ -666,6 +668,8 @@ def constraint_logic(term: CTerm) -> CTerm:
             return x
         case Or(x, Not(y)) if x == y:
             return CValue(True)
+        case Not(Or(x, y)):
+            return And(Not(x), Not(y))
         case Xor(CValue(True), x):
             return Not(x)
         case Xor(CValue(False), x):
@@ -689,30 +693,65 @@ def constraint_logic(term: CTerm) -> CTerm:
             return Eq(BValue(a ^ b, x.width), x)
         case Eq(BValue(a), Add(BValue(b), x)):
             return Eq(Add(BValue(a, x.width), Neg(BValue(b, x.width))), x)
+        case Eq(BTerm() as z, Ite(c, x, y)) if z == x:
+            return Or(c, Eq(z, y))
+        case Eq(BTerm() as z, Ite(c, x, y)) if z == y:
+            return Or(Not(c), Eq(z, x))
+        case Eq(BValue(a) as v, Ite(c, BValue(p), y)) if a != p:
+            return And(Not(c), Eq(v, y))
+        case Eq(BValue(a) as v, Ite(c, x, BValue(q))) if a != q:
+            return And(c, Eq(v, x))
+        case Eq(BValue(a), Concat([*rest, x]) as c) if len(rest) > 0:
+            return And(
+                Eq(Concat((*rest,)), BValue(a >> x.width, c.width - x.width)),
+                Eq(BValue(a & ((1 << x.width) - 1), x.width), x),
+            )
+        case Eq(Concat([*rest, x]), Ite(c, p, q) as z) if len(rest) > 0:
+            return And(
+                Eq(
+                    Concat((*rest,)),
+                    Ite(
+                        c,
+                        Extract(z.width - 1, x.width, p),
+                        Extract(z.width - 1, x.width, q),
+                    ),
+                ),
+                Eq(x, Ite(c, Extract(x.width - 1, 0, p), Extract(x.width - 1, 0, q))),
+            )
         case Ult(x, BValue(0)):
             return CValue(False)
-        case Ult(BValue(0), x):
-            return Distinct(x, BValue(0, x.width))
-        case Ult(x, BValue(1)):
-            return Eq(x, BValue(0, x.width))
         case Ule(x, BValue(0)):
             return Eq(x, BValue(0, x.width))
+        case Ult(BValue(0), x):
+            return Distinct(x, BValue(0, x.width))
         case Ule(BValue(0), x):
             return CValue(True)
-        case Eq(BValue(a), Concat([*rest, x]) as c) if len(rest) > 0:
-            mask = (1 << x.width) - 1
-            return And(
-                Eq(BValue(a >> x.width, c.width - x.width), Concat((*rest,))),
-                Eq(BValue(a & mask, x.width), x),
-            )
-        case Ult(Concat([BValue(p), x]), BValue(a)) if ((p + 1) << x.width) - 1 < a:
-            return CValue(True)
-        case Ult(BValue(a), Concat([BValue(p), x])) if a >= ((p + 1) << x.width) - 1:
-            return CValue(False)
-        case Ule(Concat([BValue(p), x]), BValue(a)) if ((p + 1) << x.width) - 1 <= a:
-            return CValue(True)
-        case Ule(BValue(a), Concat([BValue(p), x])) if a > ((p + 1) << x.width) - 1:
-            return CValue(False)
+        case Ult(x, BValue(1)):
+            return Eq(x, BValue(0, x.width))
+        case Not(Ult(x, y)):
+            return Ule(y, x)
+        case Not(Ule(x, y)):
+            return Ult(y, x)
+        case Ult(BValue(a), Concat([BValue(b) as x, *rest]) as c) if (
+            b == (a >> (c.width - x.width)) and len(rest) > 0
+        ):
+            rwidth = c.width - x.width
+            return Ult(BValue(a & ((1 << rwidth) - 1), rwidth), Concat((*rest,)))
+        case Ult(Concat([BValue(b) as x, *rest]) as c, BValue(a)) if (
+            b == (a >> (c.width - x.width)) and len(rest) > 0
+        ):
+            rwidth = c.width - x.width
+            return Ult(Concat((*rest,)), BValue(a & ((1 << rwidth) - 1), rwidth))
+        case Ule(BValue(a), Concat([BValue(b) as x, *rest]) as c) if (
+            b == (a >> (c.width - x.width)) and len(rest) > 0
+        ):
+            rwidth = c.width - x.width
+            return Ule(BValue(a & ((1 << rwidth) - 1), rwidth), Concat((*rest,)))
+        case Ule(Concat([BValue(b) as x, *rest]) as c, BValue(a)) if (
+            b == (a >> (c.width - x.width)) and len(rest) > 0
+        ):
+            rwidth = c.width - x.width
+            return Ule(Concat((*rest,)), BValue(a & ((1 << rwidth) - 1), rwidth))
         case _:
             return term
 
@@ -852,6 +891,8 @@ def bitvector_logic(term: BTerm) -> BTerm:
             return x
         case Add(x, BNot(y)) if x == y:
             return BValue(mask, width)
+        case Add(x, Add(y, BNot(z))) if x == z:
+            return Add(BValue(mask, width), y)
         case Add(BValue(a), Add(BValue(b), x)):
             return Add(BValue((a + b) % modulus, width), x)
         case Add(Add(BValue(a), x), Add(BValue(b), y)):
@@ -957,8 +998,8 @@ def propagate_minmax(term: BTerm) -> MinMax:
     match term:
         case BValue(a):
             return (a, a)
-        case Concat((BValue(0), x)):
-            return (x.min, x.max)
+        case Concat((BValue(a), x)):
+            return (x.min | (a << x.width), x.max | (a << x.width))
         case BNot(x):
             return (x.max ^ mask, x.min ^ mask)
         case BAnd(x, y):
