@@ -6,6 +6,7 @@
             "type": "shell",
             "command": "tests/speedscope.py",
             "group": "none",
+            "hide": true,
             "isBackground": true,
             "presentation": {
                 "reveal": "silent"
@@ -14,10 +15,18 @@
         },
         {
             "label": "Simple Browser",
-            "command": "${input:openSimpleBrowser}"
+            "command": "${input:openSimpleBrowser}",
+            "type": "shell",
+            "hide": true,
+            "presentation": {
+                "clear": true,
+                "reveal": "never",
+                "close": true
+            },
+            "problemMatcher": []
         },
         {
-            "label": "Profile",
+            "label": "Launch Speedscope",
             "dependsOn": [
                 "Speedscope",
                 "Simple Browser"
