@@ -463,11 +463,12 @@ class Array[K: Uint[Any] | Int[Any], V: Uint[Any] | Int[Any]](
         match self._term:
             case ASymbol() | AValue():
                 default = self._term
-                lower, upper = {}, []
+                lower, upper = frozenset[tuple[int, BTerm]](), ()
             case Store(default, lower, upper):
-                lower, upper = dict(lower), list(upper)
+                pass
         if upper or (k := key.reveal()) is None:
-            upper.append((key._term, value._term))  # pyright: ignore[reportPrivateUsage]
+            upper = (*upper, (key._term, value._term))  # pyright: ignore[reportPrivateUsage]
         else:
-            lower[k] = value._term  # pyright: ignore[reportPrivateUsage]
-        self._term = Store(default, frozenset(lower.items()), tuple(upper))
+            rm = set((p, q) for p, q in lower if k == p)
+            lower = lower - rm | set(((k, value._term),))  # pyright: ignore[reportPrivateUsage]
+        self._term = Store(default, lower, upper)
