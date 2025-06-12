@@ -582,7 +582,7 @@ class Select(BTerm):
 @dataclass(frozen=True, slots=True)
 class Store(ATerm):
     base: ASymbol | AValue
-    lower: frozenset[tuple[int, BTerm]] = frozenset()
+    lower: tuple[tuple[int, BTerm], ...] = ()
     upper: tuple[tuple[BTerm, BTerm], ...] = ()
 
     def width(self) -> tuple[int, int]:

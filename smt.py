@@ -10,7 +10,7 @@ from typing import Any, Literal, overload
 
 from smt2 import Array, Constraint, Int, Model, Symbolic, Uint
 from smt2.composite import And, CTerm, CValue
-from smt2.theory_core import BaseTerm, DumpContext
+from smt2.theory_core import DumpContext
 
 
 Uint8 = Uint[Literal[8]]
@@ -35,7 +35,7 @@ class ConstrainingError(Exception):
 
 class Solver:
     def __init__(self) -> None:
-        self._constraints: set[CTerm] | None = set()
+        self._constraints: list[CTerm] | None = []
         self._model: Model | str | None = None
 
     @property
@@ -62,20 +62,13 @@ class Solver:
             self._add(term.left)
             self._add(term.right)
             return
-
-        # Optimization: replace previously-asserted clauses with the value
-        # `True`, since we've already asserted them.
-        subs: dict[BaseTerm, BaseTerm] = {c: CValue(True) for c in self._constraints}
-        match term.substitute(subs):
+        match term:
             case CValue(True):
                 return
             case CValue(False):
                 self._constraints = None
-                return
-            case CTerm() as term:
-                self._constraints.add(term)
-            case other:
-                raise TypeError(f"unexpected term: {other.__class__}")
+            case term:
+                self._constraints.append(term)
 
     def check(self, *assumptions: Constraint) -> bool:
         self._model = None

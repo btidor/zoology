@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import abc
+from bisect import bisect_left, bisect_right
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -449,9 +450,9 @@ class Array[K: Uint[Any] | Int[Any], V: Uint[Any] | Int[Any]](
                             break
                 else:
                     if isinstance(kterm, BValue):
-                        lower = dict(lower)
-                        if kterm.value in lower:
-                            return self._mk_value(lower[kterm.value])
+                        i = bisect_left(lower, kterm.value, key=lambda x: x[0])
+                        if i < len(lower) and lower[i][0] == kterm.value:
+                            return self._mk_value(lower[i][1])
                         else:
                             if isinstance(self._term.base, ASymbol):
                                 return self._mk_value(Select(self._term.base, kterm))
@@ -463,12 +464,13 @@ class Array[K: Uint[Any] | Int[Any], V: Uint[Any] | Int[Any]](
         match self._term:
             case ASymbol() | AValue():
                 default = self._term
-                lower, upper = frozenset[tuple[int, BTerm]](), ()
+                lower, upper = (), ()
             case Store(default, lower, upper):
                 pass
         if upper or (k := key.reveal()) is None:
             upper = (*upper, (key._term, value._term))  # pyright: ignore[reportPrivateUsage]
         else:
-            rm = set((p, q) for p, q in lower if k == p)
-            lower = lower - rm | set(((k, value._term),))  # pyright: ignore[reportPrivateUsage]
+            i = bisect_left(lower, k, key=lambda x: x[0])
+            j = bisect_right(lower, k, key=lambda x: x[0])
+            lower = (*lower[:i], (k, value._term), *lower[j:])  # pyright: ignore[reportPrivateUsage]
         self._term = Store(default, lower, upper)
