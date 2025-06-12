@@ -53,9 +53,6 @@ class BitVectorMeta(abc.ABCMeta):
         return self._ccache[name]
 
 
-type Model = dict[str, Constraint | Uint[Any] | Array[Any, Any]]
-
-
 class Symbolic(abc.ABC):
     __slots__ = ("_term",)
     _term: BaseTerm
@@ -88,20 +85,10 @@ class Symbolic(abc.ABC):
     @abc.abstractmethod
     def reveal(self) -> bool | int | dict[int, int] | None: ...
 
-    def substitute(self, model: Model) -> Self:
-        k = self.__class__.__new__(self.__class__)
-        subs = dict[BaseTerm, BaseTerm]()
-        for name, sym in model.items():
-            match sym:
-                case Constraint():
-                    orig = CSymbol(name.encode())
-                case BitVector():
-                    orig = BSymbol(name.encode(), sym.width)
-                case Array():
-                    orig = ASymbol(name.encode(), sym._key.width, sym._value.width)  # pyright: ignore[reportPrivateUsage]
-            subs[orig] = sym._term  # pyright: ignore[reportPrivateUsage]
-        k._term = self._term.substitute(subs)  # pyright: ignore[reportPrivateUsage]
-        return k
+    def substitute(self, model: dict[bytes, Symbolic]) -> Self:
+        cls = self.__class__.__new__(self.__class__)
+        cls._term = self._term.substitute({k: v._term for k, v in model.items()})  # pyright: ignore[reportPrivateUsage]
+        return cls
 
 
 class Constraint(Symbolic):

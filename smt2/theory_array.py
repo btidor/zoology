@@ -44,10 +44,8 @@ class ASymbol(ATerm):
         ctx.write(self.name)
 
     @override
-    def substitute(self, subs: dict[BaseTerm, BaseTerm]) -> BaseTerm:
-        if self in subs:
-            return subs[self]
-        return self
+    def substitute(self, model: dict[bytes, BaseTerm]) -> BaseTerm:
+        return model.get(self.name, self)
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,7 +66,7 @@ class AValue(ATerm):
         ctx.write(b")")
 
     @override
-    def substitute(self, subs: dict[BaseTerm, BaseTerm]) -> BaseTerm:
+    def substitute(self, model: dict[bytes, BaseTerm]) -> BaseTerm:
         return self
 
 

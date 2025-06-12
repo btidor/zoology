@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import copy
 from functools import reduce
-from typing import Any, Iterable
+from typing import Iterable
 
 from bytes import Bytes
 from disassembler import abiencode
@@ -19,7 +19,6 @@ from smt import (
     Uint160,
     Uint256,
     get_constants,
-    substitute,
 )
 from snapshot import PLAYER, PROXY
 from state import State, Termination
@@ -31,7 +30,7 @@ class Validator:
 
     transaction: Transaction
     constraint: Constraint | None
-    constants: set[str] | None
+    constants: set[bytes] | None
 
     def __init__(self, sequence: Sequence, /, *, prints: bool = False) -> None:
         """
@@ -111,13 +110,13 @@ class Validator:
         constraint = reduce(lambda p, q: p | q, predicates, Constraint(False))
         constants = get_constants(constraint)
         for name in constants:
-            if name.startswith("STORAGE@"):
+            if name.startswith(b"STORAGE@"):
                 continue
-            elif name == "BALANCE":
+            elif name == b"BALANCE":
                 continue
-            elif name == "CODESIZE":
+            elif name == b"CODESIZE":
                 continue
-            elif name == "NUMBER":
+            elif name == b"NUMBER":
                 continue
             else:
                 # Validator expression uses an unsupported variable; fall back.
@@ -130,24 +129,24 @@ class Validator:
             return None
         assert self.constants is not None
 
-        substitutions = dict[str, Symbolic | Array[Any, Any]]()
+        substitutions = dict[bytes, Symbolic]()
         for name in self.constants:
-            if name.startswith("STORAGE@"):
+            if name.startswith(b"STORAGE@"):
                 addr = int(name[8:], 16)
                 if addr in sequence.states[-1].contracts:
                     substitutions[name] = sequence.states[-1].contracts[addr].storage
                 else:
                     substitutions[name] = Array[Uint256, Uint256](Uint256(0))
-            elif name == "BALANCE":
+            elif name == b"BALANCE":
                 substitutions[name] = sequence.states[-1].balances
-            elif name == "CODESIZE":
+            elif name == b"CODESIZE":
                 pass
-            elif name == "NUMBER":
+            elif name == b"NUMBER":
                 substitutions[name] = sequence.blocks[len(sequence.states) - 1].number
             else:
                 raise ValueError(f"unknown variable: {name}")
 
-        return substitute(self.constraint, substitutions)
+        return self.constraint.substitute(substitutions)
 
     def check(self, sequence: Sequence, /, *, prints: bool = False) -> Solution | None:
         """Simulate the execution of validateInstance on the given sequence."""

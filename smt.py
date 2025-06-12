@@ -8,7 +8,7 @@ from functools import reduce
 from subprocess import Popen, PIPE
 from typing import Any, Literal, overload
 
-from smt2 import Array, Constraint, Int, Model, Symbolic, Uint
+from smt2 import Array, Constraint, Int, Symbolic, Uint
 from smt2.composite import And, CTerm, CValue
 from smt2.theory_core import DumpContext
 
@@ -33,10 +33,13 @@ class ConstrainingError(Exception):
     pass
 
 
+type Tokenized = str | list[Tokenized]
+
+
 class Solver:
     def __init__(self) -> None:
         self._constraints: list[CTerm] | None = []
-        self._model: Model | str | None = None
+        self._model: dict[bytes, Symbolic] | str | None = None
 
     @property
     def constraint(self) -> Constraint:
@@ -125,23 +128,31 @@ class Solver:
         if isinstance(self._model, str):
             tokens = self._model.replace("(", " ( ").replace(")", " ) ").split()
             self._model = {}
-            for fun in self._read_from_tokens(tokens):
+            parsed = self._read_from_tokens(tokens)
+            assert parsed is not None
+            for fun in parsed:
                 match fun:
-                    case "define-fun", name, _, "Bool", value:
+                    case "define-fun", str() as name, _, "Bool", value:
                         assert name not in self._model, f"duplicate term: {name}"
                         match value:
                             case "true":
-                                self._model[name] = Constraint(True)
+                                self._model[name.encode()] = Constraint(True)
                             case "false":
-                                self._model[name] = Constraint(False)
+                                self._model[name.encode()] = Constraint(False)
                             case _:
                                 raise NotImplementedError(f"unknown boolean: {value}")
-                    case "define-fun", name, _, [_, "BitVec", _], value:
+                    case "define-fun", str() as name, _, [
+                        _,
+                        "BitVec",
+                        _,
+                    ], str() as value:
                         assert name not in self._model, f"duplicate term: {name}"
-                        self._model[name] = self._parse_numeral(value)
-                    case "define-fun", name, _, ["Array", _, _], value:
+                        self._model[name.encode()] = self._parse_numeral(value)
+                    case "define-fun", str() as name, _, ["Array", _, _], value:
                         assert name not in self._model, f"duplicate term: {name}"
-                        self._model[name] = self._parse_array(value, self._model)
+                        self._model[name.encode()] = self._parse_array(
+                            value, self._model
+                        )
                     case _:
                         raise NotImplementedError(f"unexpected term: {fun}")
         sym = sym.substitute(self._model)
@@ -149,7 +160,7 @@ class Solver:
         return r
 
     @classmethod
-    def _read_from_tokens(cls, tokens: list[str]) -> Any:
+    def _read_from_tokens(cls, tokens: list[str]) -> Tokenized | None:
         # https://norvig.com/lispy.html
         match tokens.pop(0).strip():
             case "(":
@@ -178,27 +189,31 @@ class Solver:
 
     @classmethod
     def _parse_array(
-        cls, parts: str | list[Any], model: Model
+        cls, parts: Tokenized, model: dict[bytes, Symbolic]
     ) -> Uint[Any] | Array[Any, Any]:
         match parts:
             case str():
                 if parts.startswith("#"):
                     return cls._parse_numeral(parts)
                 else:
-                    assert isinstance(arr := model[parts], Array)
+                    arr: Any = model[parts.encode()]
                     return copy.copy(arr)
-            case "let", [[name, value]], expr:
+            case "let", [[str() as name, value]], expr:
                 assert name not in model, f"duplicate term: {name}"
-                model[name] = cls._parse_array(value, model)
+                model[name.encode()] = cls._parse_array(value, model)
                 return cls._parse_array(expr, model)
-            case "store", expr, key, value:
+            case "store", expr, str() as key, str() as value:
                 array = cls._parse_array(expr, model)
                 assert isinstance(array, Array)
                 array[cls._parse_numeral(key)] = cls._parse_numeral(value)
                 return array
             case [
-                ["as", "const", ["Array", [_, "BitVec", k], [_, "BitVec", v]]],
-                default,
+                [
+                    "as",
+                    "const",
+                    ["Array", [_, "BitVec", str() as k], [_, "BitVec", str() as v]],
+                ],
+                str() as default,
             ]:
                 default = cls._parse_numeral(default)
                 return Array[Uint[int(k)], Uint[int(v)]](default)
@@ -218,12 +233,10 @@ def underflow_safe(a: Uint256, b: Uint256) -> Constraint:
     return a >= b
 
 
-def get_constants(s: Symbolic | Array[Any, Any]) -> set[str]:
-    raise NotImplementedError("get_constants")
-
-
-def substitute[S: Symbolic](s: S, model: dict[str, Symbolic | Array[Any, Any]]) -> S:
-    raise NotImplementedError("substitute")
+def get_constants(s: Symbolic) -> set[bytes]:
+    ctx = DumpContext()
+    s.dump(ctx)
+    return set(ctx.defs.keys())
 
 
 def to_signed(width: int, value: int) -> int:

@@ -15,43 +15,6 @@ from subprocess import PIPE, Popen
 from typing import Any, ClassVar, Self, override
 
 
-@dataclass
-class DumpContext:
-    out: bytearray = field(default_factory=bytearray)
-    defs: dict[bytes, bytes] = field(default_factory=dict[bytes, bytes])
-
-    def add(self, name: bytes, defn: bytes) -> None:
-        if name in self.defs:
-            assert self.defs[name] == defn
-        else:
-            self.defs[name] = defn
-
-    def write(self, b: bytes) -> None:
-        self.out.extend(b)
-
-
-def check(*constraints: CTerm) -> bool:
-    ctx = DumpContext()
-    for constraint in constraints:
-        ctx.write(b"(assert ")
-        constraint.dump(ctx)
-        ctx.write(b")\n")
-    ctx.write(b"(check-sat)")
-
-    smt = b"\n".join(ctx.defs.values()) + b"\n" + ctx.out
-    print(smt.decode())
-    p = Popen(["z3", "-model", "/dev/stdin"], stdin=PIPE, stdout=PIPE, stderr=PIPE)
-    out, err = p.communicate(smt)
-    outs = out.decode().split("\n", 1)
-    match outs[0]:
-        case "sat":
-            return True
-        case "unsat":
-            return False
-        case _:
-            raise RuntimeError(out, err)
-
-
 @dataclass(frozen=True, slots=True)
 class BaseTerm(abc.ABC):
     op: ClassVar[bytes]
@@ -81,25 +44,23 @@ class BaseTerm(abc.ABC):
             term.dump(ctx)
         ctx.out.extend(b")")
 
-    def substitute(self, subs: dict[BaseTerm, BaseTerm]) -> BaseTerm:
-        if self in subs:
-            return subs[self]
+    def substitute(self, model: dict[bytes, BaseTerm]) -> BaseTerm:
         args = list[Any]()
         for name in self.__match_args__:
             arg = getattr(self, name)
             if isinstance(arg, BaseTerm):
-                args.append(arg.substitute(subs))
+                args.append(arg.substitute(model))
             elif isinstance(arg, tuple):
                 s = list[BaseTerm | tuple[BaseTerm, ...]]()
                 for a in arg:  # pyright: ignore[reportUnknownVariableType]
                     match a:
                         case BaseTerm():
-                            s.append(a.substitute(subs))
+                            s.append(a.substitute(model))
                         case tuple():
                             t = list[BaseTerm]()
                             for b in a:  # pyright: ignore[reportUnknownVariableType]
                                 assert isinstance(b, BaseTerm)
-                                t.append(b.substitute(subs))
+                                t.append(b.substitute(model))
                             s.append(tuple(t))
                         case other:  # pyright: ignore[reportUnknownVariableType]
                             raise TypeError(f"unexpected arg: {other}")
@@ -107,6 +68,47 @@ class BaseTerm(abc.ABC):
             else:
                 args.append(arg)
         return self.__class__(*args)
+
+
+@dataclass
+class DumpContext:
+    out: bytearray = field(default_factory=bytearray)
+    defs: dict[bytes, bytes] = field(default_factory=dict[bytes, bytes])
+    symbols: set[BaseTerm] = field(default_factory=set[BaseTerm])
+
+    def add(self, name: bytes, defn: bytes) -> None:
+        if name in self.defs:
+            assert self.defs[name] == defn
+        else:
+            self.defs[name] = defn
+
+    def symbol(self, symbol: BaseTerm) -> None:
+        self.symbols.add(symbol)
+
+    def write(self, b: bytes) -> None:
+        self.out.extend(b)
+
+
+def check(*constraints: CTerm) -> bool:
+    ctx = DumpContext()
+    for constraint in constraints:
+        ctx.write(b"(assert ")
+        constraint.dump(ctx)
+        ctx.write(b")\n")
+    ctx.write(b"(check-sat)")
+
+    smt = b"\n".join(ctx.defs.values()) + b"\n" + ctx.out
+    print(smt.decode())
+    p = Popen(["z3", "-model", "/dev/stdin"], stdin=PIPE, stdout=PIPE, stderr=PIPE)
+    out, err = p.communicate(smt)
+    outs = out.decode().split("\n", 1)
+    match outs[0]:
+        case "sat":
+            return True
+        case "unsat":
+            return False
+        case _:
+            raise RuntimeError(out, err)
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,10 +125,8 @@ class CSymbol(CTerm):
         ctx.out.extend(self.name)
 
     @override
-    def substitute(self, subs: dict[BaseTerm, BaseTerm]) -> BaseTerm:
-        if self in subs:
-            return subs[self]
-        return self
+    def substitute(self, model: dict[bytes, BaseTerm]) -> BaseTerm:
+        return model.get(self.name, self)
 
 
 @dataclass(frozen=True, slots=True)
@@ -138,7 +138,7 @@ class CValue(CTerm):
         ctx.out.extend(b"true" if self.value else b"false")
 
     @override
-    def substitute(self, subs: dict[BaseTerm, BaseTerm]) -> BaseTerm:
+    def substitute(self, model: dict[bytes, BaseTerm]) -> BaseTerm:
         return self
 
 
