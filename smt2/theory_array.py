@@ -10,11 +10,12 @@ See: https://smt-lib.org/theories-ArraysEx.shtml
 from __future__ import annotations
 
 import abc
-from dataclasses import dataclass
-from typing import ClassVar, override
+import copy
+from dataclasses import dataclass, field
+from typing import Callable, ClassVar, Self, override
 
 from .theory_bitvec import BTerm, BValue
-from .theory_core import BaseTerm, DumpContext
+from .theory_core import BaseTerm, CValue, DumpContext, Eq
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,28 +82,54 @@ class Select(BTerm):
         k, v = self.array.width()
         assert k == self.key.width
         object.__setattr__(self, "width", v)
+        # Because Select is special-cased in RewriteMeta, we're responsible for
+        # setting our own min and max.
+        object.__setattr__(self, "min", 0)
+        object.__setattr__(self, "max", (1 << v) - 1)
 
     @classmethod
-    def simplify(cls, array: ATerm, key: BTerm) -> BTerm | None:
-        match array, key:
-            case AValue(de), _:
-                return de
-            case Store(base, lo, up), _ if not lo and not up:
-                return cls.simplify(base, key)
-            case Store(base, lo, up), BValue(kval) if not up:
-                for k, v in lo:
-                    if k == kval:
-                        return v
-                return cls.simplify(base, key)
+    def simplify(cls, array: ATerm, key: BTerm, call: Callable[..., Self]) -> BTerm:
+        match array:
+            case ASymbol():
+                return call(array, key)
+            case AValue(val):
+                return val
+            case Store(base, lower, upper):
+                pass
             case _:
-                return None
+                raise TypeError(f"unexpected ATerm: {array.__class__}")
+        for k, v in reversed(upper):
+            match Eq(k, key):
+                case CValue(True):  # pyright: ignore[reportUnnecessaryComparison]
+                    return v
+                case CValue(False):  # pyright: ignore[reportUnnecessaryComparison]
+                    continue
+                case _:
+                    return call(copy.deepcopy(array), key)
+        match key:
+            case BValue(s):
+                if s in lower:
+                    return lower[s]
+                else:
+                    match base:
+                        case AValue(default):
+                            return default
+                        case ASymbol() as symbol:
+                            return call(symbol, key)
+            case _:
+                return call(Store(base, copy.copy(lower)), key)
 
 
 @dataclass(frozen=True, slots=True)
 class Store(ATerm):
     base: ASymbol | AValue
-    lower: tuple[tuple[int, BTerm], ...] = ()
-    upper: tuple[tuple[BTerm, BTerm], ...] = ()
+    lower: dict[int, BTerm] = field(default_factory=dict[int, BTerm])
+    upper: list[tuple[BTerm, BTerm]] = field(default_factory=list[tuple[BTerm, BTerm]])
+
+    # Warning: Store is not actually immutable! Take care to create a deep copy
+    # when reusing a Store in Selects and other expressions.
+    __copy__ = None  # pyright: ignore[reportAssignmentType]
+    __deepcopy__ = None  # pyright: ignore[reportAssignmentType]
 
     def width(self) -> tuple[int, int]:
         return self.base.width()
@@ -110,7 +137,7 @@ class Store(ATerm):
     @override
     def dump(self, ctx: DumpContext) -> None:
         writes = list[tuple[BTerm, BTerm]](
-            [(BValue(k, self.base.key), v) for k, v in self.lower]
+            [(BValue(k, self.base.key), v) for k, v in self.lower.items()]
         )
         writes.extend(self.upper)
         ctx.write(b"(store " * len(writes))

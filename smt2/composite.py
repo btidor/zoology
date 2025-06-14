@@ -11,9 +11,10 @@ Warning: do not edit! To regenerate, run:
 from __future__ import annotations
 
 import abc
+import copy
 from dataclasses import InitVar, dataclass, field
 from functools import reduce
-from typing import Any, ClassVar, override
+from typing import Any, Callable, ClassVar, Self, override
 
 from .theory_core import BaseTerm, DumpContext
 
@@ -23,9 +24,8 @@ type MinMax = tuple[int, int]
 class RewriteMeta(abc.ABCMeta):
     def __call__(self, *args: Any, **kwds: Any) -> Any:
         assert issubclass(self, BaseTerm)
-        if simplify := getattr(self, "simplify", None):
-            if s := simplify(*args, **kwds):
-                return s
+        if issubclass(self, Select):
+            return self.simplify(*args, **kwds, call=super(RewriteMeta, self).__call__)
         if self.commutative:
             match args:
                 case (x, CValue() as y) if not isinstance(x, CValue):
@@ -557,27 +557,50 @@ class Select(BTerm):
         assert k == self.key.width
         object.__setattr__(self, "width", v)
 
+        object.__setattr__(self, "min", 0)
+        object.__setattr__(self, "max", (1 << v) - 1)
+
     @classmethod
-    def simplify(cls, array: ATerm, key: BTerm) -> BTerm | None:
-        match array, key:
-            case AValue(de), _:
-                return de
-            case Store(base, lo, up), _ if not lo and not up:
-                return cls.simplify(base, key)
-            case Store(base, lo, up), BValue(kval) if not up:
-                for k, v in lo:
-                    if k == kval:
-                        return v
-                return cls.simplify(base, key)
+    def simplify(cls, array: ATerm, key: BTerm, call: Callable[..., Self]) -> BTerm:
+        match array:
+            case ASymbol():
+                return call(array, key)
+            case AValue(val):
+                return val
+            case Store(base, lower, upper):
+                pass
             case _:
-                return None
+                raise TypeError(f"unexpected ATerm: {array.__class__}")
+        for k, v in reversed(upper):
+            match Eq(k, key):
+                case CValue(True):  # pyright: ignore[reportUnnecessaryComparison]
+                    return v
+                case CValue(False):  # pyright: ignore[reportUnnecessaryComparison]
+                    continue
+                case _:
+                    return call(copy.deepcopy(array), key)
+        match key:
+            case BValue(s):
+                if s in lower:
+                    return lower[s]
+                else:
+                    match base:
+                        case AValue(default):
+                            return default
+                        case ASymbol() as symbol:
+                            return call(symbol, key)
+            case _:
+                return call(Store(base, copy.copy(lower)), key)
 
 
 @dataclass(frozen=True, slots=True)
 class Store(ATerm):
     base: ASymbol | AValue
-    lower: tuple[tuple[int, BTerm], ...] = ()
-    upper: tuple[tuple[BTerm, BTerm], ...] = ()
+    lower: dict[int, BTerm] = field(default_factory=dict[int, BTerm])
+    upper: list[tuple[BTerm, BTerm]] = field(default_factory=list[tuple[BTerm, BTerm]])
+
+    __copy__ = None  # pyright: ignore[reportAssignmentType]
+    __deepcopy__ = None  # pyright: ignore[reportAssignmentType]
 
     def width(self) -> tuple[int, int]:
         return self.base.width()
@@ -585,7 +608,7 @@ class Store(ATerm):
     @override
     def dump(self, ctx: DumpContext) -> None:
         writes = list[tuple[BTerm, BTerm]](
-            [(BValue(k, self.base.key), v) for k, v in self.lower]
+            [(BValue(k, self.base.key), v) for k, v in self.lower.items()]
         )
         writes.extend(self.upper)
         ctx.write(b"(store " * len(writes))

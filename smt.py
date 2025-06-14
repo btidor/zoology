@@ -197,7 +197,7 @@ class Solver:
                     return cls._parse_numeral(parts)
                 else:
                     arr: Any = model[parts.encode()]
-                    return copy.copy(arr)
+                    return copy.deepcopy(arr)
             case "let", [[str() as name, value]], expr:
                 assert name not in model, f"duplicate term: {name}"
                 model[name.encode()] = cls._parse_array(value, model)

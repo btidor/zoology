@@ -47,9 +47,10 @@ Warning: do not edit! To regenerate, run:
 from __future__ import annotations
 
 import abc
+import copy
 from dataclasses import InitVar, dataclass, field
 from functools import reduce
-from typing import Any, ClassVar, override
+from typing import Any, Callable, ClassVar, Self, override
 
 from .theory_core import BaseTerm, DumpContext
 
@@ -86,7 +87,7 @@ type MinMax = tuple[int, int]
         # Inject metaclass for constraints & bitvectors
         s = re.sub(r"(CTerm|BTerm)\(BaseTerm", r"\1(BaseTerm, metaclass=RewriteMeta", s)
         # Delete docstrings, comments
-        s = re.sub(r'\n*\s*("""[^"]*"""| #.*)\n+', "\n", s)
+        s = re.sub(r'\n*\s*("""[^"]*"""| # (?!pyright:).*)\n+', "\n", s)
         # Skip unimplemented rewrite cases
         s = re.sub(r"\n*\s*case [^_].*\n\s*raise NotImplementedError", "", s)
         cls.out.extend(s.encode())

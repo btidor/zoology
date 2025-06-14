@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import abc
-from bisect import bisect_left, bisect_right
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -386,30 +385,26 @@ class Array[K: Uint[Any] | Int[Any], V: Uint[Any] | Int[Any]](
 
     _key: Final[type[K]]  # pyright: ignore[reportGeneralTypeIssues]
     _value: Final[type[V]]  # pyright: ignore[reportGeneralTypeIssues]
-    _term: ASymbol | AValue | Store
+    _term: Store
 
     __hash__: ClassVar[None] = None
+    __copy__: ClassVar[None] = None
+    __deepcopy__: ClassVar[None] = None
 
     def __init__(self, value: V | str, /) -> None:
         match value:
             case BitVector():
-                self._term = AValue(value._term, self._key.width)  # pyright: ignore[reportPrivateUsage]
+                self._term = Store(AValue(value._term, self._key.width))  # pyright: ignore[reportPrivateUsage]
             case str():
-                self._term = ASymbol(value.encode(), self._key.width, self._value.width)
+                self._term = Store(
+                    ASymbol(value.encode(), self._key.width, self._value.width)
+                )
 
     def __eq__(self, other: Never, /) -> Never:
         raise TypeError("Array cannot be compared for equality.")
 
     def __ne__(self, other: Never, /) -> Never:
         raise TypeError("Array cannot be compared for equality.")
-
-    def __copy__(self) -> Self:
-        k = self.__class__.__new__(self.__class__)
-        k._term = self._term
-        return k
-
-    def __deepcopy__(self, memo: Any, /) -> Self:
-        return self.__copy__()
 
     def reveal(self) -> dict[int, int] | None:
         raise NotImplementedError
@@ -420,44 +415,11 @@ class Array[K: Uint[Any] | Int[Any], V: Uint[Any] | Int[Any]](
         return k
 
     def __getitem__(self, key: K) -> V:
-        kterm = key._term  # pyright: ignore[reportPrivateUsage]
-        match self._term:
-            case ASymbol():
-                return self._value._apply(Select, self, key)
-            case AValue(default):
-                return self._mk_value(default)
-            case Store(default, lower, upper):
-                for p, q in reversed(upper):
-                    match Eq(kterm, p):
-                        case CValue(True):
-                            return self._mk_value(q)
-                        case CValue(False):
-                            continue
-                        case _:
-                            break
-                else:
-                    if isinstance(kterm, BValue):
-                        i = bisect_left(lower, kterm.value, key=lambda x: x[0])
-                        if i < len(lower) and lower[i][0] == kterm.value:
-                            return self._mk_value(lower[i][1])
-                        else:
-                            if isinstance(self._term.base, ASymbol):
-                                return self._mk_value(Select(self._term.base, kterm))
-                            else:
-                                return self._mk_value(self._term.base.default)
         return self._value._apply(Select, self, key)
 
     def __setitem__(self, key: K, value: V) -> None:
-        match self._term:
-            case ASymbol() | AValue():
-                default = self._term
-                lower, upper = (), ()
-            case Store(default, lower, upper):
-                pass
-        if upper or (k := key.reveal()) is None:
-            upper = (*upper, (key._term, value._term))  # pyright: ignore[reportPrivateUsage]
+        k = key.reveal()
+        if self._term.upper or k is None:
+            self._term.upper.append((key._term, value._term))  # pyright: ignore[reportPrivateUsage]
         else:
-            i = bisect_left(lower, k, key=lambda x: x[0])
-            j = bisect_right(lower, k, key=lambda x: x[0])
-            lower = (*lower[:i], (k, value._term), *lower[j:])  # pyright: ignore[reportPrivateUsage]
-        self._term = Store(default, lower, upper)
+            self._term.lower[k] = value._term  # pyright: ignore[reportPrivateUsage]

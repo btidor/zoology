@@ -16,6 +16,7 @@ from .rewrite import (
     constraint_logic,
     constraint_reduction,
 )
+from .theory_array import *
 from .theory_bitvec import *
 from .theory_core import *
 
@@ -144,10 +145,9 @@ class RewriteMeta(abc.ABCMeta):
     def __call__(self, *args: Any, **kwds: Any) -> Any:
         """Construct the requested term, then rewrite it."""
         assert issubclass(self, BaseTerm)
-        if simplify := getattr(self, "simplify", None):
-            # Custom constant folding for arrays
-            if s := simplify(*args, **kwds):
-                return s
+        if issubclass(self, Select):
+            # Custom logic for arrays.
+            return self.simplify(*args, **kwds, call=super(RewriteMeta, self).__call__)
         if self.commutative:
             # Swap Values to right-hand side, Nots to left-hand side.
             match args:
