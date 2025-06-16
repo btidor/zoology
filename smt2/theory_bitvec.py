@@ -132,17 +132,15 @@ class Concat(BTerm):
 
     @override
     def walk(self, ctx: DumpContext) -> None:
-        i = id(self)
-        if i in ctx.walked:
-            ctx.walked[i] += 1
+        if ctx.visit(self):
             return
-        ctx.walked[i] = 1
-
         for term in self.terms:
             term.walk(ctx)
 
     @override
     def dump(self, ctx: DumpContext) -> None:
+        if ctx.try_alias(self):
+            return
         ctx.write(b"(concat")
         for term in self.terms:
             ctx.write(b" ")

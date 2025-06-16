@@ -137,14 +137,23 @@ class Store(ATerm):
     def width(self) -> tuple[int, int]:
         return self.base.width()
 
+    def set(self, key: BTerm, value: BTerm) -> None:
+        descendants = self.descendants
+        if isinstance(key, BValue) and not self.upper:
+            k = key.value
+            if k in self.lower:
+                descendants -= self.lower[k].descendants + 1
+            self.lower[k] = value
+            descendants += value.descendants + 1
+        else:
+            self.upper.append((key, value))
+            descendants += key.descendants + value.descendants + 2
+        object.__setattr__(self, "descendants", descendants)
+
     @override
     def walk(self, ctx: DumpContext) -> None:
-        i = id(self)
-        if i in ctx.walked:
-            ctx.walked[i] += 1
+        if ctx.visit(self):
             return
-        ctx.walked[i] = 1
-
         self.base.walk(ctx)
         for term in self.lower.values():
             term.walk(ctx)
@@ -154,6 +163,8 @@ class Store(ATerm):
 
     @override
     def dump(self, ctx: DumpContext) -> None:
+        if ctx.try_alias(self):
+            return
         ctx.write(b"(store " * (len(self.lower) + len(self.upper)))
         self.base.dump(ctx)
         for k, v in self.lower.items():

@@ -418,8 +418,4 @@ class Array[K: Uint[Any] | Int[Any], V: Uint[Any] | Int[Any]](
         return self._value._apply(Select, self, key)
 
     def __setitem__(self, key: K, value: V) -> None:
-        k = key.reveal()
-        if self._term.upper or k is None:
-            self._term.upper.append((key._term, value._term))  # pyright: ignore[reportPrivateUsage]
-        else:
-            self._term.lower[k] = value._term  # pyright: ignore[reportPrivateUsage]
+        self._term.set(key._term, value._term)  # pyright: ignore[reportPrivateUsage]

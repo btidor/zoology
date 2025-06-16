@@ -40,17 +40,16 @@ class BaseTerm(abc.ABC):
     def sort(self) -> bytes: ...
 
     def walk(self, ctx: DumpContext) -> None:
-        i = id(self)
-        if i in ctx.walked:
-            ctx.walked[i] += 1
+        if ctx.visit(self):
             return
-        ctx.walked[i] = 1
         for name in self.__match_args__:
             arg = getattr(self, name, None)
             if isinstance(arg, BaseTerm):
                 arg.walk(ctx)
 
     def dump(self, ctx: DumpContext) -> None:
+        if ctx.try_alias(self):
+            return
         # 0. Gather Arguments
         args = [getattr(self, name) for name in self.__match_args__]
         params = [str(arg).encode() for arg in args if isinstance(arg, int)]
@@ -95,15 +94,50 @@ class BaseTerm(abc.ABC):
 
 @dataclass
 class DumpContext:
-    out: bytearray = field(default_factory=bytearray)
     symbols: dict[bytes, BaseTerm] = field(default_factory=dict[bytes, BaseTerm])
-    walked: dict[int, int] = field(default_factory=dict[int, int])
+    visited: dict[int, tuple[int, BaseTerm]] = field(
+        default_factory=dict[int, tuple[int, BaseTerm]]
+    )
+    aliases: dict[int, bytes] = field(default_factory=dict[int, bytes])
+
+    out: bytearray = field(default_factory=bytearray)
+
+    def visit(self, term: BaseTerm) -> bool:
+        i = id(term)
+        if i in self.visited:
+            p, q = self.visited[i]
+            self.visited[i] = (p + 1, q)
+            return True
+        else:
+            self.visited[i] = (1, term)
+            return False
 
     def walk(self, *terms: BaseTerm) -> None:
         for term in terms:
             term.walk(self)
         for name, symbol in self.symbols.items():
-            self.write(b"(declare-fun %b () %b)" % (name, symbol.sort()))
+            self.write(b"(declare-fun %b () %b)\n" % (name, symbol.sort()))
+
+        queue = list[tuple[int, int, BaseTerm]]()
+        for i, (ct, term) in self.visited.items():
+            if term.descendants < 3 or ct * term.descendants < 64:
+                continue
+            queue.append((term.descendants, i, term))
+        queue.sort()
+        for _, i, term in queue:
+            alias = b"_" + hex(i)[2:].encode()
+            self.write(b"(define-fun %b () %b " % (alias, term.sort()))
+            term.dump(self)
+            self.write(b")\n")
+            self.aliases[i] = alias
+
+    def try_alias(self, term: BaseTerm) -> bool:
+        i = id(term)
+        if i in self.aliases:
+            self.write(self.aliases[i])
+            return True
+        else:
+            return False
 
     def write(self, b: bytes) -> None:
         self.out.extend(b)
