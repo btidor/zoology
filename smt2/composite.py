@@ -657,13 +657,16 @@ class Store(ATerm):
 
     @override
     def dump(self, ctx: DumpContext) -> None:
-        writes = list[tuple[BTerm, BTerm]](
-            [(BValue(k, self.base.key), v) for k, v in self.lower.items()]
-        )
-        writes.extend(self.upper)
-        ctx.write(b"(store " * len(writes))
+        ctx.write(b"(store " * (len(self.lower) + len(self.upper)))
         self.base.dump(ctx)
-        for k, v in writes:
+        for k, v in self.lower.items():
+            if self.base.key % 8 == 0:
+                ctx.write(b" #x" + k.to_bytes(self.base.key // 8).hex().encode() + b" ")
+            else:
+                ctx.write(b" #b" + bin(k)[2:].zfill(self.base.key).encode() + b" ")
+            v.dump(ctx)
+            ctx.write(b")")
+        for k, v in self.upper:
             ctx.write(b" ")
             k.dump(ctx)
             ctx.write(b" ")
