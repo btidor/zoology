@@ -37,14 +37,11 @@ class ASymbol(ATerm):
         return (self.key, self.value)
 
     @override
+    def walk(self, ctx: DumpContext) -> None:
+        ctx.symbols[self.name] = self
+
+    @override
     def dump(self, ctx: DumpContext) -> None:
-        ctx.add(
-            self.name,
-            (
-                b"(declare-fun %s () (Array (_ BitVec %d) (_ BitVec %d)))"
-                % (self.name, self.key, self.value)
-            ),
-        )
         ctx.write(self.name)
 
     @override
@@ -139,6 +136,15 @@ class Store(ATerm):
 
     def width(self) -> tuple[int, int]:
         return self.base.width()
+
+    @override
+    def walk(self, ctx: DumpContext) -> None:
+        self.base.walk(ctx)
+        for term in self.lower.values():
+            term.walk(ctx)
+        for key, value in self.upper:
+            key.walk(ctx)
+            value.walk(ctx)
 
     @override
     def dump(self, ctx: DumpContext) -> None:

@@ -37,11 +37,11 @@ class BSymbol(BTerm):
         object.__setattr__(self, "width", w)
 
     @override
+    def walk(self, ctx: DumpContext) -> None:
+        ctx.symbols[self.name] = self
+
+    @override
     def dump(self, ctx: DumpContext) -> None:
-        ctx.add(
-            self.name,
-            (b"(declare-fun %s () (_ BitVec %d))" % (self.name, self.width)),
-        )
         ctx.write(self.name)
 
     @override
@@ -129,6 +129,11 @@ class Concat(BTerm):
         assert len(self.terms) > 0, "width must be positive"
         w = reduce(lambda p, q: p + q.width, self.terms, 0)
         object.__setattr__(self, "width", w)
+
+    @override
+    def walk(self, ctx: DumpContext) -> None:
+        for term in self.terms:
+            term.walk(ctx)
 
     @override
     def dump(self, ctx: DumpContext) -> None:

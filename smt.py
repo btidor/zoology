@@ -87,15 +87,15 @@ class Solver:
             return True
 
         ctx = DumpContext()
+        ctx.walk(*constraints)
         for constraint in constraints:
             ctx.write(b"(assert ")
             constraint.dump(ctx)
             ctx.write(b")\n")
         ctx.write(b"(check-sat)")
-        smt = b"\n".join(ctx.defs.values()) + b"\n" + bytes(ctx.out)
 
         p = Popen(["z3", "-model", "/dev/stdin"], stdin=PIPE, stdout=PIPE, stderr=PIPE)
-        out, err = p.communicate(smt)
+        out, err = p.communicate(bytes(ctx.out))
         outs = out.decode().split("\n", 1)
         match outs[0]:
             case "sat":
@@ -104,8 +104,8 @@ class Solver:
             case "unsat":
                 return False
             case _:
-                with open("tmp.smt2", "w") as f:
-                    f.write(smt.decode())
+                with open("tmp.smt2", "wb") as f:
+                    f.write(ctx.out)
                 raise RuntimeError(out, err)
 
     @overload
@@ -235,8 +235,8 @@ def underflow_safe(a: Uint256, b: Uint256) -> Constraint:
 
 def get_constants(s: Symbolic) -> set[bytes]:
     ctx = DumpContext()
-    s.dump(ctx)
-    return set(ctx.defs.keys())
+    ctx.walk(s._term)  # pyright: ignore[reportPrivateUsage]
+    return set(ctx.symbols.keys())
 
 
 def to_signed(width: int, value: int) -> int:

@@ -39,6 +39,12 @@ class BaseTerm(abc.ABC):
     @abc.abstractmethod
     def sort(self) -> bytes: ...
 
+    def walk(self, ctx: DumpContext) -> None:
+        for name in self.__match_args__:
+            arg = getattr(self, name, None)
+            if isinstance(arg, BaseTerm):
+                arg.walk(ctx)
+
     def dump(self, ctx: DumpContext) -> None:
         # 0. Gather Arguments
         args = [getattr(self, name) for name in self.__match_args__]
@@ -85,17 +91,13 @@ class BaseTerm(abc.ABC):
 @dataclass
 class DumpContext:
     out: bytearray = field(default_factory=bytearray)
-    defs: dict[bytes, bytes] = field(default_factory=dict[bytes, bytes])
-    symbols: set[BaseTerm] = field(default_factory=set[BaseTerm])
+    symbols: dict[bytes, BaseTerm] = field(default_factory=dict[bytes, BaseTerm])
 
-    def add(self, name: bytes, defn: bytes) -> None:
-        if name in self.defs:
-            assert self.defs[name] == defn
-        else:
-            self.defs[name] = defn
-
-    def symbol(self, symbol: BaseTerm) -> None:
-        self.symbols.add(symbol)
+    def walk(self, *terms: BaseTerm) -> None:
+        for term in terms:
+            term.walk(self)
+        for name, symbol in self.symbols.items():
+            self.write(b"(declare-fun %b () %b)" % (name, symbol.sort()))
 
     def write(self, b: bytes) -> None:
         self.out.extend(b)
@@ -103,16 +105,16 @@ class DumpContext:
 
 def check(*constraints: CTerm) -> bool:
     ctx = DumpContext()
+    ctx.walk(*constraints)
     for constraint in constraints:
         ctx.write(b"(assert ")
         constraint.dump(ctx)
         ctx.write(b")\n")
     ctx.write(b"(check-sat)")
 
-    smt = b"\n".join(ctx.defs.values()) + b"\n" + ctx.out
-    print(smt.decode())
+    print(ctx.out.decode())
     p = Popen(["z3", "-model", "/dev/stdin"], stdin=PIPE, stdout=PIPE, stderr=PIPE)
-    out, err = p.communicate(smt)
+    out, err = p.communicate(bytes(ctx.out))
     outs = out.decode().split("\n", 1)
     match outs[0]:
         case "sat":
@@ -134,8 +136,11 @@ class CSymbol(CTerm):
     name: bytes
 
     @override
+    def walk(self, ctx: DumpContext) -> None:
+        ctx.symbols[self.name] = self
+
+    @override
     def dump(self, ctx: DumpContext) -> None:
-        ctx.add(self.name, (b"(declare-fun %s () Bool)" % self.name))
         ctx.out.extend(self.name)
 
     @override
