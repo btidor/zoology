@@ -157,8 +157,8 @@ class CIte(CTerm):
 @dataclass(frozen=True, slots=True)
 class BTerm(BaseTerm, metaclass=RewriteMeta):
     width: int = field(init=False)
-    min: int = field(init=False, default=-1, compare=False)
-    max: int = field(init=False, default=-1, compare=False)
+    min: int = field(init=False, compare=False)
+    max: int = field(init=False, compare=False)
 
     @abc.abstractmethod
     def __post_init__(self) -> None: ...
