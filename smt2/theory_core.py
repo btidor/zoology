@@ -36,6 +36,9 @@ class BaseTerm(abc.ABC):
                 descendants += arg.descendants + 1
         object.__setattr__(self, "descendants", descendants)
 
+    @abc.abstractmethod
+    def sort(self) -> bytes: ...
+
     def dump(self, ctx: DumpContext) -> None:
         # 0. Gather Arguments
         args = [getattr(self, name) for name in self.__match_args__]
@@ -121,7 +124,9 @@ def check(*constraints: CTerm) -> bool:
 
 
 @dataclass(frozen=True, slots=True)
-class CTerm(BaseTerm): ...
+class CTerm(BaseTerm):
+    def sort(self) -> bytes:
+        return b"Bool"
 
 
 @dataclass(frozen=True, slots=True)

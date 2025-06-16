@@ -22,6 +22,9 @@ class BTerm(BaseTerm):
     min: int = field(init=False, compare=False)
     max: int = field(init=False, compare=False)
 
+    def sort(self) -> bytes:
+        return b"(_ BitVec %d)" % self.width
+
 
 @dataclass(frozen=True, slots=True)
 class BSymbol(BTerm):

@@ -20,6 +20,9 @@ from .theory_core import BaseTerm, CValue, DumpContext, Eq
 
 @dataclass(frozen=True, slots=True)
 class ATerm(BaseTerm):
+    def sort(self) -> bytes:
+        return b"(Array (_ BitVec %d) (_ BitVec %d))" % self.width()
+
     @abc.abstractmethod
     def width(self) -> tuple[int, int]: ...
 

@@ -58,7 +58,9 @@ class RewriteMeta(abc.ABCMeta):
 
 
 @dataclass(frozen=True, slots=True)
-class CTerm(BaseTerm, metaclass=RewriteMeta): ...
+class CTerm(BaseTerm, metaclass=RewriteMeta):
+    def sort(self) -> bytes:
+        return b"Bool"
 
 
 @dataclass(frozen=True, slots=True)
@@ -161,6 +163,9 @@ class BTerm(BaseTerm, metaclass=RewriteMeta):
     width: int = field(init=False)
     min: int = field(init=False, compare=False)
     max: int = field(init=False, compare=False)
+
+    def sort(self) -> bytes:
+        return b"(_ BitVec %d)" % self.width
 
 
 @dataclass(frozen=True, slots=True)
@@ -509,6 +514,9 @@ class Ite(BTerm):
 
 @dataclass(frozen=True, slots=True)
 class ATerm(BaseTerm):
+    def sort(self) -> bytes:
+        return b"(Array (_ BitVec %d) (_ BitVec %d))" % self.width()
+
     @abc.abstractmethod
     def width(self) -> tuple[int, int]: ...
 
