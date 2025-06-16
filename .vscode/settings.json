@@ -11,6 +11,12 @@
         "**/*.py[cod]": true,
         "**/.pytest_cache": true
     },
+    "search.exclude": {
+        "**/node_modules": true,
+        "**/bower_components": true,
+        "**/*.code-search": true,
+        "smt2/composite.py": true
+    },
     "python.analysis.autoImportCompletions": true,
     "python.analysis.diagnosticMode": "workspace",
     "python.analysis.diagnosticSeverityOverrides": {
