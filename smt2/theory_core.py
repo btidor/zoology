@@ -40,6 +40,11 @@ class BaseTerm(abc.ABC):
     def sort(self) -> bytes: ...
 
     def walk(self, ctx: DumpContext) -> None:
+        i = id(self)
+        if i in ctx.walked:
+            ctx.walked[i] += 1
+            return
+        ctx.walked[i] = 1
         for name in self.__match_args__:
             arg = getattr(self, name, None)
             if isinstance(arg, BaseTerm):
@@ -92,6 +97,7 @@ class BaseTerm(abc.ABC):
 class DumpContext:
     out: bytearray = field(default_factory=bytearray)
     symbols: dict[bytes, BaseTerm] = field(default_factory=dict[bytes, BaseTerm])
+    walked: dict[int, int] = field(default_factory=dict[int, int])
 
     def walk(self, *terms: BaseTerm) -> None:
         for term in terms:

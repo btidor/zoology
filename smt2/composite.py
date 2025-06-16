@@ -276,6 +276,12 @@ class Concat(BTerm):
 
     @override
     def walk(self, ctx: DumpContext) -> None:
+        i = id(self)
+        if i in ctx.walked:
+            ctx.walked[i] += 1
+            return
+        ctx.walked[i] = 1
+
         for term in self.terms:
             term.walk(ctx)
 
@@ -636,6 +642,12 @@ class Store(ATerm):
 
     @override
     def walk(self, ctx: DumpContext) -> None:
+        i = id(self)
+        if i in ctx.walked:
+            ctx.walked[i] += 1
+            return
+        ctx.walked[i] = 1
+
         self.base.walk(ctx)
         for term in self.lower.values():
             term.walk(ctx)
