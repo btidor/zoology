@@ -73,7 +73,7 @@ class CSymbol(CTerm):
 
     @override
     def dump(self, ctx: DumpContext) -> None:
-        ctx.out.extend(self.name)
+        ctx.write(self.name)
 
     @override
     def substitute(self, model: dict[bytes, BaseTerm]) -> BaseTerm:
@@ -86,7 +86,7 @@ class CValue(CTerm):
 
     @override
     def dump(self, ctx: DumpContext) -> None:
-        ctx.out.extend(b"true" if self.value else b"false")
+        ctx.write(b"true" if self.value else b"false")
 
     @override
     def substitute(self, model: dict[bytes, BaseTerm]) -> BaseTerm:

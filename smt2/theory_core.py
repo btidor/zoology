@@ -58,14 +58,14 @@ class BaseTerm(abc.ABC):
         # 1. Determine Op
         assert self.op
         if params:
-            ctx.out.extend(b"((_ %b %s)" % (self.op, b" ".join(params)))
+            ctx.write(b"((_ %b %s)" % (self.op, b" ".join(params)))
         else:
-            ctx.out.extend(b"(%b" % self.op)
+            ctx.write(b"(%b" % self.op)
         # 2. Dump Terms
         for term in terms:
-            ctx.out.extend(b" ")
+            ctx.write(b" ")
             term.dump(ctx)
-        ctx.out.extend(b")")
+        ctx.write(b")")
 
     def substitute(self, model: dict[bytes, BaseTerm]) -> BaseTerm:
         args = list[Any]()
@@ -147,7 +147,7 @@ class CSymbol(CTerm):
 
     @override
     def dump(self, ctx: DumpContext) -> None:
-        ctx.out.extend(self.name)
+        ctx.write(self.name)
 
     @override
     def substitute(self, model: dict[bytes, BaseTerm]) -> BaseTerm:
@@ -160,7 +160,7 @@ class CValue(CTerm):
 
     @override
     def dump(self, ctx: DumpContext) -> None:
-        ctx.out.extend(b"true" if self.value else b"false")
+        ctx.write(b"true" if self.value else b"false")
 
     @override
     def substitute(self, model: dict[bytes, BaseTerm]) -> BaseTerm:
