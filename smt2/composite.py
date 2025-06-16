@@ -133,6 +133,7 @@ class Eq[S: BaseTerm](CTerm):
     right: S
 
     def __post_init__(self) -> None:
+        BaseTerm.__post_init__(self)
         assert getattr(self.left, "width", None) == getattr(self.right, "width", None)
 
 
@@ -143,6 +144,7 @@ class Distinct[S: BaseTerm](CTerm):
     right: S
 
     def __post_init__(self) -> None:
+        BaseTerm.__post_init__(self)
         assert getattr(self.left, "width", None) == getattr(self.right, "width", None)
 
 
@@ -160,9 +162,6 @@ class BTerm(BaseTerm, metaclass=RewriteMeta):
     min: int = field(init=False, compare=False)
     max: int = field(init=False, compare=False)
 
-    @abc.abstractmethod
-    def __post_init__(self) -> None: ...
-
 
 @dataclass(frozen=True, slots=True)
 class BSymbol(BTerm):
@@ -170,6 +169,7 @@ class BSymbol(BTerm):
     w: InitVar[int]
 
     def __post_init__(self, w: int) -> None:
+        BaseTerm.__post_init__(self)
         assert w > 0, "width must be positive"
         object.__setattr__(self, "width", w)
 
@@ -192,6 +192,7 @@ class BValue(BTerm):
     w: InitVar[int]
 
     def __post_init__(self, w: int) -> None:
+        BaseTerm.__post_init__(self)
         assert w > 0, "width must be positive"
         if self.value < 0:
             object.__setattr__(self, "value", self.value + (1 << w))
@@ -221,6 +222,7 @@ class UnaryOp(BTerm):
     term: BTerm
 
     def __post_init__(self) -> None:
+        BaseTerm.__post_init__(self)
         object.__setattr__(self, "width", self.term.width)
 
 
@@ -230,6 +232,7 @@ class BinaryOp(BTerm):
     right: BTerm
 
     def __post_init__(self) -> None:
+        BaseTerm.__post_init__(self)
         assert self.left.width == self.right.width
         object.__setattr__(self, "width", self.left.width)
 
@@ -240,6 +243,7 @@ class CompareOp(CTerm):
     right: BTerm
 
     def __post_init__(self) -> None:
+        BaseTerm.__post_init__(self)
         assert self.left.width == self.right.width
 
 
@@ -255,6 +259,9 @@ class Concat(BTerm):
     terms: tuple[BTerm, ...]
 
     def __post_init__(self) -> None:
+        descendants = reduce(int.__add__, (t.descendants + 1 for t in self.terms))
+        object.__setattr__(self, "descendants", descendants)
+
         assert len(self.terms) > 0, "width must be positive"
         w = reduce(lambda p, q: p + q.width, self.terms, 0)
         object.__setattr__(self, "width", w)
@@ -276,6 +283,7 @@ class Extract(BTerm):
     term: BTerm
 
     def __post_init__(self) -> None:
+        BaseTerm.__post_init__(self)
         assert self.term.width > self.i >= self.j >= 0
         w = self.i - self.j + 1
         object.__setattr__(self, "width", w)
@@ -368,6 +376,7 @@ class Comp(BTerm):
     right: BTerm
 
     def __post_init__(self) -> None:
+        BaseTerm.__post_init__(self)
         assert self.left.width == self.right.width
         object.__setattr__(self, "width", 1)
 
@@ -402,6 +411,7 @@ class Repeat(SingleParamOp):
     op: ClassVar[bytes] = b"repeat"
 
     def __post_init__(self) -> None:
+        BaseTerm.__post_init__(self)
         assert self.i > 0
         w = self.term.width * self.i
         object.__setattr__(self, "width", w)
@@ -412,6 +422,7 @@ class ZeroExtend(SingleParamOp):
     op: ClassVar[bytes] = b"zero_extend"
 
     def __post_init__(self) -> None:
+        BaseTerm.__post_init__(self)
         assert self.i >= 0
         w = self.term.width + self.i
         object.__setattr__(self, "width", w)
@@ -422,6 +433,7 @@ class SignExtend(SingleParamOp):
     op: ClassVar[bytes] = b"sign_extend"
 
     def __post_init__(self) -> None:
+        BaseTerm.__post_init__(self)
         assert self.i >= 0
         w = self.term.width + self.i
         object.__setattr__(self, "width", w)
@@ -432,6 +444,7 @@ class RotateLeft(SingleParamOp):
     op: ClassVar[bytes] = b"rotate_left"
 
     def __post_init__(self) -> None:
+        BaseTerm.__post_init__(self)
         assert self.i >= 0
         object.__setattr__(self, "width", self.term.width)
 
@@ -441,6 +454,7 @@ class RotateRight(SingleParamOp):
     op: ClassVar[bytes] = b"rotate_right"
 
     def __post_init__(self) -> None:
+        BaseTerm.__post_init__(self)
         assert self.i >= 0
         object.__setattr__(self, "width", self.term.width)
 
@@ -488,6 +502,7 @@ class Ite(BTerm):
     right: BTerm
 
     def __post_init__(self) -> None:
+        BaseTerm.__post_init__(self)
         assert self.left.width == self.right.width
         object.__setattr__(self, "width", self.left.width)
 
@@ -553,6 +568,7 @@ class Select(BTerm):
 
     @override
     def __post_init__(self) -> None:
+        BaseTerm.__post_init__(self)
         k, v = self.array.width()
         assert k == self.key.width
         object.__setattr__(self, "width", v)

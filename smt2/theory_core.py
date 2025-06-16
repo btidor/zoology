@@ -19,6 +19,7 @@ from typing import Any, ClassVar, Self, override
 class BaseTerm(abc.ABC):
     op: ClassVar[bytes]
     commutative: ClassVar[bool] = False
+    descendants: int = field(init=False, compare=False)
 
     # Instances of Symbolic are expected to be immutable:
     def __copy__(self) -> Self:
@@ -26,6 +27,14 @@ class BaseTerm(abc.ABC):
 
     def __deepcopy__(self, memo: Any, /) -> Self:
         return self
+
+    def __post_init__(self) -> None:
+        descendants = 0
+        for name in self.__match_args__:
+            arg = getattr(self, name, None)
+            if isinstance(arg, BaseTerm):
+                descendants += arg.descendants + 1
+        object.__setattr__(self, "descendants", descendants)
 
     def dump(self, ctx: DumpContext) -> None:
         # 0. Gather Arguments
@@ -187,6 +196,7 @@ class Eq[S: BaseTerm](CTerm):
     right: S
 
     def __post_init__(self) -> None:
+        BaseTerm.__post_init__(self)
         assert getattr(self.left, "width", None) == getattr(self.right, "width", None)
 
 
@@ -197,6 +207,7 @@ class Distinct[S: BaseTerm](CTerm):
     right: S
 
     def __post_init__(self) -> None:
+        BaseTerm.__post_init__(self)
         assert getattr(self.left, "width", None) == getattr(self.right, "width", None)
 
 

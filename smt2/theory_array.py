@@ -79,6 +79,7 @@ class Select(BTerm):
 
     @override
     def __post_init__(self) -> None:
+        BaseTerm.__post_init__(self)
         k, v = self.array.width()
         assert k == self.key.width
         object.__setattr__(self, "width", v)
@@ -130,6 +131,8 @@ class Store(ATerm):
     # when reusing a Store in Selects and other expressions.
     __copy__ = None  # pyright: ignore[reportAssignmentType]
     __deepcopy__ = None  # pyright: ignore[reportAssignmentType]
+
+    # Also note that `Store.descendants` is likely incorrect.
 
     def width(self) -> tuple[int, int]:
         return self.base.width()
