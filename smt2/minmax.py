@@ -14,6 +14,7 @@ from .rewrite import (
     bitvector_logic_boolean,
     bitvector_logic_shifts,
     bitvector_reduction,
+    bitvector_yolo,
     constraint_folding,
     constraint_logic_bitvector,
     constraint_logic_boolean,
@@ -178,6 +179,7 @@ class RewriteMeta(abc.ABCMeta):
                 term = bitvector_logic_boolean(term)
                 term = bitvector_logic_arithmetic(term)
                 term = bitvector_logic_shifts(term)
+                term = bitvector_yolo(term)
                 min, max = propagate_minmax(term)
                 object.__setattr__(term, "min", min)
                 object.__setattr__(term, "max", max)

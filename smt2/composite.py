@@ -52,6 +52,7 @@ class RewriteMeta(abc.ABCMeta):
                 term = bitvector_logic_boolean(term)
                 term = bitvector_logic_arithmetic(term)
                 term = bitvector_logic_shifts(term)
+                term = bitvector_yolo(term)
                 min, max = propagate_minmax(term)
                 object.__setattr__(term, "min", min)
                 object.__setattr__(term, "max", max)
@@ -1083,8 +1084,6 @@ def bitvector_logic_shifts(term: BTerm) -> BTerm:
             return Extract(i - c.width + x.width, j - c.width + x.width, x)
         case Extract(i, j, Concat([x, *rest]) as c) if i < c.width - x.width:
             return Extract(i, j, Concat((*rest,)))
-        case Extract(i, j, Lshr(x, BValue(shift))) if i < x.width - shift:
-            return Extract(i + shift, j + shift, x)
         case Concat([Extract(i, j, x), Extract(k, l, y), *rest]) if (
             j == k + 1 and x == y
         ):
@@ -1160,6 +1159,14 @@ def bitvector_logic_shifts(term: BTerm) -> BTerm:
                     Lshr(Concat((*rest,)), BValue(a - x.width, term.width - x.width)),
                 )
             )
+        case _:
+            return term
+
+
+def bitvector_yolo(term: BTerm) -> BTerm:
+    match term:
+        case Extract(i, j, Lshr(x, BValue(shift))) if i < x.width - shift:
+            return Extract(i + shift, j + shift, x)
         case _:
             return term
 

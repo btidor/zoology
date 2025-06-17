@@ -562,9 +562,6 @@ def bitvector_logic_shifts(term: BTerm) -> BTerm:
         case Extract(i, j, Concat([x, *rest]) as c) if i < c.width - x.width:
             """xtr.cat"""
             return Extract(i, j, Concat((*rest,)))
-        case Extract(i, j, Lshr(x, BValue(shift))) if i < x.width - shift:
-            """xtr.lshr"""
-            return Extract(i + shift, j + shift, x)
         case Concat([Extract(i, j, x), Extract(k, l, y), *rest]) if (
             j == k + 1 and x == y
         ):
@@ -666,5 +663,15 @@ def bitvector_logic_shifts(term: BTerm) -> BTerm:
                     Lshr(Concat((*rest,)), BValue(a - x.width, term.width - x.width)),
                 )
             )
+        case _:
+            return term
+
+
+def bitvector_yolo(term: BTerm) -> BTerm:
+    """Warning: unverified rewrite rules for bitvectors."""
+    match term:
+        case Extract(i, j, Lshr(x, BValue(shift))) if i < x.width - shift:
+            """xtr.lshr"""
+            return Extract(i + shift, j + shift, x)
         case _:
             return term
