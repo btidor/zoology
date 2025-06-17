@@ -10,10 +10,13 @@ from __future__ import annotations
 
 from .rewrite import (
     bitvector_folding,
-    bitvector_logic,
+    bitvector_logic_arithmetic,
+    bitvector_logic_boolean,
+    bitvector_logic_shifts,
     bitvector_reduction,
     constraint_folding,
-    constraint_logic,
+    constraint_logic_bitvector,
+    constraint_logic_boolean,
     constraint_reduction,
 )
 from .theory_array import *
@@ -166,15 +169,18 @@ class RewriteMeta(abc.ABCMeta):
             case CTerm():
                 term = constraint_reduction(term)
                 term = constraint_folding(term)
-                term = constraint_logic(term)
-                return constraint_minmax(term)
+                term = constraint_logic_boolean(term)
+                term = constraint_logic_bitvector(term)
+                term = constraint_minmax(term)
             case BTerm():
                 term = bitvector_reduction(term)
                 term = bitvector_folding(term)
-                term = bitvector_logic(term)
+                term = bitvector_logic_boolean(term)
+                term = bitvector_logic_arithmetic(term)
+                term = bitvector_logic_shifts(term)
                 min, max = propagate_minmax(term)
                 object.__setattr__(term, "min", min)
                 object.__setattr__(term, "max", max)
-                return term
             case _:
                 raise TypeError("unknown term", term)
+        return term

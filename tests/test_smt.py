@@ -12,10 +12,13 @@ from smt2.analyze_rewrite import CaseParser, RewriteCase
 from smt2.minmax import constraint_minmax, propagate_minmax
 from smt2.rewrite import (
     bitvector_folding,
-    bitvector_logic,
+    bitvector_logic_arithmetic,
+    bitvector_logic_boolean,
+    bitvector_logic_shifts,
     bitvector_reduction,
     constraint_folding,
-    constraint_logic,
+    constraint_logic_bitvector,
+    constraint_logic_boolean,
     constraint_reduction,
 )
 from smt2.theory_core import CSymbol, Distinct, Not, check
@@ -66,8 +69,13 @@ def test_constraint_folding(case: RewriteCase):
     assert CaseParser.is_equivalent(case)
 
 
-@parameterize_rewrite(constraint_logic)
-def test_constraint_logic(case: RewriteCase):
+@parameterize_rewrite(constraint_logic_boolean)
+def test_constraint_logic_boolean(case: RewriteCase):
+    assert CaseParser.is_equivalent(case)
+
+
+@parameterize_rewrite(constraint_logic_bitvector)
+def test_constraint_logic_bitvector(case: RewriteCase):
     assert CaseParser.is_equivalent(case)
 
 
@@ -81,8 +89,18 @@ def test_bitvector_folding(case: RewriteCase):
     assert CaseParser.is_equivalent(case)
 
 
-@parameterize_rewrite(bitvector_logic)
-def test_bitvector_logic(case: RewriteCase):
+@parameterize_rewrite(bitvector_logic_boolean)
+def test_bitvector_logic_boolean(case: RewriteCase):
+    assert CaseParser.is_equivalent(case)
+
+
+@parameterize_rewrite(bitvector_logic_arithmetic)
+def test_bitvector_logic_arithmetic(case: RewriteCase):
+    assert CaseParser.is_equivalent(case)
+
+
+@parameterize_rewrite(bitvector_logic_shifts)
+def test_bitvector_logic_shifts(case: RewriteCase):
     assert CaseParser.is_equivalent(case)
 
 

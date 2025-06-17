@@ -75,10 +75,9 @@ def constraint_folding(term: CTerm) -> CTerm:
             return term
 
 
-def constraint_logic(term: CTerm) -> CTerm:
-    """Perform more logical rewrites, mostly involving a constant."""
+def constraint_logic_boolean(term: CTerm) -> CTerm:
+    """Perform logical rewrites involving booleans."""
     match term:
-        # Core Boolean Logic.
         case Not(Not(inner)):
             """not.not: ~(~X) <=> X"""
             return inner
@@ -124,8 +123,13 @@ def constraint_logic(term: CTerm) -> CTerm:
         case Xor(x, Not(y)) if x == y:
             """xor.ix: X ^ ~X <=> True"""
             return CValue(True)
+        case _:
+            return term
 
-        # Bitvector Eq.
+
+def constraint_logic_bitvector(term: CTerm) -> CTerm:
+    """Perform logical rewrites involving bitvector comparators."""
+    match term:
         case Eq(BTerm() as x, BTerm() as y) if x == y:
             """beq.x: X = X <=> True"""
             return CValue(True)
@@ -179,8 +183,6 @@ def constraint_logic(term: CTerm) -> CTerm:
                 ),
                 Eq(x, Ite(c, Extract(x.width - 1, 0, p), Extract(x.width - 1, 0, q))),
             )
-
-        # Bitvector Comparators.
         case Ult(x, BValue(0)):
             """ult.z: X < 0 <=> False"""
             return CValue(False)
@@ -368,13 +370,11 @@ def bitvector_folding(term: BTerm) -> BTerm:
             return term
 
 
-def bitvector_logic(term: BTerm) -> BTerm:
-    """Perform more logical rewrites, mostly involving a constant."""
+def bitvector_logic_boolean(term: BTerm) -> BTerm:
+    """Perform logical rewrites involving boolean ops on bitvectors."""
     width = term.width
     mask = (1 << width) - 1
-    modulus = 1 << width
     match term:
-        # Boolean Logic.
         case BNot(BNot(inner)):
             """bnot.bnot: ~(~X) <=> X"""
             return inner
@@ -414,8 +414,16 @@ def bitvector_logic(term: BTerm) -> BTerm:
         case BXor(x, BNot(y)) if x == y:
             """bxor.ix: X ^ ~X <=> 1111"""
             return BValue(mask, width)
+        case _:
+            return term
 
-        # Arithmetic.
+
+def bitvector_logic_arithmetic(term: BTerm) -> BTerm:
+    """Perform arithmetic rewrites on bitvectors."""
+    width = term.width
+    mask = (1 << width) - 1
+    modulus = 1 << width
+    match term:
         case BNot(Add(x, y)):
             """bnot.add: ~(X + Y) <=> ~X + ~Y + 1"""
             return Add(BValue(1, width), Add(BNot(x), BNot(y)))
@@ -470,8 +478,15 @@ def bitvector_logic(term: BTerm) -> BTerm:
         case Smod(x, BValue(1)):
             """smod.w: X % 1 <=> 0"""
             return BValue(0, width)
+        case _:
+            return term
 
-        # Shifts.
+
+def bitvector_logic_shifts(term: BTerm) -> BTerm:
+    """Perform logical rewrites involving bit shifts and extraction."""
+    width = term.width
+    mask = (1 << width) - 1
+    match term:
         case Shl(x, BValue(0)):
             """shl.z"""
             return x

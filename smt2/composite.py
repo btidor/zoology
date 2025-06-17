@@ -43,18 +43,21 @@ class RewriteMeta(abc.ABCMeta):
             case CTerm():
                 term = constraint_reduction(term)
                 term = constraint_folding(term)
-                term = constraint_logic(term)
-                return constraint_minmax(term)
+                term = constraint_logic_boolean(term)
+                term = constraint_logic_bitvector(term)
+                term = constraint_minmax(term)
             case BTerm():
                 term = bitvector_reduction(term)
                 term = bitvector_folding(term)
-                term = bitvector_logic(term)
+                term = bitvector_logic_boolean(term)
+                term = bitvector_logic_arithmetic(term)
+                term = bitvector_logic_shifts(term)
                 min, max = propagate_minmax(term)
                 object.__setattr__(term, "min", min)
                 object.__setattr__(term, "max", max)
-                return term
             case _:
                 raise TypeError("unknown term", term)
+        return term
 
 
 @dataclass(frozen=True, slots=True)
@@ -731,7 +734,7 @@ def constraint_folding(term: CTerm) -> CTerm:
             return term
 
 
-def constraint_logic(term: CTerm) -> CTerm:
+def constraint_logic_boolean(term: CTerm) -> CTerm:
     match term:
         case Not(Not(inner)):
             return inner
@@ -763,6 +766,12 @@ def constraint_logic(term: CTerm) -> CTerm:
             return CValue(False)
         case Xor(x, Not(y)) if x == y:
             return CValue(True)
+        case _:
+            return term
+
+
+def constraint_logic_bitvector(term: CTerm) -> CTerm:
+    match term:
         case Eq(BTerm() as x, BTerm() as y) if x == y:
             return CValue(True)
         case Eq(BTerm() as x, BNot(y)) if x == y:
@@ -939,10 +948,9 @@ def bitvector_folding(term: BTerm) -> BTerm:
             return term
 
 
-def bitvector_logic(term: BTerm) -> BTerm:
+def bitvector_logic_boolean(term: BTerm) -> BTerm:
     width = term.width
     mask = (1 << width) - 1
-    modulus = 1 << width
     match term:
         case BNot(BNot(inner)):
             return inner
@@ -970,6 +978,15 @@ def bitvector_logic(term: BTerm) -> BTerm:
             return BValue(0, width)
         case BXor(x, BNot(y)) if x == y:
             return BValue(mask, width)
+        case _:
+            return term
+
+
+def bitvector_logic_arithmetic(term: BTerm) -> BTerm:
+    width = term.width
+    mask = (1 << width) - 1
+    modulus = 1 << width
+    match term:
         case BNot(Add(x, y)):
             return Add(BValue(1, width), Add(BNot(x), BNot(y)))
         case Add(BValue(0), x):
@@ -1006,6 +1023,14 @@ def bitvector_logic(term: BTerm) -> BTerm:
             return x
         case Smod(x, BValue(1)):
             return BValue(0, width)
+        case _:
+            return term
+
+
+def bitvector_logic_shifts(term: BTerm) -> BTerm:
+    width = term.width
+    mask = (1 << width) - 1
+    match term:
         case Shl(x, BValue(0)):
             return x
         case Shl(x, BValue(val)) if val >= width:
