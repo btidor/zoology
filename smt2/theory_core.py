@@ -15,7 +15,7 @@ from subprocess import PIPE, Popen
 from typing import Any, ClassVar, Self, override
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, repr=False, slots=True)
 class BaseTerm(abc.ABC):
     op: ClassVar[bytes]
     commutative: ClassVar[bool] = False
@@ -35,6 +35,11 @@ class BaseTerm(abc.ABC):
             if isinstance(arg, BaseTerm):
                 descendants += arg.descendants + 1
         object.__setattr__(self, "descendants", descendants)
+
+    def __repr__(self) -> str:
+        ctx = DumpContext()
+        self.dump(ctx)
+        return ctx.out.decode()
 
     @abc.abstractmethod
     def sort(self) -> bytes: ...
@@ -165,13 +170,13 @@ def check(*constraints: CTerm) -> bool:
             raise RuntimeError(out, err)
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, repr=False, slots=True)
 class CTerm(BaseTerm):
     def sort(self) -> bytes:
         return b"Bool"
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, repr=False, slots=True)
 class CSymbol(CTerm):
     name: bytes
 
@@ -188,7 +193,7 @@ class CSymbol(CTerm):
         return model.get(self.name, self)
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, repr=False, slots=True)
 class CValue(CTerm):
     value: bool
 
@@ -201,20 +206,20 @@ class CValue(CTerm):
         return self
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, repr=False, slots=True)
 class Not(CTerm):
     op: ClassVar[bytes] = b"not"
     term: CTerm
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, repr=False, slots=True)
 class Implies(CTerm):
     op: ClassVar[bytes] = b"=>"
     left: CTerm
     right: CTerm
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, repr=False, slots=True)
 class And(CTerm):
     op: ClassVar[bytes] = b"and"
     commutative: ClassVar[bool] = True
@@ -222,7 +227,7 @@ class And(CTerm):
     right: CTerm
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, repr=False, slots=True)
 class Or(CTerm):
     op: ClassVar[bytes] = b"or"
     commutative: ClassVar[bool] = True
@@ -230,7 +235,7 @@ class Or(CTerm):
     right: CTerm
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, repr=False, slots=True)
 class Xor(CTerm):
     op: ClassVar[bytes] = b"xor"
     commutative: ClassVar[bool] = True
@@ -238,7 +243,7 @@ class Xor(CTerm):
     right: CTerm
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, repr=False, slots=True)
 class Eq[S: BaseTerm](CTerm):
     op: ClassVar[bytes] = b"="
     commutative: ClassVar[bool] = True
@@ -250,7 +255,7 @@ class Eq[S: BaseTerm](CTerm):
         assert getattr(self.left, "width", None) == getattr(self.right, "width", None)
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, repr=False, slots=True)
 class Distinct[S: BaseTerm](CTerm):
     op: ClassVar[bytes] = b"distinct"
     left: S
@@ -261,7 +266,7 @@ class Distinct[S: BaseTerm](CTerm):
         assert getattr(self.left, "width", None) == getattr(self.right, "width", None)
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, repr=False, slots=True)
 class CIte(CTerm):
     op: ClassVar[bytes] = b"ite"
     cond: CTerm

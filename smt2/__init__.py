@@ -74,9 +74,7 @@ class Symbolic(abc.ABC):
         return self._term.__hash__()
 
     def __repr__(self) -> str:
-        ctx = DumpContext()
-        self.dump(ctx)
-        return f"{self.__class__.__name__}({ctx.out.decode()})"
+        return f"{self.__class__.__name__}({repr(self._term)})"
 
     def dump(self, ctx: DumpContext) -> None:
         self._term.dump(ctx)

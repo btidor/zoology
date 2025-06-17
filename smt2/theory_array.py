@@ -18,7 +18,7 @@ from .theory_bitvec import BTerm, BValue
 from .theory_core import BaseTerm, CValue, DumpContext, Eq
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, repr=False, slots=True)
 class ATerm(BaseTerm):
     def sort(self) -> bytes:
         return b"(Array (_ BitVec %d) (_ BitVec %d))" % self.width()
@@ -27,7 +27,7 @@ class ATerm(BaseTerm):
     def width(self) -> tuple[int, int]: ...
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, repr=False, slots=True)
 class ASymbol(ATerm):
     name: bytes
     key: int
@@ -49,7 +49,7 @@ class ASymbol(ATerm):
         return model.get(self.name, self)
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, repr=False, slots=True)
 class AValue(ATerm):
     default: BTerm
     key: int
@@ -71,7 +71,7 @@ class AValue(ATerm):
         return self
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, repr=False, slots=True)
 class Select(BTerm):
     op: ClassVar[bytes] = b"select"
     array: ATerm
@@ -121,7 +121,7 @@ class Select(BTerm):
                 return call(Store(base, copy.copy(lower)), key)
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, repr=False, slots=True)
 class Store(ATerm):
     base: ASymbol | AValue
     lower: dict[int, BTerm] = field(default_factory=dict[int, BTerm])
