@@ -94,7 +94,7 @@ class Solver:
             ctx.write(b")\n")
         ctx.write(b"(check-sat)")
 
-        p = Popen(["z3", "-model", "/dev/stdin"], stdin=PIPE, stdout=PIPE, stderr=PIPE)
+        p = Popen(["bitwuzla", "--print-model"], stdin=PIPE, stdout=PIPE, stderr=PIPE)
         out, err = p.communicate(bytes(ctx.out))
         outs = out.decode().split("\n", 1)
         match outs[0]:

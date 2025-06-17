@@ -140,11 +140,15 @@ class Concat(BTerm):
     def dump(self, ctx: DumpContext) -> None:
         if ctx.try_alias(self):
             return
-        ctx.write(b"(concat")
-        for term in self.terms:
-            ctx.write(b" ")
-            term.dump(ctx)
-        ctx.write(b")")
+        if len(self.terms) == 1:
+            # Bitwuzla doesn't allow single-term Concats.
+            self.terms[0].dump(ctx)
+        else:
+            ctx.write(b"(concat")
+            for term in self.terms:
+                ctx.write(b" ")
+                term.dump(ctx)
+            ctx.write(b")")
 
 
 @dataclass(frozen=True, slots=True)
