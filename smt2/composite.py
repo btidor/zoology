@@ -270,10 +270,9 @@ class Concat(BTerm):
     terms: tuple[BTerm, ...]
 
     def __post_init__(self) -> None:
+        assert len(self.terms) > 0, "width must be positive"
         descendants = reduce(int.__add__, (t.descendants + 1 for t in self.terms))
         object.__setattr__(self, "descendants", descendants)
-
-        assert len(self.terms) > 0, "width must be positive"
         w = reduce(lambda p, q: p + q.width, self.terms, 0)
         object.__setattr__(self, "width", w)
 
@@ -812,6 +811,14 @@ def constraint_logic_bitvector(term: CTerm) -> CTerm:
                 ),
                 Eq(x, Ite(c, Extract(x.width - 1, 0, p), Extract(x.width - 1, 0, q))),
             )
+        case Eq(Concat([x, *xx]), Concat([y, *yy])) if (
+            x.width == y.width and len(xx) > 0 and len(yy) > 0
+        ):
+            return And(Eq(x, y), Eq(Concat((*xx,)), Concat((*yy,))))
+        case Eq(Concat([*xx, x]), Concat([*yy, y])) if (
+            x.width == y.width and len(xx) > 0 and len(yy) > 0
+        ):
+            return And(Eq(Concat((*xx,)), Concat((*yy,))), Eq(x, y))
         case Ult(x, BValue(0)):
             return CValue(False)
         case Ule(x, BValue(0)):
@@ -822,6 +829,10 @@ def constraint_logic_bitvector(term: CTerm) -> CTerm:
             return CValue(True)
         case Ult(x, BValue(1)):
             return Eq(x, BValue(0, x.width))
+        case Ult(x, y) if x == y:
+            return CValue(False)
+        case Ule(x, y) if x == y:
+            return CValue(True)
         case Not(Ult(x, y)):
             return Ule(y, x)
         case Not(Ule(x, y)):
@@ -900,6 +911,8 @@ def bitvector_folding(term: BTerm) -> BTerm:
             return single
         case Concat([BValue(a) as x, BValue(b) as y, *rest]):
             return Concat((BValue(a << y.width | b, x.width + y.width), *rest))
+        case Concat([*rest, BValue(a) as x, BValue(b) as y]):
+            return Concat((*rest, BValue(a << y.width | b, x.width + y.width)))
         case Extract(i, j, BValue(a)):
             return BValue((a >> j) & ((1 << (i - j + 1)) - 1), i - j + 1)
         case BNot(BValue(a)):
@@ -962,6 +975,8 @@ def bitvector_logic_boolean(term: BTerm) -> BTerm:
             return x
         case BAnd(x, BNot(y)) if x == y:
             return BValue(0, width)
+        case BAnd(BValue(a), BAnd(BValue(b), x)):
+            return BAnd(BValue(a & b, width), x)
         case BOr(BValue(0), x):
             return x
         case BOr(BValue(m), x) if m == mask:
@@ -970,6 +985,8 @@ def bitvector_logic_boolean(term: BTerm) -> BTerm:
             return x
         case BOr(x, BNot(y)) if x == y:
             return BValue(mask, width)
+        case BOr(BValue(a), BOr(BValue(b), x)):
+            return BOr(BValue(a | b, width), x)
         case BXor(BValue(0), x):
             return x
         case BXor(BValue(m), x) if m == mask:
@@ -978,6 +995,8 @@ def bitvector_logic_boolean(term: BTerm) -> BTerm:
             return BValue(0, width)
         case BXor(x, BNot(y)) if x == y:
             return BValue(mask, width)
+        case BXor(BValue(a), BXor(BValue(b), x)):
+            return BXor(BValue(a ^ b, width), x)
         case _:
             return term
 
@@ -1049,12 +1068,40 @@ def bitvector_logic_shifts(term: BTerm) -> BTerm:
             return x
         case SignExtend(i, SignExtend(j, x)):
             return SignExtend(i + j, x)
+        case Concat([*left, Concat((*right,))]) | Concat([Concat((*left,)), *right]):
+            return Concat((*left, *right))
+        case Extract(i, j, x) if i == x.width - 1 and j == 0:
+            return x
+        case Extract(i, j, Concat([*rest, x])) if i < x.width:
+            return Extract(i, j, x)
         case Extract(i, j, Concat([*rest, x])) if j >= x.width:
             return Extract(i - x.width, j - x.width, Concat((*rest,)))
-        case Extract(i, j, Concat([x, *rest])) if i < term.width - x.width:
+        case Extract(i, j, Concat([x, *rest]) as c) if j >= c.width - x.width:
+            return Extract(i - c.width + x.width, j - c.width + x.width, x)
+        case Extract(i, j, Concat([x, *rest]) as c) if i < c.width - x.width:
             return Extract(i, j, Concat((*rest,)))
+        case Extract(i, j, Lshr(x, BValue(a))) if i < x.width - a:
+            return Extract(i + a, j + a, x)
+        case Concat([Extract(i, j, x), Extract(k, l, y), *rest]) if (
+            j == k + 1 and x == y
+        ):
+            return Concat((Extract(i, l, x), *rest))
+        case Concat([*rest, Extract(i, j, x), Extract(k, l, y)]) if (
+            j == k + 1 and x == y
+        ):
+            return Concat((*rest, Extract(i, l, x)))
+        case Concat([*rest, Extract(i, j, x), Extract(k, l, y), z]) if (
+            j == k + 1 and x == y
+        ):
+            return Concat((*rest, Extract(i, l, x), z))
         case Ite(_c, x, y) if x == y:
             return x
+        case Ite(Not(c), x, y):
+            return Ite(c, y, x)
+        case Ite(c, Ite(d, x, y), z) if c == d:
+            return Ite(c, x, z)
+        case Ite(c, x, Ite(d, y, z)) if c == d:
+            return Ite(c, x, z)
         case BNot(Ite(c, x, y)):
             return Ite(c, BNot(x), BNot(y))
         case BAnd(Ite(c, x, y), z) | BAnd(z, Ite(c, x, y)):
@@ -1063,6 +1110,18 @@ def bitvector_logic_shifts(term: BTerm) -> BTerm:
             return Ite(c, BOr(x, z), BOr(y, z))
         case BXor(Ite(c, x, y), z) | BXor(z, Ite(c, x, y)):
             return Ite(c, BXor(x, z), BXor(y, z))
+        case Extract(i, j, BAnd(BValue(a), x)):
+            return BAnd(
+                BValue((a >> j) & ((1 << (i - j + 1)) - 1), i - j + 1), Extract(i, j, x)
+            )
+        case Extract(i, j, BOr(BValue(a), x)):
+            return BOr(
+                BValue((a >> j) & ((1 << (i - j + 1)) - 1), i - j + 1), Extract(i, j, x)
+            )
+        case Extract(i, j, BXor(BValue(a), x)):
+            return BXor(
+                BValue((a >> j) & ((1 << (i - j + 1)) - 1), i - j + 1), Extract(i, j, x)
+            )
 
         case BAnd(BValue(a), Concat([*rest, x]) as c) if len(rest) > 0:
             mask = (1 << x.width) - 1

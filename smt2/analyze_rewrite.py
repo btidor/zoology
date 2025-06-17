@@ -413,6 +413,13 @@ class CaseParser:
                     # two ASTs are distinct, that tells us nothing about whether
                     # or not the expressions are equal.
                     case _, ast.Eq(), _:
+                        if isinstance(left, BTerm) and left.width < NATIVE_WIDTH:
+                            # When constructing the guard, return False if
+                            # there's a width mismatch.
+                            assert isinstance(right, BTerm)
+                            assert right.width < NATIVE_WIDTH
+                            if left.width != right.width:
+                                return CValue(False)
                         return Eq(left, right)
                     case _, ast.NotEq(), _:
                         if isinstance(left, BTerm) and left.width < NATIVE_WIDTH:

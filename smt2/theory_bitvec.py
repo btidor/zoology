@@ -123,10 +123,9 @@ class Concat(BTerm):
     terms: tuple[BTerm, ...]
 
     def __post_init__(self) -> None:
+        assert len(self.terms) > 0, "width must be positive"
         descendants = reduce(int.__add__, (t.descendants + 1 for t in self.terms))
         object.__setattr__(self, "descendants", descendants)
-
-        assert len(self.terms) > 0, "width must be positive"
         w = reduce(lambda p, q: p + q.width, self.terms, 0)
         object.__setattr__(self, "width", w)
 
