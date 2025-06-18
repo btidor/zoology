@@ -83,7 +83,7 @@ class Symbolic(abc.ABC):
     def reveal(self) -> bool | int | dict[int, int] | None: ...
 
     def substitute(self, model: dict[bytes, Symbolic]) -> Self:
-        cls = self.__class__.__new__(self.__class__)
+        cls = self.__new__(self.__class__)
         cls._term = self._term.substitute({k: v._term for k, v in model.items()})  # pyright: ignore[reportPrivateUsage]
         return cls
 
@@ -136,19 +136,6 @@ class Constraint(Symbolic):
                 return value
             case _:
                 return None
-
-    def destructure(self) -> list[Constraint]:
-        queue = [self._term]
-        res = list[Constraint]()
-        while queue:
-            match queue.pop(0):
-                case And(x, y):
-                    queue.extend((x, y))
-                case other:
-                    k = self.__class__.__new__(self.__class__)
-                    k._term = other
-                    res.append(k)
-        return res
 
 
 class BitVector[N: int](
