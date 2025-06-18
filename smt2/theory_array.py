@@ -12,10 +12,10 @@ from __future__ import annotations
 import abc
 import copy
 from dataclasses import dataclass, field
-from typing import Callable, ClassVar, Self, override
+from typing import Any, ClassVar, Self, override
 
 from .theory_bitvec import BTerm, BValue
-from .theory_core import BaseTerm, CValue, DumpContext, Eq
+from .theory_core import BaseTerm, DumpContext
 
 
 @dataclass(frozen=True, repr=False, slots=True)
@@ -87,38 +87,8 @@ class Select(BTerm):
         # setting our own min and max.
         object.__setattr__(self, "min", 0)
         object.__setattr__(self, "max", (1 << v) - 1)
-
-    @classmethod
-    def simplify(cls, array: ATerm, key: BTerm, call: Callable[..., Self]) -> BTerm:
-        match array:
-            case ASymbol():
-                return call(array, key)
-            case AValue(val):
-                return val
-            case Store(base, lower, upper):
-                pass
-            case _:
-                raise TypeError(f"unexpected ATerm: {array.__class__}")
-        for k, v in reversed(upper):
-            match Eq(k, key):
-                case CValue(True):  # pyright: ignore[reportUnnecessaryComparison]
-                    return v
-                case CValue(False):  # pyright: ignore[reportUnnecessaryComparison]
-                    continue
-                case _:
-                    return call(copy.deepcopy(array), key)
-        match key:
-            case BValue(s):
-                if s in lower:
-                    return lower[s]
-                else:
-                    match base:
-                        case AValue(default):
-                            return default
-                        case ASymbol() as symbol:
-                            return call(symbol, key)
-            case _:
-                return call(Store(base, copy.copy(lower)), key)
+        if isinstance(self.array, Store):
+            object.__setattr__(self, "array", copy.deepcopy(self.array))
 
 
 @dataclass(frozen=True, repr=False, slots=True)
@@ -130,7 +100,14 @@ class Store(ATerm):
     # Warning: Store is not actually immutable! Take care to create a deep copy
     # when reusing a Store in Selects and other expressions.
     __copy__ = None  # pyright: ignore[reportAssignmentType]
-    __deepcopy__ = None  # pyright: ignore[reportAssignmentType]
+
+    def __deepcopy__(self, memo: Any, /) -> Self:
+        k = self.__new__(self.__class__)
+        object.__setattr__(k, "base", self.base)
+        object.__setattr__(k, "lower", copy.copy(self.lower))
+        object.__setattr__(k, "upper", copy.copy(self.upper))
+        object.__setattr__(k, "descendants", self.descendants)
+        return k
 
     # Also note that `Store.descendants` is likely incorrect.
 

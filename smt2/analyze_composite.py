@@ -50,7 +50,7 @@ import abc
 import copy
 from dataclasses import InitVar, dataclass, field
 from functools import reduce
-from typing import Any, Callable, ClassVar, Self, override
+from typing import Any, ClassVar, Self, override
 
 from .theory_core import BaseTerm, DumpContext
 

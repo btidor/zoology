@@ -149,9 +149,6 @@ class RewriteMeta(abc.ABCMeta):
     def __call__(self, *args: Any, **kwds: Any) -> Any:
         """Construct the requested term, then rewrite it."""
         assert issubclass(self, BaseTerm)
-        if issubclass(self, Select):
-            # Custom logic for arrays.
-            return self.simplify(*args, **kwds, call=super(RewriteMeta, self).__call__)
         if self.commutative:
             # Swap Values to right-hand side, Nots to left-hand side.
             match args:

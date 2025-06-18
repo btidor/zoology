@@ -3,6 +3,9 @@
 
 from __future__ import annotations
 
+import copy
+
+from .theory_array import *
 from .theory_bitvec import *
 from .theory_core import *
 
@@ -673,5 +676,29 @@ def bitvector_yolo(term: BTerm) -> BTerm:
         case Extract(i, j, Lshr(x, BValue(shift))) if i < x.width - shift:
             """xtr.lshr"""
             return Extract(i + shift, j + shift, x)
+        case Select(AValue(d), _key):
+            """sel.n"""
+            return d
+        case Select(Store(base, lower, upper), key):
+            """sel.sto"""
+            for k, v in reversed(upper):
+                match Eq(k, key):
+                    case CValue(True):  # pyright: ignore[reportUnnecessaryComparison]
+                        return v
+                    case CValue(False):  # pyright: ignore[reportUnnecessaryComparison]
+                        continue
+                    case _:
+                        return term
+            match key:
+                case BValue(s):
+                    if s in lower:
+                        return lower[s]
+                    else:
+                        return Select(base, key)
+                case _:
+                    if upper:
+                        return Select(Store(base, copy.copy(lower)), key)
+                    else:
+                        return term
         case _:
             return term

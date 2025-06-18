@@ -14,7 +14,7 @@ import abc
 import copy
 from dataclasses import InitVar, dataclass, field
 from functools import reduce
-from typing import Any, Callable, ClassVar, Self, override
+from typing import Any, ClassVar, Self, override
 
 from .theory_core import BaseTerm, DumpContext
 
@@ -24,8 +24,6 @@ type MinMax = tuple[int, int]
 class RewriteMeta(abc.ABCMeta):
     def __call__(self, *args: Any, **kwds: Any) -> Any:
         assert issubclass(self, BaseTerm)
-        if issubclass(self, Select):
-            return self.simplify(*args, **kwds, call=super(RewriteMeta, self).__call__)
         if self.commutative:
             match args:
                 case (x, CValue() as y) if not isinstance(x, CValue):
@@ -598,38 +596,8 @@ class Select(BTerm):
 
         object.__setattr__(self, "min", 0)
         object.__setattr__(self, "max", (1 << v) - 1)
-
-    @classmethod
-    def simplify(cls, array: ATerm, key: BTerm, call: Callable[..., Self]) -> BTerm:
-        match array:
-            case ASymbol():
-                return call(array, key)
-            case AValue(val):
-                return val
-            case Store(base, lower, upper):
-                pass
-            case _:
-                raise TypeError(f"unexpected ATerm: {array.__class__}")
-        for k, v in reversed(upper):
-            match Eq(k, key):
-                case CValue(True):  # pyright: ignore[reportUnnecessaryComparison]
-                    return v
-                case CValue(False):  # pyright: ignore[reportUnnecessaryComparison]
-                    continue
-                case _:
-                    return call(copy.deepcopy(array), key)
-        match key:
-            case BValue(s):
-                if s in lower:
-                    return lower[s]
-                else:
-                    match base:
-                        case AValue(default):
-                            return default
-                        case ASymbol() as symbol:
-                            return call(symbol, key)
-            case _:
-                return call(Store(base, copy.copy(lower)), key)
+        if isinstance(self.array, Store):
+            object.__setattr__(self, "array", copy.deepcopy(self.array))
 
 
 @dataclass(frozen=True, repr=False, slots=True)
@@ -639,7 +607,14 @@ class Store(ATerm):
     upper: list[tuple[BTerm, BTerm]] = field(default_factory=list[tuple[BTerm, BTerm]])
 
     __copy__ = None  # pyright: ignore[reportAssignmentType]
-    __deepcopy__ = None  # pyright: ignore[reportAssignmentType]
+
+    def __deepcopy__(self, memo: Any, /) -> Self:
+        k = self.__new__(self.__class__)
+        object.__setattr__(k, "base", self.base)
+        object.__setattr__(k, "lower", copy.copy(self.lower))
+        object.__setattr__(k, "upper", copy.copy(self.upper))
+        object.__setattr__(k, "descendants", self.descendants)
+        return k
 
     def width(self) -> tuple[int, int]:
         return self.base.width()
@@ -1167,6 +1142,28 @@ def bitvector_yolo(term: BTerm) -> BTerm:
     match term:
         case Extract(i, j, Lshr(x, BValue(shift))) if i < x.width - shift:
             return Extract(i + shift, j + shift, x)
+        case Select(AValue(d), _key):
+            return d
+        case Select(Store(base, lower, upper), key):
+            for k, v in reversed(upper):
+                match Eq(k, key):
+                    case CValue(True):  # pyright: ignore[reportUnnecessaryComparison]
+                        return v
+                    case CValue(False):  # pyright: ignore[reportUnnecessaryComparison]
+                        continue
+                    case _:
+                        return term
+            match key:
+                case BValue(s):
+                    if s in lower:
+                        return lower[s]
+                    else:
+                        return Select(base, key)
+                case _:
+                    if upper:
+                        return Select(Store(base, copy.copy(lower)), key)
+                    else:
+                        return term
         case _:
             return term
 
