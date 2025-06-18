@@ -18,7 +18,7 @@ from smt import (
     Symbolic,
     Uint160,
     Uint256,
-    get_constants,
+    get_symbols,
 )
 from snapshot import PLAYER, PROXY
 from state import State, Termination
@@ -108,7 +108,7 @@ class Validator:
 
         assert predicates
         constraint = reduce(lambda p, q: p | q, predicates, Constraint(False))
-        constants = get_constants(constraint)
+        constants = set(get_symbols(constraint).keys())
         for name in constants:
             if name.startswith(b"STORAGE@"):
                 continue

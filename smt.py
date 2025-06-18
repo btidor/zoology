@@ -8,8 +8,8 @@ from functools import reduce
 from subprocess import Popen, PIPE
 from typing import Any, Literal, overload
 
-from smt2 import Array, Constraint, Int, Symbolic, Uint
-from smt2.composite import And, CTerm, CValue
+from smt2 import Array, BitVector, Constraint, Int, Symbolic, Uint
+from smt2.composite import ASymbol, And, BSymbol, CSymbol, CTerm, CValue
 from smt2.theory_core import DumpContext
 
 
@@ -155,6 +155,16 @@ class Solver:
                         )
                     case _:
                         raise NotImplementedError(f"unexpected term: {fun}")
+        for k, v in get_symbols(sym).items():
+            if k in self._model:
+                continue
+            elif issubclass(v, Constraint):
+                self._model[k] = Constraint(False)
+            elif issubclass(v, BitVector):
+                self._model[k] = v(0)
+            else:
+                assert issubclass(v, Array)
+                self._model[k] = v(0)
         sym = sym.substitute(self._model)
         assert (r := sym.reveal()) is not None
         return r
@@ -233,10 +243,21 @@ def underflow_safe(a: Uint256, b: Uint256) -> Constraint:
     return a >= b
 
 
-def get_constants(s: Symbolic) -> set[bytes]:
+def get_symbols(s: Symbolic) -> dict[bytes, type[Symbolic]]:
     ctx = DumpContext()
     ctx.walk(s._term)  # pyright: ignore[reportPrivateUsage]
-    return set(ctx.symbols.keys())
+    symbols = dict[bytes, type[Symbolic]]()
+    for k, v in ctx.symbols.items():
+        match v:
+            case CSymbol():
+                symbols[k] = Constraint
+            case BSymbol():
+                symbols[k] = Uint[v.width]
+            case ASymbol():
+                symbols[k] = Array[Uint[v.key], Uint[v.value]]
+            case _:
+                raise TypeError(f"unexpected symbol: {v}")
+    return symbols
 
 
 def to_signed(width: int, value: int) -> int:
