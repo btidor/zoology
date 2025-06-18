@@ -73,7 +73,6 @@ def compile_solidity(source: str) -> dict[str, Bytes]:
 
     env = os.environ.copy()
     env["SOLC_VERSION"] = version.value
-    del env["LD_PRELOAD"]  # jemalloc results in std::bad_cast
     output = subprocess.check_output(
         ["solc", "--bin-runtime", "-"], env=env, input=source.encode()
     ).splitlines()
