@@ -79,12 +79,12 @@ class Select(BTerm):
 
     @override
     def __post_init__(self) -> None:
-        super(Select, self).__post_init__()
         k, v = self.array.width()
         assert k == self.key.width
         object.__setattr__(self, "width", v)
         if isinstance(self.array, Store):
             object.__setattr__(self, "array", copy.deepcopy(self.array))
+        super(Select, self).__post_init__()
 
 
 @dataclass(frozen=True, repr=False, slots=True)

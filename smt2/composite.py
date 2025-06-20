@@ -51,9 +51,6 @@ class RewriteMeta(abc.ABCMeta):
                 term = bitvector_logic_arithmetic(term)
                 term = bitvector_logic_shifts(term)
                 term = bitvector_yolo(term)
-                min, max = propagate_minmax(term)
-                object.__setattr__(term, "min", min)
-                object.__setattr__(term, "max", max)
             case _:
                 raise TypeError("unknown term", term)
         return term
@@ -172,6 +169,11 @@ class BTerm(BaseTerm, metaclass=RewriteMeta):
     def sort(self) -> bytes:
         return b"(_ BitVec %d)" % self.width
 
+    def __post_init__(self) -> None:
+        super(BTerm, self).__post_init__()
+        object.__setattr__(self, "min", 0)
+        object.__setattr__(self, "max", (1 << self.width) - 1)
+
 
 @dataclass(frozen=True, repr=False, slots=True)
 class BSymbol(BTerm):
@@ -179,9 +181,9 @@ class BSymbol(BTerm):
     w: InitVar[int]
 
     def __post_init__(self, w: int) -> None:
-        super(BSymbol, self).__post_init__()
         assert w > 0, "width must be positive"
         object.__setattr__(self, "width", w)
+        super(BSymbol, self).__post_init__()
 
     @override
     def walk(self, ctx: DumpContext) -> None:
@@ -202,12 +204,14 @@ class BValue(BTerm):
     w: InitVar[int]
 
     def __post_init__(self, w: int) -> None:
-        super(BValue, self).__post_init__()
         assert w > 0, "width must be positive"
         if self.value < 0:
             object.__setattr__(self, "value", self.value + (1 << w))
         assert 0 <= self.value < 1 << w
         object.__setattr__(self, "width", w)
+        super(BValue, self).__post_init__()
+        object.__setattr__(self, "min", self.value)
+        object.__setattr__(self, "max", self.value)
 
     @property
     def sgnd(self) -> int:
@@ -232,8 +236,8 @@ class UnaryOp(BTerm):
     term: BTerm
 
     def __post_init__(self) -> None:
-        super(UnaryOp, self).__post_init__()
         object.__setattr__(self, "width", self.term.width)
+        super(UnaryOp, self).__post_init__()
 
 
 @dataclass(frozen=True, repr=False, slots=True)
@@ -242,9 +246,9 @@ class BinaryOp(BTerm):
     right: BTerm
 
     def __post_init__(self) -> None:
-        super(BinaryOp, self).__post_init__()
         assert self.left.width == self.right.width
         object.__setattr__(self, "width", self.left.width)
+        super(BinaryOp, self).__post_init__()
 
 
 @dataclass(frozen=True, repr=False, slots=True)
@@ -253,8 +257,8 @@ class CompareOp(CTerm):
     right: BTerm
 
     def __post_init__(self) -> None:
-        super(CompareOp, self).__post_init__()
         assert self.left.width == self.right.width
+        super(CompareOp, self).__post_init__()
 
 
 @dataclass(frozen=True, repr=False, slots=True)
@@ -270,10 +274,22 @@ class Concat(BTerm):
 
     def __post_init__(self) -> None:
         assert len(self.terms) > 0, "width must be positive"
-        descendants = reduce(int.__add__, (t.descendants + 1 for t in self.terms))
-        object.__setattr__(self, "descendants", descendants)
         w = reduce(lambda p, q: p + q.width, self.terms, 0)
         object.__setattr__(self, "width", w)
+        super(Concat, self).__post_init__()
+        descendants = reduce(int.__add__, (t.descendants + 1 for t in self.terms))
+        object.__setattr__(self, "descendants", descendants)
+        if len(self.terms) == 2 and isinstance(self.terms[0], BValue):
+            object.__setattr__(
+                self,
+                "min",
+                self.terms[1].min | self.terms[0].value << self.terms[1].width,
+            )
+            object.__setattr__(
+                self,
+                "max",
+                self.terms[1].max | self.terms[0].value << self.terms[1].width,
+            )
 
     @override
     def walk(self, ctx: DumpContext) -> None:
@@ -304,15 +320,20 @@ class Extract(BTerm):
     term: BTerm
 
     def __post_init__(self) -> None:
-        super(Extract, self).__post_init__()
         assert self.term.width > self.i >= self.j >= 0
         w = self.i - self.j + 1
         object.__setattr__(self, "width", w)
+        super(Extract, self).__post_init__()
 
 
 @dataclass(frozen=True, repr=False, slots=True)
 class BNot(UnaryOp):
     op: ClassVar[bytes] = b"bvnot"
+
+    def __post_init__(self) -> None:
+        super(BNot, self).__post_init__()
+        object.__setattr__(self, "min", self.term.max ^ (1 << self.width) - 1)
+        object.__setattr__(self, "max", self.term.min ^ (1 << self.width) - 1)
 
 
 @dataclass(frozen=True, repr=False, slots=True)
@@ -320,11 +341,21 @@ class BAnd(BinaryOp):
     op: ClassVar[bytes] = b"bvand"
     commutative: ClassVar[bool] = True
 
+    def __post_init__(self) -> None:
+        super(BAnd, self).__post_init__()
+        object.__setattr__(self, "min", 0)
+        object.__setattr__(self, "max", min(self.left.max, self.right.max))
+
 
 @dataclass(frozen=True, repr=False, slots=True)
 class BOr(BinaryOp):
     op: ClassVar[bytes] = b"bvor"
     commutative: ClassVar[bool] = True
+
+    def __post_init__(self) -> None:
+        super(BOr, self).__post_init__()
+        object.__setattr__(self, "min", max(self.left.min, self.right.min))
+        object.__setattr__(self, "max", (1 << self.width) - 1)
 
 
 @dataclass(frozen=True, repr=False, slots=True)
@@ -337,31 +368,78 @@ class Add(BinaryOp):
     op: ClassVar[bytes] = b"bvadd"
     commutative: ClassVar[bool] = True
 
+    def __post_init__(self) -> None:
+        super(Add, self).__post_init__()
+        if (
+            isinstance(self.left, BValue)
+            and self.left.sgnd < 0
+            and (self.right.min + self.left.sgnd > 0)
+        ):
+            object.__setattr__(self, "min", self.right.min + self.left.sgnd)
+            object.__setattr__(self, "max", self.right.max + self.left.sgnd)
+
 
 @dataclass(frozen=True, repr=False, slots=True)
 class Mul(BinaryOp):
     op: ClassVar[bytes] = b"bvmul"
     commutative: ClassVar[bool] = True
 
+    def __post_init__(self) -> None:
+        super(Mul, self).__post_init__()
+        if (
+            isinstance(self.left, BValue)
+            and self.left.value * self.right.max <= (1 << self.width) - 1
+        ):
+            object.__setattr__(self, "min", self.left.value * self.right.min)
+            object.__setattr__(self, "max", self.left.value * self.right.max)
+
 
 @dataclass(frozen=True, repr=False, slots=True)
 class Udiv(BinaryOp):
     op: ClassVar[bytes] = b"bvudiv"
+
+    def __post_init__(self) -> None:
+        super(Udiv, self).__post_init__()
+        if isinstance(self.right, BValue) and self.right.value != 0:
+            object.__setattr__(self, "min", self.left.min // self.right.value)
+            object.__setattr__(self, "max", self.left.max // self.right.value)
 
 
 @dataclass(frozen=True, repr=False, slots=True)
 class Urem(BinaryOp):
     op: ClassVar[bytes] = b"bvurem"
 
+    def __post_init__(self) -> None:
+        super(Urem, self).__post_init__()
+        if self.right.min > 0:
+            object.__setattr__(self, "min", 0)
+            object.__setattr__(self, "max", self.right.max - 1)
+
 
 @dataclass(frozen=True, repr=False, slots=True)
 class Shl(BinaryOp):
     op: ClassVar[bytes] = b"bvshl"
 
+    def __post_init__(self) -> None:
+        super(Shl, self).__post_init__()
+        if isinstance(self.right, BValue) and self.right.value < self.width:
+            object.__setattr__(self, "min", 0)
+            object.__setattr__(
+                self,
+                "max",
+                min(self.left.max << self.right.value, (1 << self.width) - 1),
+            )
+
 
 @dataclass(frozen=True, repr=False, slots=True)
 class Lshr(BinaryOp):
     op: ClassVar[bytes] = b"bvlshr"
+
+    def __post_init__(self) -> None:
+        super(Lshr, self).__post_init__()
+        if isinstance(self.right, BValue):
+            object.__setattr__(self, "min", self.left.min >> self.right.value)
+            object.__setattr__(self, "max", self.left.max >> self.right.value)
 
 
 @dataclass(frozen=True, repr=False, slots=True)
@@ -397,9 +475,9 @@ class Comp(BTerm):
     right: BTerm
 
     def __post_init__(self) -> None:
-        super(Comp, self).__post_init__()
         assert self.left.width == self.right.width
         object.__setattr__(self, "width", 1)
+        super(Comp, self).__post_init__()
 
 
 @dataclass(frozen=True, repr=False, slots=True)
@@ -411,20 +489,53 @@ class Sub(BinaryOp):
 class Sdiv(BinaryOp):
     op: ClassVar[bytes] = b"bvsdiv"
 
+    def __post_init__(self) -> None:
+        super(Sdiv, self).__post_init__()
+        if (
+            isinstance(self.right, BValue)
+            and self.left.max < 1 << self.width - 1
+            and (self.right.value < 1 << self.width - 1)
+            and (self.right.value != 0)
+        ):
+            object.__setattr__(self, "min", self.left.min // self.right.value)
+            object.__setattr__(self, "max", self.left.max // self.right.value)
+
 
 @dataclass(frozen=True, repr=False, slots=True)
 class Srem(BinaryOp):
     op: ClassVar[bytes] = b"bvsrem"
+
+    def __post_init__(self) -> None:
+        super(Srem, self).__post_init__()
+        if (
+            self.left.max < 1 << self.width - 1
+            and self.right.min > 0
+            and (self.right.max < 1 << self.width - 1)
+        ):
+            object.__setattr__(self, "min", 0)
+            object.__setattr__(self, "max", self.right.max - 1)
 
 
 @dataclass(frozen=True, repr=False, slots=True)
 class Smod(BinaryOp):
     op: ClassVar[bytes] = b"bvsmod"
 
+    def __post_init__(self) -> None:
+        super(Smod, self).__post_init__()
+        if self.right.min > 0 and self.right.max < 1 << self.width - 1:
+            object.__setattr__(self, "min", 0)
+            object.__setattr__(self, "max", self.right.max - 1)
+
 
 @dataclass(frozen=True, repr=False, slots=True)
 class Ashr(BinaryOp):
     op: ClassVar[bytes] = b"bvashr"
+
+    def __post_init__(self) -> None:
+        super(Ashr, self).__post_init__()
+        if isinstance(self.right, BValue) and self.left.max < 1 << self.width - 1:
+            object.__setattr__(self, "min", self.left.min >> self.right.value)
+            object.__setattr__(self, "max", self.left.max >> self.right.value)
 
 
 @dataclass(frozen=True, repr=False, slots=True)
@@ -432,10 +543,10 @@ class Repeat(SingleParamOp):
     op: ClassVar[bytes] = b"repeat"
 
     def __post_init__(self) -> None:
-        super(Repeat, self).__post_init__()
         assert self.i > 0
         w = self.term.width * self.i
         object.__setattr__(self, "width", w)
+        super(Repeat, self).__post_init__()
 
 
 @dataclass(frozen=True, repr=False, slots=True)
@@ -443,10 +554,10 @@ class ZeroExtend(SingleParamOp):
     op: ClassVar[bytes] = b"zero_extend"
 
     def __post_init__(self) -> None:
-        super(ZeroExtend, self).__post_init__()
         assert self.i >= 0
         w = self.term.width + self.i
         object.__setattr__(self, "width", w)
+        super(ZeroExtend, self).__post_init__()
 
 
 @dataclass(frozen=True, repr=False, slots=True)
@@ -454,10 +565,13 @@ class SignExtend(SingleParamOp):
     op: ClassVar[bytes] = b"sign_extend"
 
     def __post_init__(self) -> None:
-        super(SignExtend, self).__post_init__()
         assert self.i >= 0
         w = self.term.width + self.i
         object.__setattr__(self, "width", w)
+        super(SignExtend, self).__post_init__()
+        if self.term.max < 1 << self.term.width - 1:
+            object.__setattr__(self, "min", self.term.min)
+            object.__setattr__(self, "max", self.term.max)
 
 
 @dataclass(frozen=True, repr=False, slots=True)
@@ -465,9 +579,9 @@ class RotateLeft(SingleParamOp):
     op: ClassVar[bytes] = b"rotate_left"
 
     def __post_init__(self) -> None:
-        super(RotateLeft, self).__post_init__()
         assert self.i >= 0
         object.__setattr__(self, "width", self.term.width)
+        super(RotateLeft, self).__post_init__()
 
 
 @dataclass(frozen=True, repr=False, slots=True)
@@ -475,9 +589,9 @@ class RotateRight(SingleParamOp):
     op: ClassVar[bytes] = b"rotate_right"
 
     def __post_init__(self) -> None:
-        super(RotateRight, self).__post_init__()
         assert self.i >= 0
         object.__setattr__(self, "width", self.term.width)
+        super(RotateRight, self).__post_init__()
 
 
 @dataclass(frozen=True, repr=False, slots=True)
@@ -523,9 +637,11 @@ class Ite(BTerm):
     right: BTerm
 
     def __post_init__(self) -> None:
-        super(Ite, self).__post_init__()
         assert self.left.width == self.right.width
         object.__setattr__(self, "width", self.left.width)
+        super(Ite, self).__post_init__()
+        object.__setattr__(self, "min", min(self.left.min, self.right.min))
+        object.__setattr__(self, "max", max(self.left.max, self.right.max))
 
 
 @dataclass(frozen=True, repr=False, slots=True)
@@ -589,12 +705,12 @@ class Select(BTerm):
 
     @override
     def __post_init__(self) -> None:
-        super(Select, self).__post_init__()
         k, v = self.array.width()
         assert k == self.key.width
         object.__setattr__(self, "width", v)
         if isinstance(self.array, Store):
             object.__setattr__(self, "array", copy.deepcopy(self.array))
+        super(Select, self).__post_init__()
 
 
 @dataclass(frozen=True, repr=False, slots=True)
@@ -1163,52 +1279,6 @@ def bitvector_yolo(term: BTerm) -> BTerm:
                         return term
         case _:
             return term
-
-
-def propagate_minmax(term: BTerm) -> MinMax:
-    mask = (1 << term.width) - 1
-    slimit = 1 << term.width - 1
-    match term:
-        case BValue(a):
-            return (a, a)
-        case Concat([BValue(a), x]):
-            return (x.min | a << x.width, x.max | a << x.width)
-        case BNot(x):
-            return (x.max ^ mask, x.min ^ mask)
-        case BAnd(x, y):
-            return (0, min(x.max, y.max))
-        case BOr(x, y):
-            return (max(x.min, y.min), mask)
-        case Add(x, y) if x.max < slimit and y.max < slimit:
-            return (x.min + y.min, x.max + y.max)
-        case Add(BValue() as x, y) if x.sgnd < 0 and y.min + x.sgnd > 0:
-            return (y.min + x.sgnd, y.max + x.sgnd)
-        case Mul(BValue(a), y) if a * y.max <= mask:
-            return (a * y.min, a * y.max)
-        case Udiv(x, BValue(a)) if a != 0:
-            return (x.min // a, x.max // a)
-        case Urem(_, y) if y.min > 0:
-            return (0, y.max - 1)
-        case Shl(x, BValue(a)) if a < term.width and x.max << a <= mask:
-            return (min(x.min << a, mask), min(x.max << a, mask))
-        case Shl(x, BValue(a)) if a < term.width:
-            return (0, min(x.max << a, mask))
-        case Lshr(x, BValue(a)):
-            return (x.min >> a, x.max >> a)
-        case Sdiv(x, BValue(a)) if x.max < slimit and a < slimit and (a != 0):
-            return (x.min // a, x.max // a)
-        case Srem(x, y) if x.max < slimit and y.min > 0 and (y.max < slimit):
-            return (0, y.max - 1)
-        case Smod(_, y) if y.min > 0 and y.max < slimit:
-            return (0, y.max - 1)
-        case Ashr(x, BValue(a)) if x.max < slimit:
-            return (x.min >> a, x.max >> a)
-        case SignExtend(_i, x) if x.max < 1 << x.width - 1:
-            return (x.min, x.max)
-        case Ite(_, x, y):
-            return (min(x.min, y.min), max(x.max, y.max))
-        case _:
-            return (0, mask)
 
 
 def constraint_minmax(term: CTerm) -> CTerm:

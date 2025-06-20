@@ -177,9 +177,6 @@ class RewriteMeta(abc.ABCMeta):
                 term = bitvector_logic_arithmetic(term)
                 term = bitvector_logic_shifts(term)
                 term = bitvector_yolo(term)
-                min, max = propagate_minmax(term)
-                object.__setattr__(term, "min", min)
-                object.__setattr__(term, "max", max)
             case _:
                 raise TypeError("unknown term", term)
         return term

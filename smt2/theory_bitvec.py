@@ -32,9 +32,9 @@ class BSymbol(BTerm):
     w: InitVar[int]
 
     def __post_init__(self, w: int) -> None:
-        super(BSymbol, self).__post_init__()
         assert w > 0, "width must be positive"
         object.__setattr__(self, "width", w)
+        super(BSymbol, self).__post_init__()
 
     @override
     def walk(self, ctx: DumpContext) -> None:
@@ -55,12 +55,12 @@ class BValue(BTerm):
     w: InitVar[int]
 
     def __post_init__(self, w: int) -> None:
-        super(BValue, self).__post_init__()
         assert w > 0, "width must be positive"
         if self.value < 0:  # convert to two's complement
             object.__setattr__(self, "value", self.value + (1 << w))
         assert 0 <= self.value < (1 << w)
         object.__setattr__(self, "width", w)
+        super(BValue, self).__post_init__()
 
     @property
     def sgnd(self) -> int:
@@ -86,8 +86,8 @@ class UnaryOp(BTerm):
     term: BTerm
 
     def __post_init__(self) -> None:
-        super(UnaryOp, self).__post_init__()
         object.__setattr__(self, "width", self.term.width)
+        super(UnaryOp, self).__post_init__()
 
 
 @dataclass(frozen=True, repr=False, slots=True)
@@ -96,9 +96,9 @@ class BinaryOp(BTerm):
     right: BTerm
 
     def __post_init__(self) -> None:
-        super(BinaryOp, self).__post_init__()
         assert self.left.width == self.right.width
         object.__setattr__(self, "width", self.left.width)
+        super(BinaryOp, self).__post_init__()
 
 
 @dataclass(frozen=True, repr=False, slots=True)
@@ -107,8 +107,8 @@ class CompareOp(CTerm):
     right: BTerm
 
     def __post_init__(self) -> None:
-        super(CompareOp, self).__post_init__()
         assert self.left.width == self.right.width
+        super(CompareOp, self).__post_init__()
 
 
 @dataclass(frozen=True, repr=False, slots=True)
@@ -124,10 +124,11 @@ class Concat(BTerm):
 
     def __post_init__(self) -> None:
         assert len(self.terms) > 0, "width must be positive"
-        descendants = reduce(int.__add__, (t.descendants + 1 for t in self.terms))
-        object.__setattr__(self, "descendants", descendants)
         w = reduce(lambda p, q: p + q.width, self.terms, 0)
         object.__setattr__(self, "width", w)
+        super(Concat, self).__post_init__()
+        descendants = reduce(int.__add__, (t.descendants + 1 for t in self.terms))
+        object.__setattr__(self, "descendants", descendants)
 
     @override
     def walk(self, ctx: DumpContext) -> None:
@@ -159,10 +160,10 @@ class Extract(BTerm):
     term: BTerm
 
     def __post_init__(self) -> None:
-        super(Extract, self).__post_init__()
         assert self.term.width > self.i >= self.j >= 0
         w = self.i - self.j + 1
         object.__setattr__(self, "width", w)
+        super(Extract, self).__post_init__()
 
 
 @dataclass(frozen=True, repr=False, slots=True)
@@ -252,9 +253,9 @@ class Comp(BTerm):  # width-1 result
     right: BTerm
 
     def __post_init__(self) -> None:
-        super(Comp, self).__post_init__()
         assert self.left.width == self.right.width
         object.__setattr__(self, "width", 1)
+        super(Comp, self).__post_init__()
 
 
 @dataclass(frozen=True, repr=False, slots=True)
@@ -287,10 +288,10 @@ class Repeat(SingleParamOp):
     op: ClassVar[bytes] = b"repeat"
 
     def __post_init__(self) -> None:
-        super(Repeat, self).__post_init__()
         assert self.i > 0
         w = self.term.width * self.i
         object.__setattr__(self, "width", w)
+        super(Repeat, self).__post_init__()
 
 
 @dataclass(frozen=True, repr=False, slots=True)
@@ -298,10 +299,10 @@ class ZeroExtend(SingleParamOp):
     op: ClassVar[bytes] = b"zero_extend"
 
     def __post_init__(self) -> None:
-        super(ZeroExtend, self).__post_init__()
         assert self.i >= 0
         w = self.term.width + self.i
         object.__setattr__(self, "width", w)
+        super(ZeroExtend, self).__post_init__()
 
 
 @dataclass(frozen=True, repr=False, slots=True)
@@ -309,10 +310,10 @@ class SignExtend(SingleParamOp):
     op: ClassVar[bytes] = b"sign_extend"
 
     def __post_init__(self) -> None:
-        super(SignExtend, self).__post_init__()
         assert self.i >= 0
         w = self.term.width + self.i
         object.__setattr__(self, "width", w)
+        super(SignExtend, self).__post_init__()
 
 
 @dataclass(frozen=True, repr=False, slots=True)
@@ -320,9 +321,9 @@ class RotateLeft(SingleParamOp):
     op: ClassVar[bytes] = b"rotate_left"
 
     def __post_init__(self) -> None:
-        super(RotateLeft, self).__post_init__()
         assert self.i >= 0
         object.__setattr__(self, "width", self.term.width)
+        super(RotateLeft, self).__post_init__()
 
 
 @dataclass(frozen=True, repr=False, slots=True)
@@ -330,9 +331,9 @@ class RotateRight(SingleParamOp):
     op: ClassVar[bytes] = b"rotate_right"
 
     def __post_init__(self) -> None:
-        super(RotateRight, self).__post_init__()
         assert self.i >= 0
         object.__setattr__(self, "width", self.term.width)
+        super(RotateRight, self).__post_init__()
 
 
 @dataclass(frozen=True, repr=False, slots=True)
@@ -378,6 +379,6 @@ class Ite(BTerm):
     right: BTerm
 
     def __post_init__(self) -> None:
-        super(Ite, self).__post_init__()
         assert self.left.width == self.right.width
         object.__setattr__(self, "width", self.left.width)
+        super(Ite, self).__post_init__()
