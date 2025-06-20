@@ -94,20 +94,28 @@ type MinMax = tuple[int, int]
             stmt = p.body[0]
         else:
             stmt = object
-        # Delete docstrings.
-        for node in ast.walk(stmt):
-            match node:
-                case ast.ClassDef() | ast.FunctionDef() | ast.match_case():
-                    match node.body:
-                        case [ast.Expr(ast.Constant(str())), *rest]:
-                            node.body = rest
-                        case _:
-                            pass
-                case _:
-                    pass
+        stmt = DeleteDocstrings().visit(stmt)
         self.out.extend(b"\n")
         self.out.extend(ast.unparse(stmt).encode())
         self.out.extend(b"\n")
+
+
+class DeleteDocstrings(ast.NodeTransformer):
+    """A visitor to delete docstrings from classes, functions and match cases."""
+
+    def visit(self, node: Any) -> Any:
+        """Visit the given AST node."""
+        node = super().visit(node)
+        match node:
+            case ast.ClassDef() | ast.FunctionDef() | ast.match_case():
+                match node.body:
+                    case [ast.Expr(ast.Constant(str())), *rest]:
+                        node.body = rest
+                    case _:
+                        pass
+            case _:
+                pass
+        return node
 
 
 if __name__ == "__main__":
