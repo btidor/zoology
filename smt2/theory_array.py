@@ -83,10 +83,6 @@ class Select(BTerm):
         k, v = self.array.width()
         assert k == self.key.width
         object.__setattr__(self, "width", v)
-        # Because Select is special-cased in RewriteMeta, we're responsible for
-        # setting our own min and max.
-        object.__setattr__(self, "min", 0)
-        object.__setattr__(self, "max", (1 << v) - 1)
         if isinstance(self.array, Store):
             object.__setattr__(self, "array", copy.deepcopy(self.array))
 
