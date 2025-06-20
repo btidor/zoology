@@ -118,7 +118,7 @@ def test_constraint_minmax(case: RewriteCase):
 
 
 def test_codegen():
-    with open(COMPOSITE_PY) as f:
+    with open(COMPOSITE_PY, "rb") as f:
         actual = f.read()
-    expected = Compositor.dump()
+    expected = Compositor().dump()
     assert actual == expected, "please run `python3 -m smt2.analyze_composite`"

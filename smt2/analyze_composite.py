@@ -24,17 +24,14 @@ COMPOSITE_PY = Path(__file__).parent / "composite.py"
 class Compositor:
     """Produces a high-level SMT library by composing low-level components."""
 
-    @classmethod
-    def dump(cls) -> str:
+    def dump(self) -> bytes:
         """Write out `composite.py`."""
-        cls.out = bytearray()
-        cls._dump()
-        formatted = check_output(["ruff", "format", "-"], input=cls.out)
-        return formatted.decode()
+        self.out = bytearray()
+        self._dump()
+        return check_output(["ruff", "format", "-"], input=self.out)
 
-    @classmethod
-    def _dump(cls) -> None:
-        cls.out.extend(b"""\"""
+    def _dump(self) -> None:
+        self.out.extend(b"""\"""
 High-level SMT library with full term rewriting.
 
 Warning: do not edit! To regenerate, run:
@@ -57,32 +54,29 @@ from .theory_core import BaseTerm, DumpContext
 type MinMax = tuple[int, int]
 
 """)
-        cls._source(RewriteMeta)
-        cls._theory(theory_core)
-        cls._theory(theory_bitvec)
-        cls._theory(theory_array)
-        cls._rewrites(rewrite)
-        cls._source(propagate_minmax)
-        cls._source(constraint_minmax)
+        self._source(RewriteMeta)
+        self._theory(theory_core)
+        self._theory(theory_bitvec)
+        self._theory(theory_array)
+        self._rewrites(rewrite)
+        self._source(propagate_minmax)
+        self._source(constraint_minmax)
 
-    @classmethod
-    def _theory(cls, module: ModuleType) -> None:
+    def _theory(self, module: ModuleType) -> None:
         for item in vars(module).values():
             if not isinstance(item, type) or not issubclass(item, BaseTerm):
                 continue
             elif item == BaseTerm or getmodule(item) != module:
                 continue
-            cls._source(item)
+            self._source(item)
 
-    @classmethod
-    def _rewrites(cls, module: ModuleType) -> None:
+    def _rewrites(self, module: ModuleType) -> None:
         for item in vars(module).values():
             if not isfunction(item) or getmodule(item) != module:
                 continue
-            cls._source(item)
+            self._source(item)
 
-    @classmethod
-    def _source(cls, object: type | Callable[..., Any]) -> None:
+    def _source(self, object: type | Callable[..., Any]) -> None:
         s = getsource(object)
         # Inject metaclass for constraints & bitvectors
         s = re.sub(r"(CTerm|BTerm)\(BaseTerm", r"\1(BaseTerm, metaclass=RewriteMeta", s)
@@ -90,10 +84,11 @@ type MinMax = tuple[int, int]
         s = re.sub(r'\n*\s*("""[^"]*"""| # (?!pyright:).*)\n+', "\n", s)
         # Skip unimplemented rewrite cases
         s = re.sub(r"\n*\s*case [^_].*\n\s*raise NotImplementedError", "", s)
-        cls.out.extend(s.encode())
-        cls.out.extend(b"\n")
+        self.out.extend(s.encode())
+        self.out.extend(b"\n")
 
 
 if __name__ == "__main__":
-    with open(COMPOSITE_PY, "w") as f:
-        f.write(Compositor().dump())
+    r = Compositor().dump()
+    with open(COMPOSITE_PY, "wb") as f:
+        f.write(r)
