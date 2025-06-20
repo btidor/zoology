@@ -26,13 +26,13 @@ class RewriteMeta(abc.ABCMeta):
         assert issubclass(self, BaseTerm)
         if self.commutative:
             match args:
-                case (x, CValue() as y) if not isinstance(x, CValue):
+                case [x, CValue() as y] if not isinstance(x, CValue):
                     args = (y, x)
-                case (Not() as x, y) if not isinstance(y, Not):
+                case [Not() as x, y] if not isinstance(y, Not):
                     args = (y, x)
-                case (x, BValue() as y) if not isinstance(x, BValue):
+                case [x, BValue() as y] if not isinstance(x, BValue):
                     args = (y, x)
-                case (BNot() as x, y) if not isinstance(y, BNot):
+                case [BNot() as x, y] if not isinstance(y, BNot):
                     args = (y, x)
                 case _:
                     pass
@@ -206,12 +206,12 @@ class BValue(BTerm):
         assert w > 0, "width must be positive"
         if self.value < 0:
             object.__setattr__(self, "value", self.value + (1 << w))
-        assert 0 <= self.value < (1 << w)
+        assert 0 <= self.value < 1 << w
         object.__setattr__(self, "width", w)
 
     @property
     def sgnd(self) -> int:
-        if self.value & (1 << (self.width - 1)):
+        if self.value & 1 << self.width - 1:
             return self.value - (1 << self.width)
         return self.value
 
@@ -593,7 +593,6 @@ class Select(BTerm):
         k, v = self.array.width()
         assert k == self.key.width
         object.__setattr__(self, "width", v)
-
         object.__setattr__(self, "min", 0)
         object.__setattr__(self, "max", (1 << v) - 1)
         if isinstance(self.array, Store):
@@ -606,7 +605,8 @@ class Store(ATerm):
     lower: dict[int, BTerm] = field(default_factory=dict[int, BTerm])
     upper: list[tuple[BTerm, BTerm]] = field(default_factory=list[tuple[BTerm, BTerm]])
 
-    __copy__ = None  # pyright: ignore[reportAssignmentType]
+    def __copy__(self) -> Self:
+        return copy.deepcopy(self)
 
     def __deepcopy__(self, memo: Any, /) -> Self:
         k = self.__new__(self.__class__)
@@ -621,7 +621,7 @@ class Store(ATerm):
 
     def set(self, key: BTerm, value: BTerm) -> None:
         descendants = self.descendants
-        if isinstance(key, BValue) and not self.upper:
+        if isinstance(key, BValue) and (not self.upper):
             k = key.value
             if k in self.lower:
                 descendants -= self.lower[k].descendants + 1
@@ -757,9 +757,9 @@ def constraint_logic_bitvector(term: CTerm) -> CTerm:
         case Eq(BValue(a), BNot(x)):
             mask = (1 << x.width) - 1
             return Eq(BValue(mask ^ a, x.width), x)
-        case Eq(BValue(a), BAnd(BValue(b), x)) if a & (b ^ ((1 << x.width) - 1)) != 0:
+        case Eq(BValue(a), BAnd(BValue(b), x)) if a & (b ^ (1 << x.width) - 1) != 0:
             return CValue(False)
-        case Eq(BValue(a), BOr(BValue(b), x)) if (a ^ ((1 << x.width) - 1)) & b != 0:
+        case Eq(BValue(a), BOr(BValue(b), x)) if (a ^ (1 << x.width) - 1) & b != 0:
             return CValue(False)
         case Eq(BValue(a), BXor(BValue(b), x)):
             return Eq(BValue(a ^ b, x.width), x)
@@ -776,7 +776,7 @@ def constraint_logic_bitvector(term: CTerm) -> CTerm:
         case Eq(BValue(a), Concat([*rest, x]) as c) if len(rest) > 0:
             return And(
                 Eq(Concat((*rest,)), BValue(a >> x.width, c.width - x.width)),
-                Eq(BValue(a & ((1 << x.width) - 1), x.width), x),
+                Eq(BValue(a & (1 << x.width) - 1, x.width), x),
             )
         case Eq(Concat([*rest, x]), Ite(c, p, q) as z) if len(rest) > 0:
             return And(
@@ -791,11 +791,11 @@ def constraint_logic_bitvector(term: CTerm) -> CTerm:
                 Eq(x, Ite(c, Extract(x.width - 1, 0, p), Extract(x.width - 1, 0, q))),
             )
         case Eq(Concat([x, *xx]), Concat([y, *yy])) if (
-            x.width == y.width and len(xx) > 0 and len(yy) > 0
+            x.width == y.width and len(xx) > 0 and (len(yy) > 0)
         ):
             return And(Eq(x, y), Eq(Concat((*xx,)), Concat((*yy,))))
         case Eq(Concat([*xx, x]), Concat([*yy, y])) if (
-            x.width == y.width and len(xx) > 0 and len(yy) > 0
+            x.width == y.width and len(xx) > 0 and (len(yy) > 0)
         ):
             return And(Eq(Concat((*xx,)), Concat((*yy,))), Eq(x, y))
         case Ult(x, BValue(0)):
@@ -817,25 +817,25 @@ def constraint_logic_bitvector(term: CTerm) -> CTerm:
         case Not(Ule(x, y)):
             return Ult(y, x)
         case Ult(BValue(a), Concat([BValue(b) as x, *rest]) as c) if (
-            b == (a >> (c.width - x.width)) and len(rest) > 0
+            b == a >> c.width - x.width and len(rest) > 0
         ):
             rwidth = c.width - x.width
-            return Ult(BValue(a & ((1 << rwidth) - 1), rwidth), Concat((*rest,)))
+            return Ult(BValue(a & (1 << rwidth) - 1, rwidth), Concat((*rest,)))
         case Ult(Concat([BValue(b) as x, *rest]) as c, BValue(a)) if (
-            b == (a >> (c.width - x.width)) and len(rest) > 0
+            b == a >> c.width - x.width and len(rest) > 0
         ):
             rwidth = c.width - x.width
-            return Ult(Concat((*rest,)), BValue(a & ((1 << rwidth) - 1), rwidth))
+            return Ult(Concat((*rest,)), BValue(a & (1 << rwidth) - 1, rwidth))
         case Ule(BValue(a), Concat([BValue(b) as x, *rest]) as c) if (
-            b == (a >> (c.width - x.width)) and len(rest) > 0
+            b == a >> c.width - x.width and len(rest) > 0
         ):
             rwidth = c.width - x.width
-            return Ule(BValue(a & ((1 << rwidth) - 1), rwidth), Concat((*rest,)))
+            return Ule(BValue(a & (1 << rwidth) - 1, rwidth), Concat((*rest,)))
         case Ule(Concat([BValue(b) as x, *rest]) as c, BValue(a)) if (
-            b == (a >> (c.width - x.width)) and len(rest) > 0
+            b == a >> c.width - x.width and len(rest) > 0
         ):
             rwidth = c.width - x.width
-            return Ule(Concat((*rest,)), BValue(a & ((1 << rwidth) - 1), rwidth))
+            return Ule(Concat((*rest,)), BValue(a & (1 << rwidth) - 1, rwidth))
         case _:
             return term
 
@@ -893,7 +893,7 @@ def bitvector_folding(term: BTerm) -> BTerm:
         case Concat([*rest, BValue(a) as x, BValue(b) as y]):
             return Concat((*rest, BValue(a << y.width | b, x.width + y.width)))
         case Extract(i, j, BValue(a)):
-            return BValue((a >> j) & ((1 << (i - j + 1)) - 1), i - j + 1)
+            return BValue(a >> j & (1 << i - j + 1) - 1, i - j + 1)
         case BNot(BValue(a)):
             return BValue(a ^ mask, width)
         case BAnd(BValue(a), BValue(b)):
@@ -905,11 +905,11 @@ def bitvector_folding(term: BTerm) -> BTerm:
         case Add(BValue(a), BValue(b)):
             return BValue((a + b) % modulus, width)
         case Mul(BValue(a), BValue(b)):
-            return BValue((a * b) % modulus, width)
+            return BValue(a * b % modulus, width)
         case Udiv(BValue(a), BValue(b)) if b != 0:
             return BValue(a // b, width)
         case Urem(BValue(a), BValue(b)) if b != 0:
-            return BValue((a % b) % modulus, width)
+            return BValue(a % b % modulus, width)
         case Shl(BValue(a), BValue(b)):
             return BValue((a << b) % modulus, width)
         case Lshr(BValue(a), BValue(b)):
@@ -929,7 +929,7 @@ def bitvector_folding(term: BTerm) -> BTerm:
         case Ashr(BValue() as x, BValue(b)) if x.sgnd >= 0:
             return BValue(x.sgnd >> b, width)
         case Ashr(BValue(a) as x, BValue(b)) if x.sgnd < 0:
-            return BValue(((a ^ mask) >> b) ^ mask, width)
+            return BValue((a ^ mask) >> b ^ mask, width)
         case SignExtend(_i, BValue() as x):
             return BValue(x.sgnd, width)
         case Ite(CValue(True), x, _y):
@@ -1047,7 +1047,7 @@ def bitvector_logic_shifts(term: BTerm) -> BTerm:
             return x
         case SignExtend(i, SignExtend(j, x)):
             return SignExtend(i + j, x)
-        case Concat([*left, Concat((*right,))]) | Concat([Concat((*left,)), *right]):
+        case Concat([*left, Concat([*right])]) | Concat([Concat([*left]), *right]):
             return Concat((*left, *right))
         case Extract(i, j, x) if i == x.width - 1 and j == 0:
             return x
@@ -1089,17 +1089,16 @@ def bitvector_logic_shifts(term: BTerm) -> BTerm:
             return Ite(c, BXor(x, z), BXor(y, z))
         case Extract(i, j, BAnd(BValue(a), x)):
             return BAnd(
-                BValue((a >> j) & ((1 << (i - j + 1)) - 1), i - j + 1), Extract(i, j, x)
+                BValue(a >> j & (1 << i - j + 1) - 1, i - j + 1), Extract(i, j, x)
             )
         case Extract(i, j, BOr(BValue(a), x)):
             return BOr(
-                BValue((a >> j) & ((1 << (i - j + 1)) - 1), i - j + 1), Extract(i, j, x)
+                BValue(a >> j & (1 << i - j + 1) - 1, i - j + 1), Extract(i, j, x)
             )
         case Extract(i, j, BXor(BValue(a), x)):
             return BXor(
-                BValue((a >> j) & ((1 << (i - j + 1)) - 1), i - j + 1), Extract(i, j, x)
+                BValue(a >> j & (1 << i - j + 1) - 1, i - j + 1), Extract(i, j, x)
             )
-
         case BAnd(BValue(a), Concat([*rest, x]) as c) if len(rest) > 0:
             mask = (1 << x.width) - 1
             return Concat(
@@ -1117,7 +1116,7 @@ def bitvector_logic_shifts(term: BTerm) -> BTerm:
                 )
             )
         case Shl(Concat([x, *rest]), BValue(a)) if (
-            a < term.width and a >= x.width and len(rest) > 0
+            a < term.width and a >= x.width and (len(rest) > 0)
         ):
             return Concat(
                 (
@@ -1126,7 +1125,7 @@ def bitvector_logic_shifts(term: BTerm) -> BTerm:
                 )
             )
         case Lshr(Concat([*rest, x]), BValue(a)) if (
-            a < term.width and a >= x.width and len(rest) > 0
+            a < term.width and a >= x.width and (len(rest) > 0)
         ):
             return Concat(
                 (
@@ -1147,9 +1146,9 @@ def bitvector_yolo(term: BTerm) -> BTerm:
         case Select(Store(base, lower, upper), key):
             for k, v in reversed(upper):
                 match Eq(k, key):
-                    case CValue(True):  # pyright: ignore[reportUnnecessaryComparison]
+                    case CValue(True):
                         return v
-                    case CValue(False):  # pyright: ignore[reportUnnecessaryComparison]
+                    case CValue(False):
                         continue
                     case _:
                         return term
@@ -1170,12 +1169,12 @@ def bitvector_yolo(term: BTerm) -> BTerm:
 
 def propagate_minmax(term: BTerm) -> MinMax:
     mask = (1 << term.width) - 1
-    slimit = 1 << (term.width - 1)
+    slimit = 1 << term.width - 1
     match term:
         case BValue(a):
             return (a, a)
-        case Concat((BValue(a), x)):
-            return (x.min | (a << x.width), x.max | (a << x.width))
+        case Concat([BValue(a), x]):
+            return (x.min | a << x.width, x.max | a << x.width)
         case BNot(x):
             return (x.max ^ mask, x.min ^ mask)
         case BAnd(x, y):
@@ -1192,21 +1191,21 @@ def propagate_minmax(term: BTerm) -> MinMax:
             return (x.min // a, x.max // a)
         case Urem(_, y) if y.min > 0:
             return (0, y.max - 1)
-        case Shl(x, BValue(a)) if a < term.width and (x.max << a) <= mask:
+        case Shl(x, BValue(a)) if a < term.width and x.max << a <= mask:
             return (min(x.min << a, mask), min(x.max << a, mask))
         case Shl(x, BValue(a)) if a < term.width:
             return (0, min(x.max << a, mask))
         case Lshr(x, BValue(a)):
             return (x.min >> a, x.max >> a)
-        case Sdiv(x, BValue(a)) if x.max < slimit and a < slimit and a != 0:
+        case Sdiv(x, BValue(a)) if x.max < slimit and a < slimit and (a != 0):
             return (x.min // a, x.max // a)
-        case Srem(x, y) if x.max < slimit and y.min > 0 and y.max < slimit:
+        case Srem(x, y) if x.max < slimit and y.min > 0 and (y.max < slimit):
             return (0, y.max - 1)
         case Smod(_, y) if y.min > 0 and y.max < slimit:
             return (0, y.max - 1)
         case Ashr(x, BValue(a)) if x.max < slimit:
             return (x.min >> a, x.max >> a)
-        case SignExtend(_i, x) if x.max < (1 << (x.width - 1)):
+        case SignExtend(_i, x) if x.max < 1 << x.width - 1:
             return (x.min, x.max)
         case Ite(_, x, y):
             return (min(x.min, y.min), max(x.max, y.max))
@@ -1228,37 +1227,29 @@ def constraint_minmax(term: CTerm) -> CTerm:
             return CValue(True)
         case Ule(x, y) if y.max < x.min:
             return CValue(False)
-        case Slt(x, y) if x.max < y.min and y.max < (1 << (y.width - 1)):
+        case Slt(x, y) if x.max < y.min and y.max < 1 << y.width - 1:
             return CValue(True)
-        case Slt(x, y) if y.max <= x.min and x.max < (1 << (x.width - 1)):
+        case Slt(x, y) if y.max <= x.min and x.max < 1 << x.width - 1:
             return CValue(False)
-        case Slt(x, y) if y.max < (1 << (y.width - 1)) and x.min >= (
-            1 << (x.width - 1)
-        ):
+        case Slt(x, y) if y.max < 1 << y.width - 1 and x.min >= 1 << x.width - 1:
             return CValue(True)
-        case Slt(x, y) if x.max < (1 << (x.width - 1)) and y.min >= (
-            1 << (y.width - 1)
-        ):
+        case Slt(x, y) if x.max < 1 << x.width - 1 and y.min >= 1 << y.width - 1:
             return CValue(False)
-        case Slt(x, y) if x.max < y.min and x.min >= (1 << (x.width - 1)):
+        case Slt(x, y) if x.max < y.min and x.min >= 1 << x.width - 1:
             return CValue(True)
-        case Slt(x, y) if y.max <= x.min and y.min >= (1 << (y.width - 1)):
+        case Slt(x, y) if y.max <= x.min and y.min >= 1 << y.width - 1:
             return CValue(False)
-        case Sle(x, y) if x.max <= y.min and y.max < (1 << (y.width - 1)):
+        case Sle(x, y) if x.max <= y.min and y.max < 1 << y.width - 1:
             return CValue(True)
-        case Sle(x, y) if y.max < x.min and x.max < (1 << (x.width - 1)):
+        case Sle(x, y) if y.max < x.min and x.max < 1 << x.width - 1:
             return CValue(False)
-        case Sle(x, y) if y.max < (1 << (y.width - 1)) and x.min >= (
-            1 << (x.width - 1)
-        ):
+        case Sle(x, y) if y.max < 1 << y.width - 1 and x.min >= 1 << x.width - 1:
             return CValue(True)
-        case Sle(x, y) if x.max < (1 << (x.width - 1)) and y.min >= (
-            1 << (y.width - 1)
-        ):
+        case Sle(x, y) if x.max < 1 << x.width - 1 and y.min >= 1 << y.width - 1:
             return CValue(False)
-        case Sle(x, y) if x.max <= y.min and x.min >= (1 << (x.width - 1)):
+        case Sle(x, y) if x.max <= y.min and x.min >= 1 << x.width - 1:
             return CValue(True)
-        case Sle(x, y) if y.max < x.min and y.min >= (1 << (y.width - 1)):
+        case Sle(x, y) if y.max < x.min and y.min >= 1 << y.width - 1:
             return CValue(False)
         case _:
             return term

@@ -99,7 +99,9 @@ class Store(ATerm):
 
     # Warning: Store is not actually immutable! Take care to create a deep copy
     # when reusing a Store in Selects and other expressions.
-    __copy__ = None  # pyright: ignore[reportAssignmentType]
+
+    def __copy__(self) -> Self:
+        return copy.deepcopy(self)
 
     def __deepcopy__(self, memo: Any, /) -> Self:
         k = self.__new__(self.__class__)
@@ -108,8 +110,6 @@ class Store(ATerm):
         object.__setattr__(k, "upper", copy.copy(self.upper))
         object.__setattr__(k, "descendants", self.descendants)
         return k
-
-    # Also note that `Store.descendants` is likely incorrect.
 
     def width(self) -> tuple[int, int]:
         return self.base.width()

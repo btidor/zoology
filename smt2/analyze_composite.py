@@ -7,7 +7,7 @@ from the rewrite library, and outputs to `composite.py`.
 
 from __future__ import annotations
 
-import re
+import ast
 from inspect import getmodule, getsource, isfunction
 from pathlib import Path
 from subprocess import check_output
@@ -68,7 +68,17 @@ type MinMax = tuple[int, int]
                 continue
             elif item == BaseTerm or getmodule(item) != module:
                 continue
-            self._source(item)
+            match ast.parse(getsource(item)).body:
+                case [ast.ClassDef("BTerm" | "CTerm") as cls]:
+                    # inject metaclass for constraints & bitvectors
+                    cls.keywords.append(
+                        ast.keyword("metaclass", ast.Name("RewriteMeta"))
+                    )
+                    self._source(cls)
+                case [ast.ClassDef() as cls]:
+                    self._source(cls)
+                case _:
+                    raise SyntaxError("unexpected item in theory")
 
     def _rewrites(self, module: ModuleType) -> None:
         for item in vars(module).values():
@@ -76,15 +86,27 @@ type MinMax = tuple[int, int]
                 continue
             self._source(item)
 
-    def _source(self, object: type | Callable[..., Any]) -> None:
-        s = getsource(object)
-        # Inject metaclass for constraints & bitvectors
-        s = re.sub(r"(CTerm|BTerm)\(BaseTerm", r"\1(BaseTerm, metaclass=RewriteMeta", s)
-        # Delete docstrings, comments
-        s = re.sub(r'\n*\s*("""[^"]*"""| # (?!pyright:).*)\n+', "\n", s)
-        # Skip unimplemented rewrite cases
-        s = re.sub(r"\n*\s*case [^_].*\n\s*raise NotImplementedError", "", s)
-        self.out.extend(s.encode())
+    def _source(self, object: type | Callable[..., Any] | ast.stmt) -> None:
+        if not isinstance(object, ast.stmt):
+            # Round-trip to delete comments.
+            p = ast.parse(getsource(object))
+            assert len(p.body) == 1
+            stmt = p.body[0]
+        else:
+            stmt = object
+        # Delete docstrings.
+        for node in ast.walk(stmt):
+            match node:
+                case ast.ClassDef() | ast.FunctionDef() | ast.match_case():
+                    match node.body:
+                        case [ast.Expr(ast.Constant(str())), *rest]:
+                            node.body = rest
+                        case _:
+                            pass
+                case _:
+                    pass
+        self.out.extend(b"\n")
+        self.out.extend(ast.unparse(stmt).encode())
         self.out.extend(b"\n")
 
 
