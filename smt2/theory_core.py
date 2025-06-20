@@ -251,7 +251,7 @@ class Eq[S: BaseTerm](CTerm):
     right: S
 
     def __post_init__(self) -> None:
-        BaseTerm.__post_init__(self)
+        super(Eq, self).__post_init__()
         assert getattr(self.left, "width", None) == getattr(self.right, "width", None)
 
 
@@ -262,7 +262,7 @@ class Distinct[S: BaseTerm](CTerm):
     right: S
 
     def __post_init__(self) -> None:
-        BaseTerm.__post_init__(self)
+        super(Distinct, self).__post_init__()
         assert getattr(self.left, "width", None) == getattr(self.right, "width", None)
 
 

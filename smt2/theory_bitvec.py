@@ -32,7 +32,7 @@ class BSymbol(BTerm):
     w: InitVar[int]
 
     def __post_init__(self, w: int) -> None:
-        BaseTerm.__post_init__(self)
+        super(BSymbol, self).__post_init__()
         assert w > 0, "width must be positive"
         object.__setattr__(self, "width", w)
 
@@ -55,7 +55,7 @@ class BValue(BTerm):
     w: InitVar[int]
 
     def __post_init__(self, w: int) -> None:
-        BaseTerm.__post_init__(self)
+        super(BValue, self).__post_init__()
         assert w > 0, "width must be positive"
         if self.value < 0:  # convert to two's complement
             object.__setattr__(self, "value", self.value + (1 << w))
@@ -86,7 +86,7 @@ class UnaryOp(BTerm):
     term: BTerm
 
     def __post_init__(self) -> None:
-        BaseTerm.__post_init__(self)
+        super(UnaryOp, self).__post_init__()
         object.__setattr__(self, "width", self.term.width)
 
 
@@ -96,7 +96,7 @@ class BinaryOp(BTerm):
     right: BTerm
 
     def __post_init__(self) -> None:
-        BaseTerm.__post_init__(self)
+        super(BinaryOp, self).__post_init__()
         assert self.left.width == self.right.width
         object.__setattr__(self, "width", self.left.width)
 
@@ -107,7 +107,7 @@ class CompareOp(CTerm):
     right: BTerm
 
     def __post_init__(self) -> None:
-        BaseTerm.__post_init__(self)
+        super(CompareOp, self).__post_init__()
         assert self.left.width == self.right.width
 
 
@@ -159,7 +159,7 @@ class Extract(BTerm):
     term: BTerm
 
     def __post_init__(self) -> None:
-        BaseTerm.__post_init__(self)
+        super(Extract, self).__post_init__()
         assert self.term.width > self.i >= self.j >= 0
         w = self.i - self.j + 1
         object.__setattr__(self, "width", w)
@@ -252,7 +252,7 @@ class Comp(BTerm):  # width-1 result
     right: BTerm
 
     def __post_init__(self) -> None:
-        BaseTerm.__post_init__(self)
+        super(Comp, self).__post_init__()
         assert self.left.width == self.right.width
         object.__setattr__(self, "width", 1)
 
@@ -287,7 +287,7 @@ class Repeat(SingleParamOp):
     op: ClassVar[bytes] = b"repeat"
 
     def __post_init__(self) -> None:
-        BaseTerm.__post_init__(self)
+        super(Repeat, self).__post_init__()
         assert self.i > 0
         w = self.term.width * self.i
         object.__setattr__(self, "width", w)
@@ -298,7 +298,7 @@ class ZeroExtend(SingleParamOp):
     op: ClassVar[bytes] = b"zero_extend"
 
     def __post_init__(self) -> None:
-        BaseTerm.__post_init__(self)
+        super(ZeroExtend, self).__post_init__()
         assert self.i >= 0
         w = self.term.width + self.i
         object.__setattr__(self, "width", w)
@@ -309,7 +309,7 @@ class SignExtend(SingleParamOp):
     op: ClassVar[bytes] = b"sign_extend"
 
     def __post_init__(self) -> None:
-        BaseTerm.__post_init__(self)
+        super(SignExtend, self).__post_init__()
         assert self.i >= 0
         w = self.term.width + self.i
         object.__setattr__(self, "width", w)
@@ -320,7 +320,7 @@ class RotateLeft(SingleParamOp):
     op: ClassVar[bytes] = b"rotate_left"
 
     def __post_init__(self) -> None:
-        BaseTerm.__post_init__(self)
+        super(RotateLeft, self).__post_init__()
         assert self.i >= 0
         object.__setattr__(self, "width", self.term.width)
 
@@ -330,7 +330,7 @@ class RotateRight(SingleParamOp):
     op: ClassVar[bytes] = b"rotate_right"
 
     def __post_init__(self) -> None:
-        BaseTerm.__post_init__(self)
+        super(RotateRight, self).__post_init__()
         assert self.i >= 0
         object.__setattr__(self, "width", self.term.width)
 
@@ -378,6 +378,6 @@ class Ite(BTerm):
     right: BTerm
 
     def __post_init__(self) -> None:
-        BaseTerm.__post_init__(self)
+        super(Ite, self).__post_init__()
         assert self.left.width == self.right.width
         object.__setattr__(self, "width", self.left.width)

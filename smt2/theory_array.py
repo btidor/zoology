@@ -79,7 +79,7 @@ class Select(BTerm):
 
     @override
     def __post_init__(self) -> None:
-        BaseTerm.__post_init__(self)
+        super(Select, self).__post_init__()
         k, v = self.array.width()
         assert k == self.key.width
         object.__setattr__(self, "width", v)
