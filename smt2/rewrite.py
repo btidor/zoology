@@ -10,6 +10,29 @@ from .theory_bitvec import *
 from .theory_core import *
 
 
+class RewriteMeta(abc.ABCMeta):
+    """Performs term rewriting."""
+
+    def __call__(self, *args: Any, **kwds: Any) -> Any:
+        """Construct the requested term, then rewrite it."""
+        assert issubclass(self, BaseTerm)
+        if self.commutative:
+            # Swap Values to right-hand side, Nots to left-hand side.
+            match args:
+                case (x, CValue() as y) if not isinstance(x, CValue):
+                    args = (y, x)
+                case (Not() as x, y) if not isinstance(y, Not):
+                    args = (y, x)
+                case (x, BValue() as y) if not isinstance(x, BValue):
+                    args = (y, x)
+                case (BNot() as x, y) if not isinstance(y, BNot):
+                    args = (y, x)
+                case _:
+                    pass
+        term = super(RewriteMeta, self).__call__(*args, **kwds)
+        return term._rewrite()
+
+
 def constraint_reduction(term: CTerm) -> CTerm:
     """Rewrite fancy constraint ops into simple ones."""
     match term:

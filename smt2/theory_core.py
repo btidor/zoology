@@ -41,6 +41,9 @@ class BaseTerm(abc.ABC):
         self.dump(ctx)
         return ctx.out.decode()
 
+    def _rewrite(self) -> BaseTerm:
+        return self
+
     @abc.abstractmethod
     def sort(self) -> bytes: ...
 

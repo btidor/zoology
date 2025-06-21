@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import ast
 from bisect import insort
+from collections import defaultdict
 from inspect import getmodule, getsource, isfunction
 from pathlib import Path
 from subprocess import check_output
@@ -17,8 +18,11 @@ from typing import Any, Callable
 
 from . import rewrite, theory_array, theory_bitvec, theory_core
 from .analyze_minmax import MinMaxCase
-from .minmax import RewriteMeta, constraint_minmax, propagate_minmax
-from .theory_core import BaseTerm
+from .analyze_rewrite import RewriteCase
+from .minmax import constraint_minmax, propagate_minmax
+from .rewrite import RewriteMeta
+from .theory_bitvec import BTerm
+from .theory_core import BaseTerm, CTerm
 
 COMPOSITE_PY = Path(__file__).parent / "composite.py"
 
@@ -32,6 +36,16 @@ class Compositor:
         self.mmcases = {
             case.id: case for case in MinMaxCase.from_function(propagate_minmax)
         }
+        self.rwcases = defaultdict[str, list[RewriteCase]](lambda: list())
+        for item in vars(rewrite).values():
+            if not isfunction(item) or getmodule(item) != rewrite:  # pyright: ignore[reportUnnecessaryComparison]
+                continue
+            for case in RewriteCase.from_function(item):
+                assert isinstance(case.pattern.cls, ast.Name)
+                self.rwcases[case.pattern.cls.id].append(case)
+        for case in RewriteCase.from_function(constraint_minmax):
+            assert isinstance(case.pattern.cls, ast.Name)
+            self.rwcases[case.pattern.cls.id].append(case)
 
     def dump(self) -> bytes:
         """Write out `composite.py`."""
@@ -63,8 +77,6 @@ type MinMax = tuple[int, int]
         self._theory(theory_core)
         self._theory(theory_bitvec)
         self._theory(theory_array)
-        self._rewrites(rewrite)
-        self._source(constraint_minmax)
         return check_output(["ruff", "format", "-"], input=self.out)
 
     def _theory(self, module: ModuleType) -> None:
@@ -84,20 +96,20 @@ type MinMax = tuple[int, int]
                 case _:
                     raise SyntaxError("unexpected item in theory")
 
-            # Have BTerm set min, max by default.
-            if item == theory_bitvec.BTerm:
+            if item == BTerm:
+                # BTerm's __post_init__ should set min, max as a fallback
                 self._post_init_append(cls, *self._minmax(cls, item, self.mmcases["_"]))
             elif item.__name__ in self.mmcases:
+                # inject each op's minmax logic into __post_init__
                 self._post_init_append(
                     cls, *self._minmax(cls, item, self.mmcases[item.__name__])
                 )
-            self._source(cls)
 
-    def _rewrites(self, module: ModuleType) -> None:
-        for item in vars(module).values():
-            if not isfunction(item) or getmodule(item) != module:
-                continue
-            self._source(item)
+            if item.__name__ in self.rwcases:
+                # construct each op's _rewrite method
+                self._rewrite(cls, item, self.rwcases[item.__name__])
+
+            self._source(cls)
 
     def _setattr(self, name: str, expr: ast.expr) -> ast.stmt:
         return ast.Expr(
@@ -225,6 +237,42 @@ type MinMax = tuple[int, int]
             return [ast.If(ast.BoolOp(ast.And(), conds), stmt)]
         else:
             return stmt
+
+    def _rewrite(
+        self, cls: ast.ClassDef, item: type[BaseTerm], cases: list[RewriteCase]
+    ) -> None:
+        replacer = ReplaceVariables({"term": ast.Name("self")})
+        stmt = ast.Match(ast.Name("self"))
+        for case in cases:
+            stmt.cases.append(ast.match_case(case.pattern, case.guard, case.body))
+        stmt.cases.append(
+            ast.match_case(
+                ast.MatchAs(None, None), None, [ast.Return(ast.Name("self"))]
+            )
+        )
+        stmt = replacer.visit(stmt)
+
+        vars = self._vars(stmt)
+        prefix = list[ast.stmt]()
+        for assign in cases[0].prefix:
+            match assign:
+                case ast.Assign([ast.Name(name)], _):
+                    if name in vars:
+                        prefix.append(replacer.visit(assign))
+                case _:
+                    raise SyntaxError("expected assignment")
+
+        fn = ast.FunctionDef(
+            "_rewrite",
+            ast.arguments([], [ast.arg("self")]),
+            [*prefix, stmt],
+            [ast.Name("override")],
+            ast.Name("CTerm" if issubclass(item, CTerm) else "BTerm"),
+        )
+        insort(cls.body, fn, key=lambda s: isinstance(s, ast.FunctionDef))
+
+    def _vars(self, expr: ast.AST) -> set[str]:
+        return set(node.id for node in ast.walk(expr) if isinstance(node, ast.Name))
 
     def _source(self, object: type | Callable[..., Any] | ast.stmt) -> None:
         if not isinstance(object, ast.stmt):
