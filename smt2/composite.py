@@ -243,34 +243,6 @@ class Eq[S: BaseTerm](CTerm):
                 return And(Not(c), Eq(v, y))
             case Eq(BValue(a) as v, Ite(c, x, BValue(q))) if a != q:
                 return And(c, Eq(v, x))
-            case Eq(BValue(a), Concat([*rest, x]) as c) if len(rest) > 0:
-                return And(
-                    Eq(Concat((*rest,)), BValue(a >> x.width, c.width - x.width)),
-                    Eq(BValue(a & (1 << x.width) - 1, x.width), x),
-                )
-            case Eq(Concat([*rest, x]), Ite(c, p, q) as z) if len(rest) > 0:
-                return And(
-                    Eq(
-                        Concat((*rest,)),
-                        Ite(
-                            c,
-                            Extract(z.width - 1, x.width, p),
-                            Extract(z.width - 1, x.width, q),
-                        ),
-                    ),
-                    Eq(
-                        x,
-                        Ite(c, Extract(x.width - 1, 0, p), Extract(x.width - 1, 0, q)),
-                    ),
-                )
-            case Eq(Concat([x, *xx]), Concat([y, *yy])) if (
-                x.width == y.width and len(xx) > 0 and (len(yy) > 0)
-            ):
-                return And(Eq(x, y), Eq(Concat((*xx,)), Concat((*yy,))))
-            case Eq(Concat([*xx, x]), Concat([*yy, y])) if (
-                x.width == y.width and len(xx) > 0 and (len(yy) > 0)
-            ):
-                return And(Eq(Concat((*xx,)), Concat((*yy,))), Eq(x, y))
             case Eq(BTerm() as x, BTerm() as y) if x.max < y.min:
                 return CValue(False)
             case Eq(BTerm() as x, BTerm() as y) if y.max < x.min:
@@ -914,6 +886,14 @@ class Lshr(BinaryOp):
                 return BValue(0, width)
             case Lshr(Lshr(x, BValue(a)), BValue(b)) if a < width and b < width:
                 return Lshr(x, BValue(a + b, width))
+            case Lshr(BAnd(x, y), z):
+                return BAnd(Lshr(x, z), Lshr(y, z))
+            case Lshr(BOr(x, y), z):
+                return BOr(Lshr(x, z), Lshr(y, z))
+            case Lshr(BXor(x, y), z):
+                return BXor(Lshr(x, z), Lshr(y, z))
+            case Lshr(Ite(c, x, y), z):
+                return Ite(c, Lshr(x, z), Lshr(y, z))
             case Lshr(Concat([*rest, x]), BValue(a)) if (
                 a < self.width and a >= x.width and (len(rest) > 0)
             ):

@@ -193,35 +193,6 @@ def constraint_logic_bitvector(term: CTerm) -> CTerm:
         case Eq(BValue(a) as v, Ite(c, x, BValue(q))) if a != q:
             """beq.itev"""
             return And(c, Eq(v, x))
-        case Eq(BValue(a), Concat([*rest, x]) as c) if len(rest) > 0:
-            """beq.cat"""
-            return And(
-                Eq(Concat((*rest,)), BValue(a >> x.width, c.width - x.width)),
-                Eq(BValue(a & ((1 << x.width) - 1), x.width), x),
-            )
-        case Eq(Concat([*rest, x]), Ite(c, p, q) as z) if len(rest) > 0:
-            """beq.catite"""
-            return And(
-                Eq(
-                    Concat((*rest,)),
-                    Ite(
-                        c,
-                        Extract(z.width - 1, x.width, p),
-                        Extract(z.width - 1, x.width, q),
-                    ),
-                ),
-                Eq(x, Ite(c, Extract(x.width - 1, 0, p), Extract(x.width - 1, 0, q))),
-            )
-        case Eq(Concat([x, *xx]), Concat([y, *yy])) if (
-            x.width == y.width and len(xx) > 0 and len(yy) > 0
-        ):
-            """beq.catcat"""
-            return And(Eq(x, y), Eq(Concat((*xx,)), Concat((*yy,))))
-        case Eq(Concat([*xx, x]), Concat([*yy, y])) if (
-            x.width == y.width and len(xx) > 0 and len(yy) > 0
-        ):
-            """beq.catcat"""
-            return And(Eq(Concat((*xx,)), Concat((*yy,))), Eq(x, y))
         case Ult(x, BValue(0)):
             """ult.z: X < 0 <=> False"""
             return CValue(False)
@@ -562,6 +533,18 @@ def bitvector_logic_shifts(term: BTerm) -> BTerm:
         case Lshr(Lshr(x, BValue(a)), BValue(b)) if a < width and b < width:
             """lshr.lshr"""
             return Lshr(x, BValue(a + b, width))
+        case Lshr(BAnd(x, y), z):
+            """lshr.band"""
+            return BAnd(Lshr(x, z), Lshr(y, z))
+        case Lshr(BOr(x, y), z):
+            """lshr.bor"""
+            return BOr(Lshr(x, z), Lshr(y, z))
+        case Lshr(BXor(x, y), z):
+            """lshr.bxor"""
+            return BXor(Lshr(x, z), Lshr(y, z))
+        case Lshr(Ite(c, x, y), z):
+            """lshr.ite"""
+            return Ite(c, Lshr(x, z), Lshr(y, z))
         case Ashr(x, BValue(0)):
             """ashr.z"""
             return x
