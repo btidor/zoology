@@ -6,7 +6,15 @@
 
 import pytest
 
+import smt
+
 pytest.register_assert_rewrite("helpers", "solidity")
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption("--profile", dest="profile", action="store_true")
+    parser.addoption("--memory", dest="memory", action="store_true")
+
 
 ### ### ### ### ###
 
@@ -27,12 +35,6 @@ RENDER_OPTS: dict[str, dict[str, str | int]] = {
 }
 
 combined = None
-
-
-def pytest_addoption(
-    parser: pytest.Parser, pluginmanager: pytest.PytestPluginManager
-) -> None:
-    parser.addoption("--profile", dest="profile", action="store_true")
 
 
 # https://pyinstrument.readthedocs.io/en/latest/guide.html#profile-pytest-tests
@@ -78,6 +80,66 @@ def pyinstrument_combined(pytestconfig: pytest.Config) -> Iterator[None]:
         renderer = SpeedscopeRenderer(**RENDER_OPTS)
         with open(filename, "w", encoding="utf-8") as f:
             f.write(renderer.render(combined))
+
+
+### ### ### ### ###
+
+import tracemalloc
+
+from _pytest.fixtures import SubRequest
+
+import zoology
+
+_memory_stats: dict[SubRequest, int] = {}
+_state_stats: dict[SubRequest, tuple[int, int]] = {}
+
+
+@pytest.fixture(autouse=True)
+def track_memory_usage(request: SubRequest) -> Iterator[None]:
+    """
+    Track peak memory usage during test execution.
+
+    Warning: only tracks allocations made by Python code, not memory usage of
+    subprocesses or (probably) memory allocated by C extensions.
+    """
+    if not request.config.getoption("memory"):
+        yield
+        return
+
+    tracemalloc.start()
+    yield  # run test
+    _, peak = tracemalloc.get_traced_memory()
+    _memory_stats[request] = peak
+    tracemalloc.stop()
+
+
+@pytest.fixture(autouse=True)
+def track_candidates_checked(request: SubRequest) -> Iterator[None]:
+    """Track application counters during test execution."""
+    zoology.count = 0
+    smt.checks = 0
+    yield  # run test
+    if zoology.count:
+        _state_stats[request] = (zoology.count, smt.checks)
+
+
+def pytest_terminal_summary(terminalreporter: pytest.TerminalReporter) -> None:
+    if _memory_stats:
+        terminalreporter.line("")
+        terminalreporter.section("peak memory usage")
+        for request, peak in sorted(_memory_stats.items(), key=lambda x: -x[1]):
+            terminalreporter.write(
+                "% 5d MiB      %s\n" % (peak // 1024 // 1024, request.node.nodeid)
+            )
+    if _state_stats:
+        terminalreporter.line("")
+        terminalreporter.section("candidates checked")
+        for request, (n, _) in sorted(_state_stats.items(), key=lambda x: -x[1][0]):
+            terminalreporter.write("% 5d          %s\n" % (n, request.node.nodeid))
+        terminalreporter.line("")
+        terminalreporter.section("solver calls")
+        for request, (_, n) in sorted(_state_stats.items(), key=lambda x: -x[1][1]):
+            terminalreporter.write("% 5d          %s\n" % (n, request.node.nodeid))
 
 
 ### ### ### ### ###

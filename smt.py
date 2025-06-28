@@ -36,6 +36,9 @@ class ConstrainingError(Exception):
 type Tokenized = str | list[Tokenized]
 
 
+checks = 0
+
+
 class Solver:
     def __init__(self) -> None:
         self._constraints: list[CTerm] | None = []
@@ -74,6 +77,7 @@ class Solver:
                 self._constraints.append(term)
 
     def check(self, *assumptions: Constraint) -> bool:
+        global checks
         self._model = None
         backup = copy.copy(self._constraints)
         for assumption in assumptions:
@@ -93,6 +97,7 @@ class Solver:
             constraint.dump(ctx)
             ctx.write(b")\n")
         ctx.write(b"(check-sat)")
+        checks += 1
 
         p = Popen(["bitwuzla", "--print-model"], stdin=PIPE, stdout=PIPE, stderr=PIPE)
         out, err = p.communicate(bytes(ctx.out))

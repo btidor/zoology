@@ -213,19 +213,19 @@ def make_heads(prefix: Sequence) -> list[State]:
 def check_candidate(
     candidate: Sequence, validator: Validator, verbose: int
 ) -> bool | Solution:
-    """Check whether a sequence ."""
+    """Check whether a sequence solves the level."""
+    global count
     if verbose:
         vprint(f"- {candidate.pz()} ({candidate.states[-1].cost})\n")
         vprint(f"  {':'.join(candidate.states[-1].trace)}\n")
     else:
-        global count
         if count > 0:
             if count % 32 == 0:
                 vprint("\n")
             if count % (32 * 16) == 0:
                 vprint("\n")
         vprint(f"{len(candidate.states) - 1:X}")
-        count += 1
+    count += 1
 
     # We consider a state "changed" if a write to storage has occurred *or* if
     # it's a pure transfer of value. The latter are represented by a
