@@ -14,6 +14,7 @@ import abc
 import copy
 from dataclasses import InitVar, dataclass, field
 from functools import reduce
+from line_profiler import profile
 from typing import Any, ClassVar, Self, override
 
 from .theory_core import BaseTerm, DumpContext
@@ -22,6 +23,7 @@ type MinMax = tuple[int, int]
 
 
 class RewriteMeta(abc.ABCMeta):
+    @profile
     def __call__(self, *args: Any, **kwds: Any) -> Any:
         assert issubclass(self, BaseTerm)
         if self.commutative:
@@ -50,14 +52,17 @@ class CTerm(BaseTerm, metaclass=RewriteMeta):
 class CSymbol(CTerm):
     name: bytes
 
+    @profile
     @override
     def walk(self, ctx: DumpContext) -> None:
         ctx.symbols[self.name] = self
 
+    @profile
     @override
     def dump(self, ctx: DumpContext) -> None:
         ctx.write(self.name)
 
+    @profile
     @override
     def substitute(self, model: dict[bytes, BaseTerm]) -> BaseTerm:
         return model.get(self.name, self)
@@ -67,10 +72,12 @@ class CSymbol(CTerm):
 class CValue(CTerm):
     value: bool
 
+    @profile
     @override
     def dump(self, ctx: DumpContext) -> None:
         ctx.write(b"true" if self.value else b"false")
 
+    @profile
     @override
     def substitute(self, model: dict[bytes, BaseTerm]) -> BaseTerm:
         return self
@@ -81,6 +88,7 @@ class Not(CTerm):
     op: ClassVar[bytes] = b"not"
     term: CTerm
 
+    @profile
     @override
     def rewrite(self) -> CTerm:
         match self:
@@ -106,6 +114,7 @@ class Implies(CTerm):
     left: CTerm
     right: CTerm
 
+    @profile
     @override
     def rewrite(self) -> CTerm:
         match self:
@@ -122,6 +131,7 @@ class And(CTerm):
     left: CTerm
     right: CTerm
 
+    @profile
     @override
     def rewrite(self) -> CTerm:
         match self:
@@ -146,6 +156,7 @@ class Or(CTerm):
     left: CTerm
     right: CTerm
 
+    @profile
     @override
     def rewrite(self) -> CTerm:
         match self:
@@ -170,6 +181,7 @@ class Xor(CTerm):
     left: CTerm
     right: CTerm
 
+    @profile
     @override
     def rewrite(self) -> CTerm:
         match self:
@@ -194,11 +206,13 @@ class Eq[S: BaseTerm](CTerm):
     left: S
     right: S
 
+    @profile
     @override
     def __post_init__(self) -> None:
         super(Eq, self).__post_init__()
         assert getattr(self.left, "width", None) == getattr(self.right, "width", None)
 
+    @profile
     @override
     def rewrite(self) -> CTerm:
         match self:
@@ -271,11 +285,13 @@ class Distinct[S: BaseTerm](CTerm):
     left: S
     right: S
 
+    @profile
     @override
     def __post_init__(self) -> None:
         super(Distinct, self).__post_init__()
         assert getattr(self.left, "width", None) == getattr(self.right, "width", None)
 
+    @profile
     @override
     def rewrite(self) -> CTerm:
         match self:
@@ -294,6 +310,7 @@ class CIte(CTerm):
     left: CTerm
     right: CTerm
 
+    @profile
     @override
     def rewrite(self) -> CTerm:
         match self:
@@ -312,6 +329,7 @@ class BTerm(BaseTerm, metaclass=RewriteMeta):
     def sort(self) -> bytes:
         return b"(_ BitVec %d)" % self.width
 
+    @profile
     def __post_init__(self) -> None:
         super(BTerm, self).__post_init__()
         object.__setattr__(self, "min", 0)
@@ -323,20 +341,24 @@ class BSymbol(BTerm):
     name: bytes
     w: InitVar[int]
 
+    @profile
     @override
     def __post_init__(self, w: int) -> None:
         assert w > 0, "width must be positive"
         object.__setattr__(self, "width", w)
         super(BSymbol, self).__post_init__()
 
+    @profile
     @override
     def walk(self, ctx: DumpContext) -> None:
         ctx.symbols[self.name] = self
 
+    @profile
     @override
     def dump(self, ctx: DumpContext) -> None:
         ctx.write(self.name)
 
+    @profile
     @override
     def substitute(self, model: dict[bytes, BaseTerm]) -> BaseTerm:
         return model.get(self.name, self)
@@ -347,6 +369,7 @@ class BValue(BTerm):
     value: int
     w: InitVar[int]
 
+    @profile
     @override
     def __post_init__(self, w: int) -> None:
         assert w > 0, "width must be positive"
@@ -359,11 +382,13 @@ class BValue(BTerm):
         object.__setattr__(self, "max", self.value)
 
     @property
+    @profile
     def sgnd(self) -> int:
         if self.value & 1 << self.width - 1:
             return self.value - (1 << self.width)
         return self.value
 
+    @profile
     @override
     def dump(self, ctx: DumpContext) -> None:
         if self.width % 8 == 0:
@@ -371,6 +396,7 @@ class BValue(BTerm):
         else:
             ctx.write(b"#b" + bin(self.value)[2:].zfill(self.width).encode())
 
+    @profile
     @override
     def substitute(self, model: dict[bytes, BaseTerm]) -> BaseTerm:
         return self
@@ -380,6 +406,7 @@ class BValue(BTerm):
 class UnaryOp(BTerm):
     term: BTerm
 
+    @profile
     @override
     def __post_init__(self) -> None:
         object.__setattr__(self, "width", self.term.width)
@@ -391,6 +418,7 @@ class BinaryOp(BTerm):
     left: BTerm
     right: BTerm
 
+    @profile
     @override
     def __post_init__(self) -> None:
         assert self.left.width == self.right.width
@@ -403,6 +431,7 @@ class CompareOp(CTerm):
     left: BTerm
     right: BTerm
 
+    @profile
     @override
     def __post_init__(self) -> None:
         assert self.left.width == self.right.width
@@ -420,6 +449,7 @@ class Concat(BTerm):
     op: ClassVar[bytes] = b"concat"
     terms: tuple[BTerm, ...]
 
+    @profile
     @override
     def __post_init__(self) -> None:
         assert len(self.terms) > 0, "width must be positive"
@@ -440,6 +470,7 @@ class Concat(BTerm):
                 self.terms[1].max | self.terms[0].value << self.terms[1].width,
             )
 
+    @profile
     @override
     def walk(self, ctx: DumpContext) -> None:
         if ctx.visit(self):
@@ -447,6 +478,7 @@ class Concat(BTerm):
         for term in self.terms:
             term.walk(ctx)
 
+    @profile
     @override
     def dump(self, ctx: DumpContext) -> None:
         if ctx.try_alias(self):
@@ -460,6 +492,7 @@ class Concat(BTerm):
                 term.dump(ctx)
             ctx.write(b")")
 
+    @profile
     @override
     def rewrite(self) -> BTerm:
         match self:
@@ -496,6 +529,7 @@ class Extract(BTerm):
     j: int
     term: BTerm
 
+    @profile
     @override
     def __post_init__(self) -> None:
         assert self.term.width > self.i >= self.j >= 0
@@ -503,6 +537,7 @@ class Extract(BTerm):
         object.__setattr__(self, "width", w)
         super(Extract, self).__post_init__()
 
+    @profile
     @override
     def rewrite(self) -> BTerm:
         match self:
@@ -540,11 +575,13 @@ class Extract(BTerm):
 class BNot(UnaryOp):
     op: ClassVar[bytes] = b"bvnot"
 
+    @profile
     def __post_init__(self) -> None:
         super(BNot, self).__post_init__()
         object.__setattr__(self, "min", self.term.max ^ (1 << self.width) - 1)
         object.__setattr__(self, "max", self.term.min ^ (1 << self.width) - 1)
 
+    @profile
     @override
     def rewrite(self) -> BTerm:
         width = self.width
@@ -567,11 +604,13 @@ class BAnd(BinaryOp):
     op: ClassVar[bytes] = b"bvand"
     commutative: ClassVar[bool] = True
 
+    @profile
     def __post_init__(self) -> None:
         super(BAnd, self).__post_init__()
         object.__setattr__(self, "min", 0)
         object.__setattr__(self, "max", min(self.left.max, self.right.max))
 
+    @profile
     @override
     def rewrite(self) -> BTerm:
         width = self.width
@@ -610,11 +649,13 @@ class BOr(BinaryOp):
     op: ClassVar[bytes] = b"bvor"
     commutative: ClassVar[bool] = True
 
+    @profile
     def __post_init__(self) -> None:
         super(BOr, self).__post_init__()
         object.__setattr__(self, "min", max(self.left.min, self.right.min))
         object.__setattr__(self, "max", (1 << self.width) - 1)
 
+    @profile
     @override
     def rewrite(self) -> BTerm:
         width = self.width
@@ -652,6 +693,7 @@ class BOr(BinaryOp):
 class Neg(UnaryOp):
     op: ClassVar[bytes] = b"bvneg"
 
+    @profile
     @override
     def rewrite(self) -> BTerm:
         match self:
@@ -666,6 +708,7 @@ class Add(BinaryOp):
     op: ClassVar[bytes] = b"bvadd"
     commutative: ClassVar[bool] = True
 
+    @profile
     def __post_init__(self) -> None:
         super(Add, self).__post_init__()
         if (
@@ -676,6 +719,7 @@ class Add(BinaryOp):
             object.__setattr__(self, "min", self.right.min + self.left.sgnd)
             object.__setattr__(self, "max", self.right.max + self.left.sgnd)
 
+    @profile
     @override
     def rewrite(self) -> BTerm:
         width = self.width
@@ -703,6 +747,7 @@ class Mul(BinaryOp):
     op: ClassVar[bytes] = b"bvmul"
     commutative: ClassVar[bool] = True
 
+    @profile
     def __post_init__(self) -> None:
         super(Mul, self).__post_init__()
         if (
@@ -712,6 +757,7 @@ class Mul(BinaryOp):
             object.__setattr__(self, "min", self.left.value * self.right.min)
             object.__setattr__(self, "max", self.left.value * self.right.max)
 
+    @profile
     @override
     def rewrite(self) -> BTerm:
         width = self.width
@@ -731,12 +777,14 @@ class Mul(BinaryOp):
 class Udiv(BinaryOp):
     op: ClassVar[bytes] = b"bvudiv"
 
+    @profile
     def __post_init__(self) -> None:
         super(Udiv, self).__post_init__()
         if isinstance(self.right, BValue) and self.right.value != 0:
             object.__setattr__(self, "min", self.left.min // self.right.value)
             object.__setattr__(self, "max", self.left.max // self.right.value)
 
+    @profile
     @override
     def rewrite(self) -> BTerm:
         width = self.width
@@ -756,12 +804,14 @@ class Udiv(BinaryOp):
 class Urem(BinaryOp):
     op: ClassVar[bytes] = b"bvurem"
 
+    @profile
     def __post_init__(self) -> None:
         super(Urem, self).__post_init__()
         if self.right.min > 0:
             object.__setattr__(self, "min", 0)
             object.__setattr__(self, "max", self.right.max - 1)
 
+    @profile
     @override
     def rewrite(self) -> BTerm:
         width = self.width
@@ -781,6 +831,7 @@ class Urem(BinaryOp):
 class Shl(BinaryOp):
     op: ClassVar[bytes] = b"bvshl"
 
+    @profile
     def __post_init__(self) -> None:
         super(Shl, self).__post_init__()
         if isinstance(self.right, BValue) and self.right.value < self.width:
@@ -791,6 +842,7 @@ class Shl(BinaryOp):
                 min(self.left.max << self.right.value, (1 << self.width) - 1),
             )
 
+    @profile
     @override
     def rewrite(self) -> BTerm:
         width = self.width
@@ -823,12 +875,14 @@ class Shl(BinaryOp):
 class Lshr(BinaryOp):
     op: ClassVar[bytes] = b"bvlshr"
 
+    @profile
     def __post_init__(self) -> None:
         super(Lshr, self).__post_init__()
         if isinstance(self.right, BValue):
             object.__setattr__(self, "min", self.left.min >> self.right.value)
             object.__setattr__(self, "max", self.left.max >> self.right.value)
 
+    @profile
     @override
     def rewrite(self) -> BTerm:
         width = self.width
@@ -861,6 +915,7 @@ class Lshr(BinaryOp):
 class Ult(CompareOp):
     op: ClassVar[bytes] = b"bvult"
 
+    @profile
     @override
     def rewrite(self) -> CTerm:
         match self:
@@ -896,6 +951,7 @@ class Ult(CompareOp):
 class Nand(BinaryOp):
     op: ClassVar[bytes] = b"bvnand"
 
+    @profile
     @override
     def rewrite(self) -> BTerm:
         match self:
@@ -909,6 +965,7 @@ class Nand(BinaryOp):
 class Nor(BinaryOp):
     op: ClassVar[bytes] = b"bvnor"
 
+    @profile
     @override
     def rewrite(self) -> BTerm:
         match self:
@@ -923,6 +980,7 @@ class BXor(BinaryOp):
     op: ClassVar[bytes] = b"bvxor"
     commutative: ClassVar[bool] = True
 
+    @profile
     @override
     def rewrite(self) -> BTerm:
         width = self.width
@@ -952,6 +1010,7 @@ class BXor(BinaryOp):
 class Xnor(BinaryOp):
     op: ClassVar[bytes] = b"bvxnor"
 
+    @profile
     @override
     def rewrite(self) -> BTerm:
         match self:
@@ -967,12 +1026,14 @@ class Comp(BTerm):
     left: BTerm
     right: BTerm
 
+    @profile
     @override
     def __post_init__(self) -> None:
         assert self.left.width == self.right.width
         object.__setattr__(self, "width", 1)
         super(Comp, self).__post_init__()
 
+    @profile
     @override
     def rewrite(self) -> BTerm:
         match self:
@@ -986,6 +1047,7 @@ class Comp(BTerm):
 class Sub(BinaryOp):
     op: ClassVar[bytes] = b"bvsub"
 
+    @profile
     @override
     def rewrite(self) -> BTerm:
         match self:
@@ -999,6 +1061,7 @@ class Sub(BinaryOp):
 class Sdiv(BinaryOp):
     op: ClassVar[bytes] = b"bvsdiv"
 
+    @profile
     def __post_init__(self) -> None:
         super(Sdiv, self).__post_init__()
         if (
@@ -1010,6 +1073,7 @@ class Sdiv(BinaryOp):
             object.__setattr__(self, "min", self.left.min // self.right.value)
             object.__setattr__(self, "max", self.left.max // self.right.value)
 
+    @profile
     @override
     def rewrite(self) -> BTerm:
         width = self.width
@@ -1031,6 +1095,7 @@ class Sdiv(BinaryOp):
 class Srem(BinaryOp):
     op: ClassVar[bytes] = b"bvsrem"
 
+    @profile
     def __post_init__(self) -> None:
         super(Srem, self).__post_init__()
         if (
@@ -1041,6 +1106,7 @@ class Srem(BinaryOp):
             object.__setattr__(self, "min", 0)
             object.__setattr__(self, "max", self.right.max - 1)
 
+    @profile
     @override
     def rewrite(self) -> BTerm:
         width = self.width
@@ -1065,12 +1131,14 @@ class Srem(BinaryOp):
 class Smod(BinaryOp):
     op: ClassVar[bytes] = b"bvsmod"
 
+    @profile
     def __post_init__(self) -> None:
         super(Smod, self).__post_init__()
         if self.right.min > 0 and self.right.max < 1 << self.width - 1:
             object.__setattr__(self, "min", 0)
             object.__setattr__(self, "max", self.right.max - 1)
 
+    @profile
     @override
     def rewrite(self) -> BTerm:
         width = self.width
@@ -1089,12 +1157,14 @@ class Smod(BinaryOp):
 class Ashr(BinaryOp):
     op: ClassVar[bytes] = b"bvashr"
 
+    @profile
     def __post_init__(self) -> None:
         super(Ashr, self).__post_init__()
         if isinstance(self.right, BValue) and self.left.max < 1 << self.width - 1:
             object.__setattr__(self, "min", self.left.min >> self.right.value)
             object.__setattr__(self, "max", self.left.max >> self.right.value)
 
+    @profile
     @override
     def rewrite(self) -> BTerm:
         width = self.width
@@ -1114,6 +1184,7 @@ class Ashr(BinaryOp):
 class Repeat(SingleParamOp):
     op: ClassVar[bytes] = b"repeat"
 
+    @profile
     @override
     def __post_init__(self) -> None:
         assert self.i > 0
@@ -1121,6 +1192,7 @@ class Repeat(SingleParamOp):
         object.__setattr__(self, "width", w)
         super(Repeat, self).__post_init__()
 
+    @profile
     @override
     def rewrite(self) -> BTerm:
         match self:
@@ -1136,6 +1208,7 @@ class Repeat(SingleParamOp):
 class ZeroExtend(SingleParamOp):
     op: ClassVar[bytes] = b"zero_extend"
 
+    @profile
     @override
     def __post_init__(self) -> None:
         assert self.i >= 0
@@ -1143,6 +1216,7 @@ class ZeroExtend(SingleParamOp):
         object.__setattr__(self, "width", w)
         super(ZeroExtend, self).__post_init__()
 
+    @profile
     @override
     def rewrite(self) -> BTerm:
         match self:
@@ -1158,6 +1232,7 @@ class ZeroExtend(SingleParamOp):
 class SignExtend(SingleParamOp):
     op: ClassVar[bytes] = b"sign_extend"
 
+    @profile
     @override
     def __post_init__(self) -> None:
         assert self.i >= 0
@@ -1168,6 +1243,7 @@ class SignExtend(SingleParamOp):
             object.__setattr__(self, "min", self.term.min)
             object.__setattr__(self, "max", self.term.max)
 
+    @profile
     @override
     def rewrite(self) -> BTerm:
         width = self.width
@@ -1186,12 +1262,14 @@ class SignExtend(SingleParamOp):
 class RotateLeft(SingleParamOp):
     op: ClassVar[bytes] = b"rotate_left"
 
+    @profile
     @override
     def __post_init__(self) -> None:
         assert self.i >= 0
         object.__setattr__(self, "width", self.term.width)
         super(RotateLeft, self).__post_init__()
 
+    @profile
     @override
     def rewrite(self) -> BTerm:
         match self:
@@ -1213,12 +1291,14 @@ class RotateLeft(SingleParamOp):
 class RotateRight(SingleParamOp):
     op: ClassVar[bytes] = b"rotate_right"
 
+    @profile
     @override
     def __post_init__(self) -> None:
         assert self.i >= 0
         object.__setattr__(self, "width", self.term.width)
         super(RotateRight, self).__post_init__()
 
+    @profile
     @override
     def rewrite(self) -> BTerm:
         match self:
@@ -1235,6 +1315,7 @@ class RotateRight(SingleParamOp):
 class Ule(CompareOp):
     op: ClassVar[bytes] = b"bvule"
 
+    @profile
     @override
     def rewrite(self) -> CTerm:
         match self:
@@ -1268,6 +1349,7 @@ class Ule(CompareOp):
 class Ugt(CompareOp):
     op: ClassVar[bytes] = b"bvugt"
 
+    @profile
     @override
     def rewrite(self) -> CTerm:
         match self:
@@ -1281,6 +1363,7 @@ class Ugt(CompareOp):
 class Uge(CompareOp):
     op: ClassVar[bytes] = b"bvuge"
 
+    @profile
     @override
     def rewrite(self) -> CTerm:
         match self:
@@ -1294,6 +1377,7 @@ class Uge(CompareOp):
 class Slt(CompareOp):
     op: ClassVar[bytes] = b"bvslt"
 
+    @profile
     @override
     def rewrite(self) -> CTerm:
         match self:
@@ -1319,6 +1403,7 @@ class Slt(CompareOp):
 class Sle(CompareOp):
     op: ClassVar[bytes] = b"bvsle"
 
+    @profile
     @override
     def rewrite(self) -> CTerm:
         match self:
@@ -1344,6 +1429,7 @@ class Sle(CompareOp):
 class Sgt(CompareOp):
     op: ClassVar[bytes] = b"bvsgt"
 
+    @profile
     @override
     def rewrite(self) -> CTerm:
         match self:
@@ -1357,6 +1443,7 @@ class Sgt(CompareOp):
 class Sge(CompareOp):
     op: ClassVar[bytes] = b"bvsge"
 
+    @profile
     @override
     def rewrite(self) -> CTerm:
         match self:
@@ -1373,6 +1460,7 @@ class Ite(BTerm):
     left: BTerm
     right: BTerm
 
+    @profile
     @override
     def __post_init__(self) -> None:
         assert self.left.width == self.right.width
@@ -1381,6 +1469,7 @@ class Ite(BTerm):
         object.__setattr__(self, "min", min(self.left.min, self.right.min))
         object.__setattr__(self, "max", max(self.left.max, self.right.max))
 
+    @profile
     @override
     def rewrite(self) -> BTerm:
         match self:
@@ -1418,14 +1507,17 @@ class ASymbol(ATerm):
     def width(self) -> tuple[int, int]:
         return (self.key, self.value)
 
+    @profile
     @override
     def walk(self, ctx: DumpContext) -> None:
         ctx.symbols[self.name] = self
 
+    @profile
     @override
     def dump(self, ctx: DumpContext) -> None:
         ctx.write(self.name)
 
+    @profile
     @override
     def substitute(self, model: dict[bytes, BaseTerm]) -> BaseTerm:
         return model.get(self.name, self)
@@ -1439,6 +1531,7 @@ class AValue(ATerm):
     def width(self) -> tuple[int, int]:
         return (self.key, self.default.width)
 
+    @profile
     @override
     def dump(self, ctx: DumpContext) -> None:
         ctx.write(
@@ -1448,6 +1541,7 @@ class AValue(ATerm):
         self.default.dump(ctx)
         ctx.write(b")")
 
+    @profile
     @override
     def substitute(self, model: dict[bytes, BaseTerm]) -> BaseTerm:
         return self
@@ -1459,6 +1553,7 @@ class Select(BTerm):
     array: ATerm
     key: BTerm
 
+    @profile
     @override
     def __post_init__(self) -> None:
         k, v = self.array.width()
@@ -1468,6 +1563,7 @@ class Select(BTerm):
             object.__setattr__(self, "array", copy.deepcopy(self.array))
         super(Select, self).__post_init__()
 
+    @profile
     @override
     def rewrite(self) -> BTerm:
         match self:
@@ -1517,6 +1613,7 @@ class Store(ATerm):
     def width(self) -> tuple[int, int]:
         return self.base.width()
 
+    @profile
     def set(self, key: BTerm, value: BTerm) -> None:
         descendants = self.descendants
         if isinstance(key, BValue) and (not self.upper):
@@ -1530,6 +1627,7 @@ class Store(ATerm):
             descendants += key.descendants + value.descendants + 2
         object.__setattr__(self, "descendants", descendants)
 
+    @profile
     @override
     def walk(self, ctx: DumpContext) -> None:
         if ctx.visit(self):
@@ -1541,6 +1639,7 @@ class Store(ATerm):
             key.walk(ctx)
             value.walk(ctx)
 
+    @profile
     @override
     def dump(self, ctx: DumpContext) -> None:
         if ctx.try_alias(self):

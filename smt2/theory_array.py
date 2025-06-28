@@ -14,6 +14,8 @@ import copy
 from dataclasses import dataclass, field
 from typing import Any, ClassVar, Self, override
 
+from line_profiler import profile
+
 from .theory_bitvec import BTerm, BValue
 from .theory_core import BaseTerm, DumpContext
 
@@ -110,6 +112,7 @@ class Store(ATerm):
     def width(self) -> tuple[int, int]:
         return self.base.width()
 
+    @profile
     def set(self, key: BTerm, value: BTerm) -> None:
         descendants = self.descendants
         if isinstance(key, BValue) and not self.upper:

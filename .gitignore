@@ -11,3 +11,4 @@ node_modules/
 # zoology
 .key
 tmp.*
+profile_output*

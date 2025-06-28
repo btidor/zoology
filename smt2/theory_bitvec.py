@@ -13,6 +13,8 @@ from dataclasses import InitVar, dataclass, field
 from functools import reduce
 from typing import ClassVar, override
 
+from line_profiler import profile
+
 from .theory_core import BaseTerm, CTerm, DumpContext
 
 
@@ -65,6 +67,7 @@ class BValue(BTerm):
         super(BValue, self).__post_init__()
 
     @property
+    @profile
     def sgnd(self) -> int:
         # https://stackoverflow.com/a/9147327 (CC BY-SA 3.0)
         if self.value & (1 << (self.width - 1)):

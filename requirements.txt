@@ -1,3 +1,4 @@
+line_profiler  # use with LINE_PROFILE=1 ...
 pycryptodome
 pyinstrument
 pytest

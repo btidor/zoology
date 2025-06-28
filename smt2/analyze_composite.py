@@ -66,6 +66,7 @@ import abc
 import copy
 from dataclasses import InitVar, dataclass, field
 from functools import reduce
+from line_profiler import profile
 from typing import Any, ClassVar, Self, override
 
 from .theory_core import BaseTerm, DumpContext
@@ -266,7 +267,7 @@ type MinMax = tuple[int, int]
             "rewrite",
             ast.arguments([], [ast.arg("self")]),
             [*prefix, stmt],
-            [ast.Name("override")],
+            [ast.Name("profile"), ast.Name("override")],
             ast.Name("CTerm" if issubclass(item, CTerm) else "BTerm"),
         )
         insort(cls.body, fn, key=lambda s: isinstance(s, ast.FunctionDef))
@@ -283,6 +284,9 @@ type MinMax = tuple[int, int]
         else:
             stmt = object
         stmt = DeleteDocstrings().visit(stmt)
+        stmt = ProfileFunctions("walk", "dump", "substitute", "__post_init__").visit(
+            stmt
+        )
         ast.fix_missing_locations(stmt)
         self.out.extend(b"\n")
         self.out.extend(ast.unparse(stmt).encode())
@@ -320,6 +324,24 @@ class ReplaceVariables(ast.NodeTransformer):
         match node:
             case ast.Name(name) if name in self.vars:
                 return self.vars[name]
+            case _:
+                pass
+        return node
+
+
+class ProfileFunctions(ast.NodeTransformer):
+    """A visitor to add @profile annotations to functions."""
+
+    def __init__(self, *names: str) -> None:
+        """Create a new ProfileFunctions transformer."""
+        self.names = set(names)
+
+    def visit(self, node: Any) -> Any:
+        """Visit the given AST node."""
+        node = super().visit(node)
+        match node:
+            case ast.FunctionDef(name) if name in self.names:
+                node.decorator_list = [ast.Name("profile"), *node.decorator_list]
             case _:
                 pass
         return node

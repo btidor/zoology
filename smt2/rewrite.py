@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import copy
 
+from line_profiler import profile
+
 from .theory_array import *
 from .theory_bitvec import *
 from .theory_core import *
@@ -13,6 +15,7 @@ from .theory_core import *
 class RewriteMeta(abc.ABCMeta):
     """Performs term rewriting."""
 
+    @profile
     def __call__(self, *args: Any, **kwds: Any) -> Any:
         """Construct the requested term, then rewrite it."""
         assert issubclass(self, BaseTerm)

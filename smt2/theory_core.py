@@ -14,6 +14,8 @@ from dataclasses import dataclass, field
 from subprocess import PIPE, Popen
 from typing import Any, ClassVar, Self, override
 
+from line_profiler import profile
+
 
 @dataclass(frozen=True, repr=False, slots=True)
 class BaseTerm(abc.ABC):
@@ -44,9 +46,11 @@ class BaseTerm(abc.ABC):
     @abc.abstractmethod
     def sort(self) -> bytes: ...
 
+    @profile
     def rewrite(self) -> BaseTerm:
         return self
 
+    @profile
     def walk(self, ctx: DumpContext) -> None:
         if ctx.visit(self):
             return
@@ -55,6 +59,7 @@ class BaseTerm(abc.ABC):
             if isinstance(arg, BaseTerm):
                 arg.walk(ctx)
 
+    @profile
     def dump(self, ctx: DumpContext) -> None:
         if ctx.try_alias(self):
             return
@@ -74,6 +79,7 @@ class BaseTerm(abc.ABC):
             term.dump(ctx)
         ctx.write(b")")
 
+    @profile
     def substitute(self, model: dict[bytes, BaseTerm]) -> BaseTerm:
         args = list[Any]()
         for name in self.__match_args__:
@@ -110,6 +116,7 @@ class DumpContext:
 
     out: bytearray = field(default_factory=bytearray)
 
+    @profile
     def visit(self, term: BaseTerm) -> bool:
         i = id(term)
         if i in self.visited:
@@ -120,6 +127,7 @@ class DumpContext:
             self.visited[i] = (1, term)
             return False
 
+    @profile
     def walk(self, *terms: BaseTerm) -> None:
         for term in terms:
             term.walk(self)
@@ -139,6 +147,7 @@ class DumpContext:
             self.write(b")\n")
             self.aliases[i] = alias
 
+    @profile
     def try_alias(self, term: BaseTerm) -> bool:
         i = id(term)
         if i in self.aliases:
@@ -147,6 +156,7 @@ class DumpContext:
         else:
             return False
 
+    @profile
     def write(self, b: bytes) -> None:
         self.out.extend(b)
 
