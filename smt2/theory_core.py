@@ -41,11 +41,11 @@ class BaseTerm(abc.ABC):
         self.dump(ctx)
         return ctx.out.decode()
 
-    def _rewrite(self) -> BaseTerm:
-        return self
-
     @abc.abstractmethod
     def sort(self) -> bytes: ...
+
+    def rewrite(self) -> BaseTerm:
+        return self
 
     def walk(self, ctx: DumpContext) -> None:
         if ctx.visit(self):
@@ -253,6 +253,7 @@ class Eq[S: BaseTerm](CTerm):
     left: S
     right: S
 
+    @override
     def __post_init__(self) -> None:
         super(Eq, self).__post_init__()
         assert getattr(self.left, "width", None) == getattr(self.right, "width", None)
@@ -264,6 +265,7 @@ class Distinct[S: BaseTerm](CTerm):
     left: S
     right: S
 
+    @override
     def __post_init__(self) -> None:
         super(Distinct, self).__post_init__()
         assert getattr(self.left, "width", None) == getattr(self.right, "width", None)

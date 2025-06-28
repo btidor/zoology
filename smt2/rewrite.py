@@ -30,7 +30,7 @@ class RewriteMeta(abc.ABCMeta):
                 case _:
                     pass
         term = super(RewriteMeta, self).__call__(*args, **kwds)
-        return term._rewrite()
+        return term.rewrite()
 
 
 def constraint_reduction(term: CTerm) -> CTerm:

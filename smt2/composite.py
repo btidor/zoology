@@ -37,7 +37,7 @@ class RewriteMeta(abc.ABCMeta):
                 case _:
                     pass
         term = super(RewriteMeta, self).__call__(*args, **kwds)
-        return term._rewrite()
+        return term.rewrite()
 
 
 @dataclass(frozen=True, repr=False, slots=True)
@@ -82,7 +82,7 @@ class Not(CTerm):
     term: CTerm
 
     @override
-    def _rewrite(self) -> CTerm:
+    def rewrite(self) -> CTerm:
         match self:
             case Not(CValue(a)):
                 return CValue(not a)
@@ -107,7 +107,7 @@ class Implies(CTerm):
     right: CTerm
 
     @override
-    def _rewrite(self) -> CTerm:
+    def rewrite(self) -> CTerm:
         match self:
             case Implies(x, y):
                 return Or(y, Not(x))
@@ -123,7 +123,7 @@ class And(CTerm):
     right: CTerm
 
     @override
-    def _rewrite(self) -> CTerm:
+    def rewrite(self) -> CTerm:
         match self:
             case And(CValue(a), CValue(b)):
                 return CValue(a and b)
@@ -147,7 +147,7 @@ class Or(CTerm):
     right: CTerm
 
     @override
-    def _rewrite(self) -> CTerm:
+    def rewrite(self) -> CTerm:
         match self:
             case Or(CValue(a), CValue(b)):
                 return CValue(a or b)
@@ -171,7 +171,7 @@ class Xor(CTerm):
     right: CTerm
 
     @override
-    def _rewrite(self) -> CTerm:
+    def rewrite(self) -> CTerm:
         match self:
             case Xor(CValue(a), CValue(b)):
                 return CValue(a != b)
@@ -194,12 +194,13 @@ class Eq[S: BaseTerm](CTerm):
     left: S
     right: S
 
+    @override
     def __post_init__(self) -> None:
         super(Eq, self).__post_init__()
         assert getattr(self.left, "width", None) == getattr(self.right, "width", None)
 
     @override
-    def _rewrite(self) -> CTerm:
+    def rewrite(self) -> CTerm:
         match self:
             case Eq(CTerm() as x, CTerm() as y):
                 return Not(Xor(x, y))
@@ -270,12 +271,13 @@ class Distinct[S: BaseTerm](CTerm):
     left: S
     right: S
 
+    @override
     def __post_init__(self) -> None:
         super(Distinct, self).__post_init__()
         assert getattr(self.left, "width", None) == getattr(self.right, "width", None)
 
     @override
-    def _rewrite(self) -> CTerm:
+    def rewrite(self) -> CTerm:
         match self:
             case Distinct(CTerm() as x, CTerm() as y):
                 return Xor(x, y)
@@ -293,7 +295,7 @@ class CIte(CTerm):
     right: CTerm
 
     @override
-    def _rewrite(self) -> CTerm:
+    def rewrite(self) -> CTerm:
         match self:
             case CIte(c, x, y):
                 return Or(And(c, x), And(Not(c), y))
@@ -321,6 +323,7 @@ class BSymbol(BTerm):
     name: bytes
     w: InitVar[int]
 
+    @override
     def __post_init__(self, w: int) -> None:
         assert w > 0, "width must be positive"
         object.__setattr__(self, "width", w)
@@ -344,6 +347,7 @@ class BValue(BTerm):
     value: int
     w: InitVar[int]
 
+    @override
     def __post_init__(self, w: int) -> None:
         assert w > 0, "width must be positive"
         if self.value < 0:
@@ -376,6 +380,7 @@ class BValue(BTerm):
 class UnaryOp(BTerm):
     term: BTerm
 
+    @override
     def __post_init__(self) -> None:
         object.__setattr__(self, "width", self.term.width)
         super(UnaryOp, self).__post_init__()
@@ -386,6 +391,7 @@ class BinaryOp(BTerm):
     left: BTerm
     right: BTerm
 
+    @override
     def __post_init__(self) -> None:
         assert self.left.width == self.right.width
         object.__setattr__(self, "width", self.left.width)
@@ -397,6 +403,7 @@ class CompareOp(CTerm):
     left: BTerm
     right: BTerm
 
+    @override
     def __post_init__(self) -> None:
         assert self.left.width == self.right.width
         super(CompareOp, self).__post_init__()
@@ -413,6 +420,7 @@ class Concat(BTerm):
     op: ClassVar[bytes] = b"concat"
     terms: tuple[BTerm, ...]
 
+    @override
     def __post_init__(self) -> None:
         assert len(self.terms) > 0, "width must be positive"
         w = reduce(lambda p, q: p + q.width, self.terms, 0)
@@ -453,7 +461,7 @@ class Concat(BTerm):
             ctx.write(b")")
 
     @override
-    def _rewrite(self) -> BTerm:
+    def rewrite(self) -> BTerm:
         match self:
             case Concat([single]):
                 return single
@@ -488,6 +496,7 @@ class Extract(BTerm):
     j: int
     term: BTerm
 
+    @override
     def __post_init__(self) -> None:
         assert self.term.width > self.i >= self.j >= 0
         w = self.i - self.j + 1
@@ -495,7 +504,7 @@ class Extract(BTerm):
         super(Extract, self).__post_init__()
 
     @override
-    def _rewrite(self) -> BTerm:
+    def rewrite(self) -> BTerm:
         match self:
             case Extract(i, j, BValue(a)):
                 return BValue(a >> j & (1 << i - j + 1) - 1, i - j + 1)
@@ -537,7 +546,7 @@ class BNot(UnaryOp):
         object.__setattr__(self, "max", self.term.min ^ (1 << self.width) - 1)
 
     @override
-    def _rewrite(self) -> BTerm:
+    def rewrite(self) -> BTerm:
         width = self.width
         mask = (1 << width) - 1
         match self:
@@ -564,7 +573,7 @@ class BAnd(BinaryOp):
         object.__setattr__(self, "max", min(self.left.max, self.right.max))
 
     @override
-    def _rewrite(self) -> BTerm:
+    def rewrite(self) -> BTerm:
         width = self.width
         mask = (1 << width) - 1
         match self:
@@ -607,7 +616,7 @@ class BOr(BinaryOp):
         object.__setattr__(self, "max", (1 << self.width) - 1)
 
     @override
-    def _rewrite(self) -> BTerm:
+    def rewrite(self) -> BTerm:
         width = self.width
         mask = (1 << width) - 1
         match self:
@@ -644,7 +653,7 @@ class Neg(UnaryOp):
     op: ClassVar[bytes] = b"bvneg"
 
     @override
-    def _rewrite(self) -> BTerm:
+    def rewrite(self) -> BTerm:
         match self:
             case Neg(x):
                 return Add(BValue(1, self.width), BNot(x))
@@ -668,7 +677,7 @@ class Add(BinaryOp):
             object.__setattr__(self, "max", self.right.max + self.left.sgnd)
 
     @override
-    def _rewrite(self) -> BTerm:
+    def rewrite(self) -> BTerm:
         width = self.width
         mask = (1 << width) - 1
         modulus = 1 << width
@@ -704,7 +713,7 @@ class Mul(BinaryOp):
             object.__setattr__(self, "max", self.left.value * self.right.max)
 
     @override
-    def _rewrite(self) -> BTerm:
+    def rewrite(self) -> BTerm:
         width = self.width
         modulus = 1 << width
         match self:
@@ -729,7 +738,7 @@ class Udiv(BinaryOp):
             object.__setattr__(self, "max", self.left.max // self.right.value)
 
     @override
-    def _rewrite(self) -> BTerm:
+    def rewrite(self) -> BTerm:
         width = self.width
         mask = (1 << width) - 1
         match self:
@@ -754,7 +763,7 @@ class Urem(BinaryOp):
             object.__setattr__(self, "max", self.right.max - 1)
 
     @override
-    def _rewrite(self) -> BTerm:
+    def rewrite(self) -> BTerm:
         width = self.width
         modulus = 1 << width
         match self:
@@ -783,7 +792,7 @@ class Shl(BinaryOp):
             )
 
     @override
-    def _rewrite(self) -> BTerm:
+    def rewrite(self) -> BTerm:
         width = self.width
         modulus = 1 << width
         match self:
@@ -821,7 +830,7 @@ class Lshr(BinaryOp):
             object.__setattr__(self, "max", self.left.max >> self.right.value)
 
     @override
-    def _rewrite(self) -> BTerm:
+    def rewrite(self) -> BTerm:
         width = self.width
         modulus = 1 << width
         match self:
@@ -853,7 +862,7 @@ class Ult(CompareOp):
     op: ClassVar[bytes] = b"bvult"
 
     @override
-    def _rewrite(self) -> CTerm:
+    def rewrite(self) -> CTerm:
         match self:
             case Ult(BValue(a), BValue(b)):
                 return CValue(a < b)
@@ -888,7 +897,7 @@ class Nand(BinaryOp):
     op: ClassVar[bytes] = b"bvnand"
 
     @override
-    def _rewrite(self) -> BTerm:
+    def rewrite(self) -> BTerm:
         match self:
             case Nand(x, y):
                 return BNot(BAnd(x, y))
@@ -901,7 +910,7 @@ class Nor(BinaryOp):
     op: ClassVar[bytes] = b"bvnor"
 
     @override
-    def _rewrite(self) -> BTerm:
+    def rewrite(self) -> BTerm:
         match self:
             case Nor(x, y):
                 return BNot(BOr(x, y))
@@ -915,7 +924,7 @@ class BXor(BinaryOp):
     commutative: ClassVar[bool] = True
 
     @override
-    def _rewrite(self) -> BTerm:
+    def rewrite(self) -> BTerm:
         width = self.width
         mask = (1 << width) - 1
         match self:
@@ -944,7 +953,7 @@ class Xnor(BinaryOp):
     op: ClassVar[bytes] = b"bvxnor"
 
     @override
-    def _rewrite(self) -> BTerm:
+    def rewrite(self) -> BTerm:
         match self:
             case Xnor(x, y):
                 return BNot(BXor(x, y))
@@ -958,13 +967,14 @@ class Comp(BTerm):
     left: BTerm
     right: BTerm
 
+    @override
     def __post_init__(self) -> None:
         assert self.left.width == self.right.width
         object.__setattr__(self, "width", 1)
         super(Comp, self).__post_init__()
 
     @override
-    def _rewrite(self) -> BTerm:
+    def rewrite(self) -> BTerm:
         match self:
             case Comp(x, y):
                 return Ite(Eq(x, y), BValue(1, 1), BValue(0, 1))
@@ -977,7 +987,7 @@ class Sub(BinaryOp):
     op: ClassVar[bytes] = b"bvsub"
 
     @override
-    def _rewrite(self) -> BTerm:
+    def rewrite(self) -> BTerm:
         match self:
             case Sub(x, y):
                 return Add(Add(x, BNot(y)), BValue(1, self.width))
@@ -1001,7 +1011,7 @@ class Sdiv(BinaryOp):
             object.__setattr__(self, "max", self.left.max // self.right.value)
 
     @override
-    def _rewrite(self) -> BTerm:
+    def rewrite(self) -> BTerm:
         width = self.width
         mask = (1 << width) - 1
         match self:
@@ -1032,7 +1042,7 @@ class Srem(BinaryOp):
             object.__setattr__(self, "max", self.right.max - 1)
 
     @override
-    def _rewrite(self) -> BTerm:
+    def rewrite(self) -> BTerm:
         width = self.width
         match self:
             case Srem(BValue() as x, BValue() as y) if x.sgnd >= 0 and y.sgnd > 0:
@@ -1062,7 +1072,7 @@ class Smod(BinaryOp):
             object.__setattr__(self, "max", self.right.max - 1)
 
     @override
-    def _rewrite(self) -> BTerm:
+    def rewrite(self) -> BTerm:
         width = self.width
         match self:
             case Smod(BValue() as x, BValue(b) as y) if b != 0:
@@ -1086,7 +1096,7 @@ class Ashr(BinaryOp):
             object.__setattr__(self, "max", self.left.max >> self.right.value)
 
     @override
-    def _rewrite(self) -> BTerm:
+    def rewrite(self) -> BTerm:
         width = self.width
         mask = (1 << width) - 1
         match self:
@@ -1104,6 +1114,7 @@ class Ashr(BinaryOp):
 class Repeat(SingleParamOp):
     op: ClassVar[bytes] = b"repeat"
 
+    @override
     def __post_init__(self) -> None:
         assert self.i > 0
         w = self.term.width * self.i
@@ -1111,7 +1122,7 @@ class Repeat(SingleParamOp):
         super(Repeat, self).__post_init__()
 
     @override
-    def _rewrite(self) -> BTerm:
+    def rewrite(self) -> BTerm:
         match self:
             case Repeat(1, x):
                 return x
@@ -1125,6 +1136,7 @@ class Repeat(SingleParamOp):
 class ZeroExtend(SingleParamOp):
     op: ClassVar[bytes] = b"zero_extend"
 
+    @override
     def __post_init__(self) -> None:
         assert self.i >= 0
         w = self.term.width + self.i
@@ -1132,7 +1144,7 @@ class ZeroExtend(SingleParamOp):
         super(ZeroExtend, self).__post_init__()
 
     @override
-    def _rewrite(self) -> BTerm:
+    def rewrite(self) -> BTerm:
         match self:
             case ZeroExtend(0, x):
                 return x
@@ -1146,6 +1158,7 @@ class ZeroExtend(SingleParamOp):
 class SignExtend(SingleParamOp):
     op: ClassVar[bytes] = b"sign_extend"
 
+    @override
     def __post_init__(self) -> None:
         assert self.i >= 0
         w = self.term.width + self.i
@@ -1156,7 +1169,7 @@ class SignExtend(SingleParamOp):
             object.__setattr__(self, "max", self.term.max)
 
     @override
-    def _rewrite(self) -> BTerm:
+    def rewrite(self) -> BTerm:
         width = self.width
         match self:
             case SignExtend(_i, BValue() as x):
@@ -1173,13 +1186,14 @@ class SignExtend(SingleParamOp):
 class RotateLeft(SingleParamOp):
     op: ClassVar[bytes] = b"rotate_left"
 
+    @override
     def __post_init__(self) -> None:
         assert self.i >= 0
         object.__setattr__(self, "width", self.term.width)
         super(RotateLeft, self).__post_init__()
 
     @override
-    def _rewrite(self) -> BTerm:
+    def rewrite(self) -> BTerm:
         match self:
             case RotateLeft(i, x) if i % self.width == 0:
                 return x
@@ -1199,13 +1213,14 @@ class RotateLeft(SingleParamOp):
 class RotateRight(SingleParamOp):
     op: ClassVar[bytes] = b"rotate_right"
 
+    @override
     def __post_init__(self) -> None:
         assert self.i >= 0
         object.__setattr__(self, "width", self.term.width)
         super(RotateRight, self).__post_init__()
 
     @override
-    def _rewrite(self) -> BTerm:
+    def rewrite(self) -> BTerm:
         match self:
             case RotateRight(i, x) if i % self.width == 0:
                 return x
@@ -1221,7 +1236,7 @@ class Ule(CompareOp):
     op: ClassVar[bytes] = b"bvule"
 
     @override
-    def _rewrite(self) -> CTerm:
+    def rewrite(self) -> CTerm:
         match self:
             case Ule(BValue(a), BValue(b)):
                 return CValue(a <= b)
@@ -1254,7 +1269,7 @@ class Ugt(CompareOp):
     op: ClassVar[bytes] = b"bvugt"
 
     @override
-    def _rewrite(self) -> CTerm:
+    def rewrite(self) -> CTerm:
         match self:
             case Ugt(x, y):
                 return Ult(y, x)
@@ -1267,7 +1282,7 @@ class Uge(CompareOp):
     op: ClassVar[bytes] = b"bvuge"
 
     @override
-    def _rewrite(self) -> CTerm:
+    def rewrite(self) -> CTerm:
         match self:
             case Uge(x, y):
                 return Ule(y, x)
@@ -1280,7 +1295,7 @@ class Slt(CompareOp):
     op: ClassVar[bytes] = b"bvslt"
 
     @override
-    def _rewrite(self) -> CTerm:
+    def rewrite(self) -> CTerm:
         match self:
             case Slt(BValue() as x, BValue() as y):
                 return CValue(x.sgnd < y.sgnd)
@@ -1305,7 +1320,7 @@ class Sle(CompareOp):
     op: ClassVar[bytes] = b"bvsle"
 
     @override
-    def _rewrite(self) -> CTerm:
+    def rewrite(self) -> CTerm:
         match self:
             case Sle(BValue() as x, BValue() as y):
                 return CValue(x.sgnd <= y.sgnd)
@@ -1330,7 +1345,7 @@ class Sgt(CompareOp):
     op: ClassVar[bytes] = b"bvsgt"
 
     @override
-    def _rewrite(self) -> CTerm:
+    def rewrite(self) -> CTerm:
         match self:
             case Sgt(x, y):
                 return Slt(y, x)
@@ -1343,7 +1358,7 @@ class Sge(CompareOp):
     op: ClassVar[bytes] = b"bvsge"
 
     @override
-    def _rewrite(self) -> CTerm:
+    def rewrite(self) -> CTerm:
         match self:
             case Sge(x, y):
                 return Sle(y, x)
@@ -1358,6 +1373,7 @@ class Ite(BTerm):
     left: BTerm
     right: BTerm
 
+    @override
     def __post_init__(self) -> None:
         assert self.left.width == self.right.width
         object.__setattr__(self, "width", self.left.width)
@@ -1366,7 +1382,7 @@ class Ite(BTerm):
         object.__setattr__(self, "max", max(self.left.max, self.right.max))
 
     @override
-    def _rewrite(self) -> BTerm:
+    def rewrite(self) -> BTerm:
         match self:
             case Ite(CValue(True), x, _y):
                 return x
@@ -1453,7 +1469,7 @@ class Select(BTerm):
         super(Select, self).__post_init__()
 
     @override
-    def _rewrite(self) -> BTerm:
+    def rewrite(self) -> BTerm:
         match self:
             case Select(AValue(d), _key):
                 return d

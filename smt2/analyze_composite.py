@@ -106,7 +106,7 @@ type MinMax = tuple[int, int]
                 )
 
             if item.__name__ in self.rwcases:
-                # construct each op's _rewrite method
+                # construct each op's rewrite method
                 self._rewrite(cls, item, self.rwcases[item.__name__])
 
             self._source(cls)
@@ -263,7 +263,7 @@ type MinMax = tuple[int, int]
                     raise SyntaxError("expected assignment")
 
         fn = ast.FunctionDef(
-            "_rewrite",
+            "rewrite",
             ast.arguments([], [ast.arg("self")]),
             [*prefix, stmt],
             [ast.Name("override")],
