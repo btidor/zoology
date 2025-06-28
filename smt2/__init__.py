@@ -142,7 +142,7 @@ class BitVector[N: int](
     Symbolic, metaclass=abc.ABCMeta if TYPE_CHECKING else BitVectorMeta
 ):
     __slots__ = ()
-    width: Final[N]  # pyright: ignore[reportGeneralTypeIssues]
+    width: ClassVar[int]
     _term: BTerm
 
     def __init__(self, value: int | str, /) -> None:
