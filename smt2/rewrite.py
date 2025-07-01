@@ -185,7 +185,7 @@ def constraint_logic_bitvector(term: CTerm) -> CTerm:
             return Eq(x, y)
         case Eq(BValue(a), Add(BValue(b), x)):
             """beq.vadd: A = X + B <=> A - B = X"""
-            return Eq(Add(BValue(a, x.width), Neg(BValue(b, x.width))), x)
+            return Eq(BValue((a - b) % (1 << x.width), x.width), x)
         case Eq(BTerm() as z, Ite(c, x, y)) if z == x:
             """beq.xite"""
             return Or(c, Eq(z, y))
