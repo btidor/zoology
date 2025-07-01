@@ -33,9 +33,7 @@ class Compositor:
     def __init__(self) -> None:
         """Create a new Compositor."""
         self.out = bytearray()
-        self.mmcases = {
-            case.id: case for case in MinMaxCase.from_function(propagate_minmax)
-        }
+        self.mmcases = list(MinMaxCase.from_function(propagate_minmax))
         self.rwcases = defaultdict[str, list[RewriteCase]](lambda: list())
         for item in vars(rewrite).values():
             if not isfunction(item) or getmodule(item) != rewrite:  # pyright: ignore[reportUnnecessaryComparison]
@@ -97,14 +95,7 @@ type MinMax = tuple[int, int]
                 case _:
                     raise SyntaxError("unexpected item in theory")
 
-            if item == BTerm:
-                # BTerm's __post_init__ should set min, max as a fallback
-                self._post_init_append(cls, *self._minmax(cls, item, self.mmcases["_"]))
-            elif item.__name__ in self.mmcases:
-                # inject each op's minmax logic into __post_init__
-                self._post_init_append(
-                    cls, *self._minmax(cls, item, self.mmcases[item.__name__])
-                )
+            self._minmax(cls, item)
 
             if item.__name__ in self.rwcases:
                 # construct each op's rewrite method
@@ -144,9 +135,34 @@ type MinMax = tuple[int, int]
         )
         insort(cls.body, fn, key=lambda s: isinstance(s, ast.FunctionDef))
 
-    def _minmax(
+    def _minmax(self, cls: ast.ClassDef, item: type[BaseTerm]) -> None:
+        # BTerm's __post_init__ should set min, max as a fallback.
+        if item == BTerm:
+            case = self.mmcases[-1]
+            assert case.id == "_"
+
+            conds, stmt = self._minmax_raw(cls, item, case)
+            assert not conds
+            return self._post_init_append(cls, *stmt)
+
+        # Inject each op's minmax logic into __post_init__.
+        result = []
+        for case in reversed(self.mmcases):
+            if case.id != item.__name__:
+                continue
+            conds, stmt = self._minmax_raw(cls, item, case)
+            if conds:
+                result: list[ast.stmt] = [
+                    ast.If(ast.BoolOp(ast.And(), conds), stmt, result)
+                ]
+            else:
+                result = stmt
+        if result:
+            self._post_init_append(cls, *result)
+
+    def _minmax_raw(
         self, cls: ast.ClassDef, item: type[BaseTerm], case: MinMaxCase
-    ) -> list[ast.stmt]:
+    ) -> tuple[list[ast.expr], list[ast.stmt]]:
         # Parse variable assignments from the prefix.
         replacer = ReplaceVariables({"term": ast.Name("self")})
         for stmt in case.prefix:
@@ -229,15 +245,12 @@ type MinMax = tuple[int, int]
                 pass
             case _:
                 raise SyntaxError("malformed minmax case body")
+        conds = [replacer.visit(c) for c in conds]
         stmt = [
             self._setattr("min", replacer.visit(min)),
             self._setattr("max", replacer.visit(max)),
         ]
-        if conds:
-            conds = [replacer.visit(c) for c in conds]
-            return [ast.If(ast.BoolOp(ast.And(), conds), stmt)]
-        else:
-            return stmt
+        return conds, stmt
 
     def _rewrite(
         self, cls: ast.ClassDef, item: type[BaseTerm], cases: list[RewriteCase]

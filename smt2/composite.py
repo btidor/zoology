@@ -711,7 +711,10 @@ class Add(BinaryOp):
     @profile
     def __post_init__(self) -> None:
         super(Add, self).__post_init__()
-        if (
+        if self.left.max < 1 << self.width - 1 and self.right.max < 1 << self.width - 1:
+            object.__setattr__(self, "min", self.left.min + self.right.min)
+            object.__setattr__(self, "max", self.left.max + self.right.max)
+        elif (
             isinstance(self.left, BValue)
             and self.left.sgnd < 0
             and (self.right.min + self.left.sgnd > 0)
@@ -834,7 +837,22 @@ class Shl(BinaryOp):
     @profile
     def __post_init__(self) -> None:
         super(Shl, self).__post_init__()
-        if isinstance(self.right, BValue) and self.right.value < self.width:
+        if (
+            isinstance(self.right, BValue)
+            and self.right.value < self.width
+            and (self.left.max << self.right.value <= (1 << self.width) - 1)
+        ):
+            object.__setattr__(
+                self,
+                "min",
+                min(self.left.min << self.right.value, (1 << self.width) - 1),
+            )
+            object.__setattr__(
+                self,
+                "max",
+                min(self.left.max << self.right.value, (1 << self.width) - 1),
+            )
+        elif isinstance(self.right, BValue) and self.right.value < self.width:
             object.__setattr__(self, "min", 0)
             object.__setattr__(
                 self,
