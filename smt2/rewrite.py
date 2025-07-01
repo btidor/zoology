@@ -178,6 +178,11 @@ def constraint_logic_bitvector(term: CTerm) -> CTerm:
         case Eq(BValue(a), BXor(BValue(b), x)):
             """bveq.vxor: A = X ^ B <=> A ^ B = X"""
             return Eq(BValue(a ^ b, x.width), x)
+        case Eq(BValue(a), Add(x, BNot(y))) if a == (1 << x.width) - 1:
+            """beq.arith: -1 = A + ~B <=> A = B"""
+            # This rewrite was discovered in test_universal.py::test_sudoku and
+            # reduces the time for that test case by 48%.
+            return Eq(x, y)
         case Eq(BValue(a), Add(BValue(b), x)):
             """beq.vadd: A = X + B <=> A - B = X"""
             return Eq(Add(BValue(a, x.width), Neg(BValue(b, x.width))), x)

@@ -233,6 +233,8 @@ class Eq[S: BaseTerm](CTerm):
                 return CValue(False)
             case Eq(BValue(a), BXor(BValue(b), x)):
                 return Eq(BValue(a ^ b, x.width), x)
+            case Eq(BValue(a), Add(x, BNot(y))) if a == (1 << x.width) - 1:
+                return Eq(x, y)
             case Eq(BValue(a), Add(BValue(b), x)):
                 return Eq(Add(BValue(a, x.width), Neg(BValue(b, x.width))), x)
             case Eq(BTerm() as z, Ite(c, x, y)) if z == x:

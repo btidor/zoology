@@ -424,9 +424,10 @@ def JUMPI(
     c = b == Uint256(0)
     match c.reveal():
         case None:  # unknown, must prepare both branches :(
-            # Search strategy: no preference between branches except to deprioritize
-            # infinite loops. Big hack: in our sample, these loops consist of a single
-            # JUMPI instruction (or a JUMP and a JUMPI), so they're easy to identify...
+            # Search strategy: no preference between branches except to
+            # deprioritize infinite loops. Big hack: in our sample, these loops
+            # consist of a single JUMPI instruction (or a JUMP and a JUMPI), so
+            # they're easy to identify...
             if s.last_jumpi == ins.offset:
                 s.cost += 1
             s.last_jumpi = ins.offset
