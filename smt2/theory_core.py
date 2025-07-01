@@ -21,7 +21,7 @@ from line_profiler import profile
 class BaseTerm(abc.ABC):
     op: ClassVar[bytes]
     commutative: ClassVar[bool] = False
-    descendants: int = field(init=False, compare=False)
+    count: int = field(init=False, compare=False)
 
     # Instances of Symbolic are expected to be immutable:
     def __copy__(self) -> Self:
@@ -31,12 +31,12 @@ class BaseTerm(abc.ABC):
         return self
 
     def __post_init__(self) -> None:
-        descendants = 0
+        count = 0
         for name in self.__match_args__:
             arg = getattr(self, name, None)
             if isinstance(arg, BaseTerm):
-                descendants += arg.descendants + 1
-        object.__setattr__(self, "descendants", descendants)
+                count += arg.count + 1
+        object.__setattr__(self, "count", count)
 
     def __repr__(self) -> str:
         ctx = DumpContext()
@@ -136,9 +136,9 @@ class DumpContext:
 
         queue = list[tuple[int, int, BaseTerm]]()
         for i, (ct, term) in self.visited.items():
-            if term.descendants < 3 or ct * term.descendants < 64:
+            if term.count < 3 or ct * term.count < 64:
                 continue
-            queue.append((term.descendants, i, term))
+            queue.append((term.count, i, term))
         queue.sort()
         for _, i, term in queue:
             alias = b"_" + hex(i)[2:].encode()

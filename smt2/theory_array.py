@@ -106,7 +106,7 @@ class Store(ATerm):
         object.__setattr__(k, "base", self.base)
         object.__setattr__(k, "lower", copy.copy(self.lower))
         object.__setattr__(k, "upper", copy.copy(self.upper))
-        object.__setattr__(k, "descendants", self.descendants)
+        object.__setattr__(k, "count", self.count)
         return k
 
     def width(self) -> tuple[int, int]:
@@ -114,17 +114,17 @@ class Store(ATerm):
 
     @profile
     def set(self, key: BTerm, value: BTerm) -> None:
-        descendants = self.descendants
+        count = self.count
         if isinstance(key, BValue) and not self.upper:
             k = key.value
             if k in self.lower:
-                descendants -= self.lower[k].descendants + 1
+                count -= self.lower[k].count + 1
             self.lower[k] = value
-            descendants += value.descendants + 1
+            count += value.count + 1
         else:
             self.upper.append((key, value))
-            descendants += key.descendants + value.descendants + 2
-        object.__setattr__(self, "descendants", descendants)
+            count += key.count + value.count + 2
+        object.__setattr__(self, "count", count)
 
     @override
     def walk(self, ctx: DumpContext) -> None:

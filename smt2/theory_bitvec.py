@@ -136,8 +136,8 @@ class Concat(BTerm):
         w = reduce(lambda p, q: p + q.width, self.terms, 0)
         object.__setattr__(self, "width", w)
         super(Concat, self).__post_init__()
-        descendants = reduce(int.__add__, (t.descendants + 1 for t in self.terms))
-        object.__setattr__(self, "descendants", descendants)
+        count = reduce(int.__add__, (t.count + 1 for t in self.terms))
+        object.__setattr__(self, "count", count)
 
     @override
     def walk(self, ctx: DumpContext) -> None:
