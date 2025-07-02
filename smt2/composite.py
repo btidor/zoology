@@ -304,12 +304,6 @@ class BTerm(BaseTerm, metaclass=RewriteMeta):
     def sort(self) -> bytes:
         return b"(_ BitVec %d)" % self.width
 
-    @profile
-    def __post_init__(self) -> None:
-        super(BTerm, self).__post_init__()
-        self.min = 0
-        self.max = (1 << self.width) - 1
-
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class BSymbol(BTerm):
@@ -322,6 +316,8 @@ class BSymbol(BTerm):
         assert w > 0, "width must be positive"
         self.width = w
         super(BSymbol, self).__post_init__()
+        self.min = 0
+        self.max = (1 << self.width) - 1
 
     @profile
     @override
@@ -434,6 +430,9 @@ class Concat(BTerm):
         if len(self.terms) == 2 and isinstance(self.terms[0], BValue):
             self.min = self.terms[1].min | self.terms[0].value << self.terms[1].width
             self.max = self.terms[1].max | self.terms[0].value << self.terms[1].width
+        else:
+            self.min = 0
+            self.max = (1 << self.width) - 1
 
     @profile
     @override
@@ -500,6 +499,8 @@ class Extract(BTerm):
         assert self.term.width > self.i >= self.j >= 0
         self.width = self.i - self.j + 1
         super(Extract, self).__post_init__()
+        self.min = 0
+        self.max = (1 << self.width) - 1
 
     @profile
     @override
@@ -658,6 +659,12 @@ class Neg(UnaryOp):
     op: ClassVar[bytes] = b"bvneg"
 
     @profile
+    def __post_init__(self) -> None:
+        super(Neg, self).__post_init__()
+        self.min = 0
+        self.max = (1 << self.width) - 1
+
+    @profile
     @override
     def rewrite(self) -> BTerm:
         match self:
@@ -685,6 +692,9 @@ class Add(BinaryOp):
         ):
             self.min = self.right.min + self.left.sgnd
             self.max = self.right.max + self.left.sgnd
+        else:
+            self.min = 0
+            self.max = (1 << self.width) - 1
 
     @profile
     @override
@@ -723,6 +733,9 @@ class Mul(BinaryOp):
         ):
             self.min = self.left.value * self.right.min
             self.max = self.left.value * self.right.max
+        else:
+            self.min = 0
+            self.max = (1 << self.width) - 1
 
     @profile
     @override
@@ -750,6 +763,9 @@ class Udiv(BinaryOp):
         if isinstance(self.right, BValue) and self.right.value != 0:
             self.min = self.left.min // self.right.value
             self.max = self.left.max // self.right.value
+        else:
+            self.min = 0
+            self.max = (1 << self.width) - 1
 
     @profile
     @override
@@ -777,6 +793,9 @@ class Urem(BinaryOp):
         if self.right.min > 0:
             self.min = 0
             self.max = self.right.max - 1
+        else:
+            self.min = 0
+            self.max = (1 << self.width) - 1
 
     @profile
     @override
@@ -811,6 +830,9 @@ class Shl(BinaryOp):
         elif isinstance(self.right, BValue) and self.right.value < self.width:
             self.min = 0
             self.max = min(self.left.max << self.right.value, (1 << self.width) - 1)
+        else:
+            self.min = 0
+            self.max = (1 << self.width) - 1
 
     @profile
     @override
@@ -851,6 +873,9 @@ class Lshr(BinaryOp):
         if isinstance(self.right, BValue):
             self.min = self.left.min >> self.right.value
             self.max = self.left.max >> self.right.value
+        else:
+            self.min = 0
+            self.max = (1 << self.width) - 1
 
     @profile
     @override
@@ -930,6 +955,12 @@ class Nand(BinaryOp):
     op: ClassVar[bytes] = b"bvnand"
 
     @profile
+    def __post_init__(self) -> None:
+        super(Nand, self).__post_init__()
+        self.min = 0
+        self.max = (1 << self.width) - 1
+
+    @profile
     @override
     def rewrite(self) -> BTerm:
         match self:
@@ -942,6 +973,12 @@ class Nand(BinaryOp):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Nor(BinaryOp):
     op: ClassVar[bytes] = b"bvnor"
+
+    @profile
+    def __post_init__(self) -> None:
+        super(Nor, self).__post_init__()
+        self.min = 0
+        self.max = (1 << self.width) - 1
 
     @profile
     @override
@@ -957,6 +994,12 @@ class Nor(BinaryOp):
 class BXor(BinaryOp):
     op: ClassVar[bytes] = b"bvxor"
     commutative: ClassVar[bool] = True
+
+    @profile
+    def __post_init__(self) -> None:
+        super(BXor, self).__post_init__()
+        self.min = 0
+        self.max = (1 << self.width) - 1
 
     @profile
     @override
@@ -989,6 +1032,12 @@ class Xnor(BinaryOp):
     op: ClassVar[bytes] = b"bvxnor"
 
     @profile
+    def __post_init__(self) -> None:
+        super(Xnor, self).__post_init__()
+        self.min = 0
+        self.max = (1 << self.width) - 1
+
+    @profile
     @override
     def rewrite(self) -> BTerm:
         match self:
@@ -1010,6 +1059,8 @@ class Comp(BTerm):
         assert self.left.width == self.right.width
         self.width = 1
         super(Comp, self).__post_init__()
+        self.min = 0
+        self.max = (1 << self.width) - 1
 
     @profile
     @override
@@ -1024,6 +1075,12 @@ class Comp(BTerm):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Sub(BinaryOp):
     op: ClassVar[bytes] = b"bvsub"
+
+    @profile
+    def __post_init__(self) -> None:
+        super(Sub, self).__post_init__()
+        self.min = 0
+        self.max = (1 << self.width) - 1
 
     @profile
     @override
@@ -1050,6 +1107,9 @@ class Sdiv(BinaryOp):
         ):
             self.min = self.left.min // self.right.value
             self.max = self.left.max // self.right.value
+        else:
+            self.min = 0
+            self.max = (1 << self.width) - 1
 
     @profile
     @override
@@ -1083,6 +1143,9 @@ class Srem(BinaryOp):
         ):
             self.min = 0
             self.max = self.right.max - 1
+        else:
+            self.min = 0
+            self.max = (1 << self.width) - 1
 
     @profile
     @override
@@ -1115,6 +1178,9 @@ class Smod(BinaryOp):
         if self.right.min > 0 and self.right.max < 1 << self.width - 1:
             self.min = 0
             self.max = self.right.max - 1
+        else:
+            self.min = 0
+            self.max = (1 << self.width) - 1
 
     @profile
     @override
@@ -1141,6 +1207,9 @@ class Ashr(BinaryOp):
         if isinstance(self.right, BValue) and self.left.max < 1 << self.width - 1:
             self.min = self.left.min >> self.right.value
             self.max = self.left.max >> self.right.value
+        else:
+            self.min = 0
+            self.max = (1 << self.width) - 1
 
     @profile
     @override
@@ -1168,6 +1237,8 @@ class Repeat(SingleParamOp):
         assert self.i > 0
         self.width = self.term.width * self.i
         super(Repeat, self).__post_init__()
+        self.min = 0
+        self.max = (1 << self.width) - 1
 
     @profile
     @override
@@ -1191,6 +1262,8 @@ class ZeroExtend(SingleParamOp):
         assert self.i >= 0
         self.width = self.term.width + self.i
         super(ZeroExtend, self).__post_init__()
+        self.min = 0
+        self.max = (1 << self.width) - 1
 
     @profile
     @override
@@ -1217,6 +1290,9 @@ class SignExtend(SingleParamOp):
         if self.term.max < 1 << self.term.width - 1:
             self.min = self.term.min
             self.max = self.term.max
+        else:
+            self.min = 0
+            self.max = (1 << self.width) - 1
 
     @profile
     @override
@@ -1243,6 +1319,8 @@ class RotateLeft(SingleParamOp):
         assert self.i >= 0
         self.width = self.term.width
         super(RotateLeft, self).__post_init__()
+        self.min = 0
+        self.max = (1 << self.width) - 1
 
     @profile
     @override
@@ -1272,6 +1350,8 @@ class RotateRight(SingleParamOp):
         assert self.i >= 0
         self.width = self.term.width
         super(RotateRight, self).__post_init__()
+        self.min = 0
+        self.max = (1 << self.width) - 1
 
     @profile
     @override
@@ -1537,6 +1617,8 @@ class Select(BTerm):
         if isinstance(self.array, Store):
             self.array = copy.deepcopy(self.array)
         super(Select, self).__post_init__()
+        self.min = 0
+        self.max = (1 << self.width) - 1
 
     @profile
     @override

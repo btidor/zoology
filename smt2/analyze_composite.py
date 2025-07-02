@@ -96,7 +96,9 @@ type MinMax = tuple[int, int]
                 case _:
                     raise SyntaxError("unexpected item in theory")
 
-            self._minmax(cls, item)
+            if issubclass(item, BTerm) and self._is_named_op(item):
+                # construct each op's __post_init__ method
+                self._minmax(cls, item)
 
             if item.__name__ in self.rwcases:
                 # construct each op's rewrite method
@@ -128,18 +130,31 @@ type MinMax = tuple[int, int]
         )
         insort(cls.body, fn, key=lambda s: isinstance(s, ast.FunctionDef))
 
+    @staticmethod
+    def _is_named_op(item: type[BaseTerm]) -> bool:
+        if item.__abstractmethods__:
+            return False
+        elif item.__name__.endswith("Term"):
+            return False
+        elif item.__name__.endswith("Symbol"):
+            return True
+        elif item.__name__.endswith("Value"):
+            return True
+        elif hasattr(item, "op"):
+            return bool(item.op)
+        else:
+            return False
+
     def _minmax(self, cls: ast.ClassDef, item: type[BaseTerm]) -> None:
-        # BTerm's __post_init__ should set min, max as a fallback.
-        if item == BTerm:
-            case = self.mmcases[-1]
-            assert case.id == "_"
+        # Get fallback definition of min, max.
+        case = self.mmcases[-1]
+        assert case.id == "_"
 
-            conds, stmt = self._minmax_raw(cls, item, case)
-            assert not conds
-            return self._post_init_append(cls, *stmt)
+        conds, stmt = self._minmax_raw(cls, item, case)
+        assert not conds
+        result = stmt
 
-        # Inject each op's minmax logic into __post_init__.
-        result = []
+        # Get op-specific minmax logic.
         for case in reversed(self.mmcases):
             if case.id != item.__name__:
                 continue
@@ -150,16 +165,17 @@ type MinMax = tuple[int, int]
                 ]
             else:
                 result = stmt
-        if result:
-            self._post_init_append(cls, *result)
+
+        # Construct __post_init__
+        self._post_init_append(cls, *result)
 
     def _minmax_raw(
         self, cls: ast.ClassDef, item: type[BaseTerm], case: MinMaxCase
     ) -> tuple[list[ast.expr], list[ast.stmt]]:
         # Parse variable assignments from the prefix.
         replacer = ReplaceVariables({"term": ast.Name("self")})
-        for stmt in case.prefix:
-            match stmt:
+        for pfx in case.prefix:
+            match pfx:
                 case ast.Assign([ast.Name(name)], expr):
                     replacer.vars[name] = replacer.visit(expr)
                 case _:
