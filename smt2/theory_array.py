@@ -91,6 +91,7 @@ class Select(BTerm):
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Store(ATerm):
+    op: ClassVar[bytes] = b"store"
     base: ASymbol | AValue
     lower: dict[int, BTerm] = field(default_factory=dict[int, BTerm])
     upper: list[tuple[BTerm, BTerm]] = field(default_factory=list[tuple[BTerm, BTerm]])

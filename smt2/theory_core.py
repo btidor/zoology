@@ -31,11 +31,7 @@ class BaseTerm(abc.ABC):
         return self
 
     def __post_init__(self) -> None:
-        self.count = 0
-        for name in self.__match_args__:
-            arg = getattr(self, name, None)
-            if isinstance(arg, BaseTerm):
-                self.count += arg.count + 1
+        pass
 
     def __repr__(self) -> str:
         ctx = DumpContext()

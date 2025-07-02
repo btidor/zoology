@@ -68,6 +68,11 @@ class CSymbol(CTerm):
     def substitute(self, model: dict[bytes, BaseTerm]) -> BaseTerm:
         return model.get(self.name, self)
 
+    @profile
+    def __post_init__(self) -> None:
+        super(CSymbol, self).__post_init__()
+        self.count = 0
+
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class CValue(CTerm):
@@ -83,11 +88,21 @@ class CValue(CTerm):
     def substitute(self, model: dict[bytes, BaseTerm]) -> BaseTerm:
         return self
 
+    @profile
+    def __post_init__(self) -> None:
+        super(CValue, self).__post_init__()
+        self.count = 0
+
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Not(CTerm):
     op: ClassVar[bytes] = b"not"
     term: CTerm
+
+    @profile
+    def __post_init__(self) -> None:
+        super(Not, self).__post_init__()
+        self.count = self.term.count + 1
 
     @profile
     @override
@@ -116,6 +131,11 @@ class Implies(CTerm):
     right: CTerm
 
     @profile
+    def __post_init__(self) -> None:
+        super(Implies, self).__post_init__()
+        self.count = self.left.count + self.right.count + 2
+
+    @profile
     @override
     def rewrite(self) -> CTerm:
         match self:
@@ -131,6 +151,11 @@ class And(CTerm):
     commutative: ClassVar[bool] = True
     left: CTerm
     right: CTerm
+
+    @profile
+    def __post_init__(self) -> None:
+        super(And, self).__post_init__()
+        self.count = self.left.count + self.right.count + 2
 
     @profile
     @override
@@ -158,6 +183,11 @@ class Or(CTerm):
     right: CTerm
 
     @profile
+    def __post_init__(self) -> None:
+        super(Or, self).__post_init__()
+        self.count = self.left.count + self.right.count + 2
+
+    @profile
     @override
     def rewrite(self) -> CTerm:
         match self:
@@ -181,6 +211,11 @@ class Xor(CTerm):
     commutative: ClassVar[bool] = True
     left: CTerm
     right: CTerm
+
+    @profile
+    def __post_init__(self) -> None:
+        super(Xor, self).__post_init__()
+        self.count = self.left.count + self.right.count + 2
 
     @profile
     @override
@@ -212,6 +247,7 @@ class Eq[S: BaseTerm](CTerm):
     def __post_init__(self) -> None:
         super(Eq, self).__post_init__()
         assert getattr(self.left, "width", None) == getattr(self.right, "width", None)
+        self.count = self.left.count + self.right.count + 2
 
     @profile
     @override
@@ -265,6 +301,7 @@ class Distinct[S: BaseTerm](CTerm):
     def __post_init__(self) -> None:
         super(Distinct, self).__post_init__()
         assert getattr(self.left, "width", None) == getattr(self.right, "width", None)
+        self.count = self.left.count + self.right.count + 2
 
     @profile
     @override
@@ -284,6 +321,11 @@ class CIte(CTerm):
     cond: CTerm
     left: CTerm
     right: CTerm
+
+    @profile
+    def __post_init__(self) -> None:
+        super(CIte, self).__post_init__()
+        self.count = self.cond.count + self.left.count + self.right.count + 3
 
     @profile
     @override
@@ -316,6 +358,7 @@ class BSymbol(BTerm):
         assert w > 0, "width must be positive"
         self.width = w
         super(BSymbol, self).__post_init__()
+        self.count = 0
         self.min = 0
         self.max = (1 << self.width) - 1
 
@@ -349,6 +392,7 @@ class BValue(BTerm):
         assert 0 <= self.value < 1 << w
         self.width = w
         super(BValue, self).__post_init__()
+        self.count = 0
         self.min = self.value
         self.max = self.value
 
@@ -499,6 +543,7 @@ class Extract(BTerm):
         assert self.term.width > self.i >= self.j >= 0
         self.width = self.i - self.j + 1
         super(Extract, self).__post_init__()
+        self.count = self.term.count + 1
         self.min = 0
         self.max = (1 << self.width) - 1
 
@@ -543,6 +588,7 @@ class BNot(UnaryOp):
     @profile
     def __post_init__(self) -> None:
         super(BNot, self).__post_init__()
+        self.count = self.term.count + 1
         self.min = self.term.max ^ (1 << self.width) - 1
         self.max = self.term.min ^ (1 << self.width) - 1
 
@@ -572,6 +618,7 @@ class BAnd(BinaryOp):
     @profile
     def __post_init__(self) -> None:
         super(BAnd, self).__post_init__()
+        self.count = self.left.count + self.right.count + 2
         self.min = 0
         self.max = min(self.left.max, self.right.max)
 
@@ -617,6 +664,7 @@ class BOr(BinaryOp):
     @profile
     def __post_init__(self) -> None:
         super(BOr, self).__post_init__()
+        self.count = self.left.count + self.right.count + 2
         self.min = max(self.left.min, self.right.min)
         self.max = (1 << self.width) - 1
 
@@ -661,6 +709,7 @@ class Neg(UnaryOp):
     @profile
     def __post_init__(self) -> None:
         super(Neg, self).__post_init__()
+        self.count = self.term.count + 1
         self.min = 0
         self.max = (1 << self.width) - 1
 
@@ -682,6 +731,7 @@ class Add(BinaryOp):
     @profile
     def __post_init__(self) -> None:
         super(Add, self).__post_init__()
+        self.count = self.left.count + self.right.count + 2
         if self.left.max < 1 << self.width - 1 and self.right.max < 1 << self.width - 1:
             self.min = self.left.min + self.right.min
             self.max = self.left.max + self.right.max
@@ -727,6 +777,7 @@ class Mul(BinaryOp):
     @profile
     def __post_init__(self) -> None:
         super(Mul, self).__post_init__()
+        self.count = self.left.count + self.right.count + 2
         if (
             isinstance(self.left, BValue)
             and self.left.value * self.right.max <= (1 << self.width) - 1
@@ -760,6 +811,7 @@ class Udiv(BinaryOp):
     @profile
     def __post_init__(self) -> None:
         super(Udiv, self).__post_init__()
+        self.count = self.left.count + self.right.count + 2
         if isinstance(self.right, BValue) and self.right.value != 0:
             self.min = self.left.min // self.right.value
             self.max = self.left.max // self.right.value
@@ -790,6 +842,7 @@ class Urem(BinaryOp):
     @profile
     def __post_init__(self) -> None:
         super(Urem, self).__post_init__()
+        self.count = self.left.count + self.right.count + 2
         if self.right.min > 0:
             self.min = 0
             self.max = self.right.max - 1
@@ -820,6 +873,7 @@ class Shl(BinaryOp):
     @profile
     def __post_init__(self) -> None:
         super(Shl, self).__post_init__()
+        self.count = self.left.count + self.right.count + 2
         if (
             isinstance(self.right, BValue)
             and self.right.value < self.width
@@ -870,6 +924,7 @@ class Lshr(BinaryOp):
     @profile
     def __post_init__(self) -> None:
         super(Lshr, self).__post_init__()
+        self.count = self.left.count + self.right.count + 2
         if isinstance(self.right, BValue):
             self.min = self.left.min >> self.right.value
             self.max = self.left.max >> self.right.value
@@ -919,6 +974,11 @@ class Ult(CompareOp):
     op: ClassVar[bytes] = b"bvult"
 
     @profile
+    def __post_init__(self) -> None:
+        super(Ult, self).__post_init__()
+        self.count = self.left.count + self.right.count + 2
+
+    @profile
     @override
     def rewrite(self) -> CTerm:
         match self:
@@ -957,6 +1017,7 @@ class Nand(BinaryOp):
     @profile
     def __post_init__(self) -> None:
         super(Nand, self).__post_init__()
+        self.count = self.left.count + self.right.count + 2
         self.min = 0
         self.max = (1 << self.width) - 1
 
@@ -977,6 +1038,7 @@ class Nor(BinaryOp):
     @profile
     def __post_init__(self) -> None:
         super(Nor, self).__post_init__()
+        self.count = self.left.count + self.right.count + 2
         self.min = 0
         self.max = (1 << self.width) - 1
 
@@ -998,6 +1060,7 @@ class BXor(BinaryOp):
     @profile
     def __post_init__(self) -> None:
         super(BXor, self).__post_init__()
+        self.count = self.left.count + self.right.count + 2
         self.min = 0
         self.max = (1 << self.width) - 1
 
@@ -1034,6 +1097,7 @@ class Xnor(BinaryOp):
     @profile
     def __post_init__(self) -> None:
         super(Xnor, self).__post_init__()
+        self.count = self.left.count + self.right.count + 2
         self.min = 0
         self.max = (1 << self.width) - 1
 
@@ -1059,6 +1123,7 @@ class Comp(BTerm):
         assert self.left.width == self.right.width
         self.width = 1
         super(Comp, self).__post_init__()
+        self.count = self.left.count + self.right.count + 2
         self.min = 0
         self.max = (1 << self.width) - 1
 
@@ -1079,6 +1144,7 @@ class Sub(BinaryOp):
     @profile
     def __post_init__(self) -> None:
         super(Sub, self).__post_init__()
+        self.count = self.left.count + self.right.count + 2
         self.min = 0
         self.max = (1 << self.width) - 1
 
@@ -1099,6 +1165,7 @@ class Sdiv(BinaryOp):
     @profile
     def __post_init__(self) -> None:
         super(Sdiv, self).__post_init__()
+        self.count = self.left.count + self.right.count + 2
         if (
             isinstance(self.right, BValue)
             and self.left.max < 1 << self.width - 1
@@ -1136,6 +1203,7 @@ class Srem(BinaryOp):
     @profile
     def __post_init__(self) -> None:
         super(Srem, self).__post_init__()
+        self.count = self.left.count + self.right.count + 2
         if (
             self.left.max < 1 << self.width - 1
             and self.right.min > 0
@@ -1175,6 +1243,7 @@ class Smod(BinaryOp):
     @profile
     def __post_init__(self) -> None:
         super(Smod, self).__post_init__()
+        self.count = self.left.count + self.right.count + 2
         if self.right.min > 0 and self.right.max < 1 << self.width - 1:
             self.min = 0
             self.max = self.right.max - 1
@@ -1204,6 +1273,7 @@ class Ashr(BinaryOp):
     @profile
     def __post_init__(self) -> None:
         super(Ashr, self).__post_init__()
+        self.count = self.left.count + self.right.count + 2
         if isinstance(self.right, BValue) and self.left.max < 1 << self.width - 1:
             self.min = self.left.min >> self.right.value
             self.max = self.left.max >> self.right.value
@@ -1237,6 +1307,7 @@ class Repeat(SingleParamOp):
         assert self.i > 0
         self.width = self.term.width * self.i
         super(Repeat, self).__post_init__()
+        self.count = self.term.count + 1
         self.min = 0
         self.max = (1 << self.width) - 1
 
@@ -1262,6 +1333,7 @@ class ZeroExtend(SingleParamOp):
         assert self.i >= 0
         self.width = self.term.width + self.i
         super(ZeroExtend, self).__post_init__()
+        self.count = self.term.count + 1
         self.min = 0
         self.max = (1 << self.width) - 1
 
@@ -1287,6 +1359,7 @@ class SignExtend(SingleParamOp):
         assert self.i >= 0
         self.width = self.term.width + self.i
         super(SignExtend, self).__post_init__()
+        self.count = self.term.count + 1
         if self.term.max < 1 << self.term.width - 1:
             self.min = self.term.min
             self.max = self.term.max
@@ -1319,6 +1392,7 @@ class RotateLeft(SingleParamOp):
         assert self.i >= 0
         self.width = self.term.width
         super(RotateLeft, self).__post_init__()
+        self.count = self.term.count + 1
         self.min = 0
         self.max = (1 << self.width) - 1
 
@@ -1350,6 +1424,7 @@ class RotateRight(SingleParamOp):
         assert self.i >= 0
         self.width = self.term.width
         super(RotateRight, self).__post_init__()
+        self.count = self.term.count + 1
         self.min = 0
         self.max = (1 << self.width) - 1
 
@@ -1369,6 +1444,11 @@ class RotateRight(SingleParamOp):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Ule(CompareOp):
     op: ClassVar[bytes] = b"bvule"
+
+    @profile
+    def __post_init__(self) -> None:
+        super(Ule, self).__post_init__()
+        self.count = self.left.count + self.right.count + 2
 
     @profile
     @override
@@ -1405,6 +1485,11 @@ class Ugt(CompareOp):
     op: ClassVar[bytes] = b"bvugt"
 
     @profile
+    def __post_init__(self) -> None:
+        super(Ugt, self).__post_init__()
+        self.count = self.left.count + self.right.count + 2
+
+    @profile
     @override
     def rewrite(self) -> CTerm:
         match self:
@@ -1419,6 +1504,11 @@ class Uge(CompareOp):
     op: ClassVar[bytes] = b"bvuge"
 
     @profile
+    def __post_init__(self) -> None:
+        super(Uge, self).__post_init__()
+        self.count = self.left.count + self.right.count + 2
+
+    @profile
     @override
     def rewrite(self) -> CTerm:
         match self:
@@ -1431,6 +1521,11 @@ class Uge(CompareOp):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Slt(CompareOp):
     op: ClassVar[bytes] = b"bvslt"
+
+    @profile
+    def __post_init__(self) -> None:
+        super(Slt, self).__post_init__()
+        self.count = self.left.count + self.right.count + 2
 
     @profile
     @override
@@ -1459,6 +1554,11 @@ class Sle(CompareOp):
     op: ClassVar[bytes] = b"bvsle"
 
     @profile
+    def __post_init__(self) -> None:
+        super(Sle, self).__post_init__()
+        self.count = self.left.count + self.right.count + 2
+
+    @profile
     @override
     def rewrite(self) -> CTerm:
         match self:
@@ -1485,6 +1585,11 @@ class Sgt(CompareOp):
     op: ClassVar[bytes] = b"bvsgt"
 
     @profile
+    def __post_init__(self) -> None:
+        super(Sgt, self).__post_init__()
+        self.count = self.left.count + self.right.count + 2
+
+    @profile
     @override
     def rewrite(self) -> CTerm:
         match self:
@@ -1497,6 +1602,11 @@ class Sgt(CompareOp):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Sge(CompareOp):
     op: ClassVar[bytes] = b"bvsge"
+
+    @profile
+    def __post_init__(self) -> None:
+        super(Sge, self).__post_init__()
+        self.count = self.left.count + self.right.count + 2
 
     @profile
     @override
@@ -1521,6 +1631,7 @@ class Ite(BTerm):
         assert self.left.width == self.right.width
         self.width = self.left.width
         super(Ite, self).__post_init__()
+        self.count = self.cond.count + self.left.count + self.right.count + 3
         self.min = min(self.left.min, self.right.min)
         self.max = max(self.left.max, self.right.max)
 
@@ -1577,6 +1688,11 @@ class ASymbol(ATerm):
     def substitute(self, model: dict[bytes, BaseTerm]) -> BaseTerm:
         return model.get(self.name, self)
 
+    @profile
+    def __post_init__(self) -> None:
+        super(ASymbol, self).__post_init__()
+        self.count = 0
+
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class AValue(ATerm):
@@ -1601,6 +1717,11 @@ class AValue(ATerm):
     def substitute(self, model: dict[bytes, BaseTerm]) -> BaseTerm:
         return self
 
+    @profile
+    def __post_init__(self) -> None:
+        super(AValue, self).__post_init__()
+        self.count = self.default.count + 1
+
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Select(BTerm):
@@ -1617,6 +1738,7 @@ class Select(BTerm):
         if isinstance(self.array, Store):
             self.array = copy.deepcopy(self.array)
         super(Select, self).__post_init__()
+        self.count = self.array.count + self.key.count + 2
         self.min = 0
         self.max = (1 << self.width) - 1
 
@@ -1652,6 +1774,7 @@ class Select(BTerm):
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Store(ATerm):
+    op: ClassVar[bytes] = b"store"
     base: ASymbol | AValue
     lower: dict[int, BTerm] = field(default_factory=dict[int, BTerm])
     upper: list[tuple[BTerm, BTerm]] = field(default_factory=list[tuple[BTerm, BTerm]])
@@ -1714,3 +1837,8 @@ class Store(ATerm):
             ctx.write(b" ")
             v.dump(ctx)
             ctx.write(b")")
+
+    @profile
+    def __post_init__(self) -> None:
+        super(Store, self).__post_init__()
+        self.count = 0
