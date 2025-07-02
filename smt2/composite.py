@@ -14,8 +14,9 @@ import abc
 import copy
 from dataclasses import InitVar, dataclass, field
 from functools import reduce
-from line_profiler import profile
 from typing import Any, ClassVar, Self, override
+
+from line_profiler import profile
 
 from .theory_core import BaseTerm, DumpContext
 
