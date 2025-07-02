@@ -104,14 +104,6 @@ type MinMax = tuple[int, int]
 
             self._source(cls)
 
-    def _setattr(self, name: str, expr: ast.expr) -> ast.stmt:
-        return ast.Expr(
-            ast.Call(
-                ast.Attribute(ast.Name("object"), "__setattr__"),
-                [ast.Name("self"), ast.Constant(name), expr],
-            )
-        )
-
     def _post_init_append(self, cls: ast.ClassDef, *stmts: ast.stmt) -> None:
         for node in ast.walk(cls):
             match node:
@@ -247,9 +239,9 @@ type MinMax = tuple[int, int]
             case _:
                 raise SyntaxError("malformed minmax case body")
         conds = [replacer.visit(c) for c in conds]
-        stmt = [
-            self._setattr("min", replacer.visit(min)),
-            self._setattr("max", replacer.visit(max)),
+        stmt: list[ast.stmt] = [
+            ast.Assign([ast.Attribute(ast.Name("self"), "min")], replacer.visit(min)),
+            ast.Assign([ast.Attribute(ast.Name("self"), "max")], replacer.visit(max)),
         ]
         return conds, stmt
 

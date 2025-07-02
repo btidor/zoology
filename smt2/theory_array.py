@@ -20,7 +20,7 @@ from .theory_bitvec import BTerm, BValue
 from .theory_core import BaseTerm, DumpContext
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class ATerm(BaseTerm):
     def sort(self) -> bytes:
         return b"(Array (_ BitVec %d) (_ BitVec %d))" % self.width()
@@ -29,7 +29,7 @@ class ATerm(BaseTerm):
     def width(self) -> tuple[int, int]: ...
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class ASymbol(ATerm):
     name: bytes
     key: int
@@ -51,7 +51,7 @@ class ASymbol(ATerm):
         return model.get(self.name, self)
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class AValue(ATerm):
     default: BTerm
     key: int
@@ -73,7 +73,7 @@ class AValue(ATerm):
         return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Select(BTerm):
     op: ClassVar[bytes] = b"select"
     array: ATerm
@@ -83,13 +83,13 @@ class Select(BTerm):
     def __post_init__(self) -> None:
         k, v = self.array.width()
         assert k == self.key.width
-        object.__setattr__(self, "width", v)
+        self.width = v
         if isinstance(self.array, Store):
-            object.__setattr__(self, "array", copy.deepcopy(self.array))
+            self.array = copy.deepcopy(self.array)
         super(Select, self).__post_init__()
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Store(ATerm):
     base: ASymbol | AValue
     lower: dict[int, BTerm] = field(default_factory=dict[int, BTerm])
@@ -103,10 +103,10 @@ class Store(ATerm):
 
     def __deepcopy__(self, memo: Any, /) -> Self:
         k = self.__new__(self.__class__)
-        object.__setattr__(k, "base", self.base)
-        object.__setattr__(k, "lower", copy.copy(self.lower))
-        object.__setattr__(k, "upper", copy.copy(self.upper))
-        object.__setattr__(k, "count", self.count)
+        k.base = self.base
+        k.lower = copy.copy(self.lower)
+        k.upper = copy.copy(self.upper)
+        k.count = self.count
         return k
 
     def width(self) -> tuple[int, int]:
@@ -114,17 +114,15 @@ class Store(ATerm):
 
     @profile
     def set(self, key: BTerm, value: BTerm) -> None:
-        count = self.count
         if isinstance(key, BValue) and not self.upper:
             k = key.value
             if k in self.lower:
-                count -= self.lower[k].count + 1
+                self.count -= self.lower[k].count + 1
             self.lower[k] = value
-            count += value.count + 1
+            self.count += value.count + 1
         else:
             self.upper.append((key, value))
-            count += key.count + value.count + 2
-        object.__setattr__(self, "count", count)
+            self.count += key.count + value.count + 2
 
     @override
     def walk(self, ctx: DumpContext) -> None:

@@ -18,7 +18,7 @@ from line_profiler import profile
 from .theory_core import BaseTerm, CTerm, DumpContext
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class BTerm(BaseTerm):
     width: int = field(init=False)
     min: int = field(init=False, compare=False)
@@ -28,7 +28,7 @@ class BTerm(BaseTerm):
         return b"(_ BitVec %d)" % self.width
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class BSymbol(BTerm):
     name: bytes
     w: InitVar[int]
@@ -36,7 +36,7 @@ class BSymbol(BTerm):
     @override
     def __post_init__(self, w: int) -> None:
         assert w > 0, "width must be positive"
-        object.__setattr__(self, "width", w)
+        self.width = w
         super(BSymbol, self).__post_init__()
 
     @override
@@ -52,7 +52,7 @@ class BSymbol(BTerm):
         return model.get(self.name, self)
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class BValue(BTerm):
     value: int
     w: InitVar[int]
@@ -61,9 +61,9 @@ class BValue(BTerm):
     def __post_init__(self, w: int) -> None:
         assert w > 0, "width must be positive"
         if self.value < 0:  # convert to two's complement
-            object.__setattr__(self, "value", self.value + (1 << w))
+            self.value = self.value + (1 << w)
         assert 0 <= self.value < (1 << w)
-        object.__setattr__(self, "width", w)
+        self.width = w
         super(BValue, self).__post_init__()
 
     @property
@@ -86,17 +86,17 @@ class BValue(BTerm):
         return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class UnaryOp(BTerm):
     term: BTerm
 
     @override
     def __post_init__(self) -> None:
-        object.__setattr__(self, "width", self.term.width)
+        self.width = self.term.width
         super(UnaryOp, self).__post_init__()
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class BinaryOp(BTerm):
     left: BTerm
     right: BTerm
@@ -104,11 +104,11 @@ class BinaryOp(BTerm):
     @override
     def __post_init__(self) -> None:
         assert self.left.width == self.right.width
-        object.__setattr__(self, "width", self.left.width)
+        self.width = self.left.width
         super(BinaryOp, self).__post_init__()
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class CompareOp(CTerm):
     left: BTerm
     right: BTerm
@@ -119,13 +119,13 @@ class CompareOp(CTerm):
         super(CompareOp, self).__post_init__()
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class SingleParamOp(BTerm):
     i: int
     term: BTerm
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Concat(BTerm):
     op: ClassVar[bytes] = b"concat"
     terms: tuple[BTerm, ...]
@@ -133,11 +133,9 @@ class Concat(BTerm):
     @override
     def __post_init__(self) -> None:
         assert len(self.terms) > 0, "width must be positive"
-        w = reduce(lambda p, q: p + q.width, self.terms, 0)
-        object.__setattr__(self, "width", w)
+        self.width = reduce(lambda p, q: p + q.width, self.terms, 0)
         super(Concat, self).__post_init__()
-        count = reduce(int.__add__, (t.count + 1 for t in self.terms))
-        object.__setattr__(self, "count", count)
+        self.count = reduce(int.__add__, (t.count + 1 for t in self.terms))
 
     @override
     def walk(self, ctx: DumpContext) -> None:
@@ -161,7 +159,7 @@ class Concat(BTerm):
             ctx.write(b")")
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Extract(BTerm):
     op: ClassVar[bytes] = b"extract"
     i: int
@@ -171,92 +169,91 @@ class Extract(BTerm):
     @override
     def __post_init__(self) -> None:
         assert self.term.width > self.i >= self.j >= 0
-        w = self.i - self.j + 1
-        object.__setattr__(self, "width", w)
+        self.width = self.i - self.j + 1
         super(Extract, self).__post_init__()
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class BNot(UnaryOp):
     op: ClassVar[bytes] = b"bvnot"
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class BAnd(BinaryOp):
     op: ClassVar[bytes] = b"bvand"
     commutative: ClassVar[bool] = True
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class BOr(BinaryOp):
     op: ClassVar[bytes] = b"bvor"
     commutative: ClassVar[bool] = True
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Neg(UnaryOp):
     op: ClassVar[bytes] = b"bvneg"
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Add(BinaryOp):
     op: ClassVar[bytes] = b"bvadd"
     commutative: ClassVar[bool] = True
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Mul(BinaryOp):
     op: ClassVar[bytes] = b"bvmul"
     commutative: ClassVar[bool] = True
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Udiv(BinaryOp):
     op: ClassVar[bytes] = b"bvudiv"
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Urem(BinaryOp):
     op: ClassVar[bytes] = b"bvurem"
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Shl(BinaryOp):
     op: ClassVar[bytes] = b"bvshl"
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Lshr(BinaryOp):
     op: ClassVar[bytes] = b"bvlshr"
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Ult(CompareOp):
     op: ClassVar[bytes] = b"bvult"
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Nand(BinaryOp):
     op: ClassVar[bytes] = b"bvnand"
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Nor(BinaryOp):
     op: ClassVar[bytes] = b"bvnor"
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class BXor(BinaryOp):
     op: ClassVar[bytes] = b"bvxor"
     commutative: ClassVar[bool] = True
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Xnor(BinaryOp):
     op: ClassVar[bytes] = b"bvxnor"
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Comp(BTerm):  # width-1 result
     op: ClassVar[bytes] = b"bvcomp"
     left: BTerm
@@ -265,129 +262,126 @@ class Comp(BTerm):  # width-1 result
     @override
     def __post_init__(self) -> None:
         assert self.left.width == self.right.width
-        object.__setattr__(self, "width", 1)
+        self.width = 1
         super(Comp, self).__post_init__()
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Sub(BinaryOp):
     op: ClassVar[bytes] = b"bvsub"
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Sdiv(BinaryOp):
     op: ClassVar[bytes] = b"bvsdiv"
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Srem(BinaryOp):
     op: ClassVar[bytes] = b"bvsrem"
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Smod(BinaryOp):
     op: ClassVar[bytes] = b"bvsmod"
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Ashr(BinaryOp):
     op: ClassVar[bytes] = b"bvashr"
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Repeat(SingleParamOp):
     op: ClassVar[bytes] = b"repeat"
 
     @override
     def __post_init__(self) -> None:
         assert self.i > 0
-        w = self.term.width * self.i
-        object.__setattr__(self, "width", w)
+        self.width = self.term.width * self.i
         super(Repeat, self).__post_init__()
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class ZeroExtend(SingleParamOp):
     op: ClassVar[bytes] = b"zero_extend"
 
     @override
     def __post_init__(self) -> None:
         assert self.i >= 0
-        w = self.term.width + self.i
-        object.__setattr__(self, "width", w)
+        self.width = self.term.width + self.i
         super(ZeroExtend, self).__post_init__()
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class SignExtend(SingleParamOp):
     op: ClassVar[bytes] = b"sign_extend"
 
     @override
     def __post_init__(self) -> None:
         assert self.i >= 0
-        w = self.term.width + self.i
-        object.__setattr__(self, "width", w)
+        self.width = self.term.width + self.i
         super(SignExtend, self).__post_init__()
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class RotateLeft(SingleParamOp):
     op: ClassVar[bytes] = b"rotate_left"
 
     @override
     def __post_init__(self) -> None:
         assert self.i >= 0
-        object.__setattr__(self, "width", self.term.width)
+        self.width = self.term.width
         super(RotateLeft, self).__post_init__()
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class RotateRight(SingleParamOp):
     op: ClassVar[bytes] = b"rotate_right"
 
     @override
     def __post_init__(self) -> None:
         assert self.i >= 0
-        object.__setattr__(self, "width", self.term.width)
+        self.width = self.term.width
         super(RotateRight, self).__post_init__()
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Ule(CompareOp):
     op: ClassVar[bytes] = b"bvule"
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Ugt(CompareOp):
     op: ClassVar[bytes] = b"bvugt"
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Uge(CompareOp):
     op: ClassVar[bytes] = b"bvuge"
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Slt(CompareOp):
     op: ClassVar[bytes] = b"bvslt"
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Sle(CompareOp):
     op: ClassVar[bytes] = b"bvsle"
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Sgt(CompareOp):
     op: ClassVar[bytes] = b"bvsgt"
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Sge(CompareOp):
     op: ClassVar[bytes] = b"bvsge"
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Ite(BTerm):
     op: ClassVar[bytes] = b"ite"
     cond: CTerm
@@ -397,5 +391,5 @@ class Ite(BTerm):
     @override
     def __post_init__(self) -> None:
         assert self.left.width == self.right.width
-        object.__setattr__(self, "width", self.left.width)
+        self.width = self.left.width
         super(Ite, self).__post_init__()

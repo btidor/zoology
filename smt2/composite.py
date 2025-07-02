@@ -43,13 +43,13 @@ class RewriteMeta(abc.ABCMeta):
         return term.rewrite()
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class CTerm(BaseTerm, metaclass=RewriteMeta):
     def sort(self) -> bytes:
         return b"Bool"
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class CSymbol(CTerm):
     name: bytes
 
@@ -69,7 +69,7 @@ class CSymbol(CTerm):
         return model.get(self.name, self)
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class CValue(CTerm):
     value: bool
 
@@ -84,7 +84,7 @@ class CValue(CTerm):
         return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Not(CTerm):
     op: ClassVar[bytes] = b"not"
     term: CTerm
@@ -109,7 +109,7 @@ class Not(CTerm):
                 return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Implies(CTerm):
     op: ClassVar[bytes] = b"=>"
     left: CTerm
@@ -125,7 +125,7 @@ class Implies(CTerm):
                 return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class And(CTerm):
     op: ClassVar[bytes] = b"and"
     commutative: ClassVar[bool] = True
@@ -150,7 +150,7 @@ class And(CTerm):
                 return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Or(CTerm):
     op: ClassVar[bytes] = b"or"
     commutative: ClassVar[bool] = True
@@ -175,7 +175,7 @@ class Or(CTerm):
                 return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Xor(CTerm):
     op: ClassVar[bytes] = b"xor"
     commutative: ClassVar[bool] = True
@@ -200,7 +200,7 @@ class Xor(CTerm):
                 return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Eq[S: BaseTerm](CTerm):
     op: ClassVar[bytes] = b"="
     commutative: ClassVar[bool] = True
@@ -254,7 +254,7 @@ class Eq[S: BaseTerm](CTerm):
                 return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Distinct[S: BaseTerm](CTerm):
     op: ClassVar[bytes] = b"distinct"
     left: S
@@ -278,7 +278,7 @@ class Distinct[S: BaseTerm](CTerm):
                 return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class CIte(CTerm):
     op: ClassVar[bytes] = b"ite"
     cond: CTerm
@@ -295,7 +295,7 @@ class CIte(CTerm):
                 return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class BTerm(BaseTerm, metaclass=RewriteMeta):
     width: int = field(init=False)
     min: int = field(init=False, compare=False)
@@ -307,11 +307,11 @@ class BTerm(BaseTerm, metaclass=RewriteMeta):
     @profile
     def __post_init__(self) -> None:
         super(BTerm, self).__post_init__()
-        object.__setattr__(self, "min", 0)
-        object.__setattr__(self, "max", (1 << self.width) - 1)
+        self.min = 0
+        self.max = (1 << self.width) - 1
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class BSymbol(BTerm):
     name: bytes
     w: InitVar[int]
@@ -320,7 +320,7 @@ class BSymbol(BTerm):
     @override
     def __post_init__(self, w: int) -> None:
         assert w > 0, "width must be positive"
-        object.__setattr__(self, "width", w)
+        self.width = w
         super(BSymbol, self).__post_init__()
 
     @profile
@@ -339,7 +339,7 @@ class BSymbol(BTerm):
         return model.get(self.name, self)
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class BValue(BTerm):
     value: int
     w: InitVar[int]
@@ -349,12 +349,12 @@ class BValue(BTerm):
     def __post_init__(self, w: int) -> None:
         assert w > 0, "width must be positive"
         if self.value < 0:
-            object.__setattr__(self, "value", self.value + (1 << w))
+            self.value = self.value + (1 << w)
         assert 0 <= self.value < 1 << w
-        object.__setattr__(self, "width", w)
+        self.width = w
         super(BValue, self).__post_init__()
-        object.__setattr__(self, "min", self.value)
-        object.__setattr__(self, "max", self.value)
+        self.min = self.value
+        self.max = self.value
 
     @property
     @profile
@@ -377,18 +377,18 @@ class BValue(BTerm):
         return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class UnaryOp(BTerm):
     term: BTerm
 
     @profile
     @override
     def __post_init__(self) -> None:
-        object.__setattr__(self, "width", self.term.width)
+        self.width = self.term.width
         super(UnaryOp, self).__post_init__()
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class BinaryOp(BTerm):
     left: BTerm
     right: BTerm
@@ -397,11 +397,11 @@ class BinaryOp(BTerm):
     @override
     def __post_init__(self) -> None:
         assert self.left.width == self.right.width
-        object.__setattr__(self, "width", self.left.width)
+        self.width = self.left.width
         super(BinaryOp, self).__post_init__()
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class CompareOp(CTerm):
     left: BTerm
     right: BTerm
@@ -413,13 +413,13 @@ class CompareOp(CTerm):
         super(CompareOp, self).__post_init__()
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class SingleParamOp(BTerm):
     i: int
     term: BTerm
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Concat(BTerm):
     op: ClassVar[bytes] = b"concat"
     terms: tuple[BTerm, ...]
@@ -428,22 +428,12 @@ class Concat(BTerm):
     @override
     def __post_init__(self) -> None:
         assert len(self.terms) > 0, "width must be positive"
-        w = reduce(lambda p, q: p + q.width, self.terms, 0)
-        object.__setattr__(self, "width", w)
+        self.width = reduce(lambda p, q: p + q.width, self.terms, 0)
         super(Concat, self).__post_init__()
-        count = reduce(int.__add__, (t.count + 1 for t in self.terms))
-        object.__setattr__(self, "count", count)
+        self.count = reduce(int.__add__, (t.count + 1 for t in self.terms))
         if len(self.terms) == 2 and isinstance(self.terms[0], BValue):
-            object.__setattr__(
-                self,
-                "min",
-                self.terms[1].min | self.terms[0].value << self.terms[1].width,
-            )
-            object.__setattr__(
-                self,
-                "max",
-                self.terms[1].max | self.terms[0].value << self.terms[1].width,
-            )
+            self.min = self.terms[1].min | self.terms[0].value << self.terms[1].width
+            self.max = self.terms[1].max | self.terms[0].value << self.terms[1].width
 
     @profile
     @override
@@ -497,7 +487,7 @@ class Concat(BTerm):
                 return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Extract(BTerm):
     op: ClassVar[bytes] = b"extract"
     i: int
@@ -508,8 +498,7 @@ class Extract(BTerm):
     @override
     def __post_init__(self) -> None:
         assert self.term.width > self.i >= self.j >= 0
-        w = self.i - self.j + 1
-        object.__setattr__(self, "width", w)
+        self.width = self.i - self.j + 1
         super(Extract, self).__post_init__()
 
     @profile
@@ -546,15 +535,15 @@ class Extract(BTerm):
                 return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class BNot(UnaryOp):
     op: ClassVar[bytes] = b"bvnot"
 
     @profile
     def __post_init__(self) -> None:
         super(BNot, self).__post_init__()
-        object.__setattr__(self, "min", self.term.max ^ (1 << self.width) - 1)
-        object.__setattr__(self, "max", self.term.min ^ (1 << self.width) - 1)
+        self.min = self.term.max ^ (1 << self.width) - 1
+        self.max = self.term.min ^ (1 << self.width) - 1
 
     @profile
     @override
@@ -574,7 +563,7 @@ class BNot(UnaryOp):
                 return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class BAnd(BinaryOp):
     op: ClassVar[bytes] = b"bvand"
     commutative: ClassVar[bool] = True
@@ -582,8 +571,8 @@ class BAnd(BinaryOp):
     @profile
     def __post_init__(self) -> None:
         super(BAnd, self).__post_init__()
-        object.__setattr__(self, "min", 0)
-        object.__setattr__(self, "max", min(self.left.max, self.right.max))
+        self.min = 0
+        self.max = min(self.left.max, self.right.max)
 
     @profile
     @override
@@ -619,7 +608,7 @@ class BAnd(BinaryOp):
                 return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class BOr(BinaryOp):
     op: ClassVar[bytes] = b"bvor"
     commutative: ClassVar[bool] = True
@@ -627,8 +616,8 @@ class BOr(BinaryOp):
     @profile
     def __post_init__(self) -> None:
         super(BOr, self).__post_init__()
-        object.__setattr__(self, "min", max(self.left.min, self.right.min))
-        object.__setattr__(self, "max", (1 << self.width) - 1)
+        self.min = max(self.left.min, self.right.min)
+        self.max = (1 << self.width) - 1
 
     @profile
     @override
@@ -664,7 +653,7 @@ class BOr(BinaryOp):
                 return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Neg(UnaryOp):
     op: ClassVar[bytes] = b"bvneg"
 
@@ -678,7 +667,7 @@ class Neg(UnaryOp):
                 return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Add(BinaryOp):
     op: ClassVar[bytes] = b"bvadd"
     commutative: ClassVar[bool] = True
@@ -687,15 +676,15 @@ class Add(BinaryOp):
     def __post_init__(self) -> None:
         super(Add, self).__post_init__()
         if self.left.max < 1 << self.width - 1 and self.right.max < 1 << self.width - 1:
-            object.__setattr__(self, "min", self.left.min + self.right.min)
-            object.__setattr__(self, "max", self.left.max + self.right.max)
+            self.min = self.left.min + self.right.min
+            self.max = self.left.max + self.right.max
         elif (
             isinstance(self.left, BValue)
             and self.left.sgnd < 0
             and (self.right.min + self.left.sgnd > 0)
         ):
-            object.__setattr__(self, "min", self.right.min + self.left.sgnd)
-            object.__setattr__(self, "max", self.right.max + self.left.sgnd)
+            self.min = self.right.min + self.left.sgnd
+            self.max = self.right.max + self.left.sgnd
 
     @profile
     @override
@@ -720,7 +709,7 @@ class Add(BinaryOp):
                 return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Mul(BinaryOp):
     op: ClassVar[bytes] = b"bvmul"
     commutative: ClassVar[bool] = True
@@ -732,8 +721,8 @@ class Mul(BinaryOp):
             isinstance(self.left, BValue)
             and self.left.value * self.right.max <= (1 << self.width) - 1
         ):
-            object.__setattr__(self, "min", self.left.value * self.right.min)
-            object.__setattr__(self, "max", self.left.value * self.right.max)
+            self.min = self.left.value * self.right.min
+            self.max = self.left.value * self.right.max
 
     @profile
     @override
@@ -751,7 +740,7 @@ class Mul(BinaryOp):
                 return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Udiv(BinaryOp):
     op: ClassVar[bytes] = b"bvudiv"
 
@@ -759,8 +748,8 @@ class Udiv(BinaryOp):
     def __post_init__(self) -> None:
         super(Udiv, self).__post_init__()
         if isinstance(self.right, BValue) and self.right.value != 0:
-            object.__setattr__(self, "min", self.left.min // self.right.value)
-            object.__setattr__(self, "max", self.left.max // self.right.value)
+            self.min = self.left.min // self.right.value
+            self.max = self.left.max // self.right.value
 
     @profile
     @override
@@ -778,7 +767,7 @@ class Udiv(BinaryOp):
                 return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Urem(BinaryOp):
     op: ClassVar[bytes] = b"bvurem"
 
@@ -786,8 +775,8 @@ class Urem(BinaryOp):
     def __post_init__(self) -> None:
         super(Urem, self).__post_init__()
         if self.right.min > 0:
-            object.__setattr__(self, "min", 0)
-            object.__setattr__(self, "max", self.right.max - 1)
+            self.min = 0
+            self.max = self.right.max - 1
 
     @profile
     @override
@@ -805,7 +794,7 @@ class Urem(BinaryOp):
                 return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Shl(BinaryOp):
     op: ClassVar[bytes] = b"bvshl"
 
@@ -817,23 +806,11 @@ class Shl(BinaryOp):
             and self.right.value < self.width
             and (self.left.max << self.right.value <= (1 << self.width) - 1)
         ):
-            object.__setattr__(
-                self,
-                "min",
-                min(self.left.min << self.right.value, (1 << self.width) - 1),
-            )
-            object.__setattr__(
-                self,
-                "max",
-                min(self.left.max << self.right.value, (1 << self.width) - 1),
-            )
+            self.min = min(self.left.min << self.right.value, (1 << self.width) - 1)
+            self.max = min(self.left.max << self.right.value, (1 << self.width) - 1)
         elif isinstance(self.right, BValue) and self.right.value < self.width:
-            object.__setattr__(self, "min", 0)
-            object.__setattr__(
-                self,
-                "max",
-                min(self.left.max << self.right.value, (1 << self.width) - 1),
-            )
+            self.min = 0
+            self.max = min(self.left.max << self.right.value, (1 << self.width) - 1)
 
     @profile
     @override
@@ -864,7 +841,7 @@ class Shl(BinaryOp):
                 return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Lshr(BinaryOp):
     op: ClassVar[bytes] = b"bvlshr"
 
@@ -872,8 +849,8 @@ class Lshr(BinaryOp):
     def __post_init__(self) -> None:
         super(Lshr, self).__post_init__()
         if isinstance(self.right, BValue):
-            object.__setattr__(self, "min", self.left.min >> self.right.value)
-            object.__setattr__(self, "max", self.left.max >> self.right.value)
+            self.min = self.left.min >> self.right.value
+            self.max = self.left.max >> self.right.value
 
     @profile
     @override
@@ -912,7 +889,7 @@ class Lshr(BinaryOp):
                 return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Ult(CompareOp):
     op: ClassVar[bytes] = b"bvult"
 
@@ -948,7 +925,7 @@ class Ult(CompareOp):
                 return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Nand(BinaryOp):
     op: ClassVar[bytes] = b"bvnand"
 
@@ -962,7 +939,7 @@ class Nand(BinaryOp):
                 return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Nor(BinaryOp):
     op: ClassVar[bytes] = b"bvnor"
 
@@ -976,7 +953,7 @@ class Nor(BinaryOp):
                 return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class BXor(BinaryOp):
     op: ClassVar[bytes] = b"bvxor"
     commutative: ClassVar[bool] = True
@@ -1007,7 +984,7 @@ class BXor(BinaryOp):
                 return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Xnor(BinaryOp):
     op: ClassVar[bytes] = b"bvxnor"
 
@@ -1021,7 +998,7 @@ class Xnor(BinaryOp):
                 return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Comp(BTerm):
     op: ClassVar[bytes] = b"bvcomp"
     left: BTerm
@@ -1031,7 +1008,7 @@ class Comp(BTerm):
     @override
     def __post_init__(self) -> None:
         assert self.left.width == self.right.width
-        object.__setattr__(self, "width", 1)
+        self.width = 1
         super(Comp, self).__post_init__()
 
     @profile
@@ -1044,7 +1021,7 @@ class Comp(BTerm):
                 return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Sub(BinaryOp):
     op: ClassVar[bytes] = b"bvsub"
 
@@ -1058,7 +1035,7 @@ class Sub(BinaryOp):
                 return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Sdiv(BinaryOp):
     op: ClassVar[bytes] = b"bvsdiv"
 
@@ -1071,8 +1048,8 @@ class Sdiv(BinaryOp):
             and (self.right.value < 1 << self.width - 1)
             and (self.right.value != 0)
         ):
-            object.__setattr__(self, "min", self.left.min // self.right.value)
-            object.__setattr__(self, "max", self.left.max // self.right.value)
+            self.min = self.left.min // self.right.value
+            self.max = self.left.max // self.right.value
 
     @profile
     @override
@@ -1092,7 +1069,7 @@ class Sdiv(BinaryOp):
                 return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Srem(BinaryOp):
     op: ClassVar[bytes] = b"bvsrem"
 
@@ -1104,8 +1081,8 @@ class Srem(BinaryOp):
             and self.right.min > 0
             and (self.right.max < 1 << self.width - 1)
         ):
-            object.__setattr__(self, "min", 0)
-            object.__setattr__(self, "max", self.right.max - 1)
+            self.min = 0
+            self.max = self.right.max - 1
 
     @profile
     @override
@@ -1128,7 +1105,7 @@ class Srem(BinaryOp):
                 return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Smod(BinaryOp):
     op: ClassVar[bytes] = b"bvsmod"
 
@@ -1136,8 +1113,8 @@ class Smod(BinaryOp):
     def __post_init__(self) -> None:
         super(Smod, self).__post_init__()
         if self.right.min > 0 and self.right.max < 1 << self.width - 1:
-            object.__setattr__(self, "min", 0)
-            object.__setattr__(self, "max", self.right.max - 1)
+            self.min = 0
+            self.max = self.right.max - 1
 
     @profile
     @override
@@ -1154,7 +1131,7 @@ class Smod(BinaryOp):
                 return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Ashr(BinaryOp):
     op: ClassVar[bytes] = b"bvashr"
 
@@ -1162,8 +1139,8 @@ class Ashr(BinaryOp):
     def __post_init__(self) -> None:
         super(Ashr, self).__post_init__()
         if isinstance(self.right, BValue) and self.left.max < 1 << self.width - 1:
-            object.__setattr__(self, "min", self.left.min >> self.right.value)
-            object.__setattr__(self, "max", self.left.max >> self.right.value)
+            self.min = self.left.min >> self.right.value
+            self.max = self.left.max >> self.right.value
 
     @profile
     @override
@@ -1181,7 +1158,7 @@ class Ashr(BinaryOp):
                 return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Repeat(SingleParamOp):
     op: ClassVar[bytes] = b"repeat"
 
@@ -1189,8 +1166,7 @@ class Repeat(SingleParamOp):
     @override
     def __post_init__(self) -> None:
         assert self.i > 0
-        w = self.term.width * self.i
-        object.__setattr__(self, "width", w)
+        self.width = self.term.width * self.i
         super(Repeat, self).__post_init__()
 
     @profile
@@ -1205,7 +1181,7 @@ class Repeat(SingleParamOp):
                 return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class ZeroExtend(SingleParamOp):
     op: ClassVar[bytes] = b"zero_extend"
 
@@ -1213,8 +1189,7 @@ class ZeroExtend(SingleParamOp):
     @override
     def __post_init__(self) -> None:
         assert self.i >= 0
-        w = self.term.width + self.i
-        object.__setattr__(self, "width", w)
+        self.width = self.term.width + self.i
         super(ZeroExtend, self).__post_init__()
 
     @profile
@@ -1229,7 +1204,7 @@ class ZeroExtend(SingleParamOp):
                 return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class SignExtend(SingleParamOp):
     op: ClassVar[bytes] = b"sign_extend"
 
@@ -1237,12 +1212,11 @@ class SignExtend(SingleParamOp):
     @override
     def __post_init__(self) -> None:
         assert self.i >= 0
-        w = self.term.width + self.i
-        object.__setattr__(self, "width", w)
+        self.width = self.term.width + self.i
         super(SignExtend, self).__post_init__()
         if self.term.max < 1 << self.term.width - 1:
-            object.__setattr__(self, "min", self.term.min)
-            object.__setattr__(self, "max", self.term.max)
+            self.min = self.term.min
+            self.max = self.term.max
 
     @profile
     @override
@@ -1259,7 +1233,7 @@ class SignExtend(SingleParamOp):
                 return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class RotateLeft(SingleParamOp):
     op: ClassVar[bytes] = b"rotate_left"
 
@@ -1267,7 +1241,7 @@ class RotateLeft(SingleParamOp):
     @override
     def __post_init__(self) -> None:
         assert self.i >= 0
-        object.__setattr__(self, "width", self.term.width)
+        self.width = self.term.width
         super(RotateLeft, self).__post_init__()
 
     @profile
@@ -1288,7 +1262,7 @@ class RotateLeft(SingleParamOp):
                 return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class RotateRight(SingleParamOp):
     op: ClassVar[bytes] = b"rotate_right"
 
@@ -1296,7 +1270,7 @@ class RotateRight(SingleParamOp):
     @override
     def __post_init__(self) -> None:
         assert self.i >= 0
-        object.__setattr__(self, "width", self.term.width)
+        self.width = self.term.width
         super(RotateRight, self).__post_init__()
 
     @profile
@@ -1312,7 +1286,7 @@ class RotateRight(SingleParamOp):
                 return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Ule(CompareOp):
     op: ClassVar[bytes] = b"bvule"
 
@@ -1346,7 +1320,7 @@ class Ule(CompareOp):
                 return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Ugt(CompareOp):
     op: ClassVar[bytes] = b"bvugt"
 
@@ -1360,7 +1334,7 @@ class Ugt(CompareOp):
                 return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Uge(CompareOp):
     op: ClassVar[bytes] = b"bvuge"
 
@@ -1374,7 +1348,7 @@ class Uge(CompareOp):
                 return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Slt(CompareOp):
     op: ClassVar[bytes] = b"bvslt"
 
@@ -1400,7 +1374,7 @@ class Slt(CompareOp):
                 return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Sle(CompareOp):
     op: ClassVar[bytes] = b"bvsle"
 
@@ -1426,7 +1400,7 @@ class Sle(CompareOp):
                 return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Sgt(CompareOp):
     op: ClassVar[bytes] = b"bvsgt"
 
@@ -1440,7 +1414,7 @@ class Sgt(CompareOp):
                 return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Sge(CompareOp):
     op: ClassVar[bytes] = b"bvsge"
 
@@ -1454,7 +1428,7 @@ class Sge(CompareOp):
                 return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Ite(BTerm):
     op: ClassVar[bytes] = b"ite"
     cond: CTerm
@@ -1465,10 +1439,10 @@ class Ite(BTerm):
     @override
     def __post_init__(self) -> None:
         assert self.left.width == self.right.width
-        object.__setattr__(self, "width", self.left.width)
+        self.width = self.left.width
         super(Ite, self).__post_init__()
-        object.__setattr__(self, "min", min(self.left.min, self.right.min))
-        object.__setattr__(self, "max", max(self.left.max, self.right.max))
+        self.min = min(self.left.min, self.right.min)
+        self.max = max(self.left.max, self.right.max)
 
     @profile
     @override
@@ -1490,7 +1464,7 @@ class Ite(BTerm):
                 return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class ATerm(BaseTerm):
     def sort(self) -> bytes:
         return b"(Array (_ BitVec %d) (_ BitVec %d))" % self.width()
@@ -1499,7 +1473,7 @@ class ATerm(BaseTerm):
     def width(self) -> tuple[int, int]: ...
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class ASymbol(ATerm):
     name: bytes
     key: int
@@ -1524,7 +1498,7 @@ class ASymbol(ATerm):
         return model.get(self.name, self)
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class AValue(ATerm):
     default: BTerm
     key: int
@@ -1548,7 +1522,7 @@ class AValue(ATerm):
         return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Select(BTerm):
     op: ClassVar[bytes] = b"select"
     array: ATerm
@@ -1559,9 +1533,9 @@ class Select(BTerm):
     def __post_init__(self) -> None:
         k, v = self.array.width()
         assert k == self.key.width
-        object.__setattr__(self, "width", v)
+        self.width = v
         if isinstance(self.array, Store):
-            object.__setattr__(self, "array", copy.deepcopy(self.array))
+            self.array = copy.deepcopy(self.array)
         super(Select, self).__post_init__()
 
     @profile
@@ -1594,7 +1568,7 @@ class Select(BTerm):
                 return self
 
 
-@dataclass(frozen=True, repr=False, slots=True)
+@dataclass(repr=False, slots=True, unsafe_hash=True)
 class Store(ATerm):
     base: ASymbol | AValue
     lower: dict[int, BTerm] = field(default_factory=dict[int, BTerm])
@@ -1605,10 +1579,10 @@ class Store(ATerm):
 
     def __deepcopy__(self, memo: Any, /) -> Self:
         k = self.__new__(self.__class__)
-        object.__setattr__(k, "base", self.base)
-        object.__setattr__(k, "lower", copy.copy(self.lower))
-        object.__setattr__(k, "upper", copy.copy(self.upper))
-        object.__setattr__(k, "count", self.count)
+        k.base = self.base
+        k.lower = copy.copy(self.lower)
+        k.upper = copy.copy(self.upper)
+        k.count = self.count
         return k
 
     def width(self) -> tuple[int, int]:
@@ -1616,17 +1590,15 @@ class Store(ATerm):
 
     @profile
     def set(self, key: BTerm, value: BTerm) -> None:
-        count = self.count
         if isinstance(key, BValue) and (not self.upper):
             k = key.value
             if k in self.lower:
-                count -= self.lower[k].count + 1
+                self.count -= self.lower[k].count + 1
             self.lower[k] = value
-            count += value.count + 1
+            self.count += value.count + 1
         else:
             self.upper.append((key, value))
-            count += key.count + value.count + 2
-        object.__setattr__(self, "count", count)
+            self.count += key.count + value.count + 2
 
     @profile
     @override
