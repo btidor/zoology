@@ -21,7 +21,7 @@ from line_profiler import profile
 class BaseTerm(abc.ABC):
     op: ClassVar[bytes]
     commutative: ClassVar[bool] = False
-    count: int = field(init=False, compare=False)
+    count: int = field(init=False, compare=False, default=-1)
 
     # Instances of Symbolic are expected to be immutable:
     def __copy__(self) -> Self:
