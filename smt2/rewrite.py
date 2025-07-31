@@ -710,7 +710,9 @@ def bitvector_yolo(term: BTerm) -> BTerm:
                     else:
                         return Select(base, key)
                 case _:
-                    if upper:
+                    if not lower:
+                        return Select(base, key)
+                    elif upper:
                         return Select(Store(base, copy.copy(lower)), key)
                     else:
                         return term
