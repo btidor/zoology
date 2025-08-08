@@ -33,7 +33,9 @@ class RewriteMeta(abc.ABCMeta):
                 case _:
                     pass
         term = super(RewriteMeta, self).__call__(*args, **kwds)
-        return term.rewrite()
+        term = term.rewrite()
+        term.bzla()  # populate cache to avoid deep recursion
+        return term
 
 
 def constraint_reduction(term: CTerm) -> CTerm:
