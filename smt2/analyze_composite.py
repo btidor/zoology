@@ -21,7 +21,7 @@ from . import rewrite, theory_array, theory_bitvec, theory_core
 from .analyze_minmax import MinMaxCase
 from .analyze_rewrite import RewriteCase
 from .minmax import constraint_minmax, propagate_minmax
-from .rewrite import RewriteMeta
+from .rewrite import CacheMeta, RewriteMeta
 from .theory_array import ATerm
 from .theory_bitvec import BTerm, Concat
 from .theory_core import BaseTerm, CTerm
@@ -76,6 +76,7 @@ type MinMax = tuple[int, int]
 
 """)
         self._source(RewriteMeta)
+        self._source(CacheMeta)
         self._theory(theory_core)
         self._theory(theory_bitvec)
         self._theory(theory_array)
@@ -93,6 +94,8 @@ type MinMax = tuple[int, int]
                     cls.keywords.append(
                         ast.keyword("metaclass", ast.Name("RewriteMeta"))
                     )
+                case [ast.ClassDef("BValue") as cls]:
+                    cls.keywords.append(ast.keyword("metaclass", ast.Name("CacheMeta")))
                 case [ast.ClassDef() as cls]:
                     pass
                 case _:

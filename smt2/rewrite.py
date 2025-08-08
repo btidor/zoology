@@ -15,6 +15,8 @@ from .theory_core import *
 class RewriteMeta(abc.ABCMeta):
     """Performs term rewriting."""
 
+    _cache = dict[Any, Any]()
+
     @profile
     def __call__(self, *args: Any, **kwds: Any) -> Any:
         """Construct the requested term, then rewrite it."""
@@ -36,6 +38,19 @@ class RewriteMeta(abc.ABCMeta):
         term = term.rewrite()
         term.bzla()  # populate cache to avoid deep recursion
         return term
+
+
+class CacheMeta(RewriteMeta):
+    """Term-caching metaclass."""
+
+    _cache = dict[tuple[Any, ...], Any]()
+
+    @profile
+    def __call__(self, *args: Any) -> Any:
+        """Return the given term, using the cache. Skip rewrites."""
+        if args not in self._cache:
+            self._cache[args] = super().__call__(*args)
+        return self._cache[args]
 
 
 def constraint_reduction(term: CTerm) -> CTerm:

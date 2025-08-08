@@ -23,6 +23,7 @@ import gc
 from typing import Any, Iterator
 
 from smt2 import theory_core
+from smt2.composite import CacheMeta
 from smt2.theory_core import CACHE, BaseTerm, make_bitwuzla
 
 
@@ -30,6 +31,7 @@ from smt2.theory_core import CACHE, BaseTerm, make_bitwuzla
 def reset_bitwuzla(request: Any) -> Iterator[None]:
     theory_core.BZLA = make_bitwuzla()
     CACHE.clear()
+    CacheMeta._cache.clear()  # pyright: ignore[reportPrivateUsage]
     gc.collect()
     for obj in gc.get_objects():
         if isinstance(obj, BaseTerm):

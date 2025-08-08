@@ -24,6 +24,8 @@ type MinMax = tuple[int, int]
 
 
 class RewriteMeta(abc.ABCMeta):
+    _cache = dict[Any, Any]()
+
     @profile
     def __call__(self, *args: Any, **kwds: Any) -> Any:
         assert issubclass(self, BaseTerm)
@@ -43,6 +45,16 @@ class RewriteMeta(abc.ABCMeta):
         term = term.rewrite()
         term.bzla()
         return term
+
+
+class CacheMeta(RewriteMeta):
+    _cache = dict[tuple[Any, ...], Any]()
+
+    @profile
+    def __call__(self, *args: Any) -> Any:
+        if args not in self._cache:
+            self._cache[args] = super().__call__(*args)
+        return self._cache[args]
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
@@ -461,7 +473,7 @@ class BSymbol(BTerm):
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
-class BValue(BTerm):
+class BValue(BTerm, metaclass=CacheMeta):
     value: int
     w: InitVar[int]
 
