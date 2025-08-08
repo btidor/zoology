@@ -24,6 +24,13 @@ from smt2.rewrite import (
 from smt2.theory_core import CSymbol, Distinct, Not, check
 
 
+def test_codegen():
+    with open(COMPOSITE_PY, "rb") as f:
+        actual = f.read()
+    expected = Compositor().dump()
+    assert actual == expected, "please run `python3 -m smt2.analyze_composite`"
+
+
 def test_bvlshr_harder():
     assert (Uint256(0x1234) >> Uint256(1)).reveal() == 0x91A
     assert (Uint256(0x1234) >> Uint256(4)).reveal() == 0x123
@@ -115,10 +122,3 @@ def test_propagate_minmax(case: MinMaxCase):
 @parameterize_rewrite(constraint_minmax)
 def test_constraint_minmax(case: RewriteCase):
     assert CaseParser.is_equivalent(case)
-
-
-def test_codegen():
-    with open(COMPOSITE_PY, "rb") as f:
-        actual = f.read()
-    expected = Compositor().dump()
-    assert actual == expected, "please run `python3 -m smt2.analyze_composite`"
