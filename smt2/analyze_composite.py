@@ -70,7 +70,7 @@ from typing import Any, ClassVar, Self, override
 
 from line_profiler import profile
 
-from .theory_core import BaseTerm, DumpContext
+from .theory_core import BZLA, CACHE, BaseTerm, BitwuzlaTerm, DumpContext, Kind
 
 type MinMax = tuple[int, int]
 

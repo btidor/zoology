@@ -17,7 +17,7 @@ from typing import Any, ClassVar, Self, override
 from line_profiler import profile
 
 from .theory_bitvec import BTerm, BValue
-from .theory_core import BaseTerm, DumpContext
+from .theory_core import BZLA, CACHE, BaseTerm, BitwuzlaTerm, DumpContext, Kind
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
@@ -50,6 +50,18 @@ class ASymbol(ATerm):
     def substitute(self, model: dict[bytes, BaseTerm]) -> BaseTerm:
         return model.get(self.name, self)
 
+    @override
+    def bzla(self) -> BitwuzlaTerm:
+        global CACHE
+        if self.name not in CACHE:
+            CACHE[self.name] = BZLA.mk_const(
+                BZLA.mk_array_sort(
+                    BZLA.mk_bv_sort(self.key), BZLA.mk_bv_sort(self.value)
+                ),
+                self.name.decode(),
+            )
+        return CACHE[self.name]
+
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class AValue(ATerm):
@@ -72,10 +84,22 @@ class AValue(ATerm):
     def substitute(self, model: dict[bytes, BaseTerm]) -> BaseTerm:
         return self
 
+    @override
+    def bzla(self) -> BitwuzlaTerm:
+        if not self._bzla:
+            self._bzla = BZLA.mk_const_array(
+                BZLA.mk_array_sort(
+                    BZLA.mk_bv_sort(self.key), BZLA.mk_bv_sort(self.default.width)
+                ),
+                self.default.bzla(),
+            )
+        return self._bzla
+
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Select(BTerm):
     op: ClassVar[bytes] = b"select"
+    kind: ClassVar[Kind] = Kind.ARRAY_SELECT
     array: ATerm
     key: BTerm
 
@@ -88,10 +112,15 @@ class Select(BTerm):
             self.array = copy.deepcopy(self.array)
         super(Select, self).__post_init__()
 
+    @override
+    def bzla(self) -> BitwuzlaTerm:
+        return BZLA.mk_term(self.kind, (self.array.bzla(), self.key.bzla()))
+
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Store(ATerm):
     op: ClassVar[bytes] = b"store"
+    kind: ClassVar[Kind] = Kind.ARRAY_STORE
     base: ASymbol | AValue
     lower: dict[int, BTerm] = field(default_factory=dict[int, BTerm])
     upper: list[tuple[BTerm, BTerm]] = field(default_factory=list[tuple[BTerm, BTerm]])
@@ -155,3 +184,13 @@ class Store(ATerm):
             ctx.write(b" ")
             v.dump(ctx)
             ctx.write(b")")
+
+    @override
+    def bzla(self) -> BitwuzlaTerm:
+        array = self.base.bzla()
+        sk = array.get_sort().array_get_index()
+        for k, v in self.lower.items():
+            array = BZLA.mk_term(self.kind, (array, BZLA.mk_bv_value(sk, k), v.bzla()))
+        for k, v in self.upper:
+            array = BZLA.mk_term(self.kind, (array, k.bzla(), v.bzla()))
+        return array

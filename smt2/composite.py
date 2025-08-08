@@ -18,7 +18,7 @@ from typing import Any, ClassVar, Self, override
 
 from line_profiler import profile
 
-from .theory_core import BaseTerm, DumpContext
+from .theory_core import BZLA, CACHE, BaseTerm, BitwuzlaTerm, DumpContext, Kind
 
 type MinMax = tuple[int, int]
 
@@ -68,6 +68,13 @@ class CSymbol(CTerm):
     def substitute(self, model: dict[bytes, BaseTerm]) -> BaseTerm:
         return model.get(self.name, self)
 
+    @override
+    def bzla(self) -> BitwuzlaTerm:
+        global CACHE
+        if self.name not in CACHE:
+            CACHE[self.name] = BZLA.mk_const(BZLA.mk_bool_sort(), self.name.decode())
+        return CACHE[self.name]
+
     @profile
     def __post_init__(self) -> None:
         super(CSymbol, self).__post_init__()
@@ -88,6 +95,12 @@ class CValue(CTerm):
     def substitute(self, model: dict[bytes, BaseTerm]) -> BaseTerm:
         return self
 
+    @override
+    def bzla(self) -> BitwuzlaTerm:
+        if not self._bzla:
+            self._bzla = BZLA.mk_bv_value(BZLA.mk_bool_sort(), int(self.value))
+        return self._bzla
+
     @profile
     def __post_init__(self) -> None:
         super(CValue, self).__post_init__()
@@ -97,7 +110,14 @@ class CValue(CTerm):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Not(CTerm):
     op: ClassVar[bytes] = b"not"
+    kind: ClassVar[Kind] = Kind.NOT
     term: CTerm
+
+    @override
+    def bzla(self) -> BitwuzlaTerm:
+        if not self._bzla:
+            self._bzla = BZLA.mk_term(self.kind, (self.term.bzla(),))
+        return self._bzla
 
     @profile
     def __post_init__(self) -> None:
@@ -127,8 +147,15 @@ class Not(CTerm):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Implies(CTerm):
     op: ClassVar[bytes] = b"=>"
+    kind: ClassVar[Kind] = Kind.IMPLIES
     left: CTerm
     right: CTerm
+
+    @override
+    def bzla(self) -> BitwuzlaTerm:
+        if not self._bzla:
+            self._bzla = BZLA.mk_term(self.kind, (self.left.bzla(), self.right.bzla()))
+        return self._bzla
 
     @profile
     def __post_init__(self) -> None:
@@ -148,9 +175,16 @@ class Implies(CTerm):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class And(CTerm):
     op: ClassVar[bytes] = b"and"
+    kind: ClassVar[Kind] = Kind.AND
     commutative: ClassVar[bool] = True
     left: CTerm
     right: CTerm
+
+    @override
+    def bzla(self) -> BitwuzlaTerm:
+        if not self._bzla:
+            self._bzla = BZLA.mk_term(self.kind, (self.left.bzla(), self.right.bzla()))
+        return self._bzla
 
     @profile
     def __post_init__(self) -> None:
@@ -178,9 +212,16 @@ class And(CTerm):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Or(CTerm):
     op: ClassVar[bytes] = b"or"
+    kind: ClassVar[Kind] = Kind.OR
     commutative: ClassVar[bool] = True
     left: CTerm
     right: CTerm
+
+    @override
+    def bzla(self) -> BitwuzlaTerm:
+        if not self._bzla:
+            self._bzla = BZLA.mk_term(self.kind, (self.left.bzla(), self.right.bzla()))
+        return self._bzla
 
     @profile
     def __post_init__(self) -> None:
@@ -208,9 +249,16 @@ class Or(CTerm):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Xor(CTerm):
     op: ClassVar[bytes] = b"xor"
+    kind: ClassVar[Kind] = Kind.XOR
     commutative: ClassVar[bool] = True
     left: CTerm
     right: CTerm
+
+    @override
+    def bzla(self) -> BitwuzlaTerm:
+        if not self._bzla:
+            self._bzla = BZLA.mk_term(self.kind, (self.left.bzla(), self.right.bzla()))
+        return self._bzla
 
     @profile
     def __post_init__(self) -> None:
@@ -238,6 +286,7 @@ class Xor(CTerm):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Eq[S: BaseTerm](CTerm):
     op: ClassVar[bytes] = b"="
+    kind: ClassVar[Kind] = Kind.EQUAL
     commutative: ClassVar[bool] = True
     left: S
     right: S
@@ -248,6 +297,12 @@ class Eq[S: BaseTerm](CTerm):
         super(Eq, self).__post_init__()
         assert getattr(self.left, "width", None) == getattr(self.right, "width", None)
         self.count = self.left.count + self.right.count + 2
+
+    @override
+    def bzla(self) -> BitwuzlaTerm:
+        if not self._bzla:
+            self._bzla = BZLA.mk_term(self.kind, (self.left.bzla(), self.right.bzla()))
+        return self._bzla
 
     @profile
     @override
@@ -293,6 +348,7 @@ class Eq[S: BaseTerm](CTerm):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Distinct[S: BaseTerm](CTerm):
     op: ClassVar[bytes] = b"distinct"
+    kind: ClassVar[Kind] = Kind.DISTINCT
     left: S
     right: S
 
@@ -302,6 +358,12 @@ class Distinct[S: BaseTerm](CTerm):
         super(Distinct, self).__post_init__()
         assert getattr(self.left, "width", None) == getattr(self.right, "width", None)
         self.count = self.left.count + self.right.count + 2
+
+    @override
+    def bzla(self) -> BitwuzlaTerm:
+        if not self._bzla:
+            self._bzla = BZLA.mk_term(self.kind, (self.left.bzla(), self.right.bzla()))
+        return self._bzla
 
     @profile
     @override
@@ -318,9 +380,18 @@ class Distinct[S: BaseTerm](CTerm):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class CIte(CTerm):
     op: ClassVar[bytes] = b"ite"
+    kind: ClassVar[Kind] = Kind.ITE
     cond: CTerm
     left: CTerm
     right: CTerm
+
+    @override
+    def bzla(self) -> BitwuzlaTerm:
+        if not self._bzla:
+            self._bzla = BZLA.mk_term(
+                self.kind, (self.cond.bzla(), self.left.bzla(), self.right.bzla())
+            )
+        return self._bzla
 
     @profile
     def __post_init__(self) -> None:
@@ -377,6 +448,15 @@ class BSymbol(BTerm):
     def substitute(self, model: dict[bytes, BaseTerm]) -> BaseTerm:
         return model.get(self.name, self)
 
+    @override
+    def bzla(self) -> BitwuzlaTerm:
+        global CACHE
+        if self.name not in CACHE:
+            CACHE[self.name] = BZLA.mk_const(
+                BZLA.mk_bv_sort(self.width), self.name.decode()
+            )
+        return CACHE[self.name]
+
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class BValue(BTerm):
@@ -416,6 +496,12 @@ class BValue(BTerm):
     def substitute(self, model: dict[bytes, BaseTerm]) -> BaseTerm:
         return self
 
+    @override
+    def bzla(self) -> BitwuzlaTerm:
+        if not self._bzla:
+            self._bzla = BZLA.mk_bv_value(BZLA.mk_bv_sort(self.width), self.value)
+        return self._bzla
+
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class UnaryOp(BTerm):
@@ -426,6 +512,12 @@ class UnaryOp(BTerm):
     def __post_init__(self) -> None:
         self.width = self.term.width
         super(UnaryOp, self).__post_init__()
+
+    @override
+    def bzla(self) -> BitwuzlaTerm:
+        if not self._bzla:
+            self._bzla = BZLA.mk_term(self.kind, (self.term.bzla(),))
+        return self._bzla
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
@@ -440,6 +532,12 @@ class BinaryOp(BTerm):
         self.width = self.left.width
         super(BinaryOp, self).__post_init__()
 
+    @override
+    def bzla(self) -> BitwuzlaTerm:
+        if not self._bzla:
+            self._bzla = BZLA.mk_term(self.kind, (self.left.bzla(), self.right.bzla()))
+        return self._bzla
+
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class CompareOp(CTerm):
@@ -452,16 +550,29 @@ class CompareOp(CTerm):
         assert self.left.width == self.right.width
         super(CompareOp, self).__post_init__()
 
+    @override
+    def bzla(self) -> BitwuzlaTerm:
+        if not self._bzla:
+            self._bzla = BZLA.mk_term(self.kind, (self.left.bzla(), self.right.bzla()))
+        return self._bzla
+
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class SingleParamOp(BTerm):
     i: int
     term: BTerm
 
+    @override
+    def bzla(self) -> BitwuzlaTerm:
+        if not self._bzla:
+            self._bzla = BZLA.mk_term(self.kind, (self.term.bzla(),), (self.i,))
+        return self._bzla
+
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Concat(BTerm):
     op: ClassVar[bytes] = b"concat"
+    kind: ClassVar[Kind] = Kind.BV_CONCAT
     terms: tuple[BTerm, ...]
 
     @profile
@@ -500,6 +611,12 @@ class Concat(BTerm):
                 term.dump(ctx)
             ctx.write(b")")
 
+    @override
+    def bzla(self) -> BitwuzlaTerm:
+        if not self._bzla:
+            self._bzla = BZLA.mk_term(self.kind, tuple((t.bzla() for t in self.terms)))
+        return self._bzla
+
     @profile
     @override
     def rewrite(self) -> BTerm:
@@ -533,6 +650,7 @@ class Concat(BTerm):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Extract(BTerm):
     op: ClassVar[bytes] = b"extract"
+    kind: ClassVar[Kind] = Kind.BV_EXTRACT
     i: int
     j: int
     term: BTerm
@@ -546,6 +664,12 @@ class Extract(BTerm):
         self.count = self.term.count + 1
         self.min = 0
         self.max = (1 << self.width) - 1
+
+    @override
+    def bzla(self) -> BitwuzlaTerm:
+        if not self._bzla:
+            self._bzla = BZLA.mk_term(self.kind, (self.term.bzla(),), (self.i, self.j))
+        return self._bzla
 
     @profile
     @override
@@ -584,6 +708,7 @@ class Extract(BTerm):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class BNot(UnaryOp):
     op: ClassVar[bytes] = b"bvnot"
+    kind: ClassVar[Kind] = Kind.BV_NOT
 
     @profile
     def __post_init__(self) -> None:
@@ -613,6 +738,7 @@ class BNot(UnaryOp):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class BAnd(BinaryOp):
     op: ClassVar[bytes] = b"bvand"
+    kind: ClassVar[Kind] = Kind.BV_AND
     commutative: ClassVar[bool] = True
 
     @profile
@@ -659,6 +785,7 @@ class BAnd(BinaryOp):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class BOr(BinaryOp):
     op: ClassVar[bytes] = b"bvor"
+    kind: ClassVar[Kind] = Kind.BV_OR
     commutative: ClassVar[bool] = True
 
     @profile
@@ -705,6 +832,7 @@ class BOr(BinaryOp):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Neg(UnaryOp):
     op: ClassVar[bytes] = b"bvneg"
+    kind: ClassVar[Kind] = Kind.BV_NEG
 
     @profile
     def __post_init__(self) -> None:
@@ -726,6 +854,7 @@ class Neg(UnaryOp):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Add(BinaryOp):
     op: ClassVar[bytes] = b"bvadd"
+    kind: ClassVar[Kind] = Kind.BV_ADD
     commutative: ClassVar[bool] = True
 
     @profile
@@ -772,6 +901,7 @@ class Add(BinaryOp):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Mul(BinaryOp):
     op: ClassVar[bytes] = b"bvmul"
+    kind: ClassVar[Kind] = Kind.BV_MUL
     commutative: ClassVar[bool] = True
 
     @profile
@@ -807,6 +937,7 @@ class Mul(BinaryOp):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Udiv(BinaryOp):
     op: ClassVar[bytes] = b"bvudiv"
+    kind: ClassVar[Kind] = Kind.BV_UDIV
 
     @profile
     def __post_init__(self) -> None:
@@ -838,6 +969,7 @@ class Udiv(BinaryOp):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Urem(BinaryOp):
     op: ClassVar[bytes] = b"bvurem"
+    kind: ClassVar[Kind] = Kind.BV_UREM
 
     @profile
     def __post_init__(self) -> None:
@@ -869,6 +1001,7 @@ class Urem(BinaryOp):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Shl(BinaryOp):
     op: ClassVar[bytes] = b"bvshl"
+    kind: ClassVar[Kind] = Kind.BV_SHL
 
     @profile
     def __post_init__(self) -> None:
@@ -920,6 +1053,7 @@ class Shl(BinaryOp):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Lshr(BinaryOp):
     op: ClassVar[bytes] = b"bvlshr"
+    kind: ClassVar[Kind] = Kind.BV_SHR
 
     @profile
     def __post_init__(self) -> None:
@@ -972,6 +1106,7 @@ class Lshr(BinaryOp):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Ult(CompareOp):
     op: ClassVar[bytes] = b"bvult"
+    kind: ClassVar[Kind] = Kind.BV_ULT
 
     @profile
     def __post_init__(self) -> None:
@@ -1013,6 +1148,7 @@ class Ult(CompareOp):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Nand(BinaryOp):
     op: ClassVar[bytes] = b"bvnand"
+    kind: ClassVar[Kind] = Kind.BV_NAND
 
     @profile
     def __post_init__(self) -> None:
@@ -1034,6 +1170,7 @@ class Nand(BinaryOp):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Nor(BinaryOp):
     op: ClassVar[bytes] = b"bvnor"
+    kind: ClassVar[Kind] = Kind.BV_NOR
 
     @profile
     def __post_init__(self) -> None:
@@ -1055,6 +1192,7 @@ class Nor(BinaryOp):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class BXor(BinaryOp):
     op: ClassVar[bytes] = b"bvxor"
+    kind: ClassVar[Kind] = Kind.BV_XOR
     commutative: ClassVar[bool] = True
 
     @profile
@@ -1093,6 +1231,7 @@ class BXor(BinaryOp):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Xnor(BinaryOp):
     op: ClassVar[bytes] = b"bvxnor"
+    kind: ClassVar[Kind] = Kind.BV_XNOR
 
     @profile
     def __post_init__(self) -> None:
@@ -1114,6 +1253,7 @@ class Xnor(BinaryOp):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Comp(BTerm):
     op: ClassVar[bytes] = b"bvcomp"
+    kind: ClassVar[Kind] = Kind.BV_COMP
     left: BTerm
     right: BTerm
 
@@ -1126,6 +1266,12 @@ class Comp(BTerm):
         self.count = self.left.count + self.right.count + 2
         self.min = 0
         self.max = (1 << self.width) - 1
+
+    @override
+    def bzla(self) -> BitwuzlaTerm:
+        if not self._bzla:
+            self._bzla = BZLA.mk_term(self.kind, (self.left.bzla(), self.right.bzla()))
+        return self._bzla
 
     @profile
     @override
@@ -1140,6 +1286,7 @@ class Comp(BTerm):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Sub(BinaryOp):
     op: ClassVar[bytes] = b"bvsub"
+    kind: ClassVar[Kind] = Kind.BV_SUB
 
     @profile
     def __post_init__(self) -> None:
@@ -1161,6 +1308,7 @@ class Sub(BinaryOp):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Sdiv(BinaryOp):
     op: ClassVar[bytes] = b"bvsdiv"
+    kind: ClassVar[Kind] = Kind.BV_SDIV
 
     @profile
     def __post_init__(self) -> None:
@@ -1199,6 +1347,7 @@ class Sdiv(BinaryOp):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Srem(BinaryOp):
     op: ClassVar[bytes] = b"bvsrem"
+    kind: ClassVar[Kind] = Kind.BV_SREM
 
     @profile
     def __post_init__(self) -> None:
@@ -1239,6 +1388,7 @@ class Srem(BinaryOp):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Smod(BinaryOp):
     op: ClassVar[bytes] = b"bvsmod"
+    kind: ClassVar[Kind] = Kind.BV_SMOD
 
     @profile
     def __post_init__(self) -> None:
@@ -1269,6 +1419,7 @@ class Smod(BinaryOp):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Ashr(BinaryOp):
     op: ClassVar[bytes] = b"bvashr"
+    kind: ClassVar[Kind] = Kind.BV_ASHR
 
     @profile
     def __post_init__(self) -> None:
@@ -1300,6 +1451,7 @@ class Ashr(BinaryOp):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Repeat(SingleParamOp):
     op: ClassVar[bytes] = b"repeat"
+    kind: ClassVar[Kind] = Kind.BV_REPEAT
 
     @profile
     @override
@@ -1326,6 +1478,7 @@ class Repeat(SingleParamOp):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class ZeroExtend(SingleParamOp):
     op: ClassVar[bytes] = b"zero_extend"
+    kind: ClassVar[Kind] = Kind.BV_ZERO_EXTEND
 
     @profile
     @override
@@ -1352,6 +1505,7 @@ class ZeroExtend(SingleParamOp):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class SignExtend(SingleParamOp):
     op: ClassVar[bytes] = b"sign_extend"
+    kind: ClassVar[Kind] = Kind.BV_SIGN_EXTEND
 
     @profile
     @override
@@ -1385,6 +1539,7 @@ class SignExtend(SingleParamOp):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class RotateLeft(SingleParamOp):
     op: ClassVar[bytes] = b"rotate_left"
+    kind: ClassVar[Kind] = Kind.BV_ROL
 
     @profile
     @override
@@ -1417,6 +1572,7 @@ class RotateLeft(SingleParamOp):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class RotateRight(SingleParamOp):
     op: ClassVar[bytes] = b"rotate_right"
+    kind: ClassVar[Kind] = Kind.BV_ROR
 
     @profile
     @override
@@ -1444,6 +1600,7 @@ class RotateRight(SingleParamOp):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Ule(CompareOp):
     op: ClassVar[bytes] = b"bvule"
+    kind: ClassVar[Kind] = Kind.BV_ULE
 
     @profile
     def __post_init__(self) -> None:
@@ -1483,6 +1640,7 @@ class Ule(CompareOp):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Ugt(CompareOp):
     op: ClassVar[bytes] = b"bvugt"
+    kind: ClassVar[Kind] = Kind.BV_UGT
 
     @profile
     def __post_init__(self) -> None:
@@ -1502,6 +1660,7 @@ class Ugt(CompareOp):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Uge(CompareOp):
     op: ClassVar[bytes] = b"bvuge"
+    kind: ClassVar[Kind] = Kind.BV_UGE
 
     @profile
     def __post_init__(self) -> None:
@@ -1521,6 +1680,7 @@ class Uge(CompareOp):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Slt(CompareOp):
     op: ClassVar[bytes] = b"bvslt"
+    kind: ClassVar[Kind] = Kind.BV_SLT
 
     @profile
     def __post_init__(self) -> None:
@@ -1552,6 +1712,7 @@ class Slt(CompareOp):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Sle(CompareOp):
     op: ClassVar[bytes] = b"bvsle"
+    kind: ClassVar[Kind] = Kind.BV_SLE
 
     @profile
     def __post_init__(self) -> None:
@@ -1583,6 +1744,7 @@ class Sle(CompareOp):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Sgt(CompareOp):
     op: ClassVar[bytes] = b"bvsgt"
+    kind: ClassVar[Kind] = Kind.BV_SGT
 
     @profile
     def __post_init__(self) -> None:
@@ -1602,6 +1764,7 @@ class Sgt(CompareOp):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Sge(CompareOp):
     op: ClassVar[bytes] = b"bvsge"
+    kind: ClassVar[Kind] = Kind.BV_SGE
 
     @profile
     def __post_init__(self) -> None:
@@ -1621,6 +1784,7 @@ class Sge(CompareOp):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Ite(BTerm):
     op: ClassVar[bytes] = b"ite"
+    kind: ClassVar[Kind] = Kind.ITE
     cond: CTerm
     left: BTerm
     right: BTerm
@@ -1634,6 +1798,14 @@ class Ite(BTerm):
         self.count = self.cond.count + self.left.count + self.right.count + 3
         self.min = min(self.left.min, self.right.min)
         self.max = max(self.left.max, self.right.max)
+
+    @override
+    def bzla(self) -> BitwuzlaTerm:
+        if not self._bzla:
+            self._bzla = BZLA.mk_term(
+                self.kind, (self.cond.bzla(), self.left.bzla(), self.right.bzla())
+            )
+        return self._bzla
 
     @profile
     @override
@@ -1688,6 +1860,18 @@ class ASymbol(ATerm):
     def substitute(self, model: dict[bytes, BaseTerm]) -> BaseTerm:
         return model.get(self.name, self)
 
+    @override
+    def bzla(self) -> BitwuzlaTerm:
+        global CACHE
+        if self.name not in CACHE:
+            CACHE[self.name] = BZLA.mk_const(
+                BZLA.mk_array_sort(
+                    BZLA.mk_bv_sort(self.key), BZLA.mk_bv_sort(self.value)
+                ),
+                self.name.decode(),
+            )
+        return CACHE[self.name]
+
     @profile
     def __post_init__(self) -> None:
         super(ASymbol, self).__post_init__()
@@ -1717,6 +1901,17 @@ class AValue(ATerm):
     def substitute(self, model: dict[bytes, BaseTerm]) -> BaseTerm:
         return self
 
+    @override
+    def bzla(self) -> BitwuzlaTerm:
+        if not self._bzla:
+            self._bzla = BZLA.mk_const_array(
+                BZLA.mk_array_sort(
+                    BZLA.mk_bv_sort(self.key), BZLA.mk_bv_sort(self.default.width)
+                ),
+                self.default.bzla(),
+            )
+        return self._bzla
+
     @profile
     def __post_init__(self) -> None:
         super(AValue, self).__post_init__()
@@ -1726,6 +1921,7 @@ class AValue(ATerm):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Select(BTerm):
     op: ClassVar[bytes] = b"select"
+    kind: ClassVar[Kind] = Kind.ARRAY_SELECT
     array: ATerm
     key: BTerm
 
@@ -1741,6 +1937,10 @@ class Select(BTerm):
         self.count = self.array.count + self.key.count + 2
         self.min = 0
         self.max = (1 << self.width) - 1
+
+    @override
+    def bzla(self) -> BitwuzlaTerm:
+        return BZLA.mk_term(self.kind, (self.array.bzla(), self.key.bzla()))
 
     @profile
     @override
@@ -1777,6 +1977,7 @@ class Select(BTerm):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Store(ATerm):
     op: ClassVar[bytes] = b"store"
+    kind: ClassVar[Kind] = Kind.ARRAY_STORE
     base: ASymbol | AValue
     lower: dict[int, BTerm] = field(default_factory=dict[int, BTerm])
     upper: list[tuple[BTerm, BTerm]] = field(default_factory=list[tuple[BTerm, BTerm]])
@@ -1839,6 +2040,16 @@ class Store(ATerm):
             ctx.write(b" ")
             v.dump(ctx)
             ctx.write(b")")
+
+    @override
+    def bzla(self) -> BitwuzlaTerm:
+        array = self.base.bzla()
+        sk = array.get_sort().array_get_index()
+        for k, v in self.lower.items():
+            array = BZLA.mk_term(self.kind, (array, BZLA.mk_bv_value(sk, k), v.bzla()))
+        for k, v in self.upper:
+            array = BZLA.mk_term(self.kind, (array, k.bzla(), v.bzla()))
+        return array
 
     @profile
     def __post_init__(self) -> None:

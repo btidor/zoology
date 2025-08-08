@@ -15,7 +15,7 @@ from typing import ClassVar, override
 
 from line_profiler import profile
 
-from .theory_core import BaseTerm, CTerm, DumpContext
+from .theory_core import BZLA, CACHE, BaseTerm, BitwuzlaTerm, CTerm, DumpContext, Kind
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
@@ -51,6 +51,15 @@ class BSymbol(BTerm):
     def substitute(self, model: dict[bytes, BaseTerm]) -> BaseTerm:
         return model.get(self.name, self)
 
+    @override
+    def bzla(self) -> BitwuzlaTerm:
+        global CACHE
+        if self.name not in CACHE:
+            CACHE[self.name] = BZLA.mk_const(
+                BZLA.mk_bv_sort(self.width), self.name.decode()
+            )
+        return CACHE[self.name]
+
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class BValue(BTerm):
@@ -85,6 +94,12 @@ class BValue(BTerm):
     def substitute(self, model: dict[bytes, BaseTerm]) -> BaseTerm:
         return self
 
+    @override
+    def bzla(self) -> BitwuzlaTerm:
+        if not self._bzla:
+            self._bzla = BZLA.mk_bv_value(BZLA.mk_bv_sort(self.width), self.value)
+        return self._bzla
+
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class UnaryOp(BTerm):
@@ -94,6 +109,12 @@ class UnaryOp(BTerm):
     def __post_init__(self) -> None:
         self.width = self.term.width
         super(UnaryOp, self).__post_init__()
+
+    @override
+    def bzla(self) -> BitwuzlaTerm:
+        if not self._bzla:
+            self._bzla = BZLA.mk_term(self.kind, (self.term.bzla(),))
+        return self._bzla
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
@@ -107,6 +128,12 @@ class BinaryOp(BTerm):
         self.width = self.left.width
         super(BinaryOp, self).__post_init__()
 
+    @override
+    def bzla(self) -> BitwuzlaTerm:
+        if not self._bzla:
+            self._bzla = BZLA.mk_term(self.kind, (self.left.bzla(), self.right.bzla()))
+        return self._bzla
+
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class CompareOp(CTerm):
@@ -118,16 +145,29 @@ class CompareOp(CTerm):
         assert self.left.width == self.right.width
         super(CompareOp, self).__post_init__()
 
+    @override
+    def bzla(self) -> BitwuzlaTerm:
+        if not self._bzla:
+            self._bzla = BZLA.mk_term(self.kind, (self.left.bzla(), self.right.bzla()))
+        return self._bzla
+
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class SingleParamOp(BTerm):
     i: int
     term: BTerm
 
+    @override
+    def bzla(self) -> BitwuzlaTerm:
+        if not self._bzla:
+            self._bzla = BZLA.mk_term(self.kind, (self.term.bzla(),), (self.i,))
+        return self._bzla
+
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Concat(BTerm):
     op: ClassVar[bytes] = b"concat"
+    kind: ClassVar[Kind] = Kind.BV_CONCAT
     terms: tuple[BTerm, ...]
 
     @override
@@ -158,10 +198,17 @@ class Concat(BTerm):
                 term.dump(ctx)
             ctx.write(b")")
 
+    @override
+    def bzla(self) -> BitwuzlaTerm:
+        if not self._bzla:
+            self._bzla = BZLA.mk_term(self.kind, tuple(t.bzla() for t in self.terms))
+        return self._bzla
+
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Extract(BTerm):
     op: ClassVar[bytes] = b"extract"
+    kind: ClassVar[Kind] = Kind.BV_EXTRACT
     i: int
     j: int
     term: BTerm
@@ -172,90 +219,112 @@ class Extract(BTerm):
         self.width = self.i - self.j + 1
         super(Extract, self).__post_init__()
 
+    @override
+    def bzla(self) -> BitwuzlaTerm:
+        if not self._bzla:
+            self._bzla = BZLA.mk_term(self.kind, (self.term.bzla(),), (self.i, self.j))
+        return self._bzla
+
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class BNot(UnaryOp):
     op: ClassVar[bytes] = b"bvnot"
+    kind: ClassVar[Kind] = Kind.BV_NOT
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class BAnd(BinaryOp):
     op: ClassVar[bytes] = b"bvand"
+    kind: ClassVar[Kind] = Kind.BV_AND
     commutative: ClassVar[bool] = True
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class BOr(BinaryOp):
     op: ClassVar[bytes] = b"bvor"
+    kind: ClassVar[Kind] = Kind.BV_OR
     commutative: ClassVar[bool] = True
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Neg(UnaryOp):
     op: ClassVar[bytes] = b"bvneg"
+    kind: ClassVar[Kind] = Kind.BV_NEG
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Add(BinaryOp):
     op: ClassVar[bytes] = b"bvadd"
+    kind: ClassVar[Kind] = Kind.BV_ADD
     commutative: ClassVar[bool] = True
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Mul(BinaryOp):
     op: ClassVar[bytes] = b"bvmul"
+    kind: ClassVar[Kind] = Kind.BV_MUL
     commutative: ClassVar[bool] = True
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Udiv(BinaryOp):
     op: ClassVar[bytes] = b"bvudiv"
+    kind: ClassVar[Kind] = Kind.BV_UDIV
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Urem(BinaryOp):
     op: ClassVar[bytes] = b"bvurem"
+    kind: ClassVar[Kind] = Kind.BV_UREM
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Shl(BinaryOp):
     op: ClassVar[bytes] = b"bvshl"
+    kind: ClassVar[Kind] = Kind.BV_SHL
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Lshr(BinaryOp):
     op: ClassVar[bytes] = b"bvlshr"
+    kind: ClassVar[Kind] = Kind.BV_SHR
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Ult(CompareOp):
     op: ClassVar[bytes] = b"bvult"
+    kind: ClassVar[Kind] = Kind.BV_ULT
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Nand(BinaryOp):
     op: ClassVar[bytes] = b"bvnand"
+    kind: ClassVar[Kind] = Kind.BV_NAND
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Nor(BinaryOp):
     op: ClassVar[bytes] = b"bvnor"
+    kind: ClassVar[Kind] = Kind.BV_NOR
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class BXor(BinaryOp):
     op: ClassVar[bytes] = b"bvxor"
+    kind: ClassVar[Kind] = Kind.BV_XOR
     commutative: ClassVar[bool] = True
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Xnor(BinaryOp):
     op: ClassVar[bytes] = b"bvxnor"
+    kind: ClassVar[Kind] = Kind.BV_XNOR
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Comp(BTerm):  # width-1 result
     op: ClassVar[bytes] = b"bvcomp"
+    kind: ClassVar[Kind] = Kind.BV_COMP
     left: BTerm
     right: BTerm
 
@@ -265,35 +334,47 @@ class Comp(BTerm):  # width-1 result
         self.width = 1
         super(Comp, self).__post_init__()
 
+    @override
+    def bzla(self) -> BitwuzlaTerm:
+        if not self._bzla:
+            self._bzla = BZLA.mk_term(self.kind, (self.left.bzla(), self.right.bzla()))
+        return self._bzla
+
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Sub(BinaryOp):
     op: ClassVar[bytes] = b"bvsub"
+    kind: ClassVar[Kind] = Kind.BV_SUB
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Sdiv(BinaryOp):
     op: ClassVar[bytes] = b"bvsdiv"
+    kind: ClassVar[Kind] = Kind.BV_SDIV
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Srem(BinaryOp):
     op: ClassVar[bytes] = b"bvsrem"
+    kind: ClassVar[Kind] = Kind.BV_SREM
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Smod(BinaryOp):
     op: ClassVar[bytes] = b"bvsmod"
+    kind: ClassVar[Kind] = Kind.BV_SMOD
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Ashr(BinaryOp):
     op: ClassVar[bytes] = b"bvashr"
+    kind: ClassVar[Kind] = Kind.BV_ASHR
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Repeat(SingleParamOp):
     op: ClassVar[bytes] = b"repeat"
+    kind: ClassVar[Kind] = Kind.BV_REPEAT
 
     @override
     def __post_init__(self) -> None:
@@ -305,6 +386,7 @@ class Repeat(SingleParamOp):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class ZeroExtend(SingleParamOp):
     op: ClassVar[bytes] = b"zero_extend"
+    kind: ClassVar[Kind] = Kind.BV_ZERO_EXTEND
 
     @override
     def __post_init__(self) -> None:
@@ -316,6 +398,7 @@ class ZeroExtend(SingleParamOp):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class SignExtend(SingleParamOp):
     op: ClassVar[bytes] = b"sign_extend"
+    kind: ClassVar[Kind] = Kind.BV_SIGN_EXTEND
 
     @override
     def __post_init__(self) -> None:
@@ -327,6 +410,7 @@ class SignExtend(SingleParamOp):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class RotateLeft(SingleParamOp):
     op: ClassVar[bytes] = b"rotate_left"
+    kind: ClassVar[Kind] = Kind.BV_ROL
 
     @override
     def __post_init__(self) -> None:
@@ -338,6 +422,7 @@ class RotateLeft(SingleParamOp):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class RotateRight(SingleParamOp):
     op: ClassVar[bytes] = b"rotate_right"
+    kind: ClassVar[Kind] = Kind.BV_ROR
 
     @override
     def __post_init__(self) -> None:
@@ -349,41 +434,49 @@ class RotateRight(SingleParamOp):
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Ule(CompareOp):
     op: ClassVar[bytes] = b"bvule"
+    kind: ClassVar[Kind] = Kind.BV_ULE
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Ugt(CompareOp):
     op: ClassVar[bytes] = b"bvugt"
+    kind: ClassVar[Kind] = Kind.BV_UGT
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Uge(CompareOp):
     op: ClassVar[bytes] = b"bvuge"
+    kind: ClassVar[Kind] = Kind.BV_UGE
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Slt(CompareOp):
     op: ClassVar[bytes] = b"bvslt"
+    kind: ClassVar[Kind] = Kind.BV_SLT
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Sle(CompareOp):
     op: ClassVar[bytes] = b"bvsle"
+    kind: ClassVar[Kind] = Kind.BV_SLE
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Sgt(CompareOp):
     op: ClassVar[bytes] = b"bvsgt"
+    kind: ClassVar[Kind] = Kind.BV_SGT
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Sge(CompareOp):
     op: ClassVar[bytes] = b"bvsge"
+    kind: ClassVar[Kind] = Kind.BV_SGE
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Ite(BTerm):
     op: ClassVar[bytes] = b"ite"
+    kind: ClassVar[Kind] = Kind.ITE
     cond: CTerm
     left: BTerm
     right: BTerm
@@ -393,3 +486,11 @@ class Ite(BTerm):
         assert self.left.width == self.right.width
         self.width = self.left.width
         super(Ite, self).__post_init__()
+
+    @override
+    def bzla(self) -> BitwuzlaTerm:
+        if not self._bzla:
+            self._bzla = BZLA.mk_term(
+                self.kind, (self.cond.bzla(), self.left.bzla(), self.right.bzla())
+            )
+        return self._bzla

@@ -4,6 +4,7 @@
 # Must appear *before* the module is imported. See:
 # https://docs.pytest.org/en/latest/how-to/assert.html#assert-introspection
 
+
 import pytest
 
 import smt
@@ -18,8 +19,27 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 
 ### ### ### ### ###
 
-from pathlib import Path
+import gc
 from typing import Any, Iterator
+
+from smt2 import theory_core
+from smt2.theory_core import CACHE, BaseTerm, make_bitwuzla
+
+
+@pytest.fixture(autouse=True)
+def reset_bitwuzla(request: Any) -> Iterator[None]:
+    theory_core.BZLA = make_bitwuzla()
+    CACHE.clear()
+    gc.collect()
+    for obj in gc.get_objects():
+        if isinstance(obj, BaseTerm):
+            obj._bzla = None  # pyright: ignore[reportPrivateUsage]
+    yield
+
+
+### ### ### ### ###
+
+from pathlib import Path
 
 from pyinstrument.profiler import Profiler
 from pyinstrument.renderers.speedscope import SpeedscopeRenderer
@@ -39,7 +59,7 @@ combined = None
 
 # https://pyinstrument.readthedocs.io/en/latest/guide.html#profile-pytest-tests
 @pytest.fixture(autouse=True)
-def pyinstrument_single(request: Any) -> Iterator[None]:
+def pyinstrument_single(request: Any, reset_bitwuzla: Any) -> Iterator[None]:
     if not request.config.getoption("profile"):
         yield
         return
@@ -95,7 +115,7 @@ _state_stats: dict[SubRequest, tuple[int, int]] = {}
 
 
 @pytest.fixture(autouse=True)
-def track_memory_usage(request: SubRequest) -> Iterator[None]:
+def track_memory_usage(request: SubRequest, reset_bitwuzla: Any) -> Iterator[None]:
     """
     Track peak memory usage during test execution.
 

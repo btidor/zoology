@@ -15,13 +15,17 @@ from subprocess import PIPE, Popen
 from typing import Any, ClassVar, Self, override
 
 from line_profiler import profile
+from zbitvector.pybitwuzla import Bitwuzla, BitwuzlaTerm, Kind, Option
+from zbitvector.pybitwuzla import Result as Result
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class BaseTerm(abc.ABC):
     op: ClassVar[bytes]
+    kind: ClassVar[Kind]
     commutative: ClassVar[bool] = False
     count: int = field(init=False, compare=False, default=-1)
+    _bzla: BitwuzlaTerm | None = field(init=False, compare=False, default=None)
 
     # Instances of Symbolic are expected to be immutable:
     def __copy__(self) -> Self:
@@ -40,6 +44,9 @@ class BaseTerm(abc.ABC):
 
     @abc.abstractmethod
     def sort(self) -> bytes: ...
+
+    @abc.abstractmethod
+    def bzla(self) -> BitwuzlaTerm: ...
 
     @profile
     def rewrite(self) -> BaseTerm:
@@ -178,6 +185,18 @@ def check(*constraints: CTerm) -> bool:
             raise RuntimeError(out, err)
 
 
+def make_bitwuzla() -> Bitwuzla:
+    bzla = Bitwuzla()
+    bzla.set_option(Option.INCREMENTAL, True)
+    bzla.set_option(Option.PRODUCE_MODELS, True)
+    bzla.set_option(Option.OUTPUT_NUMBER_FORMAT, "hex")
+    return bzla
+
+
+BZLA = make_bitwuzla()
+CACHE = dict[bytes, BitwuzlaTerm]()
+
+
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class CTerm(BaseTerm):
     def sort(self) -> bytes:
@@ -200,6 +219,13 @@ class CSymbol(CTerm):
     def substitute(self, model: dict[bytes, BaseTerm]) -> BaseTerm:
         return model.get(self.name, self)
 
+    @override
+    def bzla(self) -> BitwuzlaTerm:
+        global CACHE
+        if self.name not in CACHE:
+            CACHE[self.name] = BZLA.mk_const(BZLA.mk_bool_sort(), self.name.decode())
+        return CACHE[self.name]
+
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class CValue(CTerm):
@@ -213,47 +239,89 @@ class CValue(CTerm):
     def substitute(self, model: dict[bytes, BaseTerm]) -> BaseTerm:
         return self
 
+    @override
+    def bzla(self) -> BitwuzlaTerm:
+        if not self._bzla:
+            self._bzla = BZLA.mk_bv_value(BZLA.mk_bool_sort(), int(self.value))
+        return self._bzla
+
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Not(CTerm):
     op: ClassVar[bytes] = b"not"
+    kind: ClassVar[Kind] = Kind.NOT
     term: CTerm
+
+    @override
+    def bzla(self) -> BitwuzlaTerm:
+        if not self._bzla:
+            self._bzla = BZLA.mk_term(self.kind, (self.term.bzla(),))
+        return self._bzla
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Implies(CTerm):
     op: ClassVar[bytes] = b"=>"
+    kind: ClassVar[Kind] = Kind.IMPLIES
     left: CTerm
     right: CTerm
+
+    @override
+    def bzla(self) -> BitwuzlaTerm:
+        if not self._bzla:
+            self._bzla = BZLA.mk_term(self.kind, (self.left.bzla(), self.right.bzla()))
+        return self._bzla
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class And(CTerm):
     op: ClassVar[bytes] = b"and"
+    kind: ClassVar[Kind] = Kind.AND
     commutative: ClassVar[bool] = True
     left: CTerm
     right: CTerm
+
+    @override
+    def bzla(self) -> BitwuzlaTerm:
+        if not self._bzla:
+            self._bzla = BZLA.mk_term(self.kind, (self.left.bzla(), self.right.bzla()))
+        return self._bzla
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Or(CTerm):
     op: ClassVar[bytes] = b"or"
+    kind: ClassVar[Kind] = Kind.OR
     commutative: ClassVar[bool] = True
     left: CTerm
     right: CTerm
+
+    @override
+    def bzla(self) -> BitwuzlaTerm:
+        if not self._bzla:
+            self._bzla = BZLA.mk_term(self.kind, (self.left.bzla(), self.right.bzla()))
+        return self._bzla
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Xor(CTerm):
     op: ClassVar[bytes] = b"xor"
+    kind: ClassVar[Kind] = Kind.XOR
     commutative: ClassVar[bool] = True
     left: CTerm
     right: CTerm
+
+    @override
+    def bzla(self) -> BitwuzlaTerm:
+        if not self._bzla:
+            self._bzla = BZLA.mk_term(self.kind, (self.left.bzla(), self.right.bzla()))
+        return self._bzla
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Eq[S: BaseTerm](CTerm):
     op: ClassVar[bytes] = b"="
+    kind: ClassVar[Kind] = Kind.EQUAL
     commutative: ClassVar[bool] = True
     left: S
     right: S
@@ -263,10 +331,17 @@ class Eq[S: BaseTerm](CTerm):
         super(Eq, self).__post_init__()
         assert getattr(self.left, "width", None) == getattr(self.right, "width", None)
 
+    @override
+    def bzla(self) -> BitwuzlaTerm:
+        if not self._bzla:
+            self._bzla = BZLA.mk_term(self.kind, (self.left.bzla(), self.right.bzla()))
+        return self._bzla
+
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Distinct[S: BaseTerm](CTerm):
     op: ClassVar[bytes] = b"distinct"
+    kind: ClassVar[Kind] = Kind.DISTINCT
     left: S
     right: S
 
@@ -275,10 +350,25 @@ class Distinct[S: BaseTerm](CTerm):
         super(Distinct, self).__post_init__()
         assert getattr(self.left, "width", None) == getattr(self.right, "width", None)
 
+    @override
+    def bzla(self) -> BitwuzlaTerm:
+        if not self._bzla:
+            self._bzla = BZLA.mk_term(self.kind, (self.left.bzla(), self.right.bzla()))
+        return self._bzla
+
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class CIte(CTerm):
     op: ClassVar[bytes] = b"ite"
+    kind: ClassVar[Kind] = Kind.ITE
     cond: CTerm
     left: CTerm
     right: CTerm
+
+    @override
+    def bzla(self) -> BitwuzlaTerm:
+        if not self._bzla:
+            self._bzla = BZLA.mk_term(
+                self.kind, (self.cond.bzla(), self.left.bzla(), self.right.bzla())
+            )
+        return self._bzla

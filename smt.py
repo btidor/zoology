@@ -5,12 +5,11 @@ from __future__ import annotations
 
 import copy
 from functools import reduce
-from subprocess import Popen, PIPE
 from typing import Any, Literal, overload
 
 from smt2 import Array, BitVector, Constraint, Int, Symbolic, Uint
 from smt2.composite import ASymbol, And, BSymbol, CSymbol, CTerm, CValue
-from smt2.theory_core import DumpContext
+from smt2.theory_core import DumpContext, BZLA, Result
 
 
 Uint8 = Uint[Literal[8]]
@@ -90,28 +89,15 @@ class Solver:
             self._model = {}
             return True
 
-        ctx = DumpContext()
-        ctx.walk(*constraints)
-        for constraint in constraints:
-            ctx.write(b"(assert ")
-            constraint.dump(ctx)
-            ctx.write(b")\n")
-        ctx.write(b"(check-sat)")
-        checks += 1
-
-        p = Popen(["bitwuzla", "--print-model"], stdin=PIPE, stdout=PIPE, stderr=PIPE)
-        out, err = p.communicate(bytes(ctx.out))
-        outs = out.decode().split("\n", 1)
-        match outs[0]:
-            case "sat":
-                self._model = outs[1]
+        BZLA.assume_formula(*(c.bzla() for c in constraints))
+        match BZLA.check_sat():
+            case Result.SAT:
+                self._model = BZLA.get_model()
                 return True
-            case "unsat":
+            case Result.UNSAT:
                 return False
-            case _:
-                with open("tmp.smt2", "wb") as f:
-                    f.write(ctx.out)
-                raise RuntimeError(out, err)
+            case Result.UNKNOWN:
+                raise RuntimeError
 
     @overload
     def evaluate(self, s: Constraint, /) -> bool: ...
