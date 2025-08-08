@@ -3,12 +3,11 @@
 
 from __future__ import annotations
 
-import copy
 from functools import reduce
-from typing import Any, Literal, overload
+from typing import Literal, overload
 
-from smt2 import Array, BitVector, Constraint, Int, Symbolic, Uint
-from smt2.composite import ASymbol, And, BSymbol, CSymbol, CTerm, CValue
+from smt2 import Array, Constraint, Int, Symbolic, Uint
+from smt2.composite import ASymbol, BSymbol, CSymbol
 from smt2.theory_core import DumpContext, BZLA, Result
 
 
@@ -32,67 +31,34 @@ class ConstrainingError(Exception):
     pass
 
 
-type Tokenized = str | list[Tokenized]
-
-
 checks = 0
+last_solver: Solver | None = None
 
 
 class Solver:
-    def __init__(self) -> None:
-        self._constraints: list[CTerm] | None = []
-        self._model: dict[bytes, Symbolic] | str | None = None
+    __slots__ = ("constraint", "_last_check")
+    constraint: Constraint
+    _last_check: bool
 
-    @property
-    def constraint(self) -> Constraint:
-        if self._constraints is None:
-            return Constraint(False)
-        elif not self._constraints:
-            return Constraint(True)
-        else:
-            k = Constraint.__new__(Constraint)
-            k._term = reduce(And, self._constraints)  # pyright: ignore[reportPrivateUsage]
-            return k
+    def __init__(self) -> None:
+        self.constraint = Constraint(True)
+        self._last_check = False
 
     def add(self, assertion: Constraint, /) -> None:
-        self._model = None
-        self._add(assertion._term)  # pyright: ignore[reportPrivateUsage]
-
-    def _add(self, term: CTerm, /) -> None:
-        if self._constraints is None:
-            # This solver is already unsatisfiable.
-            return
-        elif isinstance(term, And):
-            # Lift up And-ed terms for readability.
-            self._add(term.left)
-            self._add(term.right)
-            return
-        match term:
-            case CValue(True):
-                return
-            case CValue(False):
-                self._constraints = None
-            case term:
-                self._constraints.append(term)
+        self._last_check = False
+        self.constraint &= assertion
 
     def check(self, *assumptions: Constraint) -> bool:
-        global checks
-        self._model = None
-        backup = copy.copy(self._constraints)
-        for assumption in assumptions:
-            self.add(assumption)
-        constraints, self._constraints = self._constraints, backup
+        global checks, last_solver
+        checks += 1
+        last_solver = self
+        self._last_check = False
 
-        if constraints is None:
-            return False
-        elif not constraints:
-            self._model = {}
-            return True
-
-        BZLA.assume_formula(*(c.bzla() for c in constraints))
+        constraint = reduce(Constraint.__and__, assumptions, self.constraint)
+        BZLA.assume_formula(constraint._term.bzla())  # pyright: ignore[reportPrivateUsage]
         match BZLA.check_sat():
             case Result.SAT:
-                self._model = BZLA.get_model()
+                self._last_check = True
                 return True
             case Result.UNSAT:
                 return False
@@ -113,113 +79,18 @@ class Solver:
     def evaluate[N: int, M: int](
         self, sym: Constraint | Uint[N] | Int[N] | Array[Uint[N], Uint[M]], /
     ) -> bool | int | dict[int, int]:
-        assert self._model is not None, "solver is not ready for model evaluation"
-        if not isinstance(sym, Array) and (r := sym.reveal()):
-            return r
-        if isinstance(self._model, str):
-            tokens = self._model.replace("(", " ( ").replace(")", " ) ").split()
-            self._model = {}
-            parsed = self._read_from_tokens(tokens)
-            assert parsed is not None
-            for fun in parsed:
-                match fun:
-                    case "define-fun", str() as name, _, "Bool", value:
-                        assert name not in self._model, f"duplicate term: {name}"
-                        match value:
-                            case "true":
-                                self._model[name.encode()] = Constraint(True)
-                            case "false":
-                                self._model[name.encode()] = Constraint(False)
-                            case _:
-                                raise NotImplementedError(f"unknown boolean: {value}")
-                    case "define-fun", str() as name, _, [
-                        _,
-                        "BitVec",
-                        _,
-                    ], str() as value:
-                        assert name not in self._model, f"duplicate term: {name}"
-                        self._model[name.encode()] = self._parse_numeral(value)
-                    case "define-fun", str() as name, _, ["Array", _, _], value:
-                        assert name not in self._model, f"duplicate term: {name}"
-                        self._model[name.encode()] = self._parse_array(
-                            value, self._model
-                        )
-                    case _:
-                        raise NotImplementedError(f"unexpected term: {fun}")
-        for k, v in get_symbols(sym).items():
-            if k in self._model:
-                continue
-            elif issubclass(v, Constraint):
-                self._model[k] = Constraint(False)
-            elif issubclass(v, BitVector):
-                self._model[k] = v(0)
-            else:
-                assert issubclass(v, Array)
-                self._model[k] = v(0)
-        sym = sym.substitute(self._model)
-        assert (r := sym.reveal()) is not None
-        return r
-
-    @classmethod
-    def _read_from_tokens(cls, tokens: list[str]) -> Tokenized | None:
-        # https://norvig.com/lispy.html
-        match tokens.pop(0).strip():
-            case "(":
-                L = list[Any]()
-                while tokens[0] != ")":
-                    L.append(cls._read_from_tokens(tokens))
-                assert tokens.pop(0) == ")"
-                return L
-            case ")":
-                raise SyntaxError("unexpected )")
-            case "":
-                return None
-            case word:
-                return word
-
-    @classmethod
-    def _parse_numeral(cls, s: str) -> Uint[Any]:
-        if s.startswith("#x"):
-            w = (len(s) - 2) * 4
-            return Uint[w](int(s[2:], 16))
-        elif s.startswith("#b"):
-            w = len(s) - 2
-            return Uint[w](int(s[2:], 2))
-        else:
-            raise SyntaxError(f"cannot parse numeral: {s}")
-
-    @classmethod
-    def _parse_array(
-        cls, parts: Tokenized, model: dict[bytes, Symbolic]
-    ) -> Uint[Any] | Array[Any, Any]:
-        match parts:
-            case str():
-                if parts.startswith("#"):
-                    return cls._parse_numeral(parts)
-                else:
-                    arr: Any = model[parts.encode()]
-                    return copy.deepcopy(arr)
-            case "let", [[str() as name, value]], expr:
-                assert name not in model, f"duplicate term: {name}"
-                model[name.encode()] = cls._parse_array(value, model)
-                return cls._parse_array(expr, model)
-            case "store", expr, str() as key, str() as value:
-                array = cls._parse_array(expr, model)
-                assert isinstance(array, Array)
-                array[cls._parse_numeral(key)] = cls._parse_numeral(value)
-                return array
-            case [
-                [
-                    "as",
-                    "const",
-                    ["Array", [_, "BitVec", str() as k], [_, "BitVec", str() as v]],
-                ],
-                str() as default,
-            ]:
-                default = cls._parse_numeral(default)
-                return Array[Uint[int(k)], Uint[int(v)]](default)
+        global last_solver
+        assert self._last_check is True and last_solver is self, (
+            "solver is not ready for model evaluation"
+        )
+        v = BZLA.get_value_str(sym._term.bzla())  # pyright: ignore[reportPrivateUsage]
+        match sym:
+            case Constraint():
+                return v == "1"
+            case Uint():
+                return int(v, 2)
             case _:
-                raise NotImplementedError(f"unexpected term: {parts}")
+                raise NotImplementedError
 
 
 def describe[N: int](s: Uint[N]) -> str:
