@@ -109,12 +109,14 @@ class Select(BTerm):
         assert k == self.key.width
         self.width = v
         if isinstance(self.array, Store):
-            self.array = copy.deepcopy(self.array)
+            self.array.copied = True
         super(Select, self).__post_init__()
 
     @override
     def bzla(self) -> BitwuzlaTerm:
-        return BZLA.mk_term(self.kind, (self.array.bzla(), self.key.bzla()))
+        if not self._bzla:
+            self._bzla = BZLA.mk_term(self.kind, (self.array.bzla(), self.key.bzla()))
+        return self._bzla
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
@@ -124,9 +126,16 @@ class Store(ATerm):
     base: ASymbol | AValue
     lower: dict[int, BTerm] = field(default_factory=dict[int, BTerm])
     upper: list[tuple[BTerm, BTerm]] = field(default_factory=list[tuple[BTerm, BTerm]])
+    copied: bool = field(init=False, default=False)
 
-    # Warning: Store is not actually immutable! Take care to create a deep copy
-    # when reusing a Store in Selects and other expressions.
+    def __post_init__(self) -> None:
+        assert not self.lower and not self.upper
+        self._bzla = self.base.bzla()
+
+    # Warning: Store is not immutable by default! Take care to set `copied=True`
+    # when reusing a Store in Selects and other expressions. This will cause
+    # `set` to make a copy the next time it's called, preventing further changes
+    # to the current instance.
 
     def __copy__(self) -> Self:
         return copy.deepcopy(self)
@@ -136,14 +145,22 @@ class Store(ATerm):
         k.base = self.base
         k.lower = copy.copy(self.lower)
         k.upper = copy.copy(self.upper)
+        k.copied = False
         k.count = self.count
+        k._bzla = self._bzla
         return k
 
     def width(self) -> tuple[int, int]:
         return self.base.width()
 
     @profile
-    def set(self, key: BTerm, value: BTerm) -> None:
+    def set(self, key: BTerm, value: BTerm) -> Store:
+        array = copy.deepcopy(self) if self.copied else self
+        array._set(key, value)
+        return array
+
+    @profile
+    def _set(self, key: BTerm, value: BTerm) -> None:
         if isinstance(key, BValue) and not self.upper:
             k = key.value
             if k in self.lower:
@@ -153,6 +170,8 @@ class Store(ATerm):
         else:
             self.upper.append((key, value))
             self.count += key.count + value.count + 2
+        assert self._bzla is not None
+        self._bzla = BZLA.mk_term(self.kind, (self._bzla, key.bzla(), value.bzla()))
 
     @override
     def walk(self, ctx: DumpContext) -> None:
@@ -187,10 +206,5 @@ class Store(ATerm):
 
     @override
     def bzla(self) -> BitwuzlaTerm:
-        array = self.base.bzla()
-        sk = array.get_sort().array_get_index()
-        for k, v in self.lower.items():
-            array = BZLA.mk_term(self.kind, (array, BZLA.mk_bv_value(sk, k), v.bzla()))
-        for k, v in self.upper:
-            array = BZLA.mk_term(self.kind, (array, k.bzla(), v.bzla()))
-        return array
+        assert self._bzla is not None
+        return self._bzla

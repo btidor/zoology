@@ -403,4 +403,4 @@ class Array[K: Uint[Any] | Int[Any], V: Uint[Any] | Int[Any]](
         return self._value._apply(Select, self, key)
 
     def __setitem__(self, key: K, value: V) -> None:
-        self._term.set(key._term, value._term)  # pyright: ignore[reportPrivateUsage]
+        self._term = self._term.set(key._term, value._term)  # pyright: ignore[reportPrivateUsage]
