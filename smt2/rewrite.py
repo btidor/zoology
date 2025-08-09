@@ -492,6 +492,9 @@ def bitvector_logic_arithmetic(term: BTerm) -> BTerm:
         case Add(Add(BValue(a), x), Add(BValue(b), y)):
             """add.add: (A + X) + (B + Y) <=> (A + B) + (X + Y)"""
             return Add(BValue((a + b) % modulus, width), Add(x, y))
+        case Add(Add(BValue(a) as z, x), y):
+            """add.add: (A + X) + Y <=> A + (X + Y)"""
+            return Add(z, Add(x, y))
         case Mul(BValue(0), x):
             """mul.z: X * 0 <=> 0"""
             return BValue(0, width)

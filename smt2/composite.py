@@ -908,6 +908,8 @@ class Add(BinaryOp):
                 return Add(BValue((a + b) % modulus, width), x)
             case Add(Add(BValue(a), x), Add(BValue(b), y)):
                 return Add(BValue((a + b) % modulus, width), Add(x, y))
+            case Add(Add(BValue(a) as z, x), y):
+                return Add(z, Add(x, y))
             case _:
                 return self
 
