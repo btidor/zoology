@@ -38,7 +38,7 @@ class BaseTerm(abc.ABC):
         pass
 
     def __repr__(self) -> str:
-        ctx = DumpContext()
+        ctx = DumpContext(pretty=True)
         self.dump(ctx)
         return ctx.out.decode()
 
@@ -111,6 +111,7 @@ class DumpContext:
     symbols: dict[bytes, BaseTerm] = field(default_factory=dict[bytes, BaseTerm])
     visited: set[int] = field(default_factory=set[int])
 
+    pretty: bool = field(default=False)
     out: bytearray = field(default_factory=bytearray)
 
     @profile

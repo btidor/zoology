@@ -500,7 +500,9 @@ class BValue(BTerm, metaclass=CacheMeta):
     @profile
     @override
     def dump(self, ctx: DumpContext) -> None:
-        if self.width % 8 == 0:
+        if ctx.pretty:
+            ctx.write(hex(self.value).encode())
+        elif self.width % 8 == 0:
             ctx.write(b"#x" + self.value.to_bytes(self.width // 8).hex().encode())
         else:
             ctx.write(b"#b" + bin(self.value)[2:].zfill(self.width).encode())
@@ -2059,7 +2061,9 @@ class Store(ATerm):
         ctx.write(b"(store " * (len(self.lower) + len(self.upper)))
         self.base.dump(ctx)
         for k, v in self.lower.items():
-            if self.base.key % 8 == 0:
+            if ctx.pretty:
+                ctx.write(hex(self.base.key).encode())
+            elif self.base.key % 8 == 0:
                 ctx.write(b" #x" + k.to_bytes(self.base.key // 8).hex().encode() + b" ")
             else:
                 ctx.write(b" #b" + bin(k)[2:].zfill(self.base.key).encode() + b" ")

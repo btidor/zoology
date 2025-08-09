@@ -85,7 +85,9 @@ class BValue(BTerm):
 
     @override
     def dump(self, ctx: DumpContext) -> None:
-        if self.width % 8 == 0:
+        if ctx.pretty:
+            ctx.write(hex(self.value).encode())
+        elif self.width % 8 == 0:
             ctx.write(b"#x" + self.value.to_bytes(self.width // 8).hex().encode())
         else:
             ctx.write(b"#b" + bin(self.value)[2:].zfill(self.width).encode())
