@@ -614,8 +614,6 @@ class Concat(BTerm):
     @profile
     @override
     def dump(self, ctx: DumpContext) -> None:
-        if ctx.try_alias(self):
-            return
         if len(self.terms) == 1:
             self.terms[0].dump(ctx)
         else:
@@ -2058,8 +2056,6 @@ class Store(ATerm):
     @profile
     @override
     def dump(self, ctx: DumpContext) -> None:
-        if ctx.try_alias(self):
-            return
         ctx.write(b"(store " * (len(self.lower) + len(self.upper)))
         self.base.dump(ctx)
         for k, v in self.lower.items():

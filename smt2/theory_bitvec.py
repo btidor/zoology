@@ -186,8 +186,6 @@ class Concat(BTerm):
 
     @override
     def dump(self, ctx: DumpContext) -> None:
-        if ctx.try_alias(self):
-            return
         if len(self.terms) == 1:
             # Bitwuzla doesn't allow single-term Concats.
             self.terms[0].dump(ctx)

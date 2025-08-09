@@ -63,8 +63,6 @@ class BaseTerm(abc.ABC):
 
     @profile
     def dump(self, ctx: DumpContext) -> None:
-        if ctx.try_alias(self):
-            return
         # 0. Gather Arguments
         args = [getattr(self, name) for name in self.__match_args__]
         params = [str(arg).encode() for arg in args if isinstance(arg, int)]
@@ -111,10 +109,7 @@ class BaseTerm(abc.ABC):
 @dataclass
 class DumpContext:
     symbols: dict[bytes, BaseTerm] = field(default_factory=dict[bytes, BaseTerm])
-    visited: dict[int, tuple[int, BaseTerm]] = field(
-        default_factory=dict[int, tuple[int, BaseTerm]]
-    )
-    aliases: dict[int, bytes] = field(default_factory=dict[int, bytes])
+    visited: set[int] = field(default_factory=set[int])
 
     out: bytearray = field(default_factory=bytearray)
 
@@ -122,41 +117,17 @@ class DumpContext:
     def visit(self, term: BaseTerm) -> bool:
         i = id(term)
         if i in self.visited:
-            p, q = self.visited[i]
-            self.visited[i] = (p + 1, q)
             return True
         else:
-            self.visited[i] = (1, term)
+            self.visited.add(i)
             return False
 
     @profile
-    def walk(self, *terms: BaseTerm) -> None:
+    def prepare(self, *terms: BaseTerm) -> None:
         for term in terms:
             term.walk(self)
         for name, symbol in self.symbols.items():
             self.write(b"(declare-fun %b () %b)\n" % (name, symbol.sort()))
-
-        queue = list[tuple[int, int, BaseTerm]]()
-        for i, (ct, term) in self.visited.items():
-            if term.count < 3 or ct * term.count < 64:
-                continue
-            queue.append((term.count, i, term))
-        queue.sort()
-        for _, i, term in queue:
-            alias = b"_" + hex(i)[2:].encode()
-            self.write(b"(define-fun %b () %b " % (alias, term.sort()))
-            term.dump(self)
-            self.write(b")\n")
-            self.aliases[i] = alias
-
-    @profile
-    def try_alias(self, term: BaseTerm) -> bool:
-        i = id(term)
-        if i in self.aliases:
-            self.write(self.aliases[i])
-            return True
-        else:
-            return False
 
     @profile
     def write(self, b: bytes) -> None:
@@ -165,7 +136,7 @@ class DumpContext:
 
 def check(*constraints: CTerm) -> bool:
     ctx = DumpContext()
-    ctx.walk(*constraints)
+    ctx.prepare(*constraints)
     for constraint in constraints:
         ctx.write(b"(assert ")
         constraint.dump(ctx)

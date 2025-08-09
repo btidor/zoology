@@ -107,7 +107,7 @@ def underflow_safe(a: Uint256, b: Uint256) -> Constraint:
 
 def get_symbols(s: Symbolic) -> dict[bytes, type[Symbolic]]:
     ctx = DumpContext()
-    ctx.walk(s._term)  # pyright: ignore[reportPrivateUsage]
+    ctx.prepare(s._term)  # pyright: ignore[reportPrivateUsage]
     symbols = dict[bytes, type[Symbolic]]()
     for k, v in ctx.symbols.items():
         match v:

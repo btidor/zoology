@@ -186,8 +186,6 @@ class Store(ATerm):
 
     @override
     def dump(self, ctx: DumpContext) -> None:
-        if ctx.try_alias(self):
-            return
         ctx.write(b"(store " * (len(self.lower) + len(self.upper)))
         self.base.dump(ctx)
         for k, v in self.lower.items():
