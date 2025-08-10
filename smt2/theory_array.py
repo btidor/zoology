@@ -113,6 +113,16 @@ class Select(BTerm):
         super(Select, self).__post_init__()
 
     @override
+    def dump(self, ctx: DumpContext) -> None:
+        if ctx.pretty and self._pretty == "safe_select":
+            self.array.dump(ctx)
+            ctx.write(b"[")
+            self.key.dump(ctx)
+            ctx.write(b"]")
+            return
+        super(Select, self).dump(ctx)
+
+    @override
     def bzla(self) -> BitwuzlaTerm:
         if not self._bzla:
             self._bzla = BZLA.mk_term(self.kind, (self.array.bzla(), self.key.bzla()))

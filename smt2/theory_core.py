@@ -26,6 +26,7 @@ class BaseTerm(abc.ABC):
     commutative: ClassVar[bool] = False
     count: int = field(init=False, compare=False, default=-1)
     _bzla: BitwuzlaTerm | None = field(init=False, compare=False, default=None)
+    _pretty: str | None = field(init=False, compare=False, default=None)
 
     # Instances of Symbolic are expected to be immutable:
     def __copy__(self) -> Self:
@@ -63,6 +64,8 @@ class BaseTerm(abc.ABC):
 
     @profile
     def dump(self, ctx: DumpContext) -> None:
+        if ctx.pretty and self._pretty:
+            raise NotImplementedError
         # 0. Gather Arguments
         args = [getattr(self, name) for name in self.__match_args__]
         params = [str(arg).encode() for arg in args if isinstance(arg, int)]

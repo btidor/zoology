@@ -7,6 +7,9 @@ Warning: do not edit! To regenerate, run:
 
 """
 # ruff: noqa: D101, D102, D103
+# pyright: reportAttributeAccessIssue=false
+# pyright: reportUnknownMemberType=false
+# pyright: reportUnknownVariableType=false
 
 from __future__ import annotations
 
@@ -618,12 +621,38 @@ class Concat(BTerm):
     def dump(self, ctx: DumpContext) -> None:
         if len(self.terms) == 1:
             self.terms[0].dump(ctx)
-        else:
-            ctx.write(b"(concat")
-            for term in self.terms:
-                ctx.write(b" ")
-                term.dump(ctx)
-            ctx.write(b")")
+            return
+        written = False
+        state: tuple[BaseTerm, BTerm, BTerm, int] | None = None
+        for term in self.terms:
+            if ctx.pretty and term._pretty == "safe_get":
+                assert isinstance((a := term.left.array), BaseTerm)
+                assert isinstance((k := term.left.key), BTerm)
+                assert isinstance((inc := Add(k, BValue(1, k.width))), BTerm)
+                if not state:
+                    state = (a, k, inc, 1)
+                    continue
+                elif state[0] == a and Eq(state[2], k) == CValue(True):
+                    assert isinstance(state[1], BTerm) and isinstance(state[3], int)
+                    state = (state[0], state[1], inc, state[3] + 1)
+                    continue
+                else:
+                    state[0].dump(ctx)
+                    ctx.write(b"[")
+                    state[1].dump(ctx)
+                    ctx.write(f":+{hex(state[3])}]".encode())
+                    state = None
+            if not written:
+                ctx.write(b"(concat")
+                written = True
+            ctx.write(b" ")
+            term.dump(ctx)
+        if state:
+            state[0].dump(ctx)
+            ctx.write(b"[")
+            state[1].dump(ctx)
+            ctx.write(f":+{hex(state[3])}]".encode())
+        ctx.write(b")")
 
     @override
     def bzla(self) -> BitwuzlaTerm:
@@ -1815,6 +1844,14 @@ class Ite(BTerm):
         self.min = min(self.left.min, self.right.min)
         self.max = max(self.left.max, self.right.max)
 
+    @profile
+    @override
+    def dump(self, ctx: DumpContext) -> None:
+        if ctx.pretty and self._pretty == "safe_get":
+            self.left.dump(ctx)
+            return
+        super(Ite, self).dump(ctx)
+
     @override
     def bzla(self) -> BitwuzlaTerm:
         if not self._bzla:
@@ -1953,6 +1990,17 @@ class Select(BTerm):
         self.count = self.array.count + self.key.count + 2
         self.min = 0
         self.max = (1 << self.width) - 1
+
+    @profile
+    @override
+    def dump(self, ctx: DumpContext) -> None:
+        if ctx.pretty and self._pretty == "safe_select":
+            self.array.dump(ctx)
+            ctx.write(b"[")
+            self.key.dump(ctx)
+            ctx.write(b"]")
+            return
+        super(Select, self).dump(ctx)
 
     @override
     def bzla(self) -> BitwuzlaTerm:

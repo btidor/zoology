@@ -59,6 +59,9 @@ Warning: do not edit! To regenerate, run:
 
 \"""
 # ruff: noqa: D101, D102, D103
+# pyright: reportAttributeAccessIssue=false
+# pyright: reportUnknownMemberType=false
+# pyright: reportUnknownVariableType=false
 
 from __future__ import annotations
 

@@ -7,7 +7,7 @@ from functools import reduce
 from typing import Literal, overload
 
 from smt2 import Array, Constraint, Int, Symbolic, Uint
-from smt2.composite import ASymbol, BSymbol, CSymbol
+from smt2.composite import ASymbol, BSymbol, CSymbol, Ite, Select
 from smt2.theory_core import DumpContext, BZLA, Result
 
 
@@ -91,6 +91,18 @@ class Solver:
                 return int(v, 2)
             case _:
                 raise NotImplementedError
+
+
+ZERO = Uint[Literal[8]](0)
+
+
+def safe_get[K: int](
+    key: Uint[K], value: Uint[Literal[8]], length: Uint[K]
+) -> Uint[Literal[8]]:
+    res = (key < length).ite(value, ZERO)
+    if isinstance((term := res._term), Ite) and isinstance(term.left, Select):  # pyright: ignore[reportPrivateUsage]
+        term._pretty, term.left._pretty = "safe_get", "safe_select"  # pyright: ignore[reportPrivateUsage]
+    return res
 
 
 def describe[N: int](s: Uint[N]) -> str:

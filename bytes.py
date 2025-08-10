@@ -5,7 +5,7 @@ from __future__ import annotations
 import copy
 from typing import Any, ClassVar, Iterable, Self
 
-from smt import Array, Solver, Uint, Uint8, Uint64, Uint256
+from smt import Array, Solver, Uint, Uint8, Uint64, Uint256, safe_get
 
 type BytesWrite = tuple[Uint256, Uint8 | ByteSlice]
 
@@ -65,7 +65,7 @@ class Bytes:
         Reads past the end of the bytestring return zero.
         """
         if self.check_length:
-            return (i < self.length).ite(self.array[i], BYTES[0])
+            return safe_get(i, self.array[i], self.length)
         return self.array[i]
 
     def slice(self, offset: Uint256, size: Uint256) -> ByteSlice:
@@ -124,8 +124,7 @@ class ByteSlice(Bytes):
         self.data = None
 
     def __getitem__(self, i: Uint256) -> Uint8:
-        item = self.inner[self.offset + i]
-        return (i < self.length).ite(item, BYTES[0])
+        return safe_get(i, self.inner[self.offset + i], self.length)
 
     def bigvector(self) -> Uint[Any]:
         """Return a single, large bitvector of this instance's bytes."""

@@ -15,7 +15,17 @@ from typing import ClassVar, override
 
 from line_profiler import profile
 
-from .theory_core import BZLA, CACHE, BaseTerm, BitwuzlaTerm, CTerm, DumpContext, Kind
+from .theory_core import (
+    BZLA,
+    CACHE,
+    BaseTerm,
+    BitwuzlaTerm,
+    CTerm,
+    CValue,
+    DumpContext,
+    Eq,
+    Kind,
+)
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
@@ -191,12 +201,38 @@ class Concat(BTerm):
         if len(self.terms) == 1:
             # Bitwuzla doesn't allow single-term Concats.
             self.terms[0].dump(ctx)
-        else:
-            ctx.write(b"(concat")
-            for term in self.terms:
-                ctx.write(b" ")
-                term.dump(ctx)
-            ctx.write(b")")
+            return
+        written = False
+        state: tuple[BaseTerm, BTerm, BTerm, int] | None = None
+        for term in self.terms:
+            if ctx.pretty and term._pretty == "safe_get":
+                assert isinstance(a := term.left.array, BaseTerm)  # pyright: ignore
+                assert isinstance(k := term.left.key, BTerm)  # pyright: ignore
+                assert isinstance(inc := Add(k, BValue(1, k.width)), BTerm)  # pyright: ignore
+                if not state:
+                    state = (a, k, inc, 1)
+                    continue
+                elif state[0] == a and Eq(state[2], k) == CValue(True):  # pyright: ignore
+                    assert isinstance(state[1], BTerm) and isinstance(state[3], int)
+                    state = (state[0], state[1], inc, state[3] + 1)
+                    continue
+                else:
+                    state[0].dump(ctx)
+                    ctx.write(b"[")
+                    state[1].dump(ctx)
+                    ctx.write(f":+{hex(state[3])}]".encode())
+                    state = None
+            if not written:
+                ctx.write(b"(concat")
+                written = True
+            ctx.write(b" ")
+            term.dump(ctx)
+        if state:
+            state[0].dump(ctx)
+            ctx.write(b"[")
+            state[1].dump(ctx)
+            ctx.write(f":+{hex(state[3])}]".encode())
+        ctx.write(b")")
 
     @override
     def bzla(self) -> BitwuzlaTerm:
@@ -486,6 +522,13 @@ class Ite(BTerm):
         assert self.left.width == self.right.width
         self.width = self.left.width
         super(Ite, self).__post_init__()
+
+    @override
+    def dump(self, ctx: DumpContext) -> None:
+        if ctx.pretty and self._pretty == "safe_get":
+            self.left.dump(ctx)
+            return
+        super(Ite, self).dump(ctx)
 
     @override
     def bzla(self) -> BitwuzlaTerm:
