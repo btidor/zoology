@@ -99,9 +99,11 @@ ZERO = Uint[Literal[8]](0)
 def safe_get[K: int](
     key: Uint[K], value: Uint[Literal[8]], length: Uint[K]
 ) -> Uint[Literal[8]]:
+    if isinstance(value._term, Select):  # pyright: ignore[reportPrivateUsage]
+        value._term._pretty = "safe_select"  # pyright: ignore[reportPrivateUsage]
     res = (key < length).ite(value, ZERO)
-    if isinstance((term := res._term), Ite) and isinstance(term.left, Select):  # pyright: ignore[reportPrivateUsage]
-        term._pretty, term.left._pretty = "safe_get", "safe_select"  # pyright: ignore[reportPrivateUsage]
+    if isinstance((term := res._term), Ite):  # pyright: ignore[reportPrivateUsage]
+        term._pretty = "safe_get"  # pyright: ignore[reportPrivateUsage]
     return res
 
 

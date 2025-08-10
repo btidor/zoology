@@ -619,28 +619,36 @@ class Concat(BTerm):
     @profile
     @override
     def dump(self, ctx: DumpContext) -> None:
-        if len(self.terms) == 1:
-            self.terms[0].dump(ctx)
+        terms = self.terms
+        if (
+            ctx.pretty
+            and len(self.terms) > 1
+            and isinstance(terms[0], BValue)
+            and (terms[0].value == 0)
+        ):
+            terms = terms[1:]
+        if len(terms) == 1:
+            terms[0].dump(ctx)
             return
         written = False
         state: tuple[BaseTerm, BTerm, BTerm, int] | None = None
-        for term in self.terms:
+        for term in terms:
             if ctx.pretty and term._pretty == "safe_get":
-                assert isinstance((a := term.left.array), BaseTerm)
-                assert isinstance((k := term.left.key), BTerm)
-                assert isinstance((inc := Add(k, BValue(1, k.width))), BTerm)
-                if not state:
-                    state = (a, k, inc, 1)
-                    continue
-                elif state[0] == a and Eq(state[2], k) == CValue(True):
-                    assert isinstance(state[1], BTerm) and isinstance(state[3], int)
-                    state = (state[0], state[1], inc, state[3] + 1)
-                    continue
-                else:
-                    state[0].dump(ctx)
-                    ctx.write(b"[")
-                    state[1].dump(ctx)
-                    ctx.write(f":+{hex(state[3])}]".encode())
+                res = self.pretty_terms(term)
+                if res:
+                    if not state:
+                        state = (*res, 1)
+                        continue
+                    elif state[0] == res[0] and Eq(state[2], res[1]) == CValue(True):
+                        assert isinstance(state[1], BTerm) and isinstance(state[3], int)
+                        state = (state[0], state[1], res[2], state[3] + 1)
+                        continue
+                if state:
+                    if not written:
+                        ctx.write(b"(concat")
+                        written = True
+                    ctx.write(b" ")
+                    self.pretty_dump(ctx, *state)
                     state = None
             if not written:
                 ctx.write(b"(concat")
@@ -648,11 +656,43 @@ class Concat(BTerm):
             ctx.write(b" ")
             term.dump(ctx)
         if state:
-            state[0].dump(ctx)
-            ctx.write(b"[")
-            state[1].dump(ctx)
-            ctx.write(f":+{hex(state[3])}]".encode())
-        ctx.write(b")")
+            if written:
+                ctx.write(b" ")
+            self.pretty_dump(ctx, *state)
+        if written:
+            ctx.write(b")")
+
+    def pretty_terms(self, term: BTerm) -> tuple[BaseTerm, BTerm, BTerm] | None:
+        assert isinstance(term, Ite)
+        if term.left._pretty == "safe_select":
+            st = term.left
+        elif term.right._pretty == "safe_select":
+            st = term.right
+        else:
+            return None
+        assert isinstance((array := st.array), BaseTerm)
+        assert isinstance((key := st.key), BTerm)
+        assert isinstance((inc := Add(key, BValue(1, key.width))), BTerm)
+        return (array, key, inc)
+
+    def pretty_dump(
+        self, ctx: DumpContext, array: BaseTerm, start: BTerm, end: BTerm, range: int
+    ) -> None:
+        array.dump(ctx)
+        ctx.write(b"[")
+        if isinstance(start, BValue) and start.value == 0:
+            if isinstance(end, BValue):
+                ctx.write(f":{hex(end.value)}]".encode())
+            else:
+                ctx.write(b":")
+                end.dump(ctx)
+                ctx.write(b"]")
+        else:
+            start.dump(ctx)
+            if isinstance(end, BValue):
+                ctx.write(f":{hex(end.value)}]".encode())
+            else:
+                ctx.write(f":+{hex(range)}]".encode())
 
     @override
     def bzla(self) -> BitwuzlaTerm:
@@ -1848,8 +1888,14 @@ class Ite(BTerm):
     @override
     def dump(self, ctx: DumpContext) -> None:
         if ctx.pretty and self._pretty == "safe_get":
-            self.left.dump(ctx)
-            return
+            if self.left._pretty == "safe_select":
+                self.left.dump(ctx)
+                return
+            elif self.right._pretty == "safe_select":
+                self.right.dump(ctx)
+                return
+            else:
+                self._pretty = None
         super(Ite, self).dump(ctx)
 
     @override
