@@ -1762,6 +1762,17 @@ class Ule(CompareOp):
                 a > b and x.min >= (1 << x.width) - a
             ):
                 return Ule(BValue(b - a + (1 << x.width), x.width), x)
+            case Ule(
+                Add(BValue(a), x), Add(BValue(b), BAnd(BValue(c), Add(BValue(d), y)))
+            ) if (
+                a <= b + (d - 31)
+                and b < 1 << x.width
+                and (c == (1 << x.width) - 32)
+                and (d >= 31)
+                and (x == y)
+                and (x.max < (1 << x.width) - d - b)
+            ):
+                return CValue(True)
             case Ule(x, y) if x.max <= y.min:
                 return CValue(True)
             case Ule(x, y) if y.max < x.min:

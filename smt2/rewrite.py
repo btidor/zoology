@@ -366,6 +366,23 @@ def constraint_logic_bitvector(term: CTerm) -> CTerm:
             """ult.add*"""
             return Ult(x, BValue((1 << x.width) - a, x.width))
 
+        # Custom Solidity Macros
+        case Ule(
+            Add(BValue(a), x), Add(BValue(b), BAnd(BValue(c), Add(BValue(d), y)))
+        ) if (
+            a <= b + (d - 0x1F)
+            and b < (1 << x.width)
+            and c == (1 << x.width) - 0x20
+            and d >= 0x1F
+            and x == y
+            and x.max < (1 << x.width) - d - b
+        ):
+            """ule.round"""
+            # Solidity uses 0xFF..E0 & (0x1F + X) to round memory offsets up to
+            # the nearest multiple of 0x20. This can be combined with an offset,
+            # e.g. (0x3F + X) rounds up and adds 0x20.
+            return CValue(True)
+
         case _:
             return term
 

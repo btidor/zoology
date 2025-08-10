@@ -201,7 +201,7 @@ class Memory:
     def __setitem__(self, i: Uint256, v: Uint8) -> None:
         self.length = (i < self.length).ite(self.length, i + Uint256(1))
         self.wordcache.clear()
-        if len(self.writes) == 0:
+        if self._passthrough(i, None):
             # Warning: passing writes through to the underlying array when there
             # are no custom writes is a good optimization (~12% speedup), but it
             # does create a performance cliff.
@@ -218,12 +218,32 @@ class Memory:
             self.wordcache[i_] = v
         else:
             self.wordcache.clear()
+
+        passthrough = self._passthrough(i, i + Uint256(0x20))
         for k, byte in enumerate(reversed(Uint8.explode(v))):
             n = i + Uint256(k)
-            if len(self.writes) == 0:
+            if passthrough:
                 self.array[n] = byte
             else:
                 self.writes.append((n, byte))
+
+    def _passthrough(self, start: Uint256, end: Uint256 | None) -> bool:
+        for at, write in self.writes:
+            if end is None:
+                before = start < at
+            else:
+                before = end <= at
+            if before.reveal():
+                continue
+            match write:
+                case Uint():
+                    after = start > at
+                case ByteSlice():
+                    after = start >= (at + write.length)
+            if after.reveal():
+                continue
+            return False
+        return True
 
     def slice(self, offset: Uint256, size: Uint256) -> ByteSlice:
         """Return a symbolic slice of this instance."""
