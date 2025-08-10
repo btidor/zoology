@@ -215,6 +215,13 @@ def constraint_logic_bitvector(term: CTerm) -> CTerm:
         case Eq(BValue(a) as v, Ite(c, x, BValue(q))) if a != q:
             """beq.itev"""
             return And(c, Eq(v, x))
+        case Eq(BValue(a) as x, Concat([BValue(b) as y, *rest])) if len(rest) > 0:
+            """beq.vcat"""
+            rwidth = x.width - y.width
+            return And(
+                CValue(a >> rwidth == b),
+                Eq(BValue(a & ((1 << rwidth) - 1), rwidth), Concat((*rest,))),
+            )
         case Ult(x, BValue(0)):
             """ult.z: X < 0 <=> False"""
             return CValue(False)
@@ -240,8 +247,16 @@ def constraint_logic_bitvector(term: CTerm) -> CTerm:
             """not.ult: ~(X < Y) <=> Y <= X"""
             return Ule(y, x)
         case Not(Ule(x, y)):
-            """not.ult: ~(X <= Y) <=> Y < X"""
+            """not.ule: ~(X <= Y) <=> Y < X"""
             return Ult(y, x)
+        case Not(Slt(x, y)):
+            """not.slt: ~(X < Y) <=> Y <= X"""
+            return Sle(y, x)
+        case Not(Sle(x, y)):
+            """not.sle: ~(X <= Y) <=> Y < X"""
+            return Slt(y, x)
+
+        # Compare-and-Concat
         case Ult(BValue(a), Concat([BValue(b) as x, *rest]) as c) if (
             b == (a >> (c.width - x.width)) and len(rest) > 0
         ):
@@ -266,6 +281,91 @@ def constraint_logic_bitvector(term: CTerm) -> CTerm:
             """ule.catv"""
             rwidth = c.width - x.width
             return Ule(Concat((*rest,)), BValue(a & ((1 << rwidth) - 1), rwidth))
+
+        # Compare-and-Add
+        case Ult(Add(BValue(a), x), BValue(b)) if a <= b and x.max < (1 << x.width) - a:
+            """ult.add: X + A < B <=> X < (B - A)"""
+            return Ult(x, BValue(b - a, x.width))
+        case Ult(BValue(b), Add(BValue(a), x)) if a <= b and x.max < (1 << x.width) - a:
+            """ult.add: B < X + A <=> (B - A) < X"""
+            return Ult(BValue(b - a, x.width), x)
+        case Ult(Add(BValue(a), x), BValue(b)) if a > b and x.min >= (1 << x.width) - a:
+            """ult.add: X + A < B <=> X < (B - A)"""  # Thanks, GPT-5!
+            return Ult(x, BValue(b - a + (1 << x.width), x.width))
+        case Ult(BValue(b), Add(BValue(a), x)) if a > b and x.min >= (1 << x.width) - a:
+            """ult.add: B < X + A <=> (B - A) < X"""
+            return Ult(BValue(b - a + (1 << x.width), x.width), x)
+        case Ule(Add(BValue(a), x), BValue(b)) if a <= b and x.max < (1 << x.width) - a:
+            """ule.add: X + A < B <=> X < (B - A)"""
+            return Ule(x, BValue(b - a, x.width))
+        case Ule(BValue(b), Add(BValue(a), x)) if a <= b and x.max < (1 << x.width) - a:
+            """ule.add: B < X + A <=> (B - A) < X"""
+            return Ule(BValue(b - a, x.width), x)
+        case Ule(Add(BValue(a), x), BValue(b)) if a > b and x.min >= (1 << x.width) - a:
+            """ule.add: X + A < B <=> X < (B - A)"""
+            return Ule(x, BValue(b - a + (1 << x.width), x.width))
+        case Ule(BValue(b), Add(BValue(a), x)) if a > b and x.min >= (1 << x.width) - a:
+            """ule.add: B < X + A <=> (B - A) < X"""
+            return Ule(BValue(b - a + (1 << x.width), x.width), x)
+        case Slt(Add(BValue(a) as p, x), BValue(b) as q) if (
+            0 <= p.sgnd and p.sgnd <= q.sgnd and x.max < (1 << (x.width - 1)) - q.sgnd
+        ):
+            """slt.add: X + A < B <=> X < (B- A)"""
+            return Slt(x, BValue(b - a, x.width))
+        case Slt(BValue(b) as q, Add(BValue(a) as p, x)) if (
+            0 <= p.sgnd and p.sgnd <= q.sgnd and x.max < (1 << (x.width - 1)) - q.sgnd
+        ):
+            """slt.add B < X + A <=> (B - A) < X"""
+            return Slt(BValue(b - a, x.width), x)
+        case Slt(Add(BValue(a) as p, x), BValue(b)) if (
+            p.sgnd < 0
+            and -p.sgnd < (1 << x.width - 1)
+            and b - p.sgnd < (1 << x.width - 1)
+            and x.max < (1 << x.width - 2)
+        ):
+            """slt.add: X + A < B <=> X < (B - A)"""
+            return Slt(x, BValue(b - p.sgnd, x.width))
+        case Slt(BValue(b), Add(BValue(a) as p, x)) if (
+            p.sgnd < 0
+            and -p.sgnd < (1 << x.width - 1)
+            and b - p.sgnd < (1 << x.width - 1)
+            and x.max < (1 << x.width - 2)
+        ):
+            """slt.add: X + A < B <=> X < (B - A)"""
+            return Slt(BValue(b - p.sgnd, x.width), x)
+        case Sle(Add(BValue(a) as p, x), BValue(b) as q) if (
+            0 <= p.sgnd and p.sgnd <= q.sgnd and x.max < (1 << (x.width - 1)) - q.sgnd
+        ):
+            """sle.add: X + A < B <=> X < (B- A)"""
+            return Sle(x, BValue(b - a, x.width))
+        case Sle(BValue(b) as q, Add(BValue(a) as p, x)) if (
+            0 <= p.sgnd and p.sgnd <= q.sgnd and x.max < (1 << (x.width - 1)) - q.sgnd
+        ):
+            """sle.add B < X + A <=> (B - A) < X"""
+            return Sle(BValue(b - a, x.width), x)
+        case Sle(Add(BValue(a) as p, x), BValue(b)) if (
+            p.sgnd < 0
+            and -p.sgnd < (1 << x.width - 1)
+            and b - p.sgnd < (1 << x.width - 1)
+            and x.max < (1 << x.width - 2)
+        ):
+            """sle.add: X + A < B <=> X < (B - A)"""
+            return Sle(x, BValue(b - p.sgnd, x.width))
+        case Sle(BValue(b), Add(BValue(a) as p, x)) if (
+            p.sgnd < 0
+            and -p.sgnd < (1 << x.width - 1)
+            and b - p.sgnd < (1 << x.width - 1)
+            and x.max < (1 << x.width - 2)
+        ):
+            """sle.add: X + A < B <=> X < (B - A)"""
+            return Sle(BValue(b - p.sgnd, x.width), x)
+        case Ult(Add(BValue(a), x), y) if x == y and a > 0:
+            """ult.add*"""
+            return Ule(BValue((1 << x.width) - a, x.width), x)
+        case Ult(x, Add(BValue(a), y)) if x == y and a > 0:
+            """ult.add*"""
+            return Ult(x, BValue((1 << x.width) - a, x.width))
+
         case _:
             return term
 
@@ -615,6 +715,9 @@ def bitvector_logic_shifts(term: BTerm) -> BTerm:
             """cat.xtrxtr"""
             # Yes, really: Fallback uses Concat((0, ..., 0))
             return Concat((*rest, Extract(i, l, x), z))
+        case Extract(i, j, Ite(c, BValue() as x, BValue() as y)):
+            """xtr.ite"""
+            return Ite(c, Extract(i, j, x), Extract(i, j, y))
 
         # ITE. Push down boolean expressions.
         case Ite(_c, x, y) if x == y:

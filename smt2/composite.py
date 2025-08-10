@@ -157,6 +157,10 @@ class Not(CTerm):
                 return Ule(y, x)
             case Not(Ule(x, y)):
                 return Ult(y, x)
+            case Not(Slt(x, y)):
+                return Sle(y, x)
+            case Not(Sle(x, y)):
+                return Slt(y, x)
             case _:
                 return self
 
@@ -354,6 +358,12 @@ class Eq[S: BaseTerm](CTerm):
                 return And(Not(c), Eq(v, y))
             case Eq(BValue(a) as v, Ite(c, x, BValue(q))) if a != q:
                 return And(c, Eq(v, x))
+            case Eq(BValue(a) as x, Concat([BValue(b) as y, *rest])) if len(rest) > 0:
+                rwidth = x.width - y.width
+                return And(
+                    CValue(a >> rwidth == b),
+                    Eq(BValue(a & (1 << rwidth) - 1, rwidth), Concat((*rest,))),
+                )
             case Eq(BTerm() as x, BTerm() as y) if x.max < y.min:
                 return CValue(False)
             case Eq(BTerm() as x, BTerm() as y) if y.max < x.min:
@@ -770,6 +780,8 @@ class Extract(BTerm):
                 return Extract(i - c.width + x.width, j - c.width + x.width, x)
             case Extract(i, j, Concat([x, *rest]) as c) if i < c.width - x.width:
                 return Extract(i, j, Concat((*rest,)))
+            case Extract(i, j, Ite(c, BValue() as x, BValue() as y)):
+                return Ite(c, Extract(i, j, x), Extract(i, j, y))
             case Extract(i, j, BAnd(BValue(a), x)):
                 return BAnd(
                     BValue(a >> j & (1 << i - j + 1) - 1, i - j + 1), Extract(i, j, x)
@@ -1222,6 +1234,26 @@ class Ult(CompareOp):
             ):
                 rwidth = c.width - x.width
                 return Ult(Concat((*rest,)), BValue(a & (1 << rwidth) - 1, rwidth))
+            case Ult(Add(BValue(a), x), BValue(b)) if (
+                a <= b and x.max < (1 << x.width) - a
+            ):
+                return Ult(x, BValue(b - a, x.width))
+            case Ult(BValue(b), Add(BValue(a), x)) if (
+                a <= b and x.max < (1 << x.width) - a
+            ):
+                return Ult(BValue(b - a, x.width), x)
+            case Ult(Add(BValue(a), x), BValue(b)) if (
+                a > b and x.min >= (1 << x.width) - a
+            ):
+                return Ult(x, BValue(b - a + (1 << x.width), x.width))
+            case Ult(BValue(b), Add(BValue(a), x)) if (
+                a > b and x.min >= (1 << x.width) - a
+            ):
+                return Ult(BValue(b - a + (1 << x.width), x.width), x)
+            case Ult(Add(BValue(a), x), y) if x == y and a > 0:
+                return Ule(BValue((1 << x.width) - a, x.width), x)
+            case Ult(x, Add(BValue(a), y)) if x == y and a > 0:
+                return Ult(x, BValue((1 << x.width) - a, x.width))
             case Ult(x, y) if x.max < y.min:
                 return CValue(True)
             case Ult(x, y) if y.max <= x.min:
@@ -1714,6 +1746,22 @@ class Ule(CompareOp):
             ):
                 rwidth = c.width - x.width
                 return Ule(Concat((*rest,)), BValue(a & (1 << rwidth) - 1, rwidth))
+            case Ule(Add(BValue(a), x), BValue(b)) if (
+                a <= b and x.max < (1 << x.width) - a
+            ):
+                return Ule(x, BValue(b - a, x.width))
+            case Ule(BValue(b), Add(BValue(a), x)) if (
+                a <= b and x.max < (1 << x.width) - a
+            ):
+                return Ule(BValue(b - a, x.width), x)
+            case Ule(Add(BValue(a), x), BValue(b)) if (
+                a > b and x.min >= (1 << x.width) - a
+            ):
+                return Ule(x, BValue(b - a + (1 << x.width), x.width))
+            case Ule(BValue(b), Add(BValue(a), x)) if (
+                a > b and x.min >= (1 << x.width) - a
+            ):
+                return Ule(BValue(b - a + (1 << x.width), x.width), x)
             case Ule(x, y) if x.max <= y.min:
                 return CValue(True)
             case Ule(x, y) if y.max < x.min:
@@ -1778,10 +1826,34 @@ class Slt(CompareOp):
         match self:
             case Slt(BValue() as x, BValue() as y):
                 return CValue(x.sgnd < y.sgnd)
-            case Slt(x, y) if x.max < y.min and y.max < 1 << y.width - 1:
-                return CValue(True)
-            case Slt(x, y) if y.max <= x.min and x.max < 1 << x.width - 1:
-                return CValue(False)
+            case Slt(Add(BValue(a) as p, x), BValue(b) as q) if (
+                0 <= p.sgnd
+                and p.sgnd <= q.sgnd
+                and (x.max < (1 << x.width - 1) - q.sgnd)
+            ):
+                return Slt(x, BValue(b - a, x.width))
+            case Slt(BValue(b) as q, Add(BValue(a) as p, x)) if (
+                0 <= p.sgnd
+                and p.sgnd <= q.sgnd
+                and (x.max < (1 << x.width - 1) - q.sgnd)
+            ):
+                return Slt(BValue(b - a, x.width), x)
+            case Slt(Add(BValue(a) as p, x), BValue(b)) if (
+                p.sgnd < 0
+                and -p.sgnd < 1 << x.width - 1
+                and (b - p.sgnd < 1 << x.width - 1)
+                and (x.max < 1 << x.width - 2)
+            ):
+                return Slt(x, BValue(b - p.sgnd, x.width))
+            case Slt(BValue(b), Add(BValue(a) as p, x)) if (
+                p.sgnd < 0
+                and -p.sgnd < 1 << x.width - 1
+                and (b - p.sgnd < 1 << x.width - 1)
+                and (x.max < 1 << x.width - 2)
+            ):
+                return Slt(BValue(b - p.sgnd, x.width), x)
+            case Slt(x, y) if x.max < 1 << x.width - 1 and y.max < 1 << x.width - 1:
+                return Ult(x, y)
             case Slt(x, y) if y.max < 1 << y.width - 1 and x.min >= 1 << x.width - 1:
                 return CValue(True)
             case Slt(x, y) if x.max < 1 << x.width - 1 and y.min >= 1 << y.width - 1:
@@ -1810,10 +1882,34 @@ class Sle(CompareOp):
         match self:
             case Sle(BValue() as x, BValue() as y):
                 return CValue(x.sgnd <= y.sgnd)
-            case Sle(x, y) if x.max <= y.min and y.max < 1 << y.width - 1:
-                return CValue(True)
-            case Sle(x, y) if y.max < x.min and x.max < 1 << x.width - 1:
-                return CValue(False)
+            case Sle(Add(BValue(a) as p, x), BValue(b) as q) if (
+                0 <= p.sgnd
+                and p.sgnd <= q.sgnd
+                and (x.max < (1 << x.width - 1) - q.sgnd)
+            ):
+                return Sle(x, BValue(b - a, x.width))
+            case Sle(BValue(b) as q, Add(BValue(a) as p, x)) if (
+                0 <= p.sgnd
+                and p.sgnd <= q.sgnd
+                and (x.max < (1 << x.width - 1) - q.sgnd)
+            ):
+                return Sle(BValue(b - a, x.width), x)
+            case Sle(Add(BValue(a) as p, x), BValue(b)) if (
+                p.sgnd < 0
+                and -p.sgnd < 1 << x.width - 1
+                and (b - p.sgnd < 1 << x.width - 1)
+                and (x.max < 1 << x.width - 2)
+            ):
+                return Sle(x, BValue(b - p.sgnd, x.width))
+            case Sle(BValue(b), Add(BValue(a) as p, x)) if (
+                p.sgnd < 0
+                and -p.sgnd < 1 << x.width - 1
+                and (b - p.sgnd < 1 << x.width - 1)
+                and (x.max < 1 << x.width - 2)
+            ):
+                return Sle(BValue(b - p.sgnd, x.width), x)
+            case Sle(x, y) if x.max < 1 << x.width - 1 and y.max < 1 << x.width - 1:
+                return Ule(x, y)
             case Sle(x, y) if y.max < 1 << y.width - 1 and x.min >= 1 << x.width - 1:
                 return CValue(True)
             case Sle(x, y) if x.max < 1 << x.width - 1 and y.min >= 1 << y.width - 1:
