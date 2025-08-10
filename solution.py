@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import copy
 from functools import reduce
-from typing import Iterable
+from typing import Callable, Iterable
 
 from bytes import Bytes
 from disassembler import abiencode
@@ -148,13 +148,21 @@ class Validator:
 
         return self.constraint.substitute(substitutions)
 
-    def check(self, sequence: Sequence, /, *, prints: bool = False) -> Solution | None:
+    def check(
+        self,
+        sequence: Sequence,
+        /,
+        *,
+        prints: bool = False,
+        found: Callable[[], None] = lambda: None,
+    ) -> Solution | None:
         """Simulate the execution of validateInstance on the given sequence."""
         translated = self._translate(sequence)
         if translated is not None:
             solver = copy.deepcopy(sequence.solver)
             solver.add(translated)
             if solver.check():
+                found()
                 sequence.narrow(solver)
                 return Solution(sequence, solver, None)
             return None
@@ -188,6 +196,7 @@ class Validator:
             ).bigvector() != Uint256(0)
             solver.add(ok)
             if solver.check():
+                found()
                 candidate.narrow(solver)
                 return Solution(sequence, solver, end)
         return None

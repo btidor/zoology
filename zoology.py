@@ -251,8 +251,9 @@ def check_candidate(
             if part.endswith("\n"):
                 newline = True
 
-    if solution := validator.check(candidate):
-        vprint("  > found solution!\n" if verbose else "#")
+    if solution := validator.check(
+        candidate, found=lambda: vprint("  > found solution!\n" if verbose else "#")
+    ):
         return solution
     else:
         vprint("  > candidate\n" if verbose else "*")
