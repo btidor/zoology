@@ -177,46 +177,46 @@ def constraint_logic_bitvector(term: CTerm) -> CTerm:
     """Perform logical rewrites involving bitvector comparators."""
     match term:
         case Eq(BTerm() as x, BTerm() as y) if x == y:
-            """beq.x: X = X <=> True"""
+            """eq.x: X = X <=> True"""
             return CValue(True)
         case Eq(BTerm() as x, BNot(y)) if x == y:
-            """beq.ix: X = ~X <=> False"""
+            """eq.ix: X = ~X <=> False"""
             return CValue(False)
         case Eq(BValue(a), BNot(x)):
-            """beq.vnot: A = ~X <=> ~A = X"""
+            """eq.vnot: A = ~X <=> ~A = X"""
             mask = (1 << x.width) - 1
             return Eq(BValue(mask ^ a, x.width), x)
         case Eq(BValue(a), BAnd(BValue(b), x)) if a & (b ^ ((1 << x.width) - 1)) != 0:
-            """beq.vand"""
+            """eq.vand"""
             return CValue(False)
         case Eq(BValue(a), BOr(BValue(b), x)) if (a ^ ((1 << x.width) - 1)) & b != 0:
-            """beq.vor"""
+            """eq.vor"""
             return CValue(False)
         case Eq(BValue(a), BXor(BValue(b), x)):
-            """bveq.vxor: A = X ^ B <=> A ^ B = X"""
+            """eq.vxor: A = X ^ B <=> A ^ B = X"""
             return Eq(BValue(a ^ b, x.width), x)
         case Eq(BValue(a), Add(x, BNot(y))) if a == (1 << x.width) - 1:
-            """beq.arith: -1 = A + ~B <=> A = B"""
+            """eq.arith: -1 = A + ~B <=> A = B"""
             # This rewrite was discovered in test_universal.py::test_sudoku and
             # reduces the time for that test case by 48%.
             return Eq(x, y)
         case Eq(BValue(a), Add(BValue(b), x)):
-            """beq.vadd: A = X + B <=> A - B = X"""
+            """eq.vadd: A = X + B <=> A - B = X"""
             return Eq(BValue((a - b) % (1 << x.width), x.width), x)
         case Eq(BTerm() as z, Ite(c, x, y)) if z == x:
-            """beq.xite"""
+            """eq.xite"""
             return Or(c, Eq(z, y))
         case Eq(BTerm() as z, Ite(c, x, y)) if z == y:
-            """beq.itex"""
+            """eq.itex"""
             return Or(Not(c), Eq(z, x))
         case Eq(BValue(a) as v, Ite(c, BValue(p), y)) if a != p:
-            """beq.vite"""
+            """eq.vite"""
             return And(Not(c), Eq(v, y))
         case Eq(BValue(a) as v, Ite(c, x, BValue(q))) if a != q:
-            """beq.itev"""
+            """eq.itev"""
             return And(c, Eq(v, x))
         case Eq(BValue(a) as x, Concat([BValue(b) as y, *rest])) if len(rest) > 0:
-            """beq.vcat"""
+            """eq.vcat"""
             rwidth = x.width - y.width
             return And(
                 CValue(a >> rwidth == b),

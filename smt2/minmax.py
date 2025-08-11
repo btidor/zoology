@@ -66,10 +66,10 @@ def constraint_minmax(term: CTerm) -> CTerm:
     """Rewrite comparison operators using min-max information."""
     match term:
         case Eq(BTerm() as x, BTerm() as y) if x.max < y.min:
-            """beq.lt"""
+            """eq.lt"""
             return CValue(False)
         case Eq(BTerm() as x, BTerm() as y) if y.max < x.min:
-            """beq.gt"""
+            """eq.gt"""
             return CValue(False)
         case Ult(x, y) if x.max < y.min:
             """ult.t"""
