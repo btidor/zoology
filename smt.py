@@ -69,7 +69,7 @@ class Solver:
     def evaluate(self, s: Constraint, /) -> bool: ...
 
     @overload
-    def evaluate[N: int](self, s: Uint[N] | Int[N], /) -> int: ...
+    def evaluate[N: int](self, s: Uint[N], /) -> int: ...
 
     @overload
     def evaluate[N: int, M: int](
@@ -77,7 +77,7 @@ class Solver:
     ) -> dict[int, int]: ...
 
     def evaluate[N: int, M: int](
-        self, sym: Constraint | Uint[N] | Int[N] | Array[Uint[N], Uint[M]], /
+        self, sym: Constraint | Uint[N] | Array[Uint[N], Uint[M]], /
     ) -> bool | int | dict[int, int]:
         global last_solver
         assert self._last_check is True and last_solver is self, (
@@ -89,8 +89,11 @@ class Solver:
                 return v == "1"
             case Uint():
                 return int(v, 2)
-            case _:
-                raise NotImplementedError
+            case Array():
+                d = dict[int, int]()
+                for p, q in v.items():
+                    d[int(p, 2)] = int(q, 2)
+                return d
 
 
 ZERO = Uint[Literal[8]](0)
