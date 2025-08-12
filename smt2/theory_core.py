@@ -5,18 +5,24 @@ Up-to-date with SMT-LIB version 2.7.
 
 See: https://smt-lib.org/theories-Core.shtml
 """
-# ruff: noqa: D101, D102, D103
+# ruff: noqa: D101, D102, D103, D107
 
 from __future__ import annotations
 
 import abc
 from dataclasses import dataclass, field
 from subprocess import PIPE, Popen
-from typing import Any, ClassVar, Iterable, Self, override
+from typing import Any, ClassVar, Iterable, Self, overload, override
 
 from line_profiler import profile
-from zbitvector.pybitwuzla import Bitwuzla, BitwuzlaTerm, Kind, Option
-from zbitvector.pybitwuzla import Result as Result
+from zbitvector.pybitwuzla import (
+    Bitwuzla,
+    BitwuzlaSort,
+    BitwuzlaTerm,
+    Kind,
+    Option,
+    Result,
+)
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
@@ -161,16 +167,101 @@ def check(*constraints: CTerm) -> bool:
             raise RuntimeError(out, err)
 
 
-def make_bitwuzla() -> Bitwuzla:
-    bzla = Bitwuzla()
-    bzla.set_option(Option.INCREMENTAL, True)
-    bzla.set_option(Option.PRODUCE_MODELS, True)
-    bzla.set_option(Option.OUTPUT_NUMBER_FORMAT, "hex")
-    return bzla
+type SortWidth = None | int | tuple[int, int]
 
 
-BZLA = make_bitwuzla()
-CACHE = dict[bytes, BitwuzlaTerm]()
+class BitwuzlaManager:
+    """Manages access to the global Bitwuzla instance."""
+
+    _bzla: Bitwuzla
+    _sort: dict[SortWidth, BitwuzlaSort]
+    _sym: dict[bytes, tuple[SortWidth, BitwuzlaTerm]]
+
+    # For convenience, centralize all global state here.
+    special: dict[Any, Any]  # for CacheMeta
+    last_solver: Any  # for Solver
+
+    def __init__(self):
+        self._sort = {}
+        self._sym = {}
+        self.special = {}
+        self.last_solver = None
+        self.reset()
+
+    def reset(self) -> None:
+        self._bzla = Bitwuzla()
+        self._bzla.set_option(Option.INCREMENTAL, True)
+        self._bzla.set_option(Option.PRODUCE_MODELS, True)
+        self._bzla.set_option(Option.OUTPUT_NUMBER_FORMAT, "hex")
+        self._sort.clear()
+        self._sym.clear()
+        self.special.clear()
+        self.last_solver = None
+
+    def mk_term(
+        self,
+        kind: Kind,
+        terms: list[BitwuzlaTerm] | tuple[BitwuzlaTerm, ...],
+        indices: list[int] | tuple[int, ...] | None = None,
+    ) -> BitwuzlaTerm:
+        return self._bzla.mk_term(kind, terms, indices)
+
+    def mk_sort(self, width: SortWidth) -> BitwuzlaSort:
+        if width not in self._sort:
+            match width:
+                case None:
+                    s = self._bzla.mk_bool_sort()
+                case int() as width:
+                    s = self._bzla.mk_bv_sort(width)
+                case (k, v):
+                    s = self._bzla.mk_array_sort(self.mk_sort(k), self.mk_sort(v))
+            self._sort[width] = s
+        return self._sort[width]
+
+    def mk_symbol(self, name: bytes, width: SortWidth) -> BitwuzlaTerm:
+        if name not in self._sym:
+            self._sym[name] = (width, self._bzla.mk_const(self.mk_sort(width)))
+        orig, term = self._sym[name]
+        assert width == orig, f"symbol already used: {name}"
+        return term
+
+    @overload
+    def mk_value(self, value: bool, width: None) -> BitwuzlaTerm: ...
+    @overload
+    def mk_value(self, value: int, width: int) -> BitwuzlaTerm: ...
+    @overload
+    def mk_value(self, value: BitwuzlaTerm, width: tuple[int, int]) -> BitwuzlaTerm: ...
+    def mk_value(
+        self, value: bool | int | BitwuzlaTerm, width: SortWidth
+    ) -> BitwuzlaTerm:
+        sort = self.mk_sort(width)
+        match width:
+            case None:
+                assert isinstance(value, bool)
+                return self._bzla.mk_bv_value(sort, int(value))
+            case int():
+                assert isinstance(value, int)
+                return self._bzla.mk_bv_value(sort, value)
+            case (int(), int()):
+                assert isinstance(value, BitwuzlaTerm)
+                return self._bzla.mk_const_array(sort, value)
+
+    def check(self, solver: Any, term: BaseTerm) -> bool:
+        self.last_solver = solver
+        self._bzla.assume_formula(term.bzla())
+        match self._bzla.check_sat():
+            case Result.SAT:
+                return True
+            case Result.UNSAT:
+                return False
+            case Result.UNKNOWN:
+                raise RuntimeError
+
+    def get_value_str(self, term: BaseTerm) -> str | dict[str, str]:
+        return self._bzla.get_value_str(term.bzla())
+
+
+BZLA = BitwuzlaManager()
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
@@ -197,10 +288,7 @@ class CSymbol(CTerm):
 
     @override
     def bzla(self) -> BitwuzlaTerm:
-        global CACHE
-        if self.name not in CACHE:
-            CACHE[self.name] = BZLA.mk_const(BZLA.mk_bool_sort(), self.name.decode())
-        return CACHE[self.name]
+        return BZLA.mk_symbol(self.name, None)
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
@@ -222,7 +310,7 @@ class CValue(CTerm):
     @override
     def bzla(self) -> BitwuzlaTerm:
         if not self._bzla:
-            self._bzla = BZLA.mk_bv_value(BZLA.mk_bool_sort(), int(self.value))
+            self._bzla = BZLA.mk_value(self.value, None)
         return self._bzla
 
 

@@ -21,7 +21,7 @@ from typing import Any, ClassVar, Iterable, Self, override
 
 from line_profiler import profile
 
-from .theory_core import BZLA, CACHE, BaseTerm, BitwuzlaTerm, DumpContext, Kind
+from .theory_core import BZLA, BaseTerm, BitwuzlaTerm, DumpContext, Kind
 
 type MinMax = tuple[int, int]
 
@@ -55,9 +55,9 @@ class CacheMeta(RewriteMeta):
 
     @profile
     def __call__(self, *args: Any) -> Any:
-        if args not in self._cache:
-            self._cache[args] = super().__call__(*args)
-        return self._cache[args]
+        if args not in BZLA.special:
+            BZLA.special[args] = super().__call__(*args)
+        return BZLA.special[args]
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
@@ -86,10 +86,7 @@ class CSymbol(CTerm):
 
     @override
     def bzla(self) -> BitwuzlaTerm:
-        global CACHE
-        if self.name not in CACHE:
-            CACHE[self.name] = BZLA.mk_const(BZLA.mk_bool_sort(), self.name.decode())
-        return CACHE[self.name]
+        return BZLA.mk_symbol(self.name, None)
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
@@ -113,7 +110,7 @@ class CValue(CTerm):
     @override
     def bzla(self) -> BitwuzlaTerm:
         if not self._bzla:
-            self._bzla = BZLA.mk_bv_value(BZLA.mk_bool_sort(), int(self.value))
+            self._bzla = BZLA.mk_value(self.value, None)
         return self._bzla
 
 
@@ -468,12 +465,7 @@ class BSymbol(BTerm):
 
     @override
     def bzla(self) -> BitwuzlaTerm:
-        global CACHE
-        if self.name not in CACHE:
-            CACHE[self.name] = BZLA.mk_const(
-                BZLA.mk_bv_sort(self.width), self.name.decode()
-            )
-        return CACHE[self.name]
+        return BZLA.mk_symbol(self.name, self.width)
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
@@ -522,7 +514,7 @@ class BValue(BTerm, metaclass=CacheMeta):
     @override
     def bzla(self) -> BitwuzlaTerm:
         if not self._bzla:
-            self._bzla = BZLA.mk_bv_value(BZLA.mk_bv_sort(self.width), self.value)
+            self._bzla = BZLA.mk_value(self.value, self.width)
         return self._bzla
 
 
@@ -2017,15 +2009,7 @@ class ASymbol(ATerm):
 
     @override
     def bzla(self) -> BitwuzlaTerm:
-        global CACHE
-        if self.name not in CACHE:
-            CACHE[self.name] = BZLA.mk_const(
-                BZLA.mk_array_sort(
-                    BZLA.mk_bv_sort(self.key), BZLA.mk_bv_sort(self.value)
-                ),
-                self.name.decode(),
-            )
-        return CACHE[self.name]
+        return BZLA.mk_symbol(self.name, self.width())
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
@@ -2058,12 +2042,7 @@ class AValue(ATerm):
     @override
     def bzla(self) -> BitwuzlaTerm:
         if not self._bzla:
-            self._bzla = BZLA.mk_const_array(
-                BZLA.mk_array_sort(
-                    BZLA.mk_bv_sort(self.key), BZLA.mk_bv_sort(self.default.width)
-                ),
-                self.default.bzla(),
-            )
+            self._bzla = BZLA.mk_value(self.default.bzla(), self.width())
         return self._bzla
 
 

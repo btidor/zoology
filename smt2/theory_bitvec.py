@@ -17,7 +17,6 @@ from line_profiler import profile
 
 from .theory_core import (
     BZLA,
-    CACHE,
     BaseTerm,
     BitwuzlaTerm,
     CTerm,
@@ -63,12 +62,7 @@ class BSymbol(BTerm):
 
     @override
     def bzla(self) -> BitwuzlaTerm:
-        global CACHE
-        if self.name not in CACHE:
-            CACHE[self.name] = BZLA.mk_const(
-                BZLA.mk_bv_sort(self.width), self.name.decode()
-            )
-        return CACHE[self.name]
+        return BZLA.mk_symbol(self.name, self.width)
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
@@ -113,7 +107,7 @@ class BValue(BTerm):
     @override
     def bzla(self) -> BitwuzlaTerm:
         if not self._bzla:
-            self._bzla = BZLA.mk_bv_value(BZLA.mk_bv_sort(self.width), self.value)
+            self._bzla = BZLA.mk_value(self.value, self.width)
         return self._bzla
 
 

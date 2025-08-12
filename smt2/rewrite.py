@@ -48,9 +48,9 @@ class CacheMeta(RewriteMeta):
     @profile
     def __call__(self, *args: Any) -> Any:
         """Return the given term, using the cache. Skip rewrites."""
-        if args not in self._cache:
-            self._cache[args] = super().__call__(*args)
-        return self._cache[args]
+        if args not in BZLA.special:
+            BZLA.special[args] = super().__call__(*args)
+        return BZLA.special[args]
 
 
 def constraint_reduction(term: CTerm) -> CTerm:

@@ -17,7 +17,7 @@ from typing import Any, ClassVar, Iterable, Self, override
 from line_profiler import profile
 
 from .theory_bitvec import BTerm, BValue
-from .theory_core import BZLA, CACHE, BaseTerm, BitwuzlaTerm, DumpContext, Kind
+from .theory_core import BZLA, BaseTerm, BitwuzlaTerm, DumpContext, Kind
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
@@ -52,15 +52,7 @@ class ASymbol(ATerm):
 
     @override
     def bzla(self) -> BitwuzlaTerm:
-        global CACHE
-        if self.name not in CACHE:
-            CACHE[self.name] = BZLA.mk_const(
-                BZLA.mk_array_sort(
-                    BZLA.mk_bv_sort(self.key), BZLA.mk_bv_sort(self.value)
-                ),
-                self.name.decode(),
-            )
-        return CACHE[self.name]
+        return BZLA.mk_symbol(self.name, self.width())
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
@@ -91,12 +83,7 @@ class AValue(ATerm):
     @override
     def bzla(self) -> BitwuzlaTerm:
         if not self._bzla:
-            self._bzla = BZLA.mk_const_array(
-                BZLA.mk_array_sort(
-                    BZLA.mk_bv_sort(self.key), BZLA.mk_bv_sort(self.default.width)
-                ),
-                self.default.bzla(),
-            )
+            self._bzla = BZLA.mk_value(self.default.bzla(), self.width())
         return self._bzla
 
 

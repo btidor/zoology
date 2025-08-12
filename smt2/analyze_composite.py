@@ -71,7 +71,7 @@ from typing import Any, ClassVar, Iterable, Self, override
 
 from line_profiler import profile
 
-from .theory_core import BZLA, CACHE, BaseTerm, BitwuzlaTerm, DumpContext, Kind
+from .theory_core import BZLA, BaseTerm, BitwuzlaTerm, DumpContext, Kind
 
 type MinMax = tuple[int, int]
 

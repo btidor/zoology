@@ -8,7 +8,7 @@ from typing import Literal, overload
 
 from smt2 import Array, Constraint, Int, Symbolic, Uint
 from smt2.composite import ASymbol, BSymbol, CSymbol, Ite, Select
-from smt2.theory_core import DumpContext, BZLA, Result
+from smt2.theory_core import BZLA, DumpContext
 
 
 Uint8 = Uint[Literal[8]]
@@ -32,7 +32,6 @@ class ConstrainingError(Exception):
 
 
 checks = 0
-last_solver: Solver | None = None
 
 
 class Solver:
@@ -51,19 +50,12 @@ class Solver:
     def check(self, *assumptions: Constraint) -> bool:
         global checks, last_solver
         checks += 1
-        last_solver = self
         self._last_check = False
 
         constraint = reduce(Constraint.__and__, assumptions, self.constraint)
-        BZLA.assume_formula(constraint._term.bzla())  # pyright: ignore[reportPrivateUsage]
-        match BZLA.check_sat():
-            case Result.SAT:
-                self._last_check = True
-                return True
-            case Result.UNSAT:
-                return False
-            case Result.UNKNOWN:
-                raise RuntimeError
+        r = BZLA.check(self, constraint._term)  # pyright: ignore[reportPrivateUsage]
+        self._last_check = r
+        return r
 
     @overload
     def evaluate(self, s: Constraint, /) -> bool: ...
@@ -79,17 +71,19 @@ class Solver:
     def evaluate[N: int, M: int](
         self, sym: Constraint | Uint[N] | Array[Uint[N], Uint[M]], /
     ) -> bool | int | dict[int, int]:
-        global last_solver
-        assert self._last_check is True and last_solver is self, (
+        assert self._last_check is True and BZLA.last_solver is self, (
             "solver is not ready for model evaluation"
         )
-        v = BZLA.get_value_str(sym._term.bzla())  # pyright: ignore[reportPrivateUsage]
+        v = BZLA.get_value_str(sym._term)  # pyright: ignore[reportPrivateUsage]
         match sym:
             case Constraint():
+                assert isinstance(v, str)
                 return v == "1"
             case Uint():
+                assert isinstance(v, str)
                 return int(v, 2)
             case Array():
+                assert isinstance(v, dict)
                 d = dict[int, int]()
                 for p, q in v.items():
                     d[int(p, 2)] = int(q, 2)
