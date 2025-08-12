@@ -101,6 +101,7 @@ class RewriteCase:
             match case.body:
                 case [ast.Expr(ast.Constant(str() as s)), *body]:
                     id = s.split(":")[0]
+                    assert " " not in id, f'invalid test case name: "{id}"'
                 case _:
                     raise SyntaxError("every case should begin with a docstring")
             match case.pattern:

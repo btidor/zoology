@@ -63,6 +63,7 @@ class MinMaxCase:
             match case.pattern:
                 case ast.MatchClass(ast.Name(name)):
                     # Normal single case.
+                    assert " " not in name, f'invalid test case name: "{name}"'
                     yield cls(name, case.pattern, case.guard, prefix, case.body)
                 case ast.MatchAs(None, None):
                     # Underscore case (fallthrough).

@@ -315,7 +315,7 @@ def constraint_logic_bitvector(term: CTerm) -> CTerm:
         case Slt(BValue(b) as q, Add(BValue(a) as p, x)) if (
             0 <= p.sgnd and p.sgnd <= q.sgnd and x.max < (1 << (x.width - 1)) - q.sgnd
         ):
-            """slt.add B < X + A <=> (B - A) < X"""
+            """slt.add: B < X + A <=> (B - A) < X"""
             return Slt(BValue(b - a, x.width), x)
         case Slt(Add(BValue(a) as p, x), BValue(b)) if (
             p.sgnd < 0
@@ -341,7 +341,7 @@ def constraint_logic_bitvector(term: CTerm) -> CTerm:
         case Sle(BValue(b) as q, Add(BValue(a) as p, x)) if (
             0 <= p.sgnd and p.sgnd <= q.sgnd and x.max < (1 << (x.width - 1)) - q.sgnd
         ):
-            """sle.add B < X + A <=> (B - A) < X"""
+            """sle.add: B < X + A <=> (B - A) < X"""
             return Sle(BValue(b - a, x.width), x)
         case Sle(Add(BValue(a) as p, x), BValue(b)) if (
             p.sgnd < 0
