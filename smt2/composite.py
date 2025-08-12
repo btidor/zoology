@@ -46,7 +46,6 @@ class RewriteMeta(abc.ABCMeta):
                     pass
         term = super(RewriteMeta, self).__call__(*args, **kwds)
         term = term.rewrite()
-        term.bzla
         return term
 
 

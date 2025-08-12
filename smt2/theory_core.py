@@ -61,7 +61,20 @@ class BaseTerm(abc.ABC):
     @property
     def bzla(self) -> BitwuzlaTerm:
         if self._bzla is None:
-            self._bzla = self._bzterm()
+            queue = list[BaseTerm]()
+            enqueued = set[int]()
+            pending = list[BaseTerm]([self])
+            while pending:
+                term = pending.pop(0)
+                if term._bzla is not None or id(term) in enqueued:
+                    continue
+                queue.append(term)
+                enqueued.add(id(term))
+                pending.extend(term.children())
+            queue.sort(key=lambda t: t.count)
+            for term in queue:
+                term._bzla = term._bzterm()
+            assert self._bzla is not None
         return self._bzla
 
     def _bzterm(self) -> BitwuzlaTerm:
