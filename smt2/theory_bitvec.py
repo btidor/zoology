@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from dataclasses import InitVar, dataclass, field
 from functools import reduce
-from typing import ClassVar, override
+from typing import ClassVar, Iterable, override
 
 from line_profiler import profile
 
@@ -48,6 +48,10 @@ class BSymbol(BTerm):
         assert w > 0, "width must be positive"
         self.width = w
         super(BSymbol, self).__post_init__()
+
+    @override
+    def children(self) -> Iterable[BaseTerm]:
+        return ()
 
     @override
     def walk(self, ctx: DumpContext) -> None:
@@ -94,6 +98,10 @@ class BValue(BTerm):
         return self.value
 
     @override
+    def children(self) -> Iterable[BaseTerm]:
+        return ()
+
+    @override
     def dump(self, ctx: DumpContext) -> None:
         if ctx.pretty:
             ctx.write(hex(self.value).encode())
@@ -123,6 +131,10 @@ class UnaryOp(BTerm):
         super(UnaryOp, self).__post_init__()
 
     @override
+    def children(self) -> Iterable[BaseTerm]:
+        return (self.term,)
+
+    @override
     def bzla(self) -> BitwuzlaTerm:
         if not self._bzla:
             self._bzla = BZLA.mk_term(self.kind, (self.term.bzla(),))
@@ -133,6 +145,10 @@ class UnaryOp(BTerm):
 class BinaryOp(BTerm):
     left: BTerm
     right: BTerm
+
+    @override
+    def children(self) -> Iterable[BaseTerm]:
+        return (self.left, self.right)
 
     @override
     def __post_init__(self) -> None:
@@ -153,6 +169,10 @@ class CompareOp(CTerm):
     right: BTerm
 
     @override
+    def children(self) -> Iterable[BaseTerm]:
+        return (self.left, self.right)
+
+    @override
     def __post_init__(self) -> None:
         assert self.left.width == self.right.width
         super(CompareOp, self).__post_init__()
@@ -170,6 +190,10 @@ class SingleParamOp(BTerm):
     term: BTerm
 
     @override
+    def children(self) -> Iterable[BaseTerm]:
+        return (self.term,)
+
+    @override
     def bzla(self) -> BitwuzlaTerm:
         if not self._bzla:
             self._bzla = BZLA.mk_term(self.kind, (self.term.bzla(),), (self.i,))
@@ -181,6 +205,10 @@ class Concat(BTerm):
     op: ClassVar[bytes] = b"concat"
     kind: ClassVar[Kind] = Kind.BV_CONCAT
     terms: tuple[BTerm, ...]
+
+    @override
+    def children(self) -> Iterable[BaseTerm]:
+        return self.terms
 
     @override
     def __post_init__(self) -> None:
@@ -296,6 +324,10 @@ class Extract(BTerm):
         super(Extract, self).__post_init__()
 
     @override
+    def children(self) -> Iterable[BaseTerm]:
+        return (self.term,)
+
+    @override
     def bzla(self) -> BitwuzlaTerm:
         if not self._bzla:
             self._bzla = BZLA.mk_term(self.kind, (self.term.bzla(),), (self.i, self.j))
@@ -409,6 +441,10 @@ class Comp(BTerm):  # width-1 result
         assert self.left.width == self.right.width
         self.width = 1
         super(Comp, self).__post_init__()
+
+    @override
+    def children(self) -> Iterable[BaseTerm]:
+        return (self.left, self.right)
 
     @override
     def bzla(self) -> BitwuzlaTerm:
@@ -562,6 +598,10 @@ class Ite(BTerm):
         assert self.left.width == self.right.width
         self.width = self.left.width
         super(Ite, self).__post_init__()
+
+    @override
+    def children(self) -> Iterable[BaseTerm]:
+        return (self.cond, self.left, self.right)
 
     @override
     def dump(self, ctx: DumpContext) -> None:

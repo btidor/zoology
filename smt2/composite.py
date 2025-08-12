@@ -17,7 +17,7 @@ import abc
 import copy
 from dataclasses import InitVar, dataclass, field
 from functools import reduce
-from typing import Any, ClassVar, Self, override
+from typing import Any, ClassVar, Iterable, Self, override
 
 from line_profiler import profile
 
@@ -70,6 +70,10 @@ class CTerm(BaseTerm, metaclass=RewriteMeta):
 class CSymbol(CTerm):
     name: bytes
 
+    @override
+    def children(self) -> Iterable[BaseTerm]:
+        return ()
+
     @profile
     @override
     def walk(self, ctx: DumpContext) -> None:
@@ -102,6 +106,10 @@ class CSymbol(CTerm):
 class CValue(CTerm):
     value: bool
 
+    @override
+    def children(self) -> Iterable[BaseTerm]:
+        return ()
+
     @profile
     @override
     def dump(self, ctx: DumpContext) -> None:
@@ -129,6 +137,10 @@ class Not(CTerm):
     op: ClassVar[bytes] = b"not"
     kind: ClassVar[Kind] = Kind.NOT
     term: CTerm
+
+    @override
+    def children(self) -> Iterable[BaseTerm]:
+        return (self.term,)
 
     @override
     def bzla(self) -> BitwuzlaTerm:
@@ -173,6 +185,10 @@ class Implies(CTerm):
     right: CTerm
 
     @override
+    def children(self) -> Iterable[BaseTerm]:
+        return (self.left, self.right)
+
+    @override
     def bzla(self) -> BitwuzlaTerm:
         if not self._bzla:
             self._bzla = BZLA.mk_term(self.kind, (self.left.bzla(), self.right.bzla()))
@@ -200,6 +216,10 @@ class And(CTerm):
     commutative: ClassVar[bool] = True
     left: CTerm
     right: CTerm
+
+    @override
+    def children(self) -> Iterable[BaseTerm]:
+        return (self.left, self.right)
 
     @override
     def bzla(self) -> BitwuzlaTerm:
@@ -239,6 +259,10 @@ class Or(CTerm):
     right: CTerm
 
     @override
+    def children(self) -> Iterable[BaseTerm]:
+        return (self.left, self.right)
+
+    @override
     def bzla(self) -> BitwuzlaTerm:
         if not self._bzla:
             self._bzla = BZLA.mk_term(self.kind, (self.left.bzla(), self.right.bzla()))
@@ -276,6 +300,10 @@ class Xor(CTerm):
     right: CTerm
 
     @override
+    def children(self) -> Iterable[BaseTerm]:
+        return (self.left, self.right)
+
+    @override
     def bzla(self) -> BitwuzlaTerm:
         if not self._bzla:
             self._bzla = BZLA.mk_term(self.kind, (self.left.bzla(), self.right.bzla()))
@@ -311,6 +339,10 @@ class Eq[S: BaseTerm](CTerm):
     commutative: ClassVar[bool] = True
     left: S
     right: S
+
+    @override
+    def children(self) -> Iterable[BaseTerm]:
+        return (self.left, self.right)
 
     @profile
     @override
@@ -379,6 +411,10 @@ class Distinct[S: BaseTerm](CTerm):
     left: S
     right: S
 
+    @override
+    def children(self) -> Iterable[BaseTerm]:
+        return (self.left, self.right)
+
     @profile
     @override
     def __post_init__(self) -> None:
@@ -411,6 +447,10 @@ class CIte(CTerm):
     cond: CTerm
     left: CTerm
     right: CTerm
+
+    @override
+    def children(self) -> Iterable[BaseTerm]:
+        return (self.cond, self.left, self.right)
 
     @override
     def bzla(self) -> BitwuzlaTerm:
@@ -459,6 +499,10 @@ class BSymbol(BTerm):
         self.count = 0
         self.min = 0
         self.max = (1 << self.width) - 1
+
+    @override
+    def children(self) -> Iterable[BaseTerm]:
+        return ()
 
     @profile
     @override
@@ -510,6 +554,10 @@ class BValue(BTerm, metaclass=CacheMeta):
             return self.value - (1 << self.width)
         return self.value
 
+    @override
+    def children(self) -> Iterable[BaseTerm]:
+        return ()
+
     @profile
     @override
     def dump(self, ctx: DumpContext) -> None:
@@ -543,6 +591,10 @@ class UnaryOp(BTerm):
         super(UnaryOp, self).__post_init__()
 
     @override
+    def children(self) -> Iterable[BaseTerm]:
+        return (self.term,)
+
+    @override
     def bzla(self) -> BitwuzlaTerm:
         if not self._bzla:
             self._bzla = BZLA.mk_term(self.kind, (self.term.bzla(),))
@@ -553,6 +605,10 @@ class UnaryOp(BTerm):
 class BinaryOp(BTerm):
     left: BTerm
     right: BTerm
+
+    @override
+    def children(self) -> Iterable[BaseTerm]:
+        return (self.left, self.right)
 
     @profile
     @override
@@ -573,6 +629,10 @@ class CompareOp(CTerm):
     left: BTerm
     right: BTerm
 
+    @override
+    def children(self) -> Iterable[BaseTerm]:
+        return (self.left, self.right)
+
     @profile
     @override
     def __post_init__(self) -> None:
@@ -592,6 +652,10 @@ class SingleParamOp(BTerm):
     term: BTerm
 
     @override
+    def children(self) -> Iterable[BaseTerm]:
+        return (self.term,)
+
+    @override
     def bzla(self) -> BitwuzlaTerm:
         if not self._bzla:
             self._bzla = BZLA.mk_term(self.kind, (self.term.bzla(),), (self.i,))
@@ -603,6 +667,10 @@ class Concat(BTerm):
     op: ClassVar[bytes] = b"concat"
     kind: ClassVar[Kind] = Kind.BV_CONCAT
     terms: tuple[BTerm, ...]
+
+    @override
+    def children(self) -> Iterable[BaseTerm]:
+        return self.terms
 
     @profile
     @override
@@ -757,6 +825,10 @@ class Extract(BTerm):
         self.count = self.term.count + 1
         self.min = 0
         self.max = (1 << self.width) - 1
+
+    @override
+    def children(self) -> Iterable[BaseTerm]:
+        return (self.term,)
 
     @override
     def bzla(self) -> BitwuzlaTerm:
@@ -1385,6 +1457,10 @@ class Comp(BTerm):
         self.max = (1 << self.width) - 1
 
     @override
+    def children(self) -> Iterable[BaseTerm]:
+        return (self.left, self.right)
+
+    @override
     def bzla(self) -> BitwuzlaTerm:
         if not self._bzla:
             self._bzla = BZLA.mk_term(self.kind, (self.left.bzla(), self.right.bzla()))
@@ -1991,6 +2067,10 @@ class Ite(BTerm):
         self.min = min(self.left.min, self.right.min)
         self.max = max(self.left.max, self.right.max)
 
+    @override
+    def children(self) -> Iterable[BaseTerm]:
+        return (self.cond, self.left, self.right)
+
     @profile
     @override
     def dump(self, ctx: DumpContext) -> None:
@@ -2051,6 +2131,10 @@ class ASymbol(ATerm):
     def width(self) -> tuple[int, int]:
         return (self.key, self.value)
 
+    @override
+    def children(self) -> Iterable[BaseTerm]:
+        return ()
+
     @profile
     @override
     def walk(self, ctx: DumpContext) -> None:
@@ -2091,6 +2175,10 @@ class AValue(ATerm):
 
     def width(self) -> tuple[int, int]:
         return (self.key, self.default.width)
+
+    @override
+    def children(self) -> Iterable[BaseTerm]:
+        return (self.default,)
 
     @profile
     @override
@@ -2143,6 +2231,10 @@ class Select(BTerm):
         self.count = self.array.count + self.key.count + 2
         self.min = 0
         self.max = (1 << self.width) - 1
+
+    @override
+    def children(self) -> Iterable[BaseTerm]:
+        return (self.array, self.key)
 
     @profile
     @override
@@ -2223,6 +2315,15 @@ class Store(ATerm):
 
     def width(self) -> tuple[int, int]:
         return self.base.width()
+
+    @override
+    def children(self) -> Iterable[BaseTerm]:
+        return (
+            self.base,
+            *self.lower.values(),
+            *(k for k, _ in self.upper),
+            *(v for _, v in self.upper),
+        )
 
     @profile
     def set(self, key: BTerm, value: BTerm) -> Store:

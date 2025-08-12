@@ -12,7 +12,7 @@ from __future__ import annotations
 import abc
 from dataclasses import dataclass, field
 from subprocess import PIPE, Popen
-from typing import Any, ClassVar, Self, override
+from typing import Any, ClassVar, Iterable, Self, override
 
 from line_profiler import profile
 from zbitvector.pybitwuzla import Bitwuzla, BitwuzlaTerm, Kind, Option
@@ -45,6 +45,9 @@ class BaseTerm(abc.ABC):
 
     @abc.abstractmethod
     def sort(self) -> bytes: ...
+
+    @abc.abstractmethod
+    def children(self) -> Iterable[BaseTerm]: ...
 
     @abc.abstractmethod
     def bzla(self) -> BitwuzlaTerm: ...
@@ -183,6 +186,10 @@ class CSymbol(CTerm):
     name: bytes
 
     @override
+    def children(self) -> Iterable[BaseTerm]:
+        return ()
+
+    @override
     def walk(self, ctx: DumpContext) -> None:
         ctx.symbols[self.name] = self
 
@@ -207,6 +214,10 @@ class CValue(CTerm):
     value: bool
 
     @override
+    def children(self) -> Iterable[BaseTerm]:
+        return ()
+
+    @override
     def dump(self, ctx: DumpContext) -> None:
         ctx.write(b"true" if self.value else b"false")
 
@@ -228,6 +239,10 @@ class Not(CTerm):
     term: CTerm
 
     @override
+    def children(self) -> Iterable[BaseTerm]:
+        return (self.term,)
+
+    @override
     def bzla(self) -> BitwuzlaTerm:
         if not self._bzla:
             self._bzla = BZLA.mk_term(self.kind, (self.term.bzla(),))
@@ -240,6 +255,10 @@ class Implies(CTerm):
     kind: ClassVar[Kind] = Kind.IMPLIES
     left: CTerm
     right: CTerm
+
+    @override
+    def children(self) -> Iterable[BaseTerm]:
+        return (self.left, self.right)
 
     @override
     def bzla(self) -> BitwuzlaTerm:
@@ -257,6 +276,10 @@ class And(CTerm):
     right: CTerm
 
     @override
+    def children(self) -> Iterable[BaseTerm]:
+        return (self.left, self.right)
+
+    @override
     def bzla(self) -> BitwuzlaTerm:
         if not self._bzla:
             self._bzla = BZLA.mk_term(self.kind, (self.left.bzla(), self.right.bzla()))
@@ -270,6 +293,10 @@ class Or(CTerm):
     commutative: ClassVar[bool] = True
     left: CTerm
     right: CTerm
+
+    @override
+    def children(self) -> Iterable[BaseTerm]:
+        return (self.left, self.right)
 
     @override
     def bzla(self) -> BitwuzlaTerm:
@@ -287,6 +314,10 @@ class Xor(CTerm):
     right: CTerm
 
     @override
+    def children(self) -> Iterable[BaseTerm]:
+        return (self.left, self.right)
+
+    @override
     def bzla(self) -> BitwuzlaTerm:
         if not self._bzla:
             self._bzla = BZLA.mk_term(self.kind, (self.left.bzla(), self.right.bzla()))
@@ -300,6 +331,10 @@ class Eq[S: BaseTerm](CTerm):
     commutative: ClassVar[bool] = True
     left: S
     right: S
+
+    @override
+    def children(self) -> Iterable[BaseTerm]:
+        return (self.left, self.right)
 
     @override
     def __post_init__(self) -> None:
@@ -321,6 +356,10 @@ class Distinct[S: BaseTerm](CTerm):
     right: S
 
     @override
+    def children(self) -> Iterable[BaseTerm]:
+        return (self.left, self.right)
+
+    @override
     def __post_init__(self) -> None:
         super(Distinct, self).__post_init__()
         assert getattr(self.left, "width", None) == getattr(self.right, "width", None)
@@ -339,6 +378,10 @@ class CIte(CTerm):
     cond: CTerm
     left: CTerm
     right: CTerm
+
+    @override
+    def children(self) -> Iterable[BaseTerm]:
+        return (self.cond, self.left, self.right)
 
     @override
     def bzla(self) -> BitwuzlaTerm:

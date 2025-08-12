@@ -12,7 +12,7 @@ from __future__ import annotations
 import abc
 import copy
 from dataclasses import dataclass, field
-from typing import Any, ClassVar, Self, override
+from typing import Any, ClassVar, Iterable, Self, override
 
 from line_profiler import profile
 
@@ -37,6 +37,10 @@ class ASymbol(ATerm):
 
     def width(self) -> tuple[int, int]:
         return (self.key, self.value)
+
+    @override
+    def children(self) -> Iterable[BaseTerm]:
+        return ()
 
     @override
     def walk(self, ctx: DumpContext) -> None:
@@ -70,6 +74,10 @@ class AValue(ATerm):
 
     def width(self) -> tuple[int, int]:
         return (self.key, self.default.width)
+
+    @override
+    def children(self) -> Iterable[BaseTerm]:
+        return (self.default,)
 
     @override
     def dump(self, ctx: DumpContext) -> None:
@@ -111,6 +119,10 @@ class Select(BTerm):
         if isinstance(self.array, Store):
             self.array.copied = True
         super(Select, self).__post_init__()
+
+    @override
+    def children(self) -> Iterable[BaseTerm]:
+        return (self.array, self.key)
 
     @override
     def dump(self, ctx: DumpContext) -> None:
@@ -162,6 +174,15 @@ class Store(ATerm):
 
     def width(self) -> tuple[int, int]:
         return self.base.width()
+
+    @override
+    def children(self) -> Iterable[BaseTerm]:
+        return (
+            self.base,
+            *self.lower.values(),
+            *(k for k, _ in self.upper),
+            *(v for _, v in self.upper),
+        )
 
     @profile
     def set(self, key: BTerm, value: BTerm) -> Store:
