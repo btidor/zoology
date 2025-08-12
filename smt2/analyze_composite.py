@@ -10,20 +10,18 @@ from __future__ import annotations
 import ast
 from bisect import insort
 from collections import defaultdict
-from functools import reduce
 from inspect import getmodule, getsource, isfunction
 from pathlib import Path
 from subprocess import check_output
 from types import ModuleType
-from typing import Any, Callable, TypeVar, get_type_hints
+from typing import Any, Callable
 
 from . import rewrite, theory_array, theory_bitvec, theory_core
 from .analyze_minmax import MinMaxCase
 from .analyze_rewrite import RewriteCase
 from .minmax import constraint_minmax, propagate_minmax
 from .rewrite import CacheMeta, RewriteMeta
-from .theory_array import ATerm
-from .theory_bitvec import BTerm, Concat
+from .theory_bitvec import BTerm
 from .theory_core import BaseTerm, CTerm
 
 COMPOSITE_PY = Path(__file__).parent / "composite.py"
@@ -106,8 +104,6 @@ type MinMax = tuple[int, int]
 
             if self._is_named_op(item):
                 # construct each op's __post_init__ method
-                if item != Concat:  # special cased
-                    self._count(cls, item)
                 if issubclass(item, BTerm):
                     self._minmax(cls, item)
 
@@ -155,25 +151,6 @@ type MinMax = tuple[int, int]
             return bool(item.op)
         else:
             return False
-
-    def _count(self, cls: ast.ClassDef, item: type[BaseTerm]) -> None:
-        args = list[ast.expr]()
-        for name in item.__match_args__:
-            typ = get_type_hints(item)[name]
-            if typ in (CTerm, BTerm, ATerm) or isinstance(typ, TypeVar):
-                args.append(
-                    ast.Attribute(ast.Attribute(ast.Name("self"), name), "count")
-                )
-        if args:
-            expr = ast.BinOp(
-                reduce(lambda p, q: ast.BinOp(p, ast.Add(), q), args),
-                ast.Add(),
-                ast.Constant(len(args)),
-            )
-        else:
-            expr = ast.Constant(0)
-        stmt = ast.Assign([ast.Attribute(ast.Name("self"), "count")], expr)
-        self._post_init_append(cls, stmt)
 
     def _minmax(self, cls: ast.ClassDef, item: type[BaseTerm]) -> None:
         # Get fallback definition of min, max.

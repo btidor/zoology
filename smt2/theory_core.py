@@ -24,7 +24,7 @@ class BaseTerm(abc.ABC):
     op: ClassVar[bytes]
     kind: ClassVar[Kind]
     commutative: ClassVar[bool] = False
-    count: int = field(init=False, compare=False, default=-1)
+    count: int = field(init=False, compare=False)
     _bzla: BitwuzlaTerm | None = field(init=False, compare=False, default=None)
     _pretty: str | None = field(init=False, compare=False, default=None)
 
@@ -36,7 +36,7 @@ class BaseTerm(abc.ABC):
         return self
 
     def __post_init__(self) -> None:
-        pass
+        self.count = sum(c.count for c in self.children()) + 1
 
     def __repr__(self) -> str:
         ctx = DumpContext(pretty=True)

@@ -149,6 +149,7 @@ class Store(ATerm):
     def __post_init__(self) -> None:
         assert not self.lower and not self.upper
         self._bzla = self.base.bzla()
+        super(Store, self).__post_init__()
 
     # Warning: Store is not immutable by default! Take care to set `copied=True`
     # when reusing a Store in Selects and other expressions. This will cause

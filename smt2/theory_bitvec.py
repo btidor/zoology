@@ -211,7 +211,6 @@ class Concat(BTerm):
         assert len(self.terms) > 0, "width must be positive"
         self.width = reduce(lambda p, q: p + q.width, self.terms, 0)
         super(Concat, self).__post_init__()
-        self.count = reduce(int.__add__, (t.count + 1 for t in self.terms))
 
     @override
     def dump(self, ctx: DumpContext) -> None:
