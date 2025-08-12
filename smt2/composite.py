@@ -46,7 +46,7 @@ class RewriteMeta(abc.ABCMeta):
                     pass
         term = super(RewriteMeta, self).__call__(*args, **kwds)
         term = term.rewrite()
-        term.bzla()
+        term.bzla
         return term
 
 
@@ -85,7 +85,7 @@ class CSymbol(CTerm):
         return model.get(self.name, self)
 
     @override
-    def bzla(self) -> BitwuzlaTerm:
+    def _bzterm(self) -> BitwuzlaTerm:
         return BZLA.mk_symbol(self.name, None)
 
 
@@ -108,10 +108,8 @@ class CValue(CTerm):
         return self
 
     @override
-    def bzla(self) -> BitwuzlaTerm:
-        if not self._bzla:
-            self._bzla = BZLA.mk_value(self.value, None)
-        return self._bzla
+    def _bzterm(self) -> BitwuzlaTerm:
+        return BZLA.mk_value(self.value, None)
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
@@ -123,12 +121,6 @@ class Not(CTerm):
     @override
     def children(self) -> Iterable[BaseTerm]:
         return (self.term,)
-
-    @override
-    def bzla(self) -> BitwuzlaTerm:
-        if not self._bzla:
-            self._bzla = BZLA.mk_term(self.kind, (self.term.bzla(),))
-        return self._bzla
 
     @profile
     @override
@@ -165,12 +157,6 @@ class Implies(CTerm):
     def children(self) -> Iterable[BaseTerm]:
         return (self.left, self.right)
 
-    @override
-    def bzla(self) -> BitwuzlaTerm:
-        if not self._bzla:
-            self._bzla = BZLA.mk_term(self.kind, (self.left.bzla(), self.right.bzla()))
-        return self._bzla
-
     @profile
     @override
     def rewrite(self) -> CTerm:
@@ -192,12 +178,6 @@ class And(CTerm):
     @override
     def children(self) -> Iterable[BaseTerm]:
         return (self.left, self.right)
-
-    @override
-    def bzla(self) -> BitwuzlaTerm:
-        if not self._bzla:
-            self._bzla = BZLA.mk_term(self.kind, (self.left.bzla(), self.right.bzla()))
-        return self._bzla
 
     @profile
     @override
@@ -229,12 +209,6 @@ class Or(CTerm):
     def children(self) -> Iterable[BaseTerm]:
         return (self.left, self.right)
 
-    @override
-    def bzla(self) -> BitwuzlaTerm:
-        if not self._bzla:
-            self._bzla = BZLA.mk_term(self.kind, (self.left.bzla(), self.right.bzla()))
-        return self._bzla
-
     @profile
     @override
     def rewrite(self) -> CTerm:
@@ -264,12 +238,6 @@ class Xor(CTerm):
     @override
     def children(self) -> Iterable[BaseTerm]:
         return (self.left, self.right)
-
-    @override
-    def bzla(self) -> BitwuzlaTerm:
-        if not self._bzla:
-            self._bzla = BZLA.mk_term(self.kind, (self.left.bzla(), self.right.bzla()))
-        return self._bzla
 
     @profile
     @override
@@ -306,12 +274,6 @@ class Eq[S: BaseTerm](CTerm):
     def __post_init__(self) -> None:
         super(Eq, self).__post_init__()
         assert getattr(self.left, "width", None) == getattr(self.right, "width", None)
-
-    @override
-    def bzla(self) -> BitwuzlaTerm:
-        if not self._bzla:
-            self._bzla = BZLA.mk_term(self.kind, (self.left.bzla(), self.right.bzla()))
-        return self._bzla
 
     @profile
     @override
@@ -377,12 +339,6 @@ class Distinct[S: BaseTerm](CTerm):
         super(Distinct, self).__post_init__()
         assert getattr(self.left, "width", None) == getattr(self.right, "width", None)
 
-    @override
-    def bzla(self) -> BitwuzlaTerm:
-        if not self._bzla:
-            self._bzla = BZLA.mk_term(self.kind, (self.left.bzla(), self.right.bzla()))
-        return self._bzla
-
     @profile
     @override
     def rewrite(self) -> CTerm:
@@ -406,14 +362,6 @@ class CIte(CTerm):
     @override
     def children(self) -> Iterable[BaseTerm]:
         return (self.cond, self.left, self.right)
-
-    @override
-    def bzla(self) -> BitwuzlaTerm:
-        if not self._bzla:
-            self._bzla = BZLA.mk_term(
-                self.kind, (self.cond.bzla(), self.left.bzla(), self.right.bzla())
-            )
-        return self._bzla
 
     @profile
     @override
@@ -464,7 +412,7 @@ class BSymbol(BTerm):
         return model.get(self.name, self)
 
     @override
-    def bzla(self) -> BitwuzlaTerm:
+    def _bzterm(self) -> BitwuzlaTerm:
         return BZLA.mk_symbol(self.name, self.width)
 
 
@@ -512,10 +460,8 @@ class BValue(BTerm, metaclass=CacheMeta):
         return self
 
     @override
-    def bzla(self) -> BitwuzlaTerm:
-        if not self._bzla:
-            self._bzla = BZLA.mk_value(self.value, self.width)
-        return self._bzla
+    def _bzterm(self) -> BitwuzlaTerm:
+        return BZLA.mk_value(self.value, self.width)
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
@@ -531,12 +477,6 @@ class UnaryOp(BTerm):
     @override
     def children(self) -> Iterable[BaseTerm]:
         return (self.term,)
-
-    @override
-    def bzla(self) -> BitwuzlaTerm:
-        if not self._bzla:
-            self._bzla = BZLA.mk_term(self.kind, (self.term.bzla(),))
-        return self._bzla
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
@@ -555,12 +495,6 @@ class BinaryOp(BTerm):
         self.width = self.left.width
         super(BinaryOp, self).__post_init__()
 
-    @override
-    def bzla(self) -> BitwuzlaTerm:
-        if not self._bzla:
-            self._bzla = BZLA.mk_term(self.kind, (self.left.bzla(), self.right.bzla()))
-        return self._bzla
-
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class CompareOp(CTerm):
@@ -577,12 +511,6 @@ class CompareOp(CTerm):
         assert self.left.width == self.right.width
         super(CompareOp, self).__post_init__()
 
-    @override
-    def bzla(self) -> BitwuzlaTerm:
-        if not self._bzla:
-            self._bzla = BZLA.mk_term(self.kind, (self.left.bzla(), self.right.bzla()))
-        return self._bzla
-
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class SingleParamOp(BTerm):
@@ -594,10 +522,8 @@ class SingleParamOp(BTerm):
         return (self.term,)
 
     @override
-    def bzla(self) -> BitwuzlaTerm:
-        if not self._bzla:
-            self._bzla = BZLA.mk_term(self.kind, (self.term.bzla(),), (self.i,))
-        return self._bzla
+    def _bzterm(self) -> BitwuzlaTerm:
+        return BZLA.mk_term(self.kind, (self.term.bzla,), (self.i,))
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
@@ -701,12 +627,6 @@ class Concat(BTerm):
             else:
                 ctx.write(f":+{hex(range)}]".encode())
 
-    @override
-    def bzla(self) -> BitwuzlaTerm:
-        if not self._bzla:
-            self._bzla = BZLA.mk_term(self.kind, tuple((t.bzla() for t in self.terms)))
-        return self._bzla
-
     @profile
     @override
     def rewrite(self) -> BTerm:
@@ -759,10 +679,8 @@ class Extract(BTerm):
         return (self.term,)
 
     @override
-    def bzla(self) -> BitwuzlaTerm:
-        if not self._bzla:
-            self._bzla = BZLA.mk_term(self.kind, (self.term.bzla(),), (self.i, self.j))
-        return self._bzla
+    def _bzterm(self) -> BitwuzlaTerm:
+        return BZLA.mk_term(self.kind, (self.term.bzla,), (self.i, self.j))
 
     @profile
     @override
@@ -1368,12 +1286,6 @@ class Comp(BTerm):
     def children(self) -> Iterable[BaseTerm]:
         return (self.left, self.right)
 
-    @override
-    def bzla(self) -> BitwuzlaTerm:
-        if not self._bzla:
-            self._bzla = BZLA.mk_term(self.kind, (self.left.bzla(), self.right.bzla()))
-        return self._bzla
-
     @profile
     @override
     def rewrite(self) -> BTerm:
@@ -1947,14 +1859,6 @@ class Ite(BTerm):
                 self._pretty = None
         super(Ite, self).dump(ctx)
 
-    @override
-    def bzla(self) -> BitwuzlaTerm:
-        if not self._bzla:
-            self._bzla = BZLA.mk_term(
-                self.kind, (self.cond.bzla(), self.left.bzla(), self.right.bzla())
-            )
-        return self._bzla
-
     @profile
     @override
     def rewrite(self) -> BTerm:
@@ -2008,7 +1912,7 @@ class ASymbol(ATerm):
         return model.get(self.name, self)
 
     @override
-    def bzla(self) -> BitwuzlaTerm:
+    def _bzterm(self) -> BitwuzlaTerm:
         return BZLA.mk_symbol(self.name, self.width())
 
 
@@ -2040,10 +1944,8 @@ class AValue(ATerm):
         return self
 
     @override
-    def bzla(self) -> BitwuzlaTerm:
-        if not self._bzla:
-            self._bzla = BZLA.mk_value(self.default.bzla(), self.width())
-        return self._bzla
+    def _bzterm(self) -> BitwuzlaTerm:
+        return BZLA.mk_value(self.default.bzla, self.width())
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
@@ -2079,12 +1981,6 @@ class Select(BTerm):
             ctx.write(b"]")
             return
         super(Select, self).dump(ctx)
-
-    @override
-    def bzla(self) -> BitwuzlaTerm:
-        if not self._bzla:
-            self._bzla = BZLA.mk_term(self.kind, (self.array.bzla(), self.key.bzla()))
-        return self._bzla
 
     @profile
     @override
@@ -2130,7 +2026,7 @@ class Store(ATerm):
     @profile
     def __post_init__(self) -> None:
         assert not self.lower and (not self.upper)
-        self._bzla = self.base.bzla()
+        self._bzla = self.base.bzla
         super(Store, self).__post_init__()
 
     def __copy__(self) -> Self:
@@ -2175,8 +2071,8 @@ class Store(ATerm):
         else:
             self.upper.append((key, value))
             self.count += key.count + value.count + 2
-        assert self._bzla is not None
-        self._bzla = BZLA.mk_term(self.kind, (self._bzla, key.bzla(), value.bzla()))
+        if self._bzla is not None:
+            self._bzla = BZLA.mk_term(self.kind, (self._bzla, key.bzla, value.bzla))
 
     @profile
     @override
@@ -2200,6 +2096,12 @@ class Store(ATerm):
             ctx.write(b")")
 
     @override
-    def bzla(self) -> BitwuzlaTerm:
-        assert self._bzla is not None
-        return self._bzla
+    def _bzterm(self) -> BitwuzlaTerm:
+        term = self.base.bzla
+        for k, v in self.lower.items():
+            term = BZLA.mk_term(
+                self.kind, (term, BZLA.mk_value(k, self.width()[0]), v.bzla)
+            )
+        for k, v in self.upper:
+            term = BZLA.mk_term(self.kind, (term, k.bzla, v.bzla))
+        return term

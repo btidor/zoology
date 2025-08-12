@@ -55,8 +55,14 @@ class BaseTerm(abc.ABC):
     @abc.abstractmethod
     def children(self) -> Iterable[BaseTerm]: ...
 
-    @abc.abstractmethod
-    def bzla(self) -> BitwuzlaTerm: ...
+    @property
+    def bzla(self) -> BitwuzlaTerm:
+        if self._bzla is None:
+            self._bzla = self._bzterm()
+        return self._bzla
+
+    def _bzterm(self) -> BitwuzlaTerm:
+        return BZLA.mk_term(self.kind, tuple(t.bzla for t in self.children()))
 
     @profile
     def rewrite(self) -> BaseTerm:
@@ -248,7 +254,7 @@ class BitwuzlaManager:
 
     def check(self, solver: Any, term: BaseTerm) -> bool:
         self.last_solver = solver
-        self._bzla.assume_formula(term.bzla())
+        self._bzla.assume_formula(term.bzla)
         match self._bzla.check_sat():
             case Result.SAT:
                 return True
@@ -258,7 +264,7 @@ class BitwuzlaManager:
                 raise RuntimeError
 
     def get_value_str(self, term: BaseTerm) -> str | dict[str, str]:
-        return self._bzla.get_value_str(term.bzla())
+        return self._bzla.get_value_str(term.bzla)
 
 
 BZLA = BitwuzlaManager()
@@ -287,7 +293,7 @@ class CSymbol(CTerm):
         return model.get(self.name, self)
 
     @override
-    def bzla(self) -> BitwuzlaTerm:
+    def _bzterm(self) -> BitwuzlaTerm:
         return BZLA.mk_symbol(self.name, None)
 
 
@@ -308,10 +314,8 @@ class CValue(CTerm):
         return self
 
     @override
-    def bzla(self) -> BitwuzlaTerm:
-        if not self._bzla:
-            self._bzla = BZLA.mk_value(self.value, None)
-        return self._bzla
+    def _bzterm(self) -> BitwuzlaTerm:
+        return BZLA.mk_value(self.value, None)
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
@@ -324,12 +328,6 @@ class Not(CTerm):
     def children(self) -> Iterable[BaseTerm]:
         return (self.term,)
 
-    @override
-    def bzla(self) -> BitwuzlaTerm:
-        if not self._bzla:
-            self._bzla = BZLA.mk_term(self.kind, (self.term.bzla(),))
-        return self._bzla
-
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Implies(CTerm):
@@ -341,12 +339,6 @@ class Implies(CTerm):
     @override
     def children(self) -> Iterable[BaseTerm]:
         return (self.left, self.right)
-
-    @override
-    def bzla(self) -> BitwuzlaTerm:
-        if not self._bzla:
-            self._bzla = BZLA.mk_term(self.kind, (self.left.bzla(), self.right.bzla()))
-        return self._bzla
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
@@ -361,12 +353,6 @@ class And(CTerm):
     def children(self) -> Iterable[BaseTerm]:
         return (self.left, self.right)
 
-    @override
-    def bzla(self) -> BitwuzlaTerm:
-        if not self._bzla:
-            self._bzla = BZLA.mk_term(self.kind, (self.left.bzla(), self.right.bzla()))
-        return self._bzla
-
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Or(CTerm):
@@ -380,12 +366,6 @@ class Or(CTerm):
     def children(self) -> Iterable[BaseTerm]:
         return (self.left, self.right)
 
-    @override
-    def bzla(self) -> BitwuzlaTerm:
-        if not self._bzla:
-            self._bzla = BZLA.mk_term(self.kind, (self.left.bzla(), self.right.bzla()))
-        return self._bzla
-
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Xor(CTerm):
@@ -398,12 +378,6 @@ class Xor(CTerm):
     @override
     def children(self) -> Iterable[BaseTerm]:
         return (self.left, self.right)
-
-    @override
-    def bzla(self) -> BitwuzlaTerm:
-        if not self._bzla:
-            self._bzla = BZLA.mk_term(self.kind, (self.left.bzla(), self.right.bzla()))
-        return self._bzla
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
@@ -423,12 +397,6 @@ class Eq[S: BaseTerm](CTerm):
         super(Eq, self).__post_init__()
         assert getattr(self.left, "width", None) == getattr(self.right, "width", None)
 
-    @override
-    def bzla(self) -> BitwuzlaTerm:
-        if not self._bzla:
-            self._bzla = BZLA.mk_term(self.kind, (self.left.bzla(), self.right.bzla()))
-        return self._bzla
-
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Distinct[S: BaseTerm](CTerm):
@@ -446,12 +414,6 @@ class Distinct[S: BaseTerm](CTerm):
         super(Distinct, self).__post_init__()
         assert getattr(self.left, "width", None) == getattr(self.right, "width", None)
 
-    @override
-    def bzla(self) -> BitwuzlaTerm:
-        if not self._bzla:
-            self._bzla = BZLA.mk_term(self.kind, (self.left.bzla(), self.right.bzla()))
-        return self._bzla
-
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class CIte(CTerm):
@@ -464,11 +426,3 @@ class CIte(CTerm):
     @override
     def children(self) -> Iterable[BaseTerm]:
         return (self.cond, self.left, self.right)
-
-    @override
-    def bzla(self) -> BitwuzlaTerm:
-        if not self._bzla:
-            self._bzla = BZLA.mk_term(
-                self.kind, (self.cond.bzla(), self.left.bzla(), self.right.bzla())
-            )
-        return self._bzla

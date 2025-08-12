@@ -36,7 +36,7 @@ class RewriteMeta(abc.ABCMeta):
                     pass
         term = super(RewriteMeta, self).__call__(*args, **kwds)
         term = term.rewrite()
-        term.bzla()  # populate cache to avoid deep recursion
+        term.bzla  # populate cache to avoid deep recursion
         return term
 
 

@@ -51,7 +51,7 @@ class ASymbol(ATerm):
         return model.get(self.name, self)
 
     @override
-    def bzla(self) -> BitwuzlaTerm:
+    def _bzterm(self) -> BitwuzlaTerm:
         return BZLA.mk_symbol(self.name, self.width())
 
 
@@ -81,10 +81,8 @@ class AValue(ATerm):
         return self
 
     @override
-    def bzla(self) -> BitwuzlaTerm:
-        if not self._bzla:
-            self._bzla = BZLA.mk_value(self.default.bzla(), self.width())
-        return self._bzla
+    def _bzterm(self) -> BitwuzlaTerm:
+        return BZLA.mk_value(self.default.bzla, self.width())
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
@@ -117,12 +115,6 @@ class Select(BTerm):
             return
         super(Select, self).dump(ctx)
 
-    @override
-    def bzla(self) -> BitwuzlaTerm:
-        if not self._bzla:
-            self._bzla = BZLA.mk_term(self.kind, (self.array.bzla(), self.key.bzla()))
-        return self._bzla
-
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Store(ATerm):
@@ -135,7 +127,7 @@ class Store(ATerm):
 
     def __post_init__(self) -> None:
         assert not self.lower and not self.upper
-        self._bzla = self.base.bzla()
+        self._bzla = self.base.bzla
         super(Store, self).__post_init__()
 
     # Warning: Store is not immutable by default! Take care to set `copied=True`
@@ -185,8 +177,8 @@ class Store(ATerm):
         else:
             self.upper.append((key, value))
             self.count += key.count + value.count + 2
-        assert self._bzla is not None
-        self._bzla = BZLA.mk_term(self.kind, (self._bzla, key.bzla(), value.bzla()))
+        if self._bzla is not None:
+            self._bzla = BZLA.mk_term(self.kind, (self._bzla, key.bzla, value.bzla))
 
     @override
     def dump(self, ctx: DumpContext) -> None:
@@ -209,6 +201,12 @@ class Store(ATerm):
             ctx.write(b")")
 
     @override
-    def bzla(self) -> BitwuzlaTerm:
-        assert self._bzla is not None
-        return self._bzla
+    def _bzterm(self) -> BitwuzlaTerm:
+        term = self.base.bzla
+        for k, v in self.lower.items():
+            term = BZLA.mk_term(
+                self.kind, (term, BZLA.mk_value(k, self.width()[0]), v.bzla)
+            )
+        for k, v in self.upper:
+            term = BZLA.mk_term(self.kind, (term, k.bzla, v.bzla))
+        return term
