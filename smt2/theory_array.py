@@ -43,10 +43,6 @@ class ASymbol(ATerm):
         return ()
 
     @override
-    def walk(self, ctx: DumpContext) -> None:
-        ctx.symbols[self.name] = self
-
-    @override
     def dump(self, ctx: DumpContext) -> None:
         ctx.write(self.name)
 
@@ -203,17 +199,6 @@ class Store(ATerm):
             self.count += key.count + value.count + 2
         assert self._bzla is not None
         self._bzla = BZLA.mk_term(self.kind, (self._bzla, key.bzla(), value.bzla()))
-
-    @override
-    def walk(self, ctx: DumpContext) -> None:
-        if ctx.visit(self):
-            return
-        self.base.walk(ctx)
-        for term in self.lower.values():
-            term.walk(ctx)
-        for key, value in self.upper:
-            key.walk(ctx)
-            value.walk(ctx)
 
     @override
     def dump(self, ctx: DumpContext) -> None:

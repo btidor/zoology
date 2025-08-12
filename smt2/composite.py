@@ -76,11 +76,6 @@ class CSymbol(CTerm):
 
     @profile
     @override
-    def walk(self, ctx: DumpContext) -> None:
-        ctx.symbols[self.name] = self
-
-    @profile
-    @override
     def dump(self, ctx: DumpContext) -> None:
         ctx.write(self.name)
 
@@ -506,11 +501,6 @@ class BSymbol(BTerm):
 
     @profile
     @override
-    def walk(self, ctx: DumpContext) -> None:
-        ctx.symbols[self.name] = self
-
-    @profile
-    @override
     def dump(self, ctx: DumpContext) -> None:
         ctx.write(self.name)
 
@@ -685,14 +675,6 @@ class Concat(BTerm):
         else:
             self.min = 0
             self.max = (1 << self.width) - 1
-
-    @profile
-    @override
-    def walk(self, ctx: DumpContext) -> None:
-        if ctx.visit(self):
-            return
-        for term in self.terms:
-            term.walk(ctx)
 
     @profile
     @override
@@ -2137,11 +2119,6 @@ class ASymbol(ATerm):
 
     @profile
     @override
-    def walk(self, ctx: DumpContext) -> None:
-        ctx.symbols[self.name] = self
-
-    @profile
-    @override
     def dump(self, ctx: DumpContext) -> None:
         ctx.write(self.name)
 
@@ -2344,18 +2321,6 @@ class Store(ATerm):
             self.count += key.count + value.count + 2
         assert self._bzla is not None
         self._bzla = BZLA.mk_term(self.kind, (self._bzla, key.bzla(), value.bzla()))
-
-    @profile
-    @override
-    def walk(self, ctx: DumpContext) -> None:
-        if ctx.visit(self):
-            return
-        self.base.walk(ctx)
-        for term in self.lower.values():
-            term.walk(ctx)
-        for key, value in self.upper:
-            key.walk(ctx)
-            value.walk(ctx)
 
     @profile
     @override

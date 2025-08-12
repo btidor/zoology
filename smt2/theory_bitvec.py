@@ -54,10 +54,6 @@ class BSymbol(BTerm):
         return ()
 
     @override
-    def walk(self, ctx: DumpContext) -> None:
-        ctx.symbols[self.name] = self
-
-    @override
     def dump(self, ctx: DumpContext) -> None:
         ctx.write(self.name)
 
@@ -216,13 +212,6 @@ class Concat(BTerm):
         self.width = reduce(lambda p, q: p + q.width, self.terms, 0)
         super(Concat, self).__post_init__()
         self.count = reduce(int.__add__, (t.count + 1 for t in self.terms))
-
-    @override
-    def walk(self, ctx: DumpContext) -> None:
-        if ctx.visit(self):
-            return
-        for term in self.terms:
-            term.walk(ctx)
 
     @override
     def dump(self, ctx: DumpContext) -> None:

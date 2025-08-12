@@ -57,15 +57,6 @@ class BaseTerm(abc.ABC):
         return self
 
     @profile
-    def walk(self, ctx: DumpContext) -> None:
-        if ctx.visit(self):
-            return
-        for name in self.__match_args__:
-            arg = getattr(self, name, None)
-            if isinstance(arg, BaseTerm):
-                arg.walk(ctx)
-
-    @profile
     def dump(self, ctx: DumpContext) -> None:
         if ctx.pretty and self._pretty:
             raise NotImplementedError
@@ -131,8 +122,15 @@ class DumpContext:
 
     @profile
     def prepare(self, *terms: BaseTerm) -> None:
-        for term in terms:
-            term.walk(self)
+        queue = list[BaseTerm](terms)
+        visited = set[BaseTerm]()
+        while queue:
+            term = queue.pop()
+            if term in visited:
+                continue
+            if (s := getattr(term, "name", None)) is not None:
+                self.symbols[s] = term
+            queue.extend(term.children())
         for name, symbol in self.symbols.items():
             self.write(b"(declare-fun %b () %b)\n" % (name, symbol.sort()))
 
@@ -188,10 +186,6 @@ class CSymbol(CTerm):
     @override
     def children(self) -> Iterable[BaseTerm]:
         return ()
-
-    @override
-    def walk(self, ctx: DumpContext) -> None:
-        ctx.symbols[self.name] = self
 
     @override
     def dump(self, ctx: DumpContext) -> None:
