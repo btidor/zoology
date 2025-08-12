@@ -154,14 +154,15 @@ class DumpContext:
     @profile
     def prepare(self, *terms: BaseTerm) -> None:
         queue = list[BaseTerm](terms)
-        visited = set[BaseTerm]()
+        visited = set[int]()
         while queue:
             term = queue.pop()
-            if term in visited:
+            if id(term) in visited:
                 continue
             if (s := getattr(term, "name", None)) is not None:
                 self.symbols[s] = term
             queue.extend(term.children())
+            visited.add(id(term))
         for name, symbol in self.symbols.items():
             self.write(b"(declare-fun %b () %b)\n" % (name, symbol.sort()))
 
