@@ -518,12 +518,12 @@ class SingleParamOp(BTerm):
     term: BTerm
 
     @override
-    def children(self) -> Iterable[BaseTerm]:
-        return (self.term,)
+    def params(self) -> Iterable[int]:
+        return (self.i,)
 
     @override
-    def _bzterm(self) -> BitwuzlaTerm:
-        return BZLA.mk_term(self.kind, (self.term.bzla,), (self.i,))
+    def children(self) -> Iterable[BaseTerm]:
+        return (self.term,)
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
@@ -675,12 +675,12 @@ class Extract(BTerm):
         self.max = (1 << self.width) - 1
 
     @override
-    def children(self) -> Iterable[BaseTerm]:
-        return (self.term,)
+    def params(self) -> Iterable[int]:
+        return (self.i, self.j)
 
     @override
-    def _bzterm(self) -> BitwuzlaTerm:
-        return BZLA.mk_term(self.kind, (self.term.bzla,), (self.i, self.j))
+    def children(self) -> Iterable[BaseTerm]:
+        return (self.term,)
 
     @profile
     @override

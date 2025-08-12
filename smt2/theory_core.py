@@ -52,6 +52,9 @@ class BaseTerm(abc.ABC):
     @abc.abstractmethod
     def sort(self) -> bytes: ...
 
+    def params(self) -> Iterable[int]:
+        return ()
+
     @abc.abstractmethod
     def children(self) -> Iterable[BaseTerm]: ...
 
@@ -62,7 +65,12 @@ class BaseTerm(abc.ABC):
         return self._bzla
 
     def _bzterm(self) -> BitwuzlaTerm:
-        return BZLA.mk_term(self.kind, tuple(t.bzla for t in self.children()))
+        params = tuple(self.params())
+        return BZLA.mk_term(
+            self.kind,
+            tuple(t.bzla for t in self.children()),
+            params if params else None,
+        )
 
     @profile
     def rewrite(self) -> BaseTerm:
@@ -72,18 +80,16 @@ class BaseTerm(abc.ABC):
     def dump(self, ctx: DumpContext) -> None:
         if ctx.pretty and self._pretty:
             raise NotImplementedError
-        # 0. Gather Arguments
-        args = [getattr(self, name) for name in self.__match_args__]
-        params = [str(arg).encode() for arg in args if isinstance(arg, int)]
-        terms = [arg for arg in args if isinstance(arg, BaseTerm)]
         # 1. Determine Op
         assert self.op
-        if params:
-            ctx.write(b"((_ %b %s)" % (self.op, b" ".join(params)))
+        if params := tuple(self.params()):
+            ctx.write(
+                b"((_ %b %b)" % (self.op, b" ".join(str(p).encode() for p in params))
+            )
         else:
             ctx.write(b"(%b" % self.op)
         # 2. Dump Terms
-        for term in terms:
+        for term in self.children():
             ctx.write(b" ")
             term.dump(ctx)
         ctx.write(b")")
