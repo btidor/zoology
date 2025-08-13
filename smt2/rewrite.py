@@ -7,6 +7,7 @@ import copy
 
 from line_profiler import profile
 
+from .bitwuzla import BZLA
 from .theory_array import *
 from .theory_bitvec import *
 from .theory_core import *

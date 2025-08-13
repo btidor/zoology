@@ -15,8 +15,8 @@ from typing import ClassVar, Iterable, override
 
 from line_profiler import profile
 
+from .bitwuzla import BZLA
 from .theory_core import (
-    BZLA,
     BaseTerm,
     BitwuzlaTerm,
     CTerm,

@@ -22,7 +22,8 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 import gc
 from typing import Any, Iterator
 
-from smt2.theory_core import BZLA, BaseTerm
+from smt2.bitwuzla import BZLA
+from smt2.theory_core import BaseTerm
 
 
 @pytest.fixture(autouse=True)

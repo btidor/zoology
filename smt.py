@@ -7,8 +7,9 @@ from functools import reduce
 from typing import Literal, overload
 
 from smt2 import Array, Constraint, Int, Symbolic, Uint
+from smt2.bitwuzla import BZLA
 from smt2.composite import ASymbol, BSymbol, CSymbol, Ite, Select
-from smt2.theory_core import BZLA, DumpContext
+from smt2.theory_core import DumpContext
 
 
 Uint8 = Uint[Literal[8]]

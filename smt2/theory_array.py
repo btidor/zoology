@@ -16,8 +16,9 @@ from typing import Any, ClassVar, Iterable, Self, override
 
 from line_profiler import profile
 
+from .bitwuzla import BZLA
 from .theory_bitvec import BTerm, BValue
-from .theory_core import BZLA, BaseTerm, BitwuzlaTerm, DumpContext, Kind
+from .theory_core import BaseTerm, BitwuzlaTerm, DumpContext, Kind
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
