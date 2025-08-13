@@ -134,14 +134,6 @@ class Not(CTerm):
                 return Or(Not(x), Not(y))
             case Not(Or(x, y)):
                 return And(Not(x), Not(y))
-            case Not(Ult(x, y)):
-                return Ule(y, x)
-            case Not(Ule(x, y)):
-                return Ult(y, x)
-            case Not(Slt(x, y)):
-                return Sle(y, x)
-            case Not(Sle(x, y)):
-                return Slt(y, x)
             case _:
                 return self
 
@@ -1154,9 +1146,31 @@ class Ult(CompareOp):
             ):
                 return Ult(BValue(b - a + (1 << x.width), x.width), x)
             case Ult(Add(BValue(a), x), y) if x == y and a > 0:
-                return Ule(BValue((1 << x.width) - a, x.width), x)
+                return Not(Ult(x, BValue((1 << x.width) - a, x.width)))
             case Ult(x, Add(BValue(a), y)) if x == y and a > 0:
                 return Ult(x, BValue((1 << x.width) - a, x.width))
+            case Ult(
+                Add(BValue(a), x), Add(BValue(b), BAnd(BValue(c), Add(BValue(d), y)))
+            ) if (
+                a < b + (d - 31)
+                and b < 1 << x.width
+                and (c == (1 << x.width) - 32)
+                and (d >= 31)
+                and (x == y)
+                and (x.max < (1 << x.width) - d - b)
+            ):
+                return CValue(True)
+            case Ult(
+                Add(BValue(b), BAnd(BValue(c), Add(BValue(d), y))), Add(BValue(a), x)
+            ) if (
+                a <= b + (d - 31)
+                and b < 1 << x.width
+                and (c == (1 << x.width) - 32)
+                and (d >= 31)
+                and (x == y)
+                and (x.max < (1 << x.width) - d - b)
+            ):
+                return CValue(False)
             case Ult(x, y) if x.max < y.min:
                 return CValue(True)
             case Ult(x, y) if y.max <= x.min:
@@ -1609,55 +1623,8 @@ class Ule(CompareOp):
     @override
     def rewrite(self) -> CTerm:
         match self:
-            case Ule(BValue(a), BValue(b)):
-                return CValue(a <= b)
-            case Ule(x, BValue(0)):
-                return Eq(x, BValue(0, x.width))
-            case Ule(BValue(0), x):
-                return CValue(True)
-            case Ule(x, y) if x == y:
-                return CValue(True)
-            case Ule(BValue(a), Concat([BValue(b) as x, *rest]) as c) if (
-                b == a >> c.width - x.width and len(rest) > 0
-            ):
-                rwidth = c.width - x.width
-                return Ule(BValue(a & (1 << rwidth) - 1, rwidth), Concat((*rest,)))
-            case Ule(Concat([BValue(b) as x, *rest]) as c, BValue(a)) if (
-                b == a >> c.width - x.width and len(rest) > 0
-            ):
-                rwidth = c.width - x.width
-                return Ule(Concat((*rest,)), BValue(a & (1 << rwidth) - 1, rwidth))
-            case Ule(Add(BValue(a), x), BValue(b)) if (
-                a <= b and x.max < (1 << x.width) - a
-            ):
-                return Ule(x, BValue(b - a, x.width))
-            case Ule(BValue(b), Add(BValue(a), x)) if (
-                a <= b and x.max < (1 << x.width) - a
-            ):
-                return Ule(BValue(b - a, x.width), x)
-            case Ule(Add(BValue(a), x), BValue(b)) if (
-                a > b and x.min >= (1 << x.width) - a
-            ):
-                return Ule(x, BValue(b - a + (1 << x.width), x.width))
-            case Ule(BValue(b), Add(BValue(a), x)) if (
-                a > b and x.min >= (1 << x.width) - a
-            ):
-                return Ule(BValue(b - a + (1 << x.width), x.width), x)
-            case Ule(
-                Add(BValue(a), x), Add(BValue(b), BAnd(BValue(c), Add(BValue(d), y)))
-            ) if (
-                a <= b + (d - 31)
-                and b < 1 << x.width
-                and (c == (1 << x.width) - 32)
-                and (d >= 31)
-                and (x == y)
-                and (x.max < (1 << x.width) - d - b)
-            ):
-                return CValue(True)
-            case Ule(x, y) if x.max <= y.min:
-                return CValue(True)
-            case Ule(x, y) if y.max < x.min:
-                return CValue(False)
+            case Ule(x, y):
+                return Not(Ult(y, x))
             case _:
                 return self
 
@@ -1687,7 +1654,7 @@ class Uge(CompareOp):
     def rewrite(self) -> CTerm:
         match self:
             case Uge(x, y):
-                return Ule(y, x)
+                return Not(Ult(x, y))
             case _:
                 return self
 
@@ -1752,44 +1719,8 @@ class Sle(CompareOp):
     @override
     def rewrite(self) -> CTerm:
         match self:
-            case Sle(BValue() as x, BValue() as y):
-                return CValue(x.sgnd <= y.sgnd)
-            case Sle(Add(BValue(a) as p, x), BValue(b) as q) if (
-                0 <= p.sgnd
-                and p.sgnd <= q.sgnd
-                and (x.max < (1 << x.width - 1) - q.sgnd)
-            ):
-                return Sle(x, BValue(b - a, x.width))
-            case Sle(BValue(b) as q, Add(BValue(a) as p, x)) if (
-                0 <= p.sgnd
-                and p.sgnd <= q.sgnd
-                and (x.max < (1 << x.width - 1) - q.sgnd)
-            ):
-                return Sle(BValue(b - a, x.width), x)
-            case Sle(Add(BValue(a) as p, x), BValue(b)) if (
-                p.sgnd < 0
-                and -p.sgnd < 1 << x.width - 1
-                and (b - p.sgnd < 1 << x.width - 1)
-                and (x.max < 1 << x.width - 2)
-            ):
-                return Sle(x, BValue(b - p.sgnd, x.width))
-            case Sle(BValue(b), Add(BValue(a) as p, x)) if (
-                p.sgnd < 0
-                and -p.sgnd < 1 << x.width - 1
-                and (b - p.sgnd < 1 << x.width - 1)
-                and (x.max < 1 << x.width - 2)
-            ):
-                return Sle(BValue(b - p.sgnd, x.width), x)
-            case Sle(x, y) if x.max < 1 << x.width - 1 and y.max < 1 << x.width - 1:
-                return Ule(x, y)
-            case Sle(x, y) if y.max < 1 << y.width - 1 and x.min >= 1 << x.width - 1:
-                return CValue(True)
-            case Sle(x, y) if x.max < 1 << x.width - 1 and y.min >= 1 << y.width - 1:
-                return CValue(False)
-            case Sle(x, y) if x.max <= y.min and x.min >= 1 << x.width - 1:
-                return CValue(True)
-            case Sle(x, y) if y.max < x.min and y.min >= 1 << y.width - 1:
-                return CValue(False)
+            case Sle(x, y):
+                return Not(Slt(y, x))
             case _:
                 return self
 
@@ -1819,7 +1750,7 @@ class Sge(CompareOp):
     def rewrite(self) -> CTerm:
         match self:
             case Sge(x, y):
-                return Sle(y, x)
+                return Not(Slt(x, y))
             case _:
                 return self
 

@@ -71,18 +71,24 @@ def constraint_reduction(term: CTerm) -> CTerm:
         case CIte(c, x, y):
             """cite: ite(c, x, y) <=> (C & X) | (~C & Y)"""
             return Or(And(c, x), And(Not(c), y))
+        case Ule(x, y):
+            """ule: X <= Y <=> ~(Y < X)"""
+            return Not(Ult(y, x))
         case Ugt(x, y):
             """ugt: X > Y <=> Y < X"""
             return Ult(y, x)
         case Uge(x, y):
             """uge: X >= Y <=> Y <= X"""
-            return Ule(y, x)
+            return Not(Ult(x, y))
+        case Sle(x, y):
+            """sle: X <= Y <=> !(Y < X)"""
+            return Not(Slt(y, x))
         case Sgt(x, y):
             """sgt: X > Y <=> Y < X"""
             return Slt(y, x)
         case Sge(x, y):
             """sge: X >= Y <=> Y <= X"""
-            return Sle(y, x)
+            return Not(Slt(x, y))
         case _:
             return term
 
@@ -108,15 +114,9 @@ def constraint_folding(term: CTerm) -> CTerm:
         case Ult(BValue(a), BValue(b)):
             """ult"""
             return CValue(a < b)
-        case Ule(BValue(a), BValue(b)):
-            """ule"""
-            return CValue(a <= b)
         case Slt(BValue() as x, BValue() as y):
             """slt"""
             return CValue(x.sgnd < y.sgnd)
-        case Sle(BValue() as x, BValue() as y):
-            """sle"""
-            return CValue(x.sgnd <= y.sgnd)
         case _:
             return term
 
@@ -225,36 +225,15 @@ def constraint_logic_bitvector(term: CTerm) -> CTerm:
         case Ult(x, BValue(0)):
             """ult.z: X < 0 <=> False"""
             return CValue(False)
-        case Ule(x, BValue(0)):
-            """ule.z: X <= 0 <=> X = 0"""
-            return Eq(x, BValue(0, x.width))
         case Ult(BValue(0), x):
             """z.ult: 0 < X <=> X != 0"""
             return Distinct(x, BValue(0, x.width))
-        case Ule(BValue(0), x):
-            """z.ule: 0 <= X <=> True"""
-            return CValue(True)
         case Ult(x, BValue(1)):
             """ult.w: X < 1 <=> X = 0"""
             return Eq(x, BValue(0, x.width))
         case Ult(x, y) if x == y:
             """ult.x: X < X <=> False"""
             return CValue(False)
-        case Ule(x, y) if x == y:
-            """ule.x: X <= X <=> True"""
-            return CValue(True)
-        case Not(Ult(x, y)):
-            """not.ult: ~(X < Y) <=> Y <= X"""
-            return Ule(y, x)
-        case Not(Ule(x, y)):
-            """not.ule: ~(X <= Y) <=> Y < X"""
-            return Ult(y, x)
-        case Not(Slt(x, y)):
-            """not.slt: ~(X < Y) <=> Y <= X"""
-            return Sle(y, x)
-        case Not(Sle(x, y)):
-            """not.sle: ~(X <= Y) <=> Y < X"""
-            return Slt(y, x)
 
         # Compare-and-Concat
         case Ult(BValue(a), Concat([BValue(b) as x, *rest]) as c) if (
@@ -269,18 +248,6 @@ def constraint_logic_bitvector(term: CTerm) -> CTerm:
             """ult.catv"""
             rwidth = c.width - x.width
             return Ult(Concat((*rest,)), BValue(a & ((1 << rwidth) - 1), rwidth))
-        case Ule(BValue(a), Concat([BValue(b) as x, *rest]) as c) if (
-            b == (a >> (c.width - x.width)) and len(rest) > 0
-        ):
-            """ule.vcat"""
-            rwidth = c.width - x.width
-            return Ule(BValue(a & ((1 << rwidth) - 1), rwidth), Concat((*rest,)))
-        case Ule(Concat([BValue(b) as x, *rest]) as c, BValue(a)) if (
-            b == (a >> (c.width - x.width)) and len(rest) > 0
-        ):
-            """ule.catv"""
-            rwidth = c.width - x.width
-            return Ule(Concat((*rest,)), BValue(a & ((1 << rwidth) - 1), rwidth))
 
         # Compare-and-Add
         case Ult(Add(BValue(a), x), BValue(b)) if a <= b and x.max < (1 << x.width) - a:
@@ -295,18 +262,6 @@ def constraint_logic_bitvector(term: CTerm) -> CTerm:
         case Ult(BValue(b), Add(BValue(a), x)) if a > b and x.min >= (1 << x.width) - a:
             """ult.add: B < X + A <=> (B - A) < X"""
             return Ult(BValue(b - a + (1 << x.width), x.width), x)
-        case Ule(Add(BValue(a), x), BValue(b)) if a <= b and x.max < (1 << x.width) - a:
-            """ule.add: X + A < B <=> X < (B - A)"""
-            return Ule(x, BValue(b - a, x.width))
-        case Ule(BValue(b), Add(BValue(a), x)) if a <= b and x.max < (1 << x.width) - a:
-            """ule.add: B < X + A <=> (B - A) < X"""
-            return Ule(BValue(b - a, x.width), x)
-        case Ule(Add(BValue(a), x), BValue(b)) if a > b and x.min >= (1 << x.width) - a:
-            """ule.add: X + A < B <=> X < (B - A)"""
-            return Ule(x, BValue(b - a + (1 << x.width), x.width))
-        case Ule(BValue(b), Add(BValue(a), x)) if a > b and x.min >= (1 << x.width) - a:
-            """ule.add: B < X + A <=> (B - A) < X"""
-            return Ule(BValue(b - a + (1 << x.width), x.width), x)
         case Slt(Add(BValue(a) as p, x), BValue(b) as q) if (
             0 <= p.sgnd and p.sgnd <= q.sgnd and x.max < (1 << (x.width - 1)) - q.sgnd
         ):
@@ -333,42 +288,31 @@ def constraint_logic_bitvector(term: CTerm) -> CTerm:
         ):
             """slt.add: X + A < B <=> X < (B - A)"""
             return Slt(BValue(b - p.sgnd, x.width), x)
-        case Sle(Add(BValue(a) as p, x), BValue(b) as q) if (
-            0 <= p.sgnd and p.sgnd <= q.sgnd and x.max < (1 << (x.width - 1)) - q.sgnd
-        ):
-            """sle.add: X + A < B <=> X < (B- A)"""
-            return Sle(x, BValue(b - a, x.width))
-        case Sle(BValue(b) as q, Add(BValue(a) as p, x)) if (
-            0 <= p.sgnd and p.sgnd <= q.sgnd and x.max < (1 << (x.width - 1)) - q.sgnd
-        ):
-            """sle.add: B < X + A <=> (B - A) < X"""
-            return Sle(BValue(b - a, x.width), x)
-        case Sle(Add(BValue(a) as p, x), BValue(b)) if (
-            p.sgnd < 0
-            and -p.sgnd < (1 << x.width - 1)
-            and b - p.sgnd < (1 << x.width - 1)
-            and x.max < (1 << x.width - 2)
-        ):
-            """sle.add: X + A < B <=> X < (B - A)"""
-            return Sle(x, BValue(b - p.sgnd, x.width))
-        case Sle(BValue(b), Add(BValue(a) as p, x)) if (
-            p.sgnd < 0
-            and -p.sgnd < (1 << x.width - 1)
-            and b - p.sgnd < (1 << x.width - 1)
-            and x.max < (1 << x.width - 2)
-        ):
-            """sle.add: X + A < B <=> X < (B - A)"""
-            return Sle(BValue(b - p.sgnd, x.width), x)
         case Ult(Add(BValue(a), x), y) if x == y and a > 0:
             """ult.add*"""
-            return Ule(BValue((1 << x.width) - a, x.width), x)
+            return Not(Ult(x, (BValue((1 << x.width) - a, x.width))))
         case Ult(x, Add(BValue(a), y)) if x == y and a > 0:
             """ult.add*"""
             return Ult(x, BValue((1 << x.width) - a, x.width))
 
         # Custom Solidity Macros
-        case Ule(
+        case Ult(
             Add(BValue(a), x), Add(BValue(b), BAnd(BValue(c), Add(BValue(d), y)))
+        ) if (
+            a < b + (d - 0x1F)
+            and b < (1 << x.width)
+            and c == (1 << x.width) - 0x20
+            and d >= 0x1F
+            and x == y
+            and x.max < (1 << x.width) - d - b
+        ):
+            """ult.round"""
+            # Solidity uses 0xFF..E0 & (0x1F + X) to round memory offsets up to
+            # the nearest multiple of 0x20. This can be combined with an offset,
+            # e.g. (0x3F + X) rounds up and adds 0x20.
+            return CValue(True)
+        case Ult(
+            Add(BValue(b), BAnd(BValue(c), Add(BValue(d), y))), Add(BValue(a), x)
         ) if (
             a <= b + (d - 0x1F)
             and b < (1 << x.width)
@@ -377,11 +321,8 @@ def constraint_logic_bitvector(term: CTerm) -> CTerm:
             and x == y
             and x.max < (1 << x.width) - d - b
         ):
-            """ule.round"""
-            # Solidity uses 0xFF..E0 & (0x1F + X) to round memory offsets up to
-            # the nearest multiple of 0x20. This can be combined with an offset,
-            # e.g. (0x3F + X) rounds up and adds 0x20.
-            return CValue(True)
+            """ult.round"""
+            return CValue(False)
 
         case _:
             return term

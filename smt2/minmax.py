@@ -77,12 +77,6 @@ def constraint_minmax(term: CTerm) -> CTerm:
         case Ult(x, y) if y.max <= x.min:
             """ult.f"""
             return CValue(False)
-        case Ule(x, y) if x.max <= y.min:
-            """ule.t"""
-            return CValue(True)
-        case Ule(x, y) if y.max < x.min:
-            """ule.f"""
-            return CValue(False)
         case Slt(x, y) if x.max < (1 << (x.width - 1)) and y.max < (1 << (x.width - 1)):
             """slt.pp"""
             return Ult(x, y)
@@ -101,25 +95,6 @@ def constraint_minmax(term: CTerm) -> CTerm:
             return CValue(True)
         case Slt(x, y) if y.max <= x.min and y.min >= (1 << (y.width - 1)):
             """slt.nf"""
-            return CValue(False)
-        case Sle(x, y) if x.max < (1 << (x.width - 1)) and y.max < (1 << (x.width - 1)):
-            """sle.pp"""
-            return Ule(x, y)
-        case Sle(x, y) if y.max < (1 << (y.width - 1)) and x.min >= (
-            1 << (x.width - 1)
-        ):
-            """sle.np"""
-            return CValue(True)
-        case Sle(x, y) if x.max < (1 << (x.width - 1)) and y.min >= (
-            1 << (y.width - 1)
-        ):
-            """sle.pn"""
-            return CValue(False)
-        case Sle(x, y) if x.max <= y.min and x.min >= (1 << (x.width - 1)):
-            """sle.nt"""
-            return CValue(True)
-        case Sle(x, y) if y.max < x.min and y.min >= (1 << (y.width - 1)):
-            """sle.nf"""
             return CValue(False)
         case _:
             return term
