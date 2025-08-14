@@ -22,52 +22,20 @@ from typing import Any, ClassVar, Iterable, Self, override
 from line_profiler import profile
 
 from .bitwuzla import BZLA
-from .theory_core import BaseTerm, BitwuzlaTerm, DumpContext, Kind
+from .theory_core import BaseTerm, BitwuzlaTerm, DumpContext, Kind, TermCategory
 
 type MinMax = tuple[int, int]
 
 
-class RewriteMeta(abc.ABCMeta):
-    _cache = dict[Any, Any]()
-
-    @profile
-    def __call__(self, *args: Any, **kwds: Any) -> Any:
-        assert issubclass(self, BaseTerm)
-        if self.commutative:
-            match args:
-                case [x, CValue() as y] if not isinstance(x, CValue):
-                    args = (y, x)
-                case [Not() as x, y] if not isinstance(y, Not):
-                    args = (y, x)
-                case [x, BValue() as y] if not isinstance(x, BValue):
-                    args = (y, x)
-                case [BNot() as x, y] if not isinstance(y, BNot):
-                    args = (y, x)
-                case _:
-                    pass
-        term = super(RewriteMeta, self).__call__(*args, **kwds)
-        term = term.rewrite()
-        return term
-
-
-class CacheMeta(RewriteMeta):
-    _cache = dict[tuple[Any, ...], Any]()
-
-    @profile
-    def __call__(self, *args: Any) -> Any:
-        if args not in BZLA.special:
-            BZLA.special[args] = super().__call__(*args)
-        return BZLA.special[args]
-
-
 @dataclass(repr=False, slots=True, unsafe_hash=True)
-class CTerm(BaseTerm, metaclass=RewriteMeta):
+class CTerm(BaseTerm):
     def sort(self) -> bytes:
         return b"Bool"
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class CSymbol(CTerm):
+    category: ClassVar[TermCategory] = TermCategory.SYMBOL
     name: bytes
 
     @override
@@ -91,6 +59,7 @@ class CSymbol(CTerm):
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class CValue(CTerm):
+    category: ClassVar[TermCategory] = TermCategory.VALUE
     value: bool
 
     @override
@@ -116,6 +85,7 @@ class CValue(CTerm):
 class Not(CTerm):
     op: ClassVar[bytes] = b"not"
     kind: ClassVar[Kind] = Kind.NOT
+    category: ClassVar[TermCategory] = TermCategory.NOT
     term: CTerm
 
     @override
@@ -163,7 +133,7 @@ class Implies(CTerm):
 class And(CTerm):
     op: ClassVar[bytes] = b"and"
     kind: ClassVar[Kind] = Kind.AND
-    commutative: ClassVar[bool] = True
+    category: ClassVar[TermCategory] = TermCategory.COMMUTATIVE
     left: CTerm
     right: CTerm
 
@@ -193,7 +163,7 @@ class And(CTerm):
 class Or(CTerm):
     op: ClassVar[bytes] = b"or"
     kind: ClassVar[Kind] = Kind.OR
-    commutative: ClassVar[bool] = True
+    category: ClassVar[TermCategory] = TermCategory.COMMUTATIVE
     left: CTerm
     right: CTerm
 
@@ -223,7 +193,7 @@ class Or(CTerm):
 class Xor(CTerm):
     op: ClassVar[bytes] = b"xor"
     kind: ClassVar[Kind] = Kind.XOR
-    commutative: ClassVar[bool] = True
+    category: ClassVar[TermCategory] = TermCategory.COMMUTATIVE
     left: CTerm
     right: CTerm
 
@@ -253,7 +223,7 @@ class Xor(CTerm):
 class Eq[S: BaseTerm](CTerm):
     op: ClassVar[bytes] = b"="
     kind: ClassVar[Kind] = Kind.EQUAL
-    commutative: ClassVar[bool] = True
+    category: ClassVar[TermCategory] = TermCategory.COMMUTATIVE
     left: S
     right: S
 
@@ -366,7 +336,7 @@ class CIte(CTerm):
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
-class BTerm(BaseTerm, metaclass=RewriteMeta):
+class BTerm(BaseTerm):
     width: int = field(init=False)
     min: int = field(init=False, compare=False)
     max: int = field(init=False, compare=False)
@@ -377,6 +347,7 @@ class BTerm(BaseTerm, metaclass=RewriteMeta):
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class BSymbol(BTerm):
+    category: ClassVar[TermCategory] = TermCategory.SYMBOL
     name: bytes
     w: InitVar[int]
 
@@ -409,7 +380,9 @@ class BSymbol(BTerm):
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
-class BValue(BTerm, metaclass=CacheMeta):
+class BValue(BTerm):
+    category: ClassVar[TermCategory] = TermCategory.VALUE
+    cache: ClassVar[bool] = True
     value: int
     w: InitVar[int]
 
@@ -714,6 +687,7 @@ class Extract(BTerm):
 class BNot(UnaryOp):
     op: ClassVar[bytes] = b"bvnot"
     kind: ClassVar[Kind] = Kind.BV_NOT
+    category: ClassVar[TermCategory] = TermCategory.NOT
 
     @profile
     def __post_init__(self) -> None:
@@ -743,7 +717,7 @@ class BNot(UnaryOp):
 class BAnd(BinaryOp):
     op: ClassVar[bytes] = b"bvand"
     kind: ClassVar[Kind] = Kind.BV_AND
-    commutative: ClassVar[bool] = True
+    category: ClassVar[TermCategory] = TermCategory.COMMUTATIVE
 
     @profile
     def __post_init__(self) -> None:
@@ -789,7 +763,7 @@ class BAnd(BinaryOp):
 class BOr(BinaryOp):
     op: ClassVar[bytes] = b"bvor"
     kind: ClassVar[Kind] = Kind.BV_OR
-    commutative: ClassVar[bool] = True
+    category: ClassVar[TermCategory] = TermCategory.COMMUTATIVE
 
     @profile
     def __post_init__(self) -> None:
@@ -856,7 +830,7 @@ class Neg(UnaryOp):
 class Add(BinaryOp):
     op: ClassVar[bytes] = b"bvadd"
     kind: ClassVar[Kind] = Kind.BV_ADD
-    commutative: ClassVar[bool] = True
+    category: ClassVar[TermCategory] = TermCategory.COMMUTATIVE
 
     @profile
     def __post_init__(self) -> None:
@@ -904,7 +878,7 @@ class Add(BinaryOp):
 class Mul(BinaryOp):
     op: ClassVar[bytes] = b"bvmul"
     kind: ClassVar[Kind] = Kind.BV_MUL
-    commutative: ClassVar[bool] = True
+    category: ClassVar[TermCategory] = TermCategory.COMMUTATIVE
 
     @profile
     def __post_init__(self) -> None:
@@ -1225,7 +1199,7 @@ class Nor(BinaryOp):
 class BXor(BinaryOp):
     op: ClassVar[bytes] = b"bvxor"
     kind: ClassVar[Kind] = Kind.BV_XOR
-    commutative: ClassVar[bool] = True
+    category: ClassVar[TermCategory] = TermCategory.COMMUTATIVE
 
     @profile
     def __post_init__(self) -> None:

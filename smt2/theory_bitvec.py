@@ -24,6 +24,7 @@ from .theory_core import (
     DumpContext,
     Eq,
     Kind,
+    TermCategory,
 )
 
 
@@ -39,6 +40,7 @@ class BTerm(BaseTerm):
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class BSymbol(BTerm):
+    category: ClassVar[TermCategory] = TermCategory.SYMBOL
     name: bytes
     w: InitVar[int]
 
@@ -67,6 +69,8 @@ class BSymbol(BTerm):
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class BValue(BTerm):
+    category: ClassVar[TermCategory] = TermCategory.VALUE
+    cache: ClassVar[bool] = True
     value: int
     w: InitVar[int]
 
@@ -290,20 +294,21 @@ class Extract(BTerm):
 class BNot(UnaryOp):
     op: ClassVar[bytes] = b"bvnot"
     kind: ClassVar[Kind] = Kind.BV_NOT
+    category: ClassVar[TermCategory] = TermCategory.NOT
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class BAnd(BinaryOp):
     op: ClassVar[bytes] = b"bvand"
     kind: ClassVar[Kind] = Kind.BV_AND
-    commutative: ClassVar[bool] = True
+    category: ClassVar[TermCategory] = TermCategory.COMMUTATIVE
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class BOr(BinaryOp):
     op: ClassVar[bytes] = b"bvor"
     kind: ClassVar[Kind] = Kind.BV_OR
-    commutative: ClassVar[bool] = True
+    category: ClassVar[TermCategory] = TermCategory.COMMUTATIVE
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
@@ -316,14 +321,14 @@ class Neg(UnaryOp):
 class Add(BinaryOp):
     op: ClassVar[bytes] = b"bvadd"
     kind: ClassVar[Kind] = Kind.BV_ADD
-    commutative: ClassVar[bool] = True
+    category: ClassVar[TermCategory] = TermCategory.COMMUTATIVE
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class Mul(BinaryOp):
     op: ClassVar[bytes] = b"bvmul"
     kind: ClassVar[Kind] = Kind.BV_MUL
-    commutative: ClassVar[bool] = True
+    category: ClassVar[TermCategory] = TermCategory.COMMUTATIVE
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
@@ -372,7 +377,7 @@ class Nor(BinaryOp):
 class BXor(BinaryOp):
     op: ClassVar[bytes] = b"bvxor"
     kind: ClassVar[Kind] = Kind.BV_XOR
-    commutative: ClassVar[bool] = True
+    category: ClassVar[TermCategory] = TermCategory.COMMUTATIVE
 
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)

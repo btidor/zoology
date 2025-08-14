@@ -20,7 +20,6 @@ from . import rewrite, theory_array, theory_bitvec, theory_core
 from .analyze_minmax import MinMaxCase
 from .analyze_rewrite import RewriteCase
 from .minmax import constraint_minmax, propagate_minmax
-from .rewrite import CacheMeta, RewriteMeta
 from .theory_bitvec import BTerm
 from .theory_core import BaseTerm, CTerm
 
@@ -72,13 +71,11 @@ from typing import Any, ClassVar, Iterable, Self, override
 from line_profiler import profile
 
 from .bitwuzla import BZLA
-from .theory_core import BaseTerm, BitwuzlaTerm, DumpContext, Kind
+from .theory_core import BaseTerm, BitwuzlaTerm, DumpContext, Kind, TermCategory
 
 type MinMax = tuple[int, int]
 
 """)
-        self._source(RewriteMeta)
-        self._source(CacheMeta)
         self._theory(theory_core)
         self._theory(theory_bitvec)
         self._theory(theory_array)
@@ -91,28 +88,17 @@ type MinMax = tuple[int, int]
             elif item == BaseTerm or getmodule(item) != module:
                 continue
             match ast.parse(getsource(item)).body:
-                case [ast.ClassDef("BTerm" | "CTerm") as cls]:
-                    # inject metaclass for constraints & bitvectors
-                    cls.keywords.append(
-                        ast.keyword("metaclass", ast.Name("RewriteMeta"))
-                    )
-                case [ast.ClassDef("BValue") as cls]:
-                    cls.keywords.append(ast.keyword("metaclass", ast.Name("CacheMeta")))
                 case [ast.ClassDef() as cls]:
-                    pass
+                    if self._is_named_op(item):
+                        # construct each op's __post_init__ method
+                        if issubclass(item, BTerm):
+                            self._minmax(cls, item)
+                    if item.__name__ in self.rwcases:
+                        # construct each op's rewrite method
+                        self._rewrite(cls, item, self.rwcases[item.__name__])
+                    self._source(cls)
                 case _:
                     raise SyntaxError("unexpected item in theory")
-
-            if self._is_named_op(item):
-                # construct each op's __post_init__ method
-                if issubclass(item, BTerm):
-                    self._minmax(cls, item)
-
-            if item.__name__ in self.rwcases:
-                # construct each op's rewrite method
-                self._rewrite(cls, item, self.rwcases[item.__name__])
-
-            self._source(cls)
 
     def _post_init_append(self, cls: ast.ClassDef, *stmts: ast.stmt) -> None:
         for node in ast.walk(cls):

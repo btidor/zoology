@@ -25,13 +25,13 @@ class BitwuzlaManager:
     _sym: dict[bytes, tuple[SortWidth, BitwuzlaTerm]]
 
     # For convenience, centralize all global state here.
-    special: dict[Any, Any]  # for CacheMeta
+    term_cache: dict[Any, Any]  # for TermMeta caching
     last_solver: Any  # for Solver
 
     def __init__(self):
         self._sort = {}
         self._sym = {}
-        self.special = {}
+        self.term_cache = {}
         self.last_solver = None
         self.reset()
 
@@ -42,7 +42,7 @@ class BitwuzlaManager:
         self._bzla.set_option(Option.OUTPUT_NUMBER_FORMAT, "hex")
         self._sort.clear()
         self._sym.clear()
-        self.special.clear()
+        self.term_cache.clear()
         self.last_solver = None
 
     def mk_term(

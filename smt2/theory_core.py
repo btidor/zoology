@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import abc
 from dataclasses import dataclass, field
+from enum import Enum
 from subprocess import PIPE, Popen
 from typing import Any, ClassVar, Iterable, Self, override
 
@@ -23,12 +24,49 @@ from zbitvector.pybitwuzla import (
 from .bitwuzla import BZLA
 
 
+class TermCategory(Enum):
+    GENERIC = 0
+    VALUE = 1
+    SYMBOL = 2
+    NOT = 3
+    COMMUTATIVE = 4
+
+
+class TermMeta(abc.ABCMeta):
+    """Performs term rewriting and caching."""
+
+    @profile
+    def __call__(self, *args: Any) -> Any:
+        """Construct the requested term, then rewrite it."""
+        assert issubclass(self, BaseTerm)
+        if self.cache:
+            if args not in BZLA.term_cache:
+                BZLA.term_cache[args] = super().__call__(*args)
+            return BZLA.term_cache[args]
+        elif self.category == TermCategory.COMMUTATIVE:
+            assert len(args) == 2
+            left, right = args
+            if left.category == right.category:
+                pass
+            elif right.category == TermCategory.VALUE:
+                args = (right, left)
+            elif left.category == TermCategory.NOT:
+                args = (right, left)
+        term = super(TermMeta, self).__call__(*args)
+        term = term.rewrite()
+        return term
+
+
 @dataclass(repr=False, slots=True, unsafe_hash=True)
-class BaseTerm(abc.ABC):
+class BaseTerm(abc.ABC, metaclass=TermMeta):
     op: ClassVar[bytes]
     kind: ClassVar[Kind]
-    commutative: ClassVar[bool] = False
+
+    category: ClassVar[TermCategory] = TermCategory.GENERIC
+    cache: ClassVar[bool] = False
+
     count: int = field(init=False, compare=False)
+
     _bzla: BitwuzlaTerm | None = field(init=False, compare=False, default=None)
     _pretty: str | None = field(init=False, compare=False, default=None)
 
@@ -83,7 +121,6 @@ class BaseTerm(abc.ABC):
             params if params else None,
         )
 
-    @profile
     def rewrite(self) -> BaseTerm:
         return self
 
@@ -199,6 +236,7 @@ class CTerm(BaseTerm):
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class CSymbol(CTerm):
+    category: ClassVar[TermCategory] = TermCategory.SYMBOL
     name: bytes
 
     @override
@@ -220,6 +258,7 @@ class CSymbol(CTerm):
 
 @dataclass(repr=False, slots=True, unsafe_hash=True)
 class CValue(CTerm):
+    category: ClassVar[TermCategory] = TermCategory.VALUE
     value: bool
 
     @override
@@ -243,6 +282,7 @@ class CValue(CTerm):
 class Not(CTerm):
     op: ClassVar[bytes] = b"not"
     kind: ClassVar[Kind] = Kind.NOT
+    category: ClassVar[TermCategory] = TermCategory.NOT
     term: CTerm
 
     @override
@@ -266,7 +306,7 @@ class Implies(CTerm):
 class And(CTerm):
     op: ClassVar[bytes] = b"and"
     kind: ClassVar[Kind] = Kind.AND
-    commutative: ClassVar[bool] = True
+    category: ClassVar[TermCategory] = TermCategory.COMMUTATIVE
     left: CTerm
     right: CTerm
 
@@ -279,7 +319,7 @@ class And(CTerm):
 class Or(CTerm):
     op: ClassVar[bytes] = b"or"
     kind: ClassVar[Kind] = Kind.OR
-    commutative: ClassVar[bool] = True
+    category: ClassVar[TermCategory] = TermCategory.COMMUTATIVE
     left: CTerm
     right: CTerm
 
@@ -292,7 +332,7 @@ class Or(CTerm):
 class Xor(CTerm):
     op: ClassVar[bytes] = b"xor"
     kind: ClassVar[Kind] = Kind.XOR
-    commutative: ClassVar[bool] = True
+    category: ClassVar[TermCategory] = TermCategory.COMMUTATIVE
     left: CTerm
     right: CTerm
 
@@ -305,7 +345,7 @@ class Xor(CTerm):
 class Eq[S: BaseTerm](CTerm):
     op: ClassVar[bytes] = b"="
     kind: ClassVar[Kind] = Kind.EQUAL
-    commutative: ClassVar[bool] = True
+    category: ClassVar[TermCategory] = TermCategory.COMMUTATIVE
     left: S
     right: S
 
