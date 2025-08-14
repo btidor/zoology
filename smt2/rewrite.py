@@ -3,8 +3,6 @@
 
 from __future__ import annotations
 
-import copy
-
 from .theory_array import *
 from .theory_bitvec import *
 from .theory_core import *
@@ -754,7 +752,7 @@ def bitvector_yolo(term: BTerm) -> BTerm:
                     if not lower:
                         return Select(base, key)
                     elif upper:
-                        return Select(Store(base, copy.copy(lower)), key)
+                        return Select(Store(base, lower), key, recurse=False)
                     else:
                         return term
         case _:

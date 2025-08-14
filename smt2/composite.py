@@ -1914,7 +1914,7 @@ class Select(BTerm):
                         if not lower:
                             return Select(base, key)
                         elif upper:
-                            return Select(Store(base, copy.copy(lower)), key)
+                            return Select(Store(base, lower), key, recurse=False)
                         else:
                             return self
             case _:
