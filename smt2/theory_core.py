@@ -30,6 +30,7 @@ class TermCategory(Enum):
     SYMBOL = 2
     NOT = 3
     COMMUTATIVE = 4
+    MUTABLE = 5
 
 
 class TermMeta(abc.ABCMeta):
@@ -39,11 +40,7 @@ class TermMeta(abc.ABCMeta):
     def __call__(self, *args: Any) -> Any:
         """Construct the requested term, then rewrite it."""
         assert issubclass(self, BaseTerm)
-        if self.cache:
-            if args not in BZLA.term_cache:
-                BZLA.term_cache[args] = super().__call__(*args)
-            return BZLA.term_cache[args]
-        elif self.category == TermCategory.COMMUTATIVE:
+        if self.category == TermCategory.COMMUTATIVE:
             assert len(args) == 2
             left, right = args
             if left.category == right.category:
@@ -52,30 +49,43 @@ class TermMeta(abc.ABCMeta):
                 args = (right, left)
             elif left.category == TermCategory.NOT:
                 args = (right, left)
-        term = super(TermMeta, self).__call__(*args)
-        term = term.rewrite()
-        return term
+        key = (self, *args)
+        if key in BZLA.argcache:
+            return BZLA.argcache[key]
+        else:
+            term = super(TermMeta, self).__call__(*args)
+            term = term.rewrite()
+            if self.category != TermCategory.MUTABLE:
+                BZLA.argcache[key] = term
+            return term
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class BaseTerm(abc.ABC, metaclass=TermMeta):
     op: ClassVar[bytes]
     kind: ClassVar[Kind]
-
     category: ClassVar[TermCategory] = TermCategory.GENERIC
-    cache: ClassVar[bool] = False
 
     count: int = field(init=False, compare=False)
 
     _bzla: BitwuzlaTerm | None = field(init=False, compare=False, default=None)
     _pretty: str | None = field(init=False, compare=False, default=None)
 
-    # Instances of Symbolic are expected to be immutable:
+    # Instances of BaseTerm are expected to be immutable. This makes copying
+    # fast.
     def __copy__(self) -> Self:
         return self
 
     def __deepcopy__(self, memo: Any, /) -> Self:
         return self
+
+    # Instances of BaseTerm are also expected to be *singletons* (see argcache
+    # logic in the metaclass, above). This makes equality fast.
+    def __eq__(self, other: Any, /) -> bool:
+        return id(self) == id(other)
+
+    def __hash__(self) -> int:
+        return id(self) // 16
 
     def __post_init__(self) -> None:
         self.count = sum(c.count for c in self.children()) + 1
@@ -228,13 +238,13 @@ def check(*constraints: CTerm) -> bool:
             raise RuntimeError(out, err)
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class CTerm(BaseTerm):
     def sort(self) -> bytes:
         return b"Bool"
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class CSymbol(CTerm):
     category: ClassVar[TermCategory] = TermCategory.SYMBOL
     name: bytes
@@ -256,7 +266,7 @@ class CSymbol(CTerm):
         return BZLA.mk_symbol(self.name, None)
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class CValue(CTerm):
     category: ClassVar[TermCategory] = TermCategory.VALUE
     value: bool
@@ -278,7 +288,7 @@ class CValue(CTerm):
         return BZLA.mk_value(self.value, None)
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class Not(CTerm):
     op: ClassVar[bytes] = b"not"
     kind: ClassVar[Kind] = Kind.NOT
@@ -290,7 +300,7 @@ class Not(CTerm):
         return (self.term,)
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class Implies(CTerm):
     op: ClassVar[bytes] = b"=>"
     kind: ClassVar[Kind] = Kind.IMPLIES
@@ -302,7 +312,7 @@ class Implies(CTerm):
         return (self.left, self.right)
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class And(CTerm):
     op: ClassVar[bytes] = b"and"
     kind: ClassVar[Kind] = Kind.AND
@@ -315,7 +325,7 @@ class And(CTerm):
         return (self.left, self.right)
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class Or(CTerm):
     op: ClassVar[bytes] = b"or"
     kind: ClassVar[Kind] = Kind.OR
@@ -328,7 +338,7 @@ class Or(CTerm):
         return (self.left, self.right)
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class Xor(CTerm):
     op: ClassVar[bytes] = b"xor"
     kind: ClassVar[Kind] = Kind.XOR
@@ -341,7 +351,7 @@ class Xor(CTerm):
         return (self.left, self.right)
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class Eq[S: BaseTerm](CTerm):
     op: ClassVar[bytes] = b"="
     kind: ClassVar[Kind] = Kind.EQUAL
@@ -359,7 +369,7 @@ class Eq[S: BaseTerm](CTerm):
         assert getattr(self.left, "width", None) == getattr(self.right, "width", None)
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class Distinct[S: BaseTerm](CTerm):
     op: ClassVar[bytes] = b"distinct"
     kind: ClassVar[Kind] = Kind.DISTINCT
@@ -376,7 +386,7 @@ class Distinct[S: BaseTerm](CTerm):
         assert getattr(self.left, "width", None) == getattr(self.right, "width", None)
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class CIte(CTerm):
     op: ClassVar[bytes] = b"ite"
     kind: ClassVar[Kind] = Kind.ITE

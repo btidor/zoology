@@ -18,10 +18,10 @@ from line_profiler import profile
 
 from .bitwuzla import BZLA
 from .theory_bitvec import BTerm, BValue
-from .theory_core import BaseTerm, BitwuzlaTerm, DumpContext, Kind
+from .theory_core import BaseTerm, BitwuzlaTerm, DumpContext, Kind, TermCategory
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class ATerm(BaseTerm):
     def sort(self) -> bytes:
         return b"(Array (_ BitVec %d) (_ BitVec %d))" % self.width()
@@ -30,7 +30,7 @@ class ATerm(BaseTerm):
     def width(self) -> tuple[int, int]: ...
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class ASymbol(ATerm):
     name: bytes
     key: int
@@ -56,7 +56,7 @@ class ASymbol(ATerm):
         return BZLA.mk_symbol(self.name, self.width())
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class AValue(ATerm):
     default: BTerm
     key: int
@@ -86,7 +86,7 @@ class AValue(ATerm):
         return BZLA.mk_value(self.default.bzla, self.width())
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class Select(BTerm):
     op: ClassVar[bytes] = b"select"
     kind: ClassVar[Kind] = Kind.ARRAY_SELECT
@@ -117,13 +117,16 @@ class Select(BTerm):
         super(Select, self).dump(ctx)
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class Store(ATerm):
     op: ClassVar[bytes] = b"store"
     kind: ClassVar[Kind] = Kind.ARRAY_STORE
+    category: ClassVar[TermCategory] = TermCategory.MUTABLE
+
     base: ASymbol | AValue
     lower: dict[int, BTerm] = field(default_factory=dict[int, BTerm])
     upper: list[tuple[BTerm, BTerm]] = field(default_factory=list[tuple[BTerm, BTerm]])
+
     copied: bool = field(init=False, default=False)
 
     def __post_init__(self) -> None:

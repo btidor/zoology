@@ -27,13 +27,13 @@ from .theory_core import BaseTerm, BitwuzlaTerm, DumpContext, Kind, TermCategory
 type MinMax = tuple[int, int]
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class CTerm(BaseTerm):
     def sort(self) -> bytes:
         return b"Bool"
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class CSymbol(CTerm):
     category: ClassVar[TermCategory] = TermCategory.SYMBOL
     name: bytes
@@ -57,7 +57,7 @@ class CSymbol(CTerm):
         return BZLA.mk_symbol(self.name, None)
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class CValue(CTerm):
     category: ClassVar[TermCategory] = TermCategory.VALUE
     value: bool
@@ -81,7 +81,7 @@ class CValue(CTerm):
         return BZLA.mk_value(self.value, None)
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class Not(CTerm):
     op: ClassVar[bytes] = b"not"
     kind: ClassVar[Kind] = Kind.NOT
@@ -108,7 +108,7 @@ class Not(CTerm):
                 return self
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class Implies(CTerm):
     op: ClassVar[bytes] = b"=>"
     kind: ClassVar[Kind] = Kind.IMPLIES
@@ -129,7 +129,7 @@ class Implies(CTerm):
                 return self
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class And(CTerm):
     op: ClassVar[bytes] = b"and"
     kind: ClassVar[Kind] = Kind.AND
@@ -159,7 +159,7 @@ class And(CTerm):
                 return self
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class Or(CTerm):
     op: ClassVar[bytes] = b"or"
     kind: ClassVar[Kind] = Kind.OR
@@ -189,7 +189,7 @@ class Or(CTerm):
                 return self
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class Xor(CTerm):
     op: ClassVar[bytes] = b"xor"
     kind: ClassVar[Kind] = Kind.XOR
@@ -219,7 +219,7 @@ class Xor(CTerm):
                 return self
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class Eq[S: BaseTerm](CTerm):
     op: ClassVar[bytes] = b"="
     kind: ClassVar[Kind] = Kind.EQUAL
@@ -284,7 +284,7 @@ class Eq[S: BaseTerm](CTerm):
                 return self
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class Distinct[S: BaseTerm](CTerm):
     op: ClassVar[bytes] = b"distinct"
     kind: ClassVar[Kind] = Kind.DISTINCT
@@ -313,7 +313,7 @@ class Distinct[S: BaseTerm](CTerm):
                 return self
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class CIte(CTerm):
     op: ClassVar[bytes] = b"ite"
     kind: ClassVar[Kind] = Kind.ITE
@@ -335,7 +335,7 @@ class CIte(CTerm):
                 return self
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class BTerm(BaseTerm):
     width: int = field(init=False)
     min: int = field(init=False, compare=False)
@@ -345,7 +345,7 @@ class BTerm(BaseTerm):
         return b"(_ BitVec %d)" % self.width
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class BSymbol(BTerm):
     category: ClassVar[TermCategory] = TermCategory.SYMBOL
     name: bytes
@@ -379,7 +379,7 @@ class BSymbol(BTerm):
         return BZLA.mk_symbol(self.name, self.width)
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class BValue(BTerm):
     category: ClassVar[TermCategory] = TermCategory.VALUE
     cache: ClassVar[bool] = True
@@ -429,7 +429,7 @@ class BValue(BTerm):
         return BZLA.mk_value(self.value, self.width)
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class UnaryOp(BTerm):
     term: BTerm
 
@@ -444,7 +444,7 @@ class UnaryOp(BTerm):
         return (self.term,)
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class BinaryOp(BTerm):
     left: BTerm
     right: BTerm
@@ -461,7 +461,7 @@ class BinaryOp(BTerm):
         super(BinaryOp, self).__post_init__()
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class CompareOp(CTerm):
     left: BTerm
     right: BTerm
@@ -477,7 +477,7 @@ class CompareOp(CTerm):
         super(CompareOp, self).__post_init__()
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class SingleParamOp(BTerm):
     i: int
     term: BTerm
@@ -491,7 +491,7 @@ class SingleParamOp(BTerm):
         return (self.term,)
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class Concat(BTerm):
     op: ClassVar[bytes] = b"concat"
     kind: ClassVar[Kind] = Kind.BV_CONCAT
@@ -622,7 +622,7 @@ class Concat(BTerm):
                 return self
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class Extract(BTerm):
     op: ClassVar[bytes] = b"extract"
     kind: ClassVar[Kind] = Kind.BV_EXTRACT
@@ -683,7 +683,7 @@ class Extract(BTerm):
                 return self
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class BNot(UnaryOp):
     op: ClassVar[bytes] = b"bvnot"
     kind: ClassVar[Kind] = Kind.BV_NOT
@@ -713,7 +713,7 @@ class BNot(UnaryOp):
                 return self
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class BAnd(BinaryOp):
     op: ClassVar[bytes] = b"bvand"
     kind: ClassVar[Kind] = Kind.BV_AND
@@ -759,7 +759,7 @@ class BAnd(BinaryOp):
                 return self
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class BOr(BinaryOp):
     op: ClassVar[bytes] = b"bvor"
     kind: ClassVar[Kind] = Kind.BV_OR
@@ -805,7 +805,7 @@ class BOr(BinaryOp):
                 return self
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class Neg(UnaryOp):
     op: ClassVar[bytes] = b"bvneg"
     kind: ClassVar[Kind] = Kind.BV_NEG
@@ -826,7 +826,7 @@ class Neg(UnaryOp):
                 return self
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class Add(BinaryOp):
     op: ClassVar[bytes] = b"bvadd"
     kind: ClassVar[Kind] = Kind.BV_ADD
@@ -874,7 +874,7 @@ class Add(BinaryOp):
                 return self
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class Mul(BinaryOp):
     op: ClassVar[bytes] = b"bvmul"
     kind: ClassVar[Kind] = Kind.BV_MUL
@@ -909,7 +909,7 @@ class Mul(BinaryOp):
                 return self
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class Udiv(BinaryOp):
     op: ClassVar[bytes] = b"bvudiv"
     kind: ClassVar[Kind] = Kind.BV_UDIV
@@ -940,7 +940,7 @@ class Udiv(BinaryOp):
                 return self
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class Urem(BinaryOp):
     op: ClassVar[bytes] = b"bvurem"
     kind: ClassVar[Kind] = Kind.BV_UREM
@@ -971,7 +971,7 @@ class Urem(BinaryOp):
                 return self
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class Shl(BinaryOp):
     op: ClassVar[bytes] = b"bvshl"
     kind: ClassVar[Kind] = Kind.BV_SHL
@@ -1022,7 +1022,7 @@ class Shl(BinaryOp):
                 return self
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class Lshr(BinaryOp):
     op: ClassVar[bytes] = b"bvlshr"
     kind: ClassVar[Kind] = Kind.BV_SHR
@@ -1074,7 +1074,7 @@ class Lshr(BinaryOp):
                 return self
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class Ult(CompareOp):
     op: ClassVar[bytes] = b"bvult"
     kind: ClassVar[Kind] = Kind.BV_ULT
@@ -1153,7 +1153,7 @@ class Ult(CompareOp):
                 return self
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class Nand(BinaryOp):
     op: ClassVar[bytes] = b"bvnand"
     kind: ClassVar[Kind] = Kind.BV_NAND
@@ -1174,7 +1174,7 @@ class Nand(BinaryOp):
                 return self
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class Nor(BinaryOp):
     op: ClassVar[bytes] = b"bvnor"
     kind: ClassVar[Kind] = Kind.BV_NOR
@@ -1195,7 +1195,7 @@ class Nor(BinaryOp):
                 return self
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class BXor(BinaryOp):
     op: ClassVar[bytes] = b"bvxor"
     kind: ClassVar[Kind] = Kind.BV_XOR
@@ -1233,7 +1233,7 @@ class BXor(BinaryOp):
                 return self
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class Xnor(BinaryOp):
     op: ClassVar[bytes] = b"bvxnor"
     kind: ClassVar[Kind] = Kind.BV_XNOR
@@ -1254,7 +1254,7 @@ class Xnor(BinaryOp):
                 return self
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class Comp(BTerm):
     op: ClassVar[bytes] = b"bvcomp"
     kind: ClassVar[Kind] = Kind.BV_COMP
@@ -1284,7 +1284,7 @@ class Comp(BTerm):
                 return self
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class Sub(BinaryOp):
     op: ClassVar[bytes] = b"bvsub"
     kind: ClassVar[Kind] = Kind.BV_SUB
@@ -1305,7 +1305,7 @@ class Sub(BinaryOp):
                 return self
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class Sdiv(BinaryOp):
     op: ClassVar[bytes] = b"bvsdiv"
     kind: ClassVar[Kind] = Kind.BV_SDIV
@@ -1343,7 +1343,7 @@ class Sdiv(BinaryOp):
                 return self
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class Srem(BinaryOp):
     op: ClassVar[bytes] = b"bvsrem"
     kind: ClassVar[Kind] = Kind.BV_SREM
@@ -1383,7 +1383,7 @@ class Srem(BinaryOp):
                 return self
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class Smod(BinaryOp):
     op: ClassVar[bytes] = b"bvsmod"
     kind: ClassVar[Kind] = Kind.BV_SMOD
@@ -1413,7 +1413,7 @@ class Smod(BinaryOp):
                 return self
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class Ashr(BinaryOp):
     op: ClassVar[bytes] = b"bvashr"
     kind: ClassVar[Kind] = Kind.BV_ASHR
@@ -1444,7 +1444,7 @@ class Ashr(BinaryOp):
                 return self
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class Repeat(SingleParamOp):
     op: ClassVar[bytes] = b"repeat"
     kind: ClassVar[Kind] = Kind.BV_REPEAT
@@ -1470,7 +1470,7 @@ class Repeat(SingleParamOp):
                 return self
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class ZeroExtend(SingleParamOp):
     op: ClassVar[bytes] = b"zero_extend"
     kind: ClassVar[Kind] = Kind.BV_ZERO_EXTEND
@@ -1496,7 +1496,7 @@ class ZeroExtend(SingleParamOp):
                 return self
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class SignExtend(SingleParamOp):
     op: ClassVar[bytes] = b"sign_extend"
     kind: ClassVar[Kind] = Kind.BV_SIGN_EXTEND
@@ -1529,7 +1529,7 @@ class SignExtend(SingleParamOp):
                 return self
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class RotateLeft(SingleParamOp):
     op: ClassVar[bytes] = b"rotate_left"
     kind: ClassVar[Kind] = Kind.BV_ROL
@@ -1561,7 +1561,7 @@ class RotateLeft(SingleParamOp):
                 return self
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class RotateRight(SingleParamOp):
     op: ClassVar[bytes] = b"rotate_right"
     kind: ClassVar[Kind] = Kind.BV_ROR
@@ -1588,7 +1588,7 @@ class RotateRight(SingleParamOp):
                 return self
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class Ule(CompareOp):
     op: ClassVar[bytes] = b"bvule"
     kind: ClassVar[Kind] = Kind.BV_ULE
@@ -1603,7 +1603,7 @@ class Ule(CompareOp):
                 return self
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class Ugt(CompareOp):
     op: ClassVar[bytes] = b"bvugt"
     kind: ClassVar[Kind] = Kind.BV_UGT
@@ -1618,7 +1618,7 @@ class Ugt(CompareOp):
                 return self
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class Uge(CompareOp):
     op: ClassVar[bytes] = b"bvuge"
     kind: ClassVar[Kind] = Kind.BV_UGE
@@ -1633,7 +1633,7 @@ class Uge(CompareOp):
                 return self
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class Slt(CompareOp):
     op: ClassVar[bytes] = b"bvslt"
     kind: ClassVar[Kind] = Kind.BV_SLT
@@ -1684,7 +1684,7 @@ class Slt(CompareOp):
                 return self
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class Sle(CompareOp):
     op: ClassVar[bytes] = b"bvsle"
     kind: ClassVar[Kind] = Kind.BV_SLE
@@ -1699,7 +1699,7 @@ class Sle(CompareOp):
                 return self
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class Sgt(CompareOp):
     op: ClassVar[bytes] = b"bvsgt"
     kind: ClassVar[Kind] = Kind.BV_SGT
@@ -1714,7 +1714,7 @@ class Sgt(CompareOp):
                 return self
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class Sge(CompareOp):
     op: ClassVar[bytes] = b"bvsge"
     kind: ClassVar[Kind] = Kind.BV_SGE
@@ -1729,7 +1729,7 @@ class Sge(CompareOp):
                 return self
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class Ite(BTerm):
     op: ClassVar[bytes] = b"ite"
     kind: ClassVar[Kind] = Kind.ITE
@@ -1784,7 +1784,7 @@ class Ite(BTerm):
                 return self
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class ATerm(BaseTerm):
     def sort(self) -> bytes:
         return b"(Array (_ BitVec %d) (_ BitVec %d))" % self.width()
@@ -1793,7 +1793,7 @@ class ATerm(BaseTerm):
     def width(self) -> tuple[int, int]: ...
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class ASymbol(ATerm):
     name: bytes
     key: int
@@ -1821,7 +1821,7 @@ class ASymbol(ATerm):
         return BZLA.mk_symbol(self.name, self.width())
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class AValue(ATerm):
     default: BTerm
     key: int
@@ -1853,7 +1853,7 @@ class AValue(ATerm):
         return BZLA.mk_value(self.default.bzla, self.width())
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class Select(BTerm):
     op: ClassVar[bytes] = b"select"
     kind: ClassVar[Kind] = Kind.ARRAY_SELECT
@@ -1919,10 +1919,11 @@ class Select(BTerm):
                 return self
 
 
-@dataclass(repr=False, slots=True, unsafe_hash=True)
+@dataclass(repr=False, slots=True, eq=False)
 class Store(ATerm):
     op: ClassVar[bytes] = b"store"
     kind: ClassVar[Kind] = Kind.ARRAY_STORE
+    category: ClassVar[TermCategory] = TermCategory.MUTABLE
     base: ASymbol | AValue
     lower: dict[int, BTerm] = field(default_factory=dict[int, BTerm])
     upper: list[tuple[BTerm, BTerm]] = field(default_factory=list[tuple[BTerm, BTerm]])
