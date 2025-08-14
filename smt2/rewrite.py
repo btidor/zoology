@@ -734,17 +734,23 @@ def bitvector_yolo(term: BTerm) -> BTerm:
             return d
         case Select(Store(base, lower, upper), key):
             """sel.sto"""
-            filtered = list[tuple[BTerm, BTerm]]()
+            filtered = list[tuple[BTerm, BTerm, CTerm]]()
             for k, v in reversed(upper):
-                match Eq(k, key):
+                eq = Eq(k, key)
+                match eq:
                     case CValue(True):
                         if not filtered:
                             return v
-                        filtered.append((k, v))
+                        else:
+                            filtered.reverse()
+                            term = v
+                            for _, v, eq in filtered[1:]:
+                                term = Ite(eq, v, term)
+                            return term
                     case CValue(False):
                         pass
                     case _:
-                        filtered.append((k, v))
+                        filtered.append((k, v, eq))
             filtered.reverse()
 
             if not filtered and isinstance(key, BValue):
@@ -753,9 +759,10 @@ def bitvector_yolo(term: BTerm) -> BTerm:
                 else:
                     return Select(base, key)
 
+            up = list((k, v) for k, v, _ in filtered)
             down = dict((k, v) for k, v in lower.items() if key.min <= k <= key.max)
-            if not filtered and not down:
+            if not up and not down:
                 return Select(base, key)
-            return Select(Store(base, down, filtered), key, recurse=False)
+            return Select(Store(base, down, up), key, recurse=False)
         case _:
             return term
