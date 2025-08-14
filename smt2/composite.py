@@ -1903,29 +1903,29 @@ class Select(BTerm):
             case Select(AValue(d), _key):
                 return d
             case Select(Store(base, lower, upper), key):
-                for i, (k, v) in reverse_enumerate(upper):
+                filtered = list[tuple[BTerm, BTerm]]()
+                for k, v in reversed(upper):
                     match Eq(k, key):
                         case CValue(True):
-                            return v
+                            if not filtered:
+                                return v
+                            filtered.append((k, v))
                         case CValue(False):
-                            continue
+                            pass
                         case _:
-                            return Select(
-                                Store(base, lower, upper[: i + 1]), key, recurse=False
-                            )
-                match key:
-                    case BValue(s):
-                        if s in lower:
-                            return lower[s]
-                        else:
-                            return Select(base, key)
-                    case _:
-                        if not lower:
-                            return Select(base, key)
-                        elif upper:
-                            return Select(Store(base, lower), key, recurse=False)
-                        else:
-                            return self
+                            filtered.append((k, v))
+                filtered.reverse()
+                if not filtered and isinstance(key, BValue):
+                    if key.value in lower:
+                        return lower[key.value]
+                    else:
+                        return Select(base, key)
+                down = dict(
+                    ((k, v) for k, v in lower.items() if key.min <= k <= key.max)
+                )
+                if not filtered and (not down):
+                    return Select(base, key)
+                return Select(Store(base, down, filtered), key, recurse=False)
             case _:
                 return self
 
