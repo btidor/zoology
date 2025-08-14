@@ -42,3 +42,17 @@ def test_memory_arith():
 
     delta = Uint256(0x20) - base
     assert (delta.into(Int256) < Int256(0)).reveal() is True
+
+
+def test_memory_round():
+    memory = Memory()
+    offset = Uint64("BYTES0").into(Uint256)
+    rounded = Uint256(
+        0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE0
+    ) & (Uint256(0x1F) + offset)
+    memory.setword(
+        Uint256(0xA0) + rounded,
+        Uint256(0x0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF),
+    )
+    assert memory[Uint256(0xBF) + rounded].reveal() == 0xEF
+    assert memory[Uint256(0xBE) + rounded].reveal() == 0xCD
