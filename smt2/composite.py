@@ -22,7 +22,14 @@ from typing import Any, ClassVar, Iterable, Self, override
 from line_profiler import profile
 
 from .bitwuzla import BZLA
-from .theory_core import BaseTerm, BitwuzlaTerm, DumpContext, Kind, TermCategory
+from .theory_core import (
+    BaseTerm,
+    BitwuzlaTerm,
+    DumpContext,
+    Kind,
+    TermCategory,
+    reverse_enumerate,
+)
 
 type MinMax = tuple[int, int]
 
@@ -1869,7 +1876,7 @@ class Select(BTerm):
         assert k == self.key.width
         self.width = v
         if isinstance(self.array, Store):
-            self.array.copied = True
+            self.array.freeze = True
         super(Select, self).__post_init__()
         self.min = 0
         self.max = (1 << self.width) - 1
@@ -1896,14 +1903,16 @@ class Select(BTerm):
             case Select(AValue(d), _key):
                 return d
             case Select(Store(base, lower, upper), key):
-                for k, v in reversed(upper):
+                for i, (k, v) in reverse_enumerate(upper):
                     match Eq(k, key):
                         case CValue(True):
                             return v
                         case CValue(False):
                             continue
                         case _:
-                            return self
+                            return Select(
+                                Store(base, lower, upper[: i + 1]), key, recurse=False
+                            )
                 match key:
                     case BValue(s):
                         if s in lower:
@@ -1929,13 +1938,7 @@ class Store(ATerm):
     base: ASymbol | AValue
     lower: dict[int, BTerm] = field(default_factory=dict[int, BTerm])
     upper: list[tuple[BTerm, BTerm]] = field(default_factory=list[tuple[BTerm, BTerm]])
-    copied: bool = field(init=False, default=False)
-
-    @profile
-    def __post_init__(self) -> None:
-        assert not self.lower and (not self.upper)
-        self._bzla = self.base.bzla
-        super(Store, self).__post_init__()
+    freeze: bool = field(init=False, default=False)
 
     def __copy__(self) -> Self:
         return copy.deepcopy(self)
@@ -1945,9 +1948,9 @@ class Store(ATerm):
         k.base = self.base
         k.lower = copy.copy(self.lower)
         k.upper = copy.copy(self.upper)
-        k.copied = False
+        k.freeze = False
         k.count = self.count
-        k._bzla = self._bzla
+        k._bzla = None
         return k
 
     def width(self) -> tuple[int, int]:
@@ -1964,15 +1967,13 @@ class Store(ATerm):
 
     @profile
     def set(self, key: BTerm, value: BTerm) -> Store:
-        array = copy.deepcopy(self) if self.copied else self
+        array = copy.deepcopy(self) if self.freeze else self
         array._set(key, value)
         return array
 
     @profile
     def _set(self, key: BTerm, value: BTerm) -> None:
-        if self._bzla is not None:
-            self._bzla = BZLA.mk_term(self.kind, (self._bzla, key.bzla, value.bzla))
-        for i, (k, v) in reversed(tuple(enumerate(self.upper))):
+        for i, (k, v) in reverse_enumerate(self.upper):
             match Eq(k, key):
                 case CValue(True):
                     self.upper[i] = (k, value)
@@ -2031,6 +2032,7 @@ class Store(ATerm):
 
     @override
     def _bzterm(self) -> BitwuzlaTerm:
+        assert self.freeze
         term = self.base.bzla
         for k, v in self.lower.items():
             term = BZLA.mk_term(

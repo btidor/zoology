@@ -13,7 +13,7 @@ import abc
 from dataclasses import dataclass, field
 from enum import Enum
 from subprocess import PIPE, Popen
-from typing import Any, ClassVar, Iterable, Self, override
+from typing import Any, ClassVar, Iterable, Protocol, Self, TypeVar, override
 
 from line_profiler import profile
 from zbitvector.pybitwuzla import (
@@ -22,6 +22,22 @@ from zbitvector.pybitwuzla import (
 )
 
 from .bitwuzla import BZLA
+
+# Type helpers from typeshed-fallback:
+_T_co = TypeVar("_T_co", covariant=True)
+
+
+class SupportsLenAndGetItem(Protocol[_T_co]):
+    def __len__(self) -> int: ...
+    def __getitem__(self, k: int, /) -> _T_co: ...
+
+
+def reverse_enumerate[K: Any](
+    data: SupportsLenAndGetItem[K],
+) -> Iterable[tuple[int, K]]:
+    # https://stackoverflow.com/a/390885 (CC BY-SA 2.5)
+    for i in range(len(data) - 1, -1, -1):
+        yield (i, data[i])
 
 
 class TermCategory(Enum):

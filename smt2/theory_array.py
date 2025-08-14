@@ -26,6 +26,7 @@ from .theory_core import (
     Eq,
     Kind,
     TermCategory,
+    reverse_enumerate,
 )
 
 
@@ -107,7 +108,7 @@ class Select(BTerm):
         assert k == self.key.width
         self.width = v
         if isinstance(self.array, Store):
-            self.array.copied = True
+            self.array.freeze = True
         super(Select, self).__post_init__()
 
     @override
@@ -135,14 +136,9 @@ class Store(ATerm):
     lower: dict[int, BTerm] = field(default_factory=dict[int, BTerm])
     upper: list[tuple[BTerm, BTerm]] = field(default_factory=list[tuple[BTerm, BTerm]])
 
-    copied: bool = field(init=False, default=False)
+    freeze: bool = field(init=False, default=False)
 
-    def __post_init__(self) -> None:
-        assert not self.lower and not self.upper
-        self._bzla = self.base.bzla
-        super(Store, self).__post_init__()
-
-    # Warning: Store is not immutable by default! Take care to set `copied=True`
+    # Warning: Store is not immutable by default! Take care to set `freeze=True`
     # when reusing a Store in Selects and other expressions. This will cause
     # `set` to make a copy the next time it's called, preventing further changes
     # to the current instance.
@@ -155,9 +151,9 @@ class Store(ATerm):
         k.base = self.base
         k.lower = copy.copy(self.lower)
         k.upper = copy.copy(self.upper)
-        k.copied = False
+        k.freeze = False
         k.count = self.count
-        k._bzla = self._bzla
+        k._bzla = None
         return k
 
     def width(self) -> tuple[int, int]:
@@ -174,15 +170,13 @@ class Store(ATerm):
 
     @profile
     def set(self, key: BTerm, value: BTerm) -> Store:
-        array = copy.deepcopy(self) if self.copied else self
+        array = copy.deepcopy(self) if self.freeze else self
         array._set(key, value)
         return array
 
     @profile
     def _set(self, key: BTerm, value: BTerm) -> None:
-        if self._bzla is not None:
-            self._bzla = BZLA.mk_term(self.kind, (self._bzla, key.bzla, value.bzla))
-        for i, (k, v) in reversed(tuple(enumerate(self.upper))):
+        for i, (k, v) in reverse_enumerate(self.upper):
             match Eq(k, key):
                 case CValue(True):
                     self.upper[i] = (k, value)
@@ -240,6 +234,7 @@ class Store(ATerm):
 
     @override
     def _bzterm(self) -> BitwuzlaTerm:
+        assert self.freeze
         term = self.base.bzla
         for k, v in self.lower.items():
             term = BZLA.mk_term(

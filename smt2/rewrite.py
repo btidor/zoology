@@ -734,14 +734,16 @@ def bitvector_yolo(term: BTerm) -> BTerm:
             return d
         case Select(Store(base, lower, upper), key):
             """sel.sto"""
-            for k, v in reversed(upper):
+            for i, (k, v) in reverse_enumerate(upper):
                 match Eq(k, key):
                     case CValue(True):  # pyright: ignore[reportUnnecessaryComparison]
                         return v
                     case CValue(False):  # pyright: ignore[reportUnnecessaryComparison]
                         continue
                     case _:
-                        return term
+                        return Select(
+                            Store(base, lower, upper[: i + 1]), key, recurse=False
+                        )
             match key:
                 case BValue(s):
                     if s in lower:
