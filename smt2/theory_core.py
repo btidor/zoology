@@ -108,14 +108,14 @@ class BaseTerm(abc.ABC, metaclass=TermMeta):
     def bzla(self) -> BitwuzlaTerm:
         if self._bzla is None:
             queue = list[BaseTerm]()
-            enqueued = set[int]()
+            enqueued = set[BaseTerm]()
             pending = list[BaseTerm]([self])
             while pending:
                 term = pending.pop(0)
-                if term._bzla is not None or id(term) in enqueued:
+                if term._bzla is not None or term in enqueued:
                     continue
                 queue.append(term)
-                enqueued.add(id(term))
+                enqueued.add(term)
                 pending.extend(term.children())
             queue.sort(key=lambda t: t.count)
             for term in queue:
@@ -182,32 +182,31 @@ class BaseTerm(abc.ABC, metaclass=TermMeta):
 @dataclass
 class DumpContext:
     symbols: dict[bytes, BaseTerm] = field(default_factory=dict[bytes, BaseTerm])
-    visited: set[int] = field(default_factory=set[int])
+    visited: set[BaseTerm] = field(default_factory=set[BaseTerm])
 
     pretty: bool = field(default=False)
     out: bytearray = field(default_factory=bytearray)
 
     @profile
     def visit(self, term: BaseTerm) -> bool:
-        i = id(term)
-        if i in self.visited:
+        if term in self.visited:
             return True
         else:
-            self.visited.add(i)
+            self.visited.add(term)
             return False
 
     @profile
     def prepare(self, *terms: BaseTerm) -> None:
         queue = list[BaseTerm](terms)
-        visited = set[int]()
+        visited = set[BaseTerm]()
         while queue:
             term = queue.pop()
-            if id(term) in visited:
+            if term in visited:
                 continue
             if (s := getattr(term, "name", None)) is not None:
                 self.symbols[s] = term
             queue.extend(term.children())
-            visited.add(id(term))
+            visited.add(term)
         for name, symbol in self.symbols.items():
             self.write(b"(declare-fun %b () %b)\n" % (name, symbol.sort()))
 
