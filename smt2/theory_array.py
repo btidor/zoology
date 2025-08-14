@@ -18,7 +18,15 @@ from line_profiler import profile
 
 from .bitwuzla import BZLA
 from .theory_bitvec import BTerm, BValue
-from .theory_core import BaseTerm, BitwuzlaTerm, DumpContext, Kind, TermCategory
+from .theory_core import (
+    BaseTerm,
+    BitwuzlaTerm,
+    CValue,
+    DumpContext,
+    Eq,
+    Kind,
+    TermCategory,
+)
 
 
 @dataclass(repr=False, slots=True, eq=False)
@@ -172,7 +180,21 @@ class Store(ATerm):
 
     @profile
     def _set(self, key: BTerm, value: BTerm) -> None:
-        if isinstance(key, BValue) and not self.upper:
+        if self._bzla is not None:
+            self._bzla = BZLA.mk_term(self.kind, (self._bzla, key.bzla, value.bzla))
+        for i, (k, v) in reversed(tuple(enumerate(self.upper))):
+            match Eq(k, key):
+                case CValue(True):
+                    self.upper[i] = (k, value)
+                    self.count += value.count - v.count
+                    return
+                case CValue(False):
+                    continue
+                case _:
+                    self.upper.append((key, value))
+                    self.count += key.count + value.count + 2
+                    return
+        if isinstance(key, BValue):
             k = key.value
             if k in self.lower:
                 self.count -= self.lower[k].count + 1
@@ -181,8 +203,6 @@ class Store(ATerm):
         else:
             self.upper.append((key, value))
             self.count += key.count + value.count + 2
-        if self._bzla is not None:
-            self._bzla = BZLA.mk_term(self.kind, (self._bzla, key.bzla, value.bzla))
 
     @override
     def dump(self, ctx: DumpContext) -> None:
