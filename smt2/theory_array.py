@@ -153,7 +153,7 @@ class Store(ATerm):
         k.upper = copy.copy(self.upper)
         k.freeze = False
         k.count = self.count
-        k._bzla = None
+        k._bzla = self._bzla
         return k
 
     def width(self) -> tuple[int, int]:
@@ -171,6 +171,7 @@ class Store(ATerm):
     @profile
     def set(self, key: BTerm, value: BTerm) -> Store:
         array = copy.deepcopy(self) if self.freeze else self
+        array._bzla = None
         array._set(key, value)
         return array
 
@@ -234,7 +235,6 @@ class Store(ATerm):
 
     @override
     def _bzterm(self) -> BitwuzlaTerm:
-        assert self.freeze
         term = self.base.bzla
         for k, v in self.lower.items():
             term = BZLA.mk_term(
