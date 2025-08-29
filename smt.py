@@ -8,8 +8,8 @@ from typing import Literal, overload
 
 from smt2 import Array, Constraint, Int, Symbolic, Uint
 from smt2.bitwuzla import BZLA
-from smt2.composite import ASymbol, BSymbol, CSymbol, Ite, Select
-from smt2.theory_core import DumpContext
+from smt2.composite import ASymbol, And, BSymbol, CSymbol, Ite, Select
+from smt2.theory_core import BaseTerm, DumpContext
 
 
 Uint8 = Uint[Literal[8]]
@@ -36,8 +36,9 @@ checks = 0
 
 
 class Solver:
-    __slots__ = ("constraint", "_last_check")
+    __slots__ = ("constraint", "_minmax", "_last_check")
     constraint: Constraint
+    _minmax: dict[BaseTerm, tuple[int, int]]
     _last_check: bool
 
     def __init__(self) -> None:
@@ -47,6 +48,11 @@ class Solver:
     def add(self, assertion: Constraint, /) -> None:
         self._last_check = False
         self.constraint &= assertion
+        queue = [assertion._term]  # pyright: ignore[reportPrivateUsage]
+        while queue:
+            term = queue.pop()
+            if isinstance(term, And):
+                queue.extend(term.children())
 
     def check(self, *assumptions: Constraint) -> bool:
         global checks, last_solver

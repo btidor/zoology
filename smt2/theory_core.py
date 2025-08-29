@@ -124,18 +124,17 @@ class BaseTerm(abc.ABC, metaclass=TermMeta):
     @property
     def bzla(self) -> BitwuzlaTerm:
         if self._bzla is None:
-            queue = list[BaseTerm]()
-            enqueued = set[BaseTerm]()
-            pending = list[BaseTerm]([self])
-            while pending:
-                term = pending.pop(0)
-                if term._bzla is not None or term in enqueued:
+            leaves = set[BaseTerm]()
+            queue = list[BaseTerm]([self])
+            while queue:
+                term = queue.pop(0)
+                if term in leaves:
                     continue
-                queue.append(term)
-                enqueued.add(term)
-                pending.extend(term.children())
-            queue.sort(key=lambda t: t.count)
-            for term in queue:
+                leaves.add(term)
+                queue.extend((t for t in term.children() if t._bzla is None))
+            leaves = list(leaves)
+            leaves.sort(key=lambda t: t.count)
+            for term in leaves:
                 term._bzla = term._bzterm()
             assert self._bzla is not None
         return self._bzla
