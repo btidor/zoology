@@ -74,7 +74,7 @@ class AValue(ATerm):
         return (self.key, self.default.width)
 
     @override
-    def children(self) -> Iterable[BaseTerm]:
+    def children(self) -> Iterable[BTerm]:
         return (self.default,)
 
     @override

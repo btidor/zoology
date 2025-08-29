@@ -96,7 +96,7 @@ class Not(CTerm):
     term: CTerm
 
     @override
-    def children(self) -> Iterable[BaseTerm]:
+    def children(self) -> Iterable[CTerm]:
         return (self.term,)
 
     @profile
@@ -123,7 +123,7 @@ class Implies(CTerm):
     right: CTerm
 
     @override
-    def children(self) -> Iterable[BaseTerm]:
+    def children(self) -> Iterable[CTerm]:
         return (self.left, self.right)
 
     @profile
@@ -145,7 +145,7 @@ class And(CTerm):
     right: CTerm
 
     @override
-    def children(self) -> Iterable[BaseTerm]:
+    def children(self) -> Iterable[CTerm]:
         return (self.left, self.right)
 
     @profile
@@ -175,7 +175,7 @@ class Or(CTerm):
     right: CTerm
 
     @override
-    def children(self) -> Iterable[BaseTerm]:
+    def children(self) -> Iterable[CTerm]:
         return (self.left, self.right)
 
     @profile
@@ -205,7 +205,7 @@ class Xor(CTerm):
     right: CTerm
 
     @override
-    def children(self) -> Iterable[BaseTerm]:
+    def children(self) -> Iterable[CTerm]:
         return (self.left, self.right)
 
     @profile
@@ -235,7 +235,7 @@ class Eq[S: BaseTerm](CTerm):
     right: S
 
     @override
-    def children(self) -> Iterable[BaseTerm]:
+    def children(self) -> Iterable[S]:
         return (self.left, self.right)
 
     @profile
@@ -301,7 +301,7 @@ class Distinct[S: BaseTerm](CTerm):
     right: S
 
     @override
-    def children(self) -> Iterable[BaseTerm]:
+    def children(self) -> Iterable[S]:
         return (self.left, self.right)
 
     @profile
@@ -331,7 +331,7 @@ class CIte(CTerm):
     right: CTerm
 
     @override
-    def children(self) -> Iterable[BaseTerm]:
+    def children(self) -> Iterable[CTerm]:
         return (self.cond, self.left, self.right)
 
     @profile
@@ -449,7 +449,7 @@ class UnaryOp(BTerm):
         super(UnaryOp, self).__post_init__()
 
     @override
-    def children(self) -> Iterable[BaseTerm]:
+    def children(self) -> Iterable[BTerm]:
         return (self.term,)
 
 
@@ -459,7 +459,7 @@ class BinaryOp(BTerm):
     right: BTerm
 
     @override
-    def children(self) -> Iterable[BaseTerm]:
+    def children(self) -> Iterable[BTerm]:
         return (self.left, self.right)
 
     @profile
@@ -476,7 +476,7 @@ class CompareOp(CTerm):
     right: BTerm
 
     @override
-    def children(self) -> Iterable[BaseTerm]:
+    def children(self) -> Iterable[BTerm]:
         return (self.left, self.right)
 
     @profile
@@ -496,7 +496,7 @@ class SingleParamOp(BTerm):
         return (self.i,)
 
     @override
-    def children(self) -> Iterable[BaseTerm]:
+    def children(self) -> Iterable[BTerm]:
         return (self.term,)
 
 
@@ -507,7 +507,7 @@ class Concat(BTerm):
     terms: tuple[BTerm, ...]
 
     @override
-    def children(self) -> Iterable[BaseTerm]:
+    def children(self) -> Iterable[BTerm]:
         return self.terms
 
     @profile
@@ -663,7 +663,7 @@ class Extract(BTerm):
         return (self.i, self.j)
 
     @override
-    def children(self) -> Iterable[BaseTerm]:
+    def children(self) -> Iterable[BTerm]:
         return (self.term,)
 
     @profile
@@ -1290,7 +1290,7 @@ class Comp(BTerm):
         self.max = (1 << self.width) - 1
 
     @override
-    def children(self) -> Iterable[BaseTerm]:
+    def children(self) -> Iterable[BTerm]:
         return (self.left, self.right)
 
     @profile
@@ -1849,7 +1849,7 @@ class AValue(ATerm):
         return (self.key, self.default.width)
 
     @override
-    def children(self) -> Iterable[BaseTerm]:
+    def children(self) -> Iterable[BTerm]:
         return (self.default,)
 
     @profile

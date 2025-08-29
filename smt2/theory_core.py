@@ -312,7 +312,7 @@ class Not(CTerm):
     term: CTerm
 
     @override
-    def children(self) -> Iterable[BaseTerm]:
+    def children(self) -> Iterable[CTerm]:
         return (self.term,)
 
 
@@ -324,7 +324,7 @@ class Implies(CTerm):
     right: CTerm
 
     @override
-    def children(self) -> Iterable[BaseTerm]:
+    def children(self) -> Iterable[CTerm]:
         return (self.left, self.right)
 
 
@@ -337,7 +337,7 @@ class And(CTerm):
     right: CTerm
 
     @override
-    def children(self) -> Iterable[BaseTerm]:
+    def children(self) -> Iterable[CTerm]:
         return (self.left, self.right)
 
 
@@ -350,7 +350,7 @@ class Or(CTerm):
     right: CTerm
 
     @override
-    def children(self) -> Iterable[BaseTerm]:
+    def children(self) -> Iterable[CTerm]:
         return (self.left, self.right)
 
 
@@ -363,7 +363,7 @@ class Xor(CTerm):
     right: CTerm
 
     @override
-    def children(self) -> Iterable[BaseTerm]:
+    def children(self) -> Iterable[CTerm]:
         return (self.left, self.right)
 
 
@@ -376,7 +376,7 @@ class Eq[S: BaseTerm](CTerm):
     right: S
 
     @override
-    def children(self) -> Iterable[BaseTerm]:
+    def children(self) -> Iterable[S]:
         return (self.left, self.right)
 
     @override
@@ -393,7 +393,7 @@ class Distinct[S: BaseTerm](CTerm):
     right: S
 
     @override
-    def children(self) -> Iterable[BaseTerm]:
+    def children(self) -> Iterable[S]:
         return (self.left, self.right)
 
     @override
@@ -411,5 +411,5 @@ class CIte(CTerm):
     right: CTerm
 
     @override
-    def children(self) -> Iterable[BaseTerm]:
+    def children(self) -> Iterable[CTerm]:
         return (self.cond, self.left, self.right)

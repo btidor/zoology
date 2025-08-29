@@ -123,7 +123,7 @@ class UnaryOp(BTerm):
         super(UnaryOp, self).__post_init__()
 
     @override
-    def children(self) -> Iterable[BaseTerm]:
+    def children(self) -> Iterable[BTerm]:
         return (self.term,)
 
 
@@ -133,7 +133,7 @@ class BinaryOp(BTerm):
     right: BTerm
 
     @override
-    def children(self) -> Iterable[BaseTerm]:
+    def children(self) -> Iterable[BTerm]:
         return (self.left, self.right)
 
     @override
@@ -149,7 +149,7 @@ class CompareOp(CTerm):
     right: BTerm
 
     @override
-    def children(self) -> Iterable[BaseTerm]:
+    def children(self) -> Iterable[BTerm]:
         return (self.left, self.right)
 
     @override
@@ -168,7 +168,7 @@ class SingleParamOp(BTerm):
         return (self.i,)
 
     @override
-    def children(self) -> Iterable[BaseTerm]:
+    def children(self) -> Iterable[BTerm]:
         return (self.term,)
 
 
@@ -179,7 +179,7 @@ class Concat(BTerm):
     terms: tuple[BTerm, ...]
 
     @override
-    def children(self) -> Iterable[BaseTerm]:
+    def children(self) -> Iterable[BTerm]:
         return self.terms
 
     @override
@@ -286,7 +286,7 @@ class Extract(BTerm):
         return (self.i, self.j)
 
     @override
-    def children(self) -> Iterable[BaseTerm]:
+    def children(self) -> Iterable[BTerm]:
         return (self.term,)
 
 
@@ -400,7 +400,7 @@ class Comp(BTerm):  # width-1 result
         super(Comp, self).__post_init__()
 
     @override
-    def children(self) -> Iterable[BaseTerm]:
+    def children(self) -> Iterable[BTerm]:
         return (self.left, self.right)
 
 
