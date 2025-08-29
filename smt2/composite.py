@@ -627,6 +627,16 @@ class Concat(BTerm):
                 j == k + 1 and x == y
             ):
                 return Concat((*rest, Extract(i, l, x), z))
+            case Concat([Ite(c, x, y), Ite(d, z, w)]) if c == d:
+                return Ite(c, Concat((x, z)), Concat((y, w)))
+            case Concat([Ite(c, x, y), Ite(d, z, w), *rest]) if (
+                c == d and len(rest) > 0
+            ):
+                return Concat((Ite(c, Concat((x, z)), Concat((y, w))), *rest))
+            case Concat([BValue() as v, Ite(c, x, y), *rest]) if len(rest) > 0:
+                return Concat((Ite(c, Concat((v, x)), Concat((v, y))), *rest))
+            case Concat([Ite(c, x, y), BValue() as v]):
+                return Ite(c, Concat((x, v)), Concat((y, v)))
             case _:
                 return self
 

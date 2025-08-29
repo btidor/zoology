@@ -634,6 +634,18 @@ def bitvector_logic_shifts(term: BTerm) -> BTerm:
         case Extract(i, j, Ite(c, BValue() as x, BValue() as y)):
             """xtr.ite"""
             return Ite(c, Extract(i, j, x), Extract(i, j, y))
+        case Concat([Ite(c, x, y), Ite(d, z, w)]) if c == d:
+            """cat.ite"""
+            return Ite(c, Concat((x, z)), Concat((y, w)))
+        case Concat([Ite(c, x, y), Ite(d, z, w), *rest]) if c == d and len(rest) > 0:
+            """cat.ite"""
+            return Concat((Ite(c, Concat((x, z)), Concat((y, w))), *rest))
+        case Concat([BValue() as v, Ite(c, x, y), *rest]) if len(rest) > 0:
+            """cat.ite"""
+            return Concat((Ite(c, Concat((v, x)), Concat((v, y))), *rest))
+        case Concat([Ite(c, x, y), BValue() as v]):
+            """cat.ite"""
+            return Ite(c, Concat((x, v)), Concat((y, v)))
 
         # ITE. Push down boolean expressions.
         case Ite(_c, x, y) if x == y:
