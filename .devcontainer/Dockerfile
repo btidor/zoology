@@ -4,8 +4,8 @@ FROM mcr.microsoft.com/devcontainers/base:noble
 
 COPY *.sources /etc/apt/sources.list.d/
 
-ADD --apt libjemalloc2 nodejs python3.13 python3-pip
-RUN ln -sf /usr/bin/python3.13 /usr/bin/python3 && \
+ADD --apt libjemalloc2 nodejs python3.14-dev python3-pip
+RUN ln -sf /usr/bin/python3.14 /usr/bin/python3 && \
 rm -f /usr/bin/python3-config
 
 ADD --apt libgmp-dev meson pkg-config
