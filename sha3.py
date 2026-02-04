@@ -67,7 +67,7 @@ class SHA3:
             digest = Uint256(f"DIGEST@F{len(self.free)}")
             self.free.append((input, digest))
 
-            # ASSUMPTION: no hash may have more than 128 leading zero bits. This
+            # ASSUMPTION: no hash may have more than 127 leading zero bits. This
             # avoids hash collisions between maps/arrays and ordinary storage
             # slots.
             digest._term.min = 1 << 128  # pyright: ignore[reportPrivateUsage]
@@ -104,11 +104,13 @@ class SHA3:
                 if prequal(vector, other):
                     return (digest, Constraint(True))
             digest = Uint256(f"DIGEST@S{len(self.symbolic)}")
-            digest._term.min = 1 << 128  # pyright: ignore[reportPrivateUsage]
             self.symbolic.append((vector, digest))
 
+            # ASSUMPTION: not too many leading zeroes (see above).
+            digest._term.min = 1 << 128  # pyright: ignore[reportPrivateUsage]
             constraint = (digest >> Uint256(128)).into(Uint128) != Uint128(0)
             constraint &= digest != EMPTY_DIGEST
+
             for data, (vector2, digest2) in self.concrete.items():
                 if vector.width // 8 == len(data):
                     constraint &= (vector == vector2).iff(digest == digest2)
