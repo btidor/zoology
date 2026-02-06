@@ -63,6 +63,14 @@ class BSymbol(BTerm):
         return model.get(self.name, self)
 
     @override
+    def replace(
+        self, model: dict[BaseTerm, BaseTerm], cache: dict[BaseTerm, BaseTerm]
+    ) -> BaseTerm:
+        if (r := model.get(self)) is not None:
+            return r
+        return self
+
+    @override
     def _bzterm(self) -> BitwuzlaTerm:
         return BZLA.mk_symbol(self.name, self.width)
 
@@ -106,6 +114,14 @@ class BValue(BTerm):
 
     @override
     def substitute(self, model: dict[bytes, BaseTerm]) -> BaseTerm:
+        return self
+
+    @override
+    def replace(
+        self, model: dict[BaseTerm, BaseTerm], cache: dict[BaseTerm, BaseTerm]
+    ) -> BaseTerm:
+        if (r := model.get(self)) is not None:
+            return r
         return self
 
     @override

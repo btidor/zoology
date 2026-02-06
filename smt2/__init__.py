@@ -87,6 +87,13 @@ class Symbolic(abc.ABC):
         cls._term = self._term.substitute({k: v._term for k, v in model.items()})  # pyright: ignore[reportPrivateUsage]
         return cls
 
+    def replace(
+        self, model: dict[BaseTerm, BaseTerm], cache: dict[BaseTerm, BaseTerm]
+    ) -> Self:
+        cls = self.__new__(self.__class__)
+        cls._term = self._term.replace(model, cache)
+        return cls
+
 
 class Constraint(Symbolic):
     __slots__ = ()

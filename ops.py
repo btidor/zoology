@@ -433,13 +433,11 @@ def JUMPI(
             s.last_jumpi = ins.offset
 
             s0, s1 = copy.deepcopy(s), s
-            s0.solver.add(c)
-            s0.trace.append(f"{ins.offset + 1:04X}")
+            s0.update(c, f"{ins.offset + 1:04X}")
 
             s1.pc = s.program.jumps[counter]
             s1.path |= 1
-            s1.solver.add(~c)
-            s1.trace.append(f"{counter:04X}")
+            s1.update(~c, f"{counter:04X}")
             return Jump(targets=(s0, s1))
         case True:  # branch never taken, fall through
             s.trace.append(f"{ins.offset + 1:04X}")

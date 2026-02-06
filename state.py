@@ -216,6 +216,13 @@ class State:
 
         assert solver.check()
 
+    def update(self, constraint: Constraint, trace: str) -> None:
+        """Add a constraint to the solver and re-simplify state."""
+        self.solver.add(constraint)
+        self.trace.append(trace)
+        self.stack = [self.solver.replace(i) for i in self.stack]
+        self.memory.replace(self.solver)
+
 
 @dataclass(frozen=True, slots=True)
 class Termination:

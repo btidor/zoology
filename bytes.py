@@ -110,6 +110,11 @@ class Bytes:
             return self.data
         return _reveal(self)
 
+    def replace(self, solver: Solver) -> None:
+        """Re-simplify this instance with the given solver."""
+        self.length = solver.replace(self.length)
+        self.array = solver.replace(self.array)
+
 
 class ByteSlice(Bytes):
     """Represents an immutable slice of Bytes or Memory."""
@@ -143,6 +148,12 @@ class ByteSlice(Bytes):
                     return super().bigvector()
             return Uint256.concat(*words)
         return super().bigvector()
+
+    def replace(self, solver: Solver) -> None:
+        """Re-simplify this instance with the given solver."""
+        self.inner.replace(solver)
+        self.offset = solver.replace(self.offset)
+        self.length = solver.replace(self.length)
 
 
 class Memory:
@@ -273,6 +284,14 @@ class Memory:
         """Unwrap this instance to bytes."""
         return _reveal(self)
 
+    def replace(self, solver: Solver) -> None:
+        """Re-simplify this instance with the given solver."""
+        self.length = solver.replace(self.length)
+        self.array = solver.replace(self.array)
+        self.writes = [_replace_byteswrite(solver, i) for i in self.writes]
+        for k, v in self.wordcache.items():
+            self.wordcache[k] = solver.replace(v)
+
 
 def _reveal(instance: Bytes | Memory) -> bytes | None:
     if (length := instance.length.reveal()) is None:
@@ -283,3 +302,13 @@ def _reveal(instance: Bytes | Memory) -> bytes | None:
             return None
         data.append(v)
     return bytes(data)
+
+
+def _replace_byteswrite(solver: Solver, write: BytesWrite) -> BytesWrite:
+    at, data = write
+    at = solver.replace(at)
+    if isinstance(data, Uint):
+        data = solver.replace(data)
+    else:
+        data.replace(solver)
+    return at, data

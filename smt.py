@@ -8,7 +8,7 @@ from typing import Literal, overload
 
 from smt2 import Array, Constraint, Int, Symbolic, Uint
 from smt2.bitwuzla import BZLA
-from smt2.composite import ASymbol, And, BSymbol, CSymbol, Ite, Select
+from smt2.composite import ASymbol, And, BSymbol, CSymbol, Eq, Ite, Select
 from smt2.theory_core import BaseTerm, DumpContext
 
 
@@ -36,28 +36,49 @@ checks = 0
 
 
 class Solver:
-    __slots__ = ("constraint", "_minmax", "_last_check")
+    __slots__ = (
+        "constraint",
+        "_minmax",
+        "_last_check",
+        "_last_assertion",
+        "_replace_cache",
+    )
     constraint: Constraint
     _minmax: dict[BaseTerm, tuple[int, int]]
     _last_check: bool
+    _last_assertion: Constraint | None
+    _replace_cache: dict[BaseTerm, BaseTerm]
 
     def __init__(self) -> None:
         self.constraint = Constraint(True)
         self._last_check = False
+        self._last_assertion = None
+        self._replace_cache = {}
 
     def add(self, assertion: Constraint, /) -> None:
-        self._last_check = False
         self.constraint &= assertion
-        queue = [assertion._term]  # pyright: ignore[reportPrivateUsage]
+        self._last_check = False
+        self._last_assertion = assertion
+        self._replace_cache.clear()
+
+    def replace[S: Symbolic](self, term: S, /) -> S:
+        assert self._last_assertion is not None, "solver is not ready for replace"
+        model = dict[BaseTerm, BaseTerm]()
+        queue = [self._last_assertion._term]  # pyright: ignore[reportPrivateUsage]
         while queue:
-            term = queue.pop()
-            if isinstance(term, And):
-                queue.extend(term.children())
+            item = queue.pop(0)
+            if isinstance(item, And):
+                queue.extend(item.children())
+            elif isinstance(item, Eq):
+                a, b = item.children()  # pyright: ignore[reportUnknownVariableType]
+                model[b] = a
+        return term.replace(model, self._replace_cache)
 
     def check(self, *assumptions: Constraint) -> bool:
         global checks, last_solver
         checks += 1
         self._last_check = False
+        self._last_assertion = None
 
         constraint = reduce(Constraint.__and__, assumptions, self.constraint)
         r = BZLA.check(self, constraint._term)  # pyright: ignore[reportPrivateUsage]
