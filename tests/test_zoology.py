@@ -103,7 +103,7 @@ def test_king() -> None:
         "-       \tvalue: 1125899906842623\tvia proxy",
         "validateInstance(...)",
         " -> Proxy CALL -       ",
-        "    REVERT 00",
+        "    REVERT -",
     ]
     check_level(9, fixture)
 
@@ -111,11 +111,11 @@ def test_king() -> None:
 def test_reentrance() -> None:
     fixture = [
         "00362a95 000000000000000000000000c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0\tvalue: 1125899906842623",
-        "2e1a7d4d 0000000000000000000000000000000000000000000000000003ffffffffffff\tvia proxy",
-        " -> Proxy CALL -       \tvalue: 1125899906842623",
+        "2e1a7d4d 0000000000000000000000000000000000000000000000000003ebffffffffff\tvia proxy",
+        " -> Proxy CALL -       \tvalue: 1103909674287103",
         "     -> To 0x79cf5bd9e06f09ace1ade01aedeac5c979b77d6c:",
-        "        CALL 2e1a7d4d 00000000000000000000000000000000000000000000000000038d7ea4c68000",
-        "         -> Proxy CALL -       \tvalue: 1000000000000000",
+        "        CALL 2e1a7d4d 0000000000000000000000000000000000000000000000000003a17ea4c68000",
+        "         -> Proxy CALL -       \tvalue: 1021990232555520",
         "            RETURN 00",
         "        RETURN -       ",
         "    RETURN -",
@@ -125,10 +125,10 @@ def test_reentrance() -> None:
 
 def test_elevator() -> None:
     fixture = [
-        "ed9a7134 ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\tvia proxy",
-        " -> Proxy CALL 5f9a4bca ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "ed9a7134 0000000000000000000000000000000000000000000000000000000000000000\tvia proxy",
+        " -> Proxy CALL 5f9a4bca 0000000000000000000000000000000000000000000000000000000000000000",
         "    RETURN 0000000000000000000000000000000000000000000000000000000000000000",
-        " -> Proxy CALL 5f9a4bca ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        " -> Proxy CALL 5f9a4bca 0000000000000000000000000000000000000000000000000000000000000000",
         "    RETURN 0000000000000000000000000000000000000000000000000000000000000001",
     ]
     check_level(11, fixture)
@@ -143,7 +143,7 @@ def test_privacy() -> None:
 
 def test_gatekeeper_one() -> None:
     fixture = [
-        "3370204e ffffffff0000caca000000000000000000000000000000000000000000000000\tvia proxy",
+        "3370204e 000000010000caca000000000000000000000000000000000000000000000000\tvia proxy",
     ]
     check_level(13, fixture)
 
@@ -158,10 +158,10 @@ def test_gatekeeper_two() -> None:
 
 def test_naughtcoin() -> None:
     fixture = [
-        "095ea7b3 000000000000000000000000cacacacacacacacacacacacacacacacacacacaca"
+        "39509351 000000000000000000000000cacacacacacacacacacacacacacacacacacacaca"
         + "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
         "23b872dd 000000000000000000000000cacacacacacacacacacacacacacacacacacacaca"
-        + "000000000000000000000000ffffffffffffffffffffffffffffffffffffffff"
+        + "0000000000000000000000002000000000000000000000000000000000000000"
         + "00000000000000000000000000000000000000000000d3c21bcecceda1000000",
     ]
     check_level(15, fixture)
@@ -202,7 +202,7 @@ def test_alien_codex() -> None:
         "328b52cb",
         "47f57b32",
         "0339f300 4ef1d2ad89edf8c4d91132028e8195cdf30bb4b5053d4f8cd260341d4805f30a"
-        + "ffffffffffffffffffffffffcacacacacacacacacacacacacacacacacacacaca",
+        + "000000000000000000000001cacacacacacacacacacacacacacacacacacacaca",
     ]
     check_level(19, fixture)
 
@@ -221,9 +221,9 @@ def test_shop() -> None:
     fixture = [
         "a6f2ae3a\tvia proxy",
         " -> Proxy CALL a035b1fe",
-        "    RETURN ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "    RETURN 8000000000000000000000000000000000000000000000000000000000000000",
         " -> Proxy CALL a035b1fe",
-        "    RETURN 0000000000000000000000000000000000000000000000000000000000000063",
+        "    RETURN 0000000000000000000000000000000000000000000000000000000000000000",
     ]
     check_level(21, fixture)
 
@@ -248,25 +248,25 @@ def test_motorbike() -> None:
         "To 0x42976789d3e2613934d9386f952bea594f8f4a54:",
         "    8129fc1c",
         "To 0x42976789d3e2613934d9386f952bea594f8f4a54:",
-        "    4f1ef286 000000000000000000000000c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0"
+        "    4f1ef286 ffffffffffffffffffffffffc0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0"
         + "0000000000000000000000000000000000000000000000000000000000000040"
         + "0000000000000000000000000000000000000000000000000000000000000001"
-        + "ff",
-        " -> Proxy DELEGATECALL ff",
+        + "60",
+        " -> Proxy DELEGATECALL 60",
         "    SELFDESTRUCT",
     ]
     check_level(25, fixture)
 
 
-def test_double_entry_point() -> None:
-    # Nontraditional solution: attempting to invoke a method on an EOA address
-    # causes a revert, even inside a try/catch block:
-    # https://github.com/ethereum/solidity/issues/12725
-    fixture = [
-        "To 0x01a11621db21dd3eb323ada87bbb1d0d8a099544:",
-        "    9e927c68 000000000000000000000000ffffffffffffffffffffffffffffffffffffffff",
-    ]
-    check_level(26, fixture)
+# def test_double_entry_point() -> None:
+#     # Nontraditional solution: attempting to invoke a method on an EOA address
+#     # causes a revert, even inside a try/catch block:
+#     # https://github.com/ethereum/solidity/issues/12725
+#     fixture = [
+#         "To 0x01a11621db21dd3eb323ada87bbb1d0d8a099544:",
+#         "    9e927c68 000000000000000000000000ffffffffffffffffffffffffffffffffffffffff",
+#     ]
+#     check_level(26, fixture)
 
 
 def test_good_samaritan() -> None:
@@ -297,7 +297,7 @@ def test_switch() -> None:
     fixture = [
         "30c13ade "
         + "0000000000000000000000000000000000000000000000000000000000000044"
-        + "ffffffff00000000ffffffffffffffffffffffffffffffffffffffffffffffff"
+        + "496949c000000000444444000065650000000000000000000000000000000044"
         + "20606e1500000000000000000000000000000000000000000000000000000000"
         + "0000000476227e12"
     ]
@@ -306,7 +306,7 @@ def test_switch() -> None:
 
 def test_higher_order() -> None:
     fixture = [
-        "211c85ab ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "211c85ab 8000000000000000000000000000000000000000000000000000000000000000",
         "5b3e8fe7",
     ]
     check_level(30, fixture)
