@@ -369,6 +369,17 @@ class BTerm(BaseTerm):
     def sort(self) -> bytes:
         return b"(_ BitVec %d)" % self.width
 
+    def realcopy(self, min: int, max: int) -> BTerm:
+        args = list[Any]()
+        for name in self.__match_args__:
+            if name == "w":
+                args.append(self.width)
+            else:
+                args.append(getattr(self, name))
+        r = self.__class__(*args, cache=False)
+        r.min, r.max = (min, max)
+        return r
+
 
 @dataclass(repr=False, slots=True, eq=False)
 class BSymbol(BTerm):

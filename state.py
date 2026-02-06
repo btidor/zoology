@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass, field
 from typing import Any, Callable, Iterable, Self
 
@@ -218,10 +219,22 @@ class State:
 
     def update(self, constraint: Constraint, trace: str) -> None:
         """Add a constraint to the solver and re-simplify state."""
+        if constraint.reveal() is True:
+            return
         self.solver.add(constraint)
         self.trace.append(trace)
         self.stack = [self.solver.replace(i) for i in self.stack]
         self.memory.replace(self.solver)
+        calldata = copy.copy(self.transaction.calldata)
+        calldata.replace(self.solver)
+        self.transaction = Transaction(
+            origin=self.solver.replace(self.transaction.origin),
+            caller=self.solver.replace(self.transaction.caller),
+            address=self.solver.replace(self.transaction.address),
+            callvalue=self.solver.replace(self.transaction.callvalue),
+            calldata=calldata,
+            gasprice=self.solver.replace(self.transaction.gasprice),
+        )
 
 
 @dataclass(frozen=True, slots=True)

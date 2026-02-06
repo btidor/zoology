@@ -8,7 +8,18 @@ from typing import Literal, overload
 
 from smt2 import Array, Constraint, Int, Symbolic, Uint
 from smt2.bitwuzla import BZLA
-from smt2.composite import ASymbol, And, BSymbol, CSymbol, Eq, Ite, Select
+from smt2.composite import (
+    ASymbol,
+    And,
+    BSymbol,
+    BValue,
+    CSymbol,
+    Eq,
+    Ite,
+    Not,
+    Select,
+    Ult,
+)
 from smt2.theory_core import BaseTerm, DumpContext
 
 
@@ -56,23 +67,38 @@ class Solver:
         self._replace_cache = {}
 
     def add(self, assertion: Constraint, /) -> None:
-        self.constraint &= assertion
         self._last_check = False
         self._last_assertion = assertion
         self._replace_cache.clear()
+        if assertion.reveal() is True:
+            return
+        self.constraint &= assertion
 
     def replace[S: Symbolic](self, term: S, /) -> S:
         assert self._last_assertion is not None, "solver is not ready for replace"
         model = dict[BaseTerm, BaseTerm]()
         queue = [self._last_assertion._term]  # pyright: ignore[reportPrivateUsage]
         while queue:
-            item = queue.pop(0)
-            if isinstance(item, And):
-                queue.extend(item.children())
-            elif isinstance(item, Eq):
-                a, b = item.children()  # pyright: ignore[reportUnknownVariableType]
-                model[b] = a
-        return term.replace(model, self._replace_cache)
+            match queue.pop(0):
+                case And(a, b):
+                    queue.extend((a, b))
+                case Eq(a, b):  # pyright: ignore[reportUnknownVariableType]
+                    assert b not in model
+                    model[b] = a
+                case Ult(b, BValue(x)):
+                    assert b not in model
+                    if b.max > x - 1:
+                        model[b] = b.realcopy(b.min, x - 1)
+                case Not(Ult(b, BValue(x))):
+                    assert b not in model
+                    if b.min < x:
+                        model[b] = b.realcopy(x, b.max)
+                case _:
+                    pass
+        if model:
+            return term.replace(model, self._replace_cache)
+        else:
+            return term
 
     def check(self, *assumptions: Constraint) -> bool:
         global checks, last_solver
