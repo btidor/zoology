@@ -438,7 +438,11 @@ def JUMPI(
             s1.pc = s.program.jumps[counter]
             s1.path |= 1
             s1.update(~c, f"{counter:04X}")
-            return Jump(targets=(s0, s1))
+            return Jump(
+                targets=tuple(
+                    s for s in (s0, s1) if s.solver.constraint.reveal() is not False
+                )
+            )
         case True:  # branch never taken, fall through
             s.trace.append(f"{ins.offset + 1:04X}")
             return None
