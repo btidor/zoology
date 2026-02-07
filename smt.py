@@ -20,7 +20,7 @@ from smt2.composite import (
     Select,
     Ult,
 )
-from smt2.theory_core import BaseTerm, DumpContext
+from smt2.theory_core import BaseTerm, DumpContext, ReplaceContext
 
 
 Uint8 = Uint[Literal[8]]
@@ -47,56 +47,48 @@ checks = 0
 
 
 class Solver:
-    __slots__ = (
-        "constraint",
-        "_minmax",
-        "_last_check",
-        "_last_assertion",
-        "_replace_cache",
-    )
+    __slots__ = ("constraint", "_minmax", "_last_check", "_replace")
     constraint: Constraint
     _minmax: dict[BaseTerm, tuple[int, int]]
     _last_check: bool
-    _last_assertion: Constraint | None
-    _replace_cache: dict[BaseTerm, BaseTerm]
+    _replace: ReplaceContext | Constraint | None
 
     def __init__(self) -> None:
         self.constraint = Constraint(True)
         self._last_check = False
-        self._last_assertion = None
-        self._replace_cache = {}
+        self._replace = None
 
     def add(self, assertion: Constraint, /) -> None:
         self._last_check = False
-        self._last_assertion = assertion
-        self._replace_cache.clear()
+        self._replace = assertion
         if assertion.reveal() is True:
             return
         self.constraint &= assertion
 
     def replace[S: Symbolic](self, term: S, /) -> S:
-        assert self._last_assertion is not None, "solver is not ready for replace"
-        model = dict[BaseTerm, BaseTerm]()
-        queue = [self._last_assertion._term]  # pyright: ignore[reportPrivateUsage]
-        while queue:
-            match queue.pop(0):
-                case And(a, b):
-                    queue.extend((a, b))
-                case Eq(a, b):  # pyright: ignore[reportUnknownVariableType]
-                    assert b not in model
-                    model[b] = a
-                case Ult(b, BValue(x)):
-                    assert b not in model
-                    if b.max > x - 1:
-                        model[b] = b.realcopy(b.min, x - 1)
-                case Not(Ult(b, BValue(x))):
-                    assert b not in model
-                    if b.min < x:
-                        model[b] = b.realcopy(x, b.max)
-                case _:
-                    pass
-        if model:
-            return term.replace(model, self._replace_cache)
+        assert self._replace is not None, "solver is not ready for replace"
+        if isinstance(self._replace, Constraint):
+            queue = [self._replace._term]  # pyright: ignore[reportPrivateUsage]
+            self._replace = ReplaceContext()
+            while queue:
+                match queue.pop(0):
+                    case And(a, b):
+                        queue.extend((a, b))
+                    case Eq(a, b):  # pyright: ignore[reportUnknownVariableType]
+                        assert b not in self._replace.terms
+                        self._replace.terms[b] = a
+                    case Ult(b, BValue(x)):
+                        assert b not in self._replace.terms
+                        if b.max > x - 1:
+                            self._replace.terms[b] = b.realcopy(b.min, x - 1)
+                    case Not(Ult(b, BValue(x))):
+                        assert b not in self._replace.terms
+                        if b.min < x:
+                            self._replace.terms[b] = b.realcopy(x, b.max)
+                    case _:
+                        pass
+        if self._replace.terms:
+            return term.replace(self._replace)
         else:
             return term
 
@@ -104,7 +96,7 @@ class Solver:
         global checks, last_solver
         checks += 1
         self._last_check = False
-        self._last_assertion = None
+        self._replace = None
 
         constraint = reduce(Constraint.__and__, assumptions, self.constraint)
         r = BZLA.check(self, constraint._term)  # pyright: ignore[reportPrivateUsage]

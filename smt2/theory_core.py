@@ -197,37 +197,49 @@ class BaseTerm(abc.ABC, metaclass=TermMeta):
         return self.__class__(*args)
 
     @profile
-    def replace(
-        self, model: dict[BaseTerm, BaseTerm], cache: dict[BaseTerm, BaseTerm]
-    ) -> BaseTerm:
-        if (r := model.get(self)) is not None:
-            return r
-        elif (r := cache.get(self)) is not None:
+    def replace(self, model: ReplaceContext) -> BaseTerm:
+        if (r := model.check(self)) is not None:
             return r
         args = list[Any]()
         for name in self.__match_args__:
             arg = getattr(self, name)
             if isinstance(arg, BaseTerm):
-                args.append(arg.replace(model, cache))
+                args.append(arg.replace(model))
             elif isinstance(arg, tuple):
                 s = list[BaseTerm | tuple[BaseTerm, ...]]()
                 for a in arg:  # pyright: ignore[reportUnknownVariableType]
                     match a:
                         case BaseTerm():
-                            s.append(a.replace(model, cache))
+                            s.append(a.replace(model))
                         case tuple():
                             t = list[BaseTerm]()
                             for b in a:  # pyright: ignore[reportUnknownVariableType]
                                 assert isinstance(b, BaseTerm)
-                                t.append(b.replace(model, cache))
+                                t.append(b.replace(model))
                             s.append(tuple(t))
                         case other:  # pyright: ignore[reportUnknownVariableType]
                             raise TypeError(f"unexpected arg: {other}")
                 args.append(tuple(s))
             else:
                 args.append(arg)
-        cache[self] = self.__class__(*args)
-        return cache[self]
+        return model.cache(self, self.__class__(*args))
+
+
+@dataclass(repr=False, slots=True, eq=False)
+class ReplaceContext:
+    terms: dict[BaseTerm, BaseTerm] = field(default_factory=dict[BaseTerm, BaseTerm])
+    _cache: dict[BaseTerm, BaseTerm] = field(default_factory=dict[BaseTerm, BaseTerm])
+
+    def check(self, term: BaseTerm) -> BaseTerm | None:
+        if (r := self.terms.get(term)) is not None:
+            return r
+        elif (r := self._cache.get(term)) is not None:
+            return r
+        return None
+
+    def cache(self, term: BaseTerm, replacement: BaseTerm) -> BaseTerm:
+        self._cache[term] = replacement
+        return replacement
 
 
 @dataclass
@@ -312,10 +324,8 @@ class CSymbol(CTerm):
         return model.get(self.name, self)
 
     @override
-    def replace(
-        self, model: dict[BaseTerm, BaseTerm], cache: dict[BaseTerm, BaseTerm]
-    ) -> BaseTerm:
-        if (r := model.get(self)) is not None:
+    def replace(self, model: ReplaceContext) -> BaseTerm:
+        if (r := model.check(self)) is not None:
             return r
         return self
 
@@ -342,10 +352,8 @@ class CValue(CTerm):
         return self
 
     @override
-    def replace(
-        self, model: dict[BaseTerm, BaseTerm], cache: dict[BaseTerm, BaseTerm]
-    ) -> BaseTerm:
-        if (r := model.get(self)) is not None:
+    def replace(self, model: ReplaceContext) -> BaseTerm:
+        if (r := model.check(self)) is not None:
             return r
         return self
 

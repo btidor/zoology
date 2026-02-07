@@ -24,6 +24,7 @@ from .theory_core import (
     DumpContext,
     Eq,
     Kind,
+    ReplaceContext,
     TermCategory,
 )
 
@@ -74,10 +75,8 @@ class BSymbol(BTerm):
         return model.get(self.name, self)
 
     @override
-    def replace(
-        self, model: dict[BaseTerm, BaseTerm], cache: dict[BaseTerm, BaseTerm]
-    ) -> BaseTerm:
-        if (r := model.get(self)) is not None:
+    def replace(self, model: ReplaceContext) -> BaseTerm:
+        if (r := model.check(self)) is not None:
             return r
         return self
 
@@ -128,10 +127,8 @@ class BValue(BTerm):
         return self
 
     @override
-    def replace(
-        self, model: dict[BaseTerm, BaseTerm], cache: dict[BaseTerm, BaseTerm]
-    ) -> BaseTerm:
-        if (r := model.get(self)) is not None:
+    def replace(self, model: ReplaceContext) -> BaseTerm:
+        if (r := model.check(self)) is not None:
             return r
         return self
 

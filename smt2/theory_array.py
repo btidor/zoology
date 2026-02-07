@@ -25,6 +25,7 @@ from .theory_core import (
     DumpContext,
     Eq,
     Kind,
+    ReplaceContext,
     TermCategory,
     reverse_enumerate,
 )
@@ -61,10 +62,8 @@ class ASymbol(ATerm):
         return model.get(self.name, self)
 
     @override
-    def replace(
-        self, model: dict[BaseTerm, BaseTerm], cache: dict[BaseTerm, BaseTerm]
-    ) -> BaseTerm:
-        if (r := model.get(self)) is not None:
+    def replace(self, model: ReplaceContext) -> BaseTerm:
+        if (r := model.check(self)) is not None:
             return r
         return self
 
@@ -99,10 +98,8 @@ class AValue(ATerm):
         return self
 
     @override
-    def replace(
-        self, model: dict[BaseTerm, BaseTerm], cache: dict[BaseTerm, BaseTerm]
-    ) -> BaseTerm:
-        if (r := model.get(self)) is not None:
+    def replace(self, model: ReplaceContext) -> BaseTerm:
+        if (r := model.check(self)) is not None:
             return r
         return self
 
@@ -248,6 +245,10 @@ class Store(ATerm):
                 ctx.write(b" ")
                 v.dump(ctx)
                 ctx.write(b")")
+
+    # @override TODO
+    # def replace(self, model: ReplaceContext) -> BaseTerm:
+    #     raise NotImplementedError
 
     @override
     def _bzterm(self) -> BitwuzlaTerm:

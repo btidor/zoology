@@ -76,6 +76,7 @@ from .theory_core import (
     BitwuzlaTerm,
     DumpContext,
     Kind,
+    ReplaceContext,
     TermCategory,
     reverse_enumerate,
 )
