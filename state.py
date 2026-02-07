@@ -180,7 +180,7 @@ class State:
         Automatically adds hash constraints to the current constraint.
         """
         digest, constraint = self.sha3.hash(input)
-        self.solver.add(constraint)
+        self.update(constraint)
         return digest
 
     def cleanup(self) -> None:
@@ -217,12 +217,13 @@ class State:
 
         assert solver.check()
 
-    def update(self, constraint: Constraint, trace: str) -> None:
+    def update(self, constraint: Constraint, trace: str | None = None) -> None:
         """Add a constraint to the solver and re-simplify state."""
         if constraint.reveal() is True:
             return
         self.solver.add(constraint)
-        self.trace.append(trace)
+        if trace is not None:
+            self.trace.append(trace)
         self.stack = [self.solver.replace(i) for i in self.stack]
         self.memory.replace(self.solver)
         calldata = copy.copy(self.transaction.calldata)

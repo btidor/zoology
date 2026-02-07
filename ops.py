@@ -772,7 +772,7 @@ def _call_common(
         s.path <<= 1
         state = copy.deepcopy(s)
         state.path |= 1
-        state.solver.add(cond)
+        state.update(cond)
         if delegate:
             transaction = Transaction(
                 origin=state.transaction.origin,
@@ -825,7 +825,7 @@ def _call_common(
                 s.path <<= 1
                 state = copy.deepcopy(s)
                 state.path |= 1
-                state.solver.add(cond)
+                state.update(cond)
                 dc = DelegateCall(
                     transaction,
                     Constraint(False),
@@ -842,7 +842,7 @@ def _call_common(
                 s.path <<= 1
                 state = copy.deepcopy(s)
                 state.path |= 1
-                state.solver.add(cond)
+                state.update(cond)
                 dc = DelegateCall(
                     transaction,
                     Constraint(True),
@@ -863,7 +863,7 @@ def _call_common(
                 s.path <<= 1
                 state = copy.deepcopy(s)
                 state.path |= 1
-                state.solver.add(cond)
+                state.update(cond)
 
                 state.balances[state.transaction.address] = Uint256(0)
                 state.changed = True
@@ -897,7 +897,7 @@ def _call_common(
                 s.path <<= 1
                 state = copy.deepcopy(s)
                 state.path |= 1
-                state.solver.add(cond)
+                state.update(cond)
                 ok = Constraint(f"RETURNOK{suffix}")
                 state.transfer(
                     transaction.caller, transaction.address, ok.ite(value, Uint256(0))
@@ -911,7 +911,7 @@ def _call_common(
                 s.path <<= 1
                 state = copy.deepcopy(s)
                 state.path |= 1
-                state.solver.add(cond)
+                state.update(cond)
                 # This case is kind of weird, so penalize it in favor of Case I.
                 state.cost += 1
                 state.gas_hogged += gas
@@ -934,7 +934,7 @@ def _call_common(
                     s.path <<= 1
                     state = copy.deepcopy(s)
                     state.path |= 1
-                    state.solver.add(cond)
+                    state.update(cond)
                     state.transfer(transaction.caller, transaction.address, value)
                     state.suffix += "R"
                     original, state.calls = state.calls, ()
@@ -974,7 +974,7 @@ def _call_common(
                     )
 
     if eoa.reveal() is not False:
-        s.solver.add(eoa)
+        s.update(eoa)
         if delegate:
             transaction = Transaction(
                 origin=s.transaction.origin,
