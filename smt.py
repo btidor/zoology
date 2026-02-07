@@ -14,6 +14,7 @@ from smt2.composite import (
     BSymbol,
     BValue,
     CSymbol,
+    CValue,
     Eq,
     Ite,
     Not,
@@ -85,12 +86,11 @@ class Solver:
                         assert b not in self._replace.terms
                         if b.min < x:
                             self._replace.terms[b] = b.realcopy(x, b.max)
-                    case _:
-                        pass
-        if self._replace.terms:
-            return term.replace(self._replace)
-        else:
-            return term
+                    case Not(inv):
+                        self._replace.terms[inv] = CValue(False)
+                    case item:
+                        self._replace.terms[item] = CValue(True)
+        return term.replace(self._replace)
 
     def check(self, *assumptions: Constraint) -> bool:
         global checks, last_solver
