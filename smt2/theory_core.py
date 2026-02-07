@@ -56,7 +56,9 @@ class TermMeta(abc.ABCMeta):
     def __call__(self, *args: Any, recurse: bool = True, cache: bool = True) -> Any:
         """Construct the requested term, then rewrite it."""
         assert issubclass(self, BaseTerm)
-        if self.category == TermCategory.COMMUTATIVE:
+        if self.category == TermCategory.MUTABLE:
+            cache = False
+        elif self.category == TermCategory.COMMUTATIVE:
             assert len(args) == 2
             left, right = args
             if left.category == right.category:
@@ -66,13 +68,13 @@ class TermMeta(abc.ABCMeta):
             elif left.category == TermCategory.NOT:
                 args = (right, left)
         key = (self, *args)
-        if self.category != TermCategory.MUTABLE and key in BZLA.argcache and cache:
+        if cache and key in BZLA.argcache:
             return BZLA.argcache[key]
         else:
             term = super(TermMeta, self).__call__(*args)
             if recurse:
                 term = term.rewrite()
-            if self.category != TermCategory.MUTABLE and cache:
+            if cache:
                 BZLA.argcache[key] = term
             return term
 
