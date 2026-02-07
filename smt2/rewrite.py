@@ -735,6 +735,36 @@ def bitvector_logic_shifts(term: BTerm) -> BTerm:
             return term
 
 
+def constraint_yolo(term: CTerm) -> CTerm:
+    """Warning: unverified rewrite rules for constriants."""
+    match term:
+        case Eq(BValue() as z, Select(Store(AValue(d), lower, upper), key)) if (
+            not upper
+        ):
+            """eq.sel"""
+            eq = Eq(d, z)
+            match eq:
+                case CValue(False):
+                    pass
+                case _:
+                    return term  # pyright: ignore[reportUnknownVariableType]
+            matches = list[CValue]()
+            for k, v in lower.items():
+                eq = Eq(v, z)
+                match eq:
+                    case CValue(True):
+                        matches.append(Eq(key, BValue(k, key.width)))
+                    case CValue(False):
+                        pass
+                    case _:
+                        matches.append(And(Eq(key, BValue(k, key.width)), eq))
+            if not matches:
+                return CValue(False)
+            return reduce(Or, matches)
+        case _:
+            return term
+
+
 def bitvector_yolo(term: BTerm) -> BTerm:
     """Warning: unverified rewrite rules for bitvectors."""
     match term:

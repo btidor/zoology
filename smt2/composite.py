@@ -298,6 +298,28 @@ class Eq[S: BaseTerm](CTerm):
                     CValue(a >> rwidth == b),
                     Eq(BValue(a & (1 << rwidth) - 1, rwidth), Concat((*rest,))),
                 )
+            case Eq(BValue() as z, Select(Store(AValue(d), lower, upper), key)) if (
+                not upper
+            ):
+                eq = Eq(d, z)
+                match eq:
+                    case CValue(False):
+                        pass
+                    case _:
+                        return self
+                matches = list[CValue]()
+                for k, v in lower.items():
+                    eq = Eq(v, z)
+                    match eq:
+                        case CValue(True):
+                            matches.append(Eq(key, BValue(k, key.width)))
+                        case CValue(False):
+                            pass
+                        case _:
+                            matches.append(And(Eq(key, BValue(k, key.width)), eq))
+                if not matches:
+                    return CValue(False)
+                return reduce(Or, matches)
             case Eq(BTerm() as x, BTerm() as y) if x.max < y.min:
                 return CValue(False)
             case Eq(BTerm() as x, BTerm() as y) if y.max < x.min:
