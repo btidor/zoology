@@ -246,9 +246,16 @@ class Store(ATerm):
                 v.dump(ctx)
                 ctx.write(b")")
 
-    # @override TODO
-    # def replace(self, model: ReplaceContext) -> BaseTerm:
-    #     raise NotImplementedError
+    @override
+    def replace(self, model: ReplaceContext) -> BaseTerm:
+        if (r := model.check(self)) is not None:
+            return r
+        base = self.base.replace(model)
+        lower = {k: v.replace(model) for k, v in self.lower.items()}
+        upper = [(k.replace(model), v.replace(model)) for k, v in self.upper]
+        r = Store(base, lower, upper)
+        r.freeze = self.freeze
+        return model.cache(self, r)
 
     @override
     def _bzterm(self) -> BitwuzlaTerm:
