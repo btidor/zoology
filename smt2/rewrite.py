@@ -180,6 +180,11 @@ def constraint_logic_bitvector(term: CTerm) -> CTerm:
                 CValue(a >> rwidth == b),
                 Eq(BValue(a & ((1 << rwidth) - 1), rwidth), Concat((*rest,))),
             )
+        case Eq(Concat([*rest0, x]), Concat([*rest1, y])) if (
+            x == y and len(rest0) > 0 and len(rest1) > 0
+        ):
+            """eq.catcat"""
+            return Eq(Concat((*rest0,)), Concat((*rest1,)))
         case Ult(x, BValue(0)):
             """ult.z: X < 0 <=> False"""
             return CValue(False)
@@ -497,10 +502,10 @@ def bitvector_logic_arithmetic(term: BTerm) -> BTerm:
             """add.z: X + 0 <=> X"""
             return x
         case Add(x, BNot(y)) if x == y:
-            """add.bnot: X + ~X <=> """
+            """add.bnot: X + ~X <=> 1111"""
             return BValue(mask, width)
-        case Add(x, Add(y, BNot(z))) if x == z:
-            """add.bnot: X + ~X <=> """
+        case Add(x, Add(y, BNot(z))) | Add(Add(x, y), BNot(z)) if x == z:
+            """add.bnot: X + Y + ~X <=> 1111 + Y"""
             return Add(BValue(mask, width), y)
         case Add(BValue(a), Add(BValue(b), x)):
             """add.add: A + (B + X) <=> (A + B) + X"""

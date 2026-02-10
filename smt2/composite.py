@@ -298,6 +298,10 @@ class Eq[S: BaseTerm](CTerm):
                     CValue(a >> rwidth == b),
                     Eq(BValue(a & (1 << rwidth) - 1, rwidth), Concat((*rest,))),
                 )
+            case Eq(Concat([*rest0, x]), Concat([*rest1, y])) if (
+                x == y and len(rest0) > 0 and (len(rest1) > 0)
+            ):
+                return Eq(Concat((*rest0,)), Concat((*rest1,)))
             case Eq(BValue() as z, Select(Store(AValue(d), lower, upper), key)) if (
                 not upper
             ):
@@ -940,6 +944,8 @@ class Add(BinaryOp):
             case Add(x, BNot(y)) if x == y:
                 return BValue(mask, width)
             case Add(x, Add(y, BNot(z))) if x == z:
+                return Add(BValue(mask, width), y)
+            case Add(Add(x, y), BNot(z)) if x == z:
                 return Add(BValue(mask, width), y)
             case Add(BValue(a), Add(BValue(b), x)):
                 return Add(BValue((a + b) % modulus, width), x)
