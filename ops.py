@@ -22,6 +22,7 @@ from smt import (
     overflow_safe,
 )
 from state import (
+    AbstractCallError,
     Call,
     ControlFlow,
     DelegateCall,
@@ -755,6 +756,9 @@ def _call_common(
     delegate: bool,
 ) -> ControlFlow:
     address = _address.into(Uint160)
+    if address.reveal() is None and s.require_concrete_calls:
+        raise AbstractCallError
+
     calldata = s.memory.slice(argsOffset, argsSize)
 
     substates = list[State]()
@@ -1046,6 +1050,7 @@ def _descend_substate(
         trace=state.trace + ["0x" + address.to_bytes(20).hex()],
         changed=state.changed if not static else None,
         skip_self_calls=state.skip_self_calls,
+        require_concrete_calls=state.require_concrete_calls,
     )
     substate.transfer(transaction.caller, transaction.address, transfer_value)
 

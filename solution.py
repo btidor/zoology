@@ -21,7 +21,7 @@ from smt import (
     get_symbols,
 )
 from snapshot import PLAYER, PROXY
-from state import State, Termination
+from state import AbstractCallError, State, Termination
 from universal import universal_transaction
 
 
@@ -64,15 +64,16 @@ class Validator:
             contracts={},
             balances=Array[Uint160, Uint256]("BALANCE"),
             solver=copy.deepcopy(previous.solver),
+            # TODO: do we need these? why?
             mystery_proxy=PROXY,
             mystery_size=previous.mystery_size,
             gas_count=0,
-            # ASSUMPTION: when executing validateInstance(...), we only call
-            # into contracts defined at the outset, and no contract calls
-            # itself.
-            skip_self_calls=True,
+            require_concrete_calls=True,
         )
 
+        # ASSUMPTION: when executing validateInstance(...), no contract calls a
+        # concrete address that (a) does not exist at the outset and is created
+        # later, or (b) is later SELFDESTRUCTed.
         for reference in previous.contracts.values():
             assert (a := reference.address.reveal()) is not None
             start = start.with_contract(
@@ -86,25 +87,30 @@ class Validator:
             )
 
         predicates = list[Constraint]()
-        for end in universal_transaction(start, check=False, prints=prints):
-            assert isinstance(end.pc, Termination)
+        try:
+            for end in universal_transaction(start, check=False, prints=prints):
+                assert isinstance(end.pc, Termination)
 
-            # This logic needs to match State.constrain(). We don't need to
-            # worry about narrowing because SHA3 is not invoked (see check
-            # below).
-            b: Uint256 = end.pc.returndata.slice(Uint256(0), Uint256(32)).bigvector()
-            predicates.append(end.solver.constraint & (b != Uint256(0)))
+                # This logic needs to match State.constrain(). We don't need to
+                # worry about narrowing because SHA3 is not invoked (see check
+                # below).
+                b: Uint256 = end.pc.returndata.slice(
+                    Uint256(0), Uint256(32)
+                ).bigvector()
+                predicates.append(end.solver.constraint & (b != Uint256(0)))
 
-            if len(end.contracts) > len(previous.contracts):
-                # We can't handle validators that create contracts. That would
-                # be pretty strange, though.
-                raise NotImplementedError
+                if len(end.contracts) > len(previous.contracts):
+                    # We can't handle validators that create contracts. That would
+                    # be pretty strange, though.
+                    raise NotImplementedError
 
-            if end.sha3.free or end.sha3.symbolic:
-                # We can't currently handle feeding the global SHA3 instance
-                # into the validator. Fall back to running validateInstance with
-                # concrete inputs at every step.
-                return
+                if end.sha3.free or end.sha3.symbolic:
+                    # We can't currently handle feeding the global SHA3 instance
+                    # into the validator. Fall back to running validateInstance with
+                    # concrete inputs at every step.
+                    return
+        except AbstractCallError:
+            return
 
         assert predicates
         constraint = reduce(lambda p, q: p | q, predicates, Constraint(False))

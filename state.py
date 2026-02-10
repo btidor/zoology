@@ -102,10 +102,15 @@ class State:
     # transfers raise an exception.
     changed: bool | None = False
 
-    # We want to raise an exception if a contract tries to call itself during
-    # the validate function (i.e. with fully symbolic state), since this usually
-    # indicates that the solver is entering an infinite loop.
+    # Skip cases where a contract tries to call itself. When executing with
+    # symbolic state, this usually indicates that the solver is entering an
+    # infinite loop. Since this is unsound, do not use in the main analysis.
     skip_self_calls: bool = False
+
+    # Raise an AbstractCallError if a contract tries to call a symbolic address.
+    # This is used when simulating validateInstance(...) with fully-symbolic
+    # state.
+    require_concrete_calls: bool = False
 
     def px(self) -> str:
         """Return a human-readable version of the path."""
@@ -445,3 +450,7 @@ class Unreachable:
 
     def __deepcopy__(self, memo: Any) -> Self:
         return self
+
+
+class AbstractCallError(RuntimeError):
+    """Raised when require_concrete_calls fails."""

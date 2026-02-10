@@ -264,15 +264,15 @@ def test_motorbike() -> None:
     check_level(25, fixture, False)
 
 
-# def test_double_entry_point() -> None:
-#     # Nontraditional solution: attempting to invoke a method on an EOA address
-#     # causes a revert, even inside a try/catch block:
-#     # https://github.com/ethereum/solidity/issues/12725
-#     fixture = [
-#         "To 0x01a11621db21dd3eb323ada87bbb1d0d8a099544:",
-#         "    9e927c68 000000000000000000000000ffffffffffffffffffffffffffffffffffffffff",
-#     ]
-#     check_level(26, fixture)
+def test_double_entry_point() -> None:
+    # Nontraditional solution: attempting to invoke a method on an EOA address
+    # causes a revert, even inside a try/catch block:
+    # https://github.com/ethereum/solidity/issues/12725
+    fixture = [
+        "To 0x01a11621db21dd3eb323ada87bbb1d0d8a099544:",
+        "    9e927c68 000000000000000000000000ffffffffffffffffffffffffffffffffffffffff",
+    ]
+    check_level(26, fixture, False)
 
 
 def test_good_samaritan() -> None:
