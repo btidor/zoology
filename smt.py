@@ -12,8 +12,10 @@ from smt2.composite import (
     ASymbol,
     And,
     BSymbol,
+    BTerm,
     BValue,
     CSymbol,
+    CTerm,
     CValue,
     Eq,
     Ite,
@@ -73,9 +75,7 @@ class Solver:
             match queue.pop(0):
                 case And(a, b):
                     queue.extend((a, b))
-                case Eq(CValue() as a, CValue() as b) | Eq(
-                    BValue() as a, BValue() as b
-                ):
+                case Eq(CTerm() as a, CTerm() as b) | Eq(BTerm() as a, BTerm() as b):
                     assert b not in self._replace.terms
                     self._replace.terms[b] = a
                 case Ult(b, BValue(x)):
