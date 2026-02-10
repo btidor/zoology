@@ -2081,6 +2081,10 @@ class Store(ATerm):
                     return
         if isinstance(key, BValue):
             k = key.value
+            if isinstance(self.base, AValue) and self.base.default == value:
+                if k in self.lower:
+                    del self.lower[k]
+                return
             if k in self.lower:
                 self.count -= self.lower[k].count + 1
             self.lower[k] = value
@@ -2095,7 +2099,7 @@ class Store(ATerm):
         if ctx.pretty:
             ctx.write(b"{\n  ")
             self.base.dump(ctx)
-            for k, v in self.lower.items():
+            for k, v in sorted(self.lower.items()):
                 ctx.write(b"\n  " + hex(k).encode())
                 ctx.write(b" -> ")
                 v.dump(ctx)
