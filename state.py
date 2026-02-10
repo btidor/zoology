@@ -219,9 +219,11 @@ class State:
 
     def update(self, constraint: Constraint, trace: str | None = None) -> None:
         """Add a constraint to the solver and re-simplify state."""
-        if constraint.reveal() is True:
+        if constraint.reveal() is not None:
+            self.solver.add(constraint)
             return
-        self.solver.add(constraint)
+
+        self.solver.add_for_replace(constraint)
         if trace is not None:
             self.trace.append(trace)
         self.stack = [self.solver.replace(i) for i in self.stack]

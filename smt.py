@@ -52,7 +52,7 @@ class Solver:
     constraint: Constraint
     _minmax: dict[BaseTerm, tuple[int, int]]
     _last_check: bool
-    _replace: ReplaceContext | Constraint | None
+    _replace: ReplaceContext | None
 
     def __init__(self) -> None:
         self.constraint = Constraint(True)
@@ -61,35 +61,39 @@ class Solver:
 
     def add(self, assertion: Constraint, /) -> None:
         self._last_check = False
-        self._replace = assertion
-        if assertion.reveal() is True:
-            return
+        self._replace = None
         self.constraint &= assertion
+
+    def add_for_replace(self, assertion: Constraint, /) -> None:
+        self._last_check = False
+        self._replace = ReplaceContext()
+        queue = [assertion._term]  # pyright: ignore[reportPrivateUsage]
+        self._replace = ReplaceContext()
+        while queue:
+            match queue.pop(0):
+                case And(a, b):
+                    queue.extend((a, b))
+                case Eq(CValue() as a, CValue() as b) | Eq(
+                    BValue() as a, BValue() as b
+                ):
+                    assert b not in self._replace.terms
+                    self._replace.terms[b] = a
+                case Ult(b, BValue(x)):
+                    assert b not in self._replace.terms
+                    if b.max > x - 1:
+                        self._replace.terms[b] = b.realcopy(b.min, x - 1)
+                case Not(Ult(b, BValue(x))):
+                    assert b not in self._replace.terms
+                    if b.min < x:
+                        self._replace.terms[b] = b.realcopy(x, b.max)
+                case Not(inv):
+                    self._replace.terms[inv] = CValue(False)
+                case item:
+                    self._replace.terms[item] = CValue(True)
+        self.constraint = self.constraint.replace(self._replace) & assertion
 
     def replace[S: Symbolic](self, term: S, /) -> S:
         assert self._replace is not None, "solver is not ready for replace"
-        if isinstance(self._replace, Constraint):
-            queue = [self._replace._term]  # pyright: ignore[reportPrivateUsage]
-            self._replace = ReplaceContext()
-            while queue:
-                match queue.pop(0):
-                    case And(a, b):
-                        queue.extend((a, b))
-                    case Eq(a, b):  # pyright: ignore[reportUnknownVariableType]
-                        assert b not in self._replace.terms
-                        self._replace.terms[b] = a
-                    case Ult(b, BValue(x)):
-                        assert b not in self._replace.terms
-                        if b.max > x - 1:
-                            self._replace.terms[b] = b.realcopy(b.min, x - 1)
-                    case Not(Ult(b, BValue(x))):
-                        assert b not in self._replace.terms
-                        if b.min < x:
-                            self._replace.terms[b] = b.realcopy(x, b.max)
-                    case Not(inv):
-                        self._replace.terms[inv] = CValue(False)
-                    case item:
-                        self._replace.terms[item] = CValue(True)
         return term.replace(self._replace)
 
     def dump(self) -> None:
