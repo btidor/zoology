@@ -92,6 +92,18 @@ class Solver:
                         self._replace.terms[item] = CValue(True)
         return term.replace(self._replace)
 
+    def dump(self) -> None:
+        ctx = DumpContext(pretty=True)
+        queue = [self.constraint._term]  # pyright: ignore[reportPrivateUsage]
+        while queue:
+            match queue.pop(0):
+                case And(a, b):
+                    queue.extend((a, b))
+                case item:
+                    ctx.write(b"\n* ")
+                    item.dump(ctx)
+        print(ctx.out.decode())
+
     def check(self, *assumptions: Constraint) -> bool:
         global checks, last_solver
         checks += 1
