@@ -21,6 +21,7 @@ from smt2.composite import (
     Ite,
     Not,
     Select,
+    Store,
     Ult,
 )
 from smt2.theory_core import BaseTerm, DumpContext, ReplaceContext
@@ -70,11 +71,22 @@ class Solver:
         self._last_check = False
         self._replace = ReplaceContext()
         queue = [assertion._term]  # pyright: ignore[reportPrivateUsage]
-        self._replace = ReplaceContext()
+        # TODO: do we need to replace within sibling terms?
         while queue:
             match queue.pop(0):
                 case And(a, b):
                     queue.extend((a, b))
+                case Eq(CTerm() as v, Select(ASymbol() as a, k)) | Eq(
+                    Select(ASymbol() as a, k), CTerm() as v
+                ):
+                    assert a not in self._replace.terms
+                    self._replace.terms[a] = Store(a).set(k, v)
+                case Eq(CTerm() as v, Select(Store() as a, k)) | Eq(
+                    Select(Store() as a, k), CTerm() as v
+                ):
+                    assert a not in self._replace.terms
+                    a.freeze = True
+                    self._replace.terms[a] = a.set(k, v)
                 case Eq(CTerm() as a, CTerm() as b) | Eq(BTerm() as a, BTerm() as b):
                     assert b not in self._replace.terms
                     self._replace.terms[b] = a
