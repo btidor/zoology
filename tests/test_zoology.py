@@ -5,12 +5,18 @@ from solution import Validator
 from zoology import search, starting_sequence
 
 
-def check_level(i: int, fixture: list[str]) -> None:
+def check_level(i: int, fixture: list[str], succinct: bool) -> None:
     factory = LEVEL_FACTORIES[i]
     contracts = snapshot_contracts(factory)
 
     beginning = starting_sequence(contracts, factory)
     validator = Validator(beginning)
+    if succinct:
+        assert validator.constraint is not None, "expected succinct validator"
+        if validator.constraint.reveal() is not None:
+            raise ValueError(f"degenerate validator: {validator.constraint}")
+    else:
+        assert validator.constraint is None, "expected non-succinct validator"
     if not (solution := validator.check(beginning)):
         solution = search(beginning, validator, depth=10)
         assert solution, "search failed"
@@ -24,7 +30,7 @@ def test_hello() -> None:
         + "000000000000000000000000000000000000000000000000000000000000000a"
         + "65746865726e61757430"
     ]
-    check_level(0, fixture)
+    check_level(0, fixture, True)
 
 
 def test_fallback() -> None:
@@ -33,14 +39,14 @@ def test_fallback() -> None:
         "-       \tvalue: 1",
         "3ccfd60b",
     ]
-    check_level(1, fixture)
+    check_level(1, fixture, True)
 
 
 def test_fallout() -> None:
     fixture = [
         "6fab5ddf",
     ]
-    check_level(2, fixture)
+    check_level(2, fixture, True)
 
 
 def test_coinflip() -> None:
@@ -56,14 +62,14 @@ def test_coinflip() -> None:
         "1d263f67 0000000000000000000000000000000000000000000000000000000000000000",
         "1d263f67 0000000000000000000000000000000000000000000000000000000000000000",
     ]
-    check_level(3, fixture)
+    check_level(3, fixture, True)
 
 
 def test_telephone() -> None:
     fixture = [
         "a6f9dae1 000000000000000000000000cacacacacacacacacacacacacacacacacacacaca\tvia proxy",
     ]
-    check_level(4, fixture)
+    check_level(4, fixture, True)
 
 
 def test_token() -> None:
@@ -74,28 +80,28 @@ def test_token() -> None:
     fixture = [
         "a9059cbb 000000000000000000000000ffffffffffffffffffffffffffffffffffffffff0000000000000000000000000000000000000000000000000000000000000015",
     ]
-    check_level(5, fixture)
+    check_level(5, fixture, True)
 
 
 def test_delegation() -> None:
     fixture = [
         "dd365b8b",
     ]
-    check_level(6, fixture)
+    check_level(6, fixture, True)
 
 
 def test_force() -> None:
     fixture = [
         "SELFDESTRUCT\tvalue: 1",
     ]
-    check_level(7, fixture)
+    check_level(7, fixture, True)
 
 
 def test_vault() -> None:
     fixture = [
         "ec9b5b3a 412076657279207374726f6e67207365637265742070617373776f7264203a29",
     ]
-    check_level(8, fixture)
+    check_level(8, fixture, True)
 
 
 def test_king() -> None:
@@ -105,7 +111,7 @@ def test_king() -> None:
         " -> Proxy CALL -       ",
         "    REVERT -",
     ]
-    check_level(9, fixture)
+    check_level(9, fixture, False)
 
 
 def test_reentrance() -> None:
@@ -120,7 +126,7 @@ def test_reentrance() -> None:
         "        RETURN -       ",
         "    RETURN -",
     ]
-    check_level(10, fixture)
+    check_level(10, fixture, True)
 
 
 def test_elevator() -> None:
@@ -131,21 +137,21 @@ def test_elevator() -> None:
         " -> Proxy CALL 5f9a4bca 0000000000000000000000000000000000000000000000000000000000000000",
         "    RETURN 0000000000000000000000000000000000000000000000000000000000000001",
     ]
-    check_level(11, fixture)
+    check_level(11, fixture, True)
 
 
 def test_privacy() -> None:
     fixture = [
         "e1afb08c 9ee15dc717f734f5a16e8e0ce75e036900000000000000000000000000000000",
     ]
-    check_level(12, fixture)
+    check_level(12, fixture, True)
 
 
 def test_gatekeeper_one() -> None:
     fixture = [
         "3370204e 000000010000caca000000000000000000000000000000000000000000000000\tvia proxy",
     ]
-    check_level(13, fixture)
+    check_level(13, fixture, True)
 
 
 def test_gatekeeper_two() -> None:
@@ -153,7 +159,7 @@ def test_gatekeeper_two() -> None:
         "Proxy CODESIZE 0x0 (via constructor)",
         "3370204e 2433b6aeb6cc3764000000000000000000000000000000000000000000000000\tvia proxy",
     ]
-    check_level(14, fixture)
+    check_level(14, fixture, True)
 
 
 def test_naughtcoin() -> None:
@@ -164,7 +170,7 @@ def test_naughtcoin() -> None:
         + "0000000000000000000000002000000000000000000000000000000000000000"
         + "00000000000000000000000000000000000000000000d3c21bcecceda1000000",
     ]
-    check_level(15, fixture)
+    check_level(15, fixture, True)
 
 
 def test_preservation() -> None:
@@ -175,7 +181,7 @@ def test_preservation() -> None:
         "    RETURN 00",
         "      0x2 -> 0xffffffffffffffffffffffffcacacacacacacacacacacacacacacacacacacaca",
     ]
-    check_level(16, fixture)
+    check_level(16, fixture, True)
 
 
 def test_recovery() -> None:
@@ -183,7 +189,7 @@ def test_recovery() -> None:
         "To 0xfab8648a23eebdd484c15aaeebba94e17ac78129:",
         "    00f55d9d 0000000000000000000000000000000000000000000000000000000000000000",
     ]
-    check_level(17, fixture)
+    check_level(17, fixture, True)
 
 
 def test_magic_number() -> None:
@@ -194,7 +200,7 @@ def test_magic_number() -> None:
         " -> Proxy CALL 650500c1",
         "    RETURN 000000000000000000000000000000000000000000000000000000000000002a",
     ]
-    check_level(18, fixture)
+    check_level(18, fixture, False)
 
 
 def test_alien_codex() -> None:
@@ -204,7 +210,7 @@ def test_alien_codex() -> None:
         "0339f300 4ef1d2ad89edf8c4d91132028e8195cdf30bb4b5053d4f8cd260341d4805f30a"
         + "000000000000000000000001cacacacacacacacacacacacacacacacacacacaca",
     ]
-    check_level(19, fixture)
+    check_level(19, fixture, True)
 
 
 def test_denial() -> None:
@@ -214,7 +220,7 @@ def test_denial() -> None:
         " -> Proxy CALL -       \tvalue: 10000000000000",
         "    CONSUME ALL GAS",
     ]
-    check_level(20, fixture)
+    check_level(20, fixture, False)
 
 
 def test_shop() -> None:
@@ -225,7 +231,7 @@ def test_shop() -> None:
         " -> Proxy CALL a035b1fe",
         "    RETURN 0000000000000000000000000000000000000000000000000000000000000000",
     ]
-    check_level(21, fixture)
+    check_level(21, fixture, True)
 
 
 # def test_dex() -> None:
@@ -255,7 +261,7 @@ def test_motorbike() -> None:
         " -> Proxy DELEGATECALL 60",
         "    SELFDESTRUCT",
     ]
-    check_level(25, fixture)
+    check_level(25, fixture, False)
 
 
 # def test_double_entry_point() -> None:
@@ -277,7 +283,7 @@ def test_good_samaritan() -> None:
         " -> Proxy CALL 98d078b4 00000000000000000000000000000000000000000000000000000000000f4240",
         "    RETURN -",
     ]
-    check_level(27, fixture)
+    check_level(27, fixture, False)
 
 
 def test_gatekeeper_three() -> None:
@@ -290,7 +296,7 @@ def test_gatekeeper_three() -> None:
         " -> Proxy CALL -       \tvalue: 1000000000000000",
         "    REVERT -",
     ]
-    check_level(28, fixture)
+    check_level(28, fixture, True)
 
 
 def test_switch() -> None:
@@ -301,7 +307,7 @@ def test_switch() -> None:
         + "20606e1500000000000000000000000000000000000000000000000000000000"
         + "0000000476227e12"
     ]
-    check_level(29, fixture)
+    check_level(29, fixture, True)
 
 
 def test_higher_order() -> None:
@@ -309,7 +315,7 @@ def test_higher_order() -> None:
         "211c85ab 8000000000000000000000000000000000000000000000000000000000000000",
         "5b3e8fe7",
     ]
-    check_level(30, fixture)
+    check_level(30, fixture, True)
 
 
 # def test_stake() -> None:
