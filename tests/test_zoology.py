@@ -78,7 +78,8 @@ def test_token() -> None:
     # address is arbitrary, and our solver sometimes produces it by adding 1 to
     # the player address.
     fixture = [
-        "a9059cbb 000000000000000000000000ffffffffffffffffffffffffffffffffffffffff0000000000000000000000000000000000000000000000000000000000000015",
+        "a9059cbb 000000000000000000000000478f3476358eb166cb7ade4666d04fbddb56c406"
+        + "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
     ]
     check_level(5, fixture, True)
 
@@ -109,7 +110,7 @@ def test_king() -> None:
         "-       \tvalue: 1125899906842623\tvia proxy",
         "validateInstance(...)",
         " -> Proxy CALL -       ",
-        "    REVERT -",
+        "    REVERT 00",
     ]
     check_level(9, fixture, False)
 
@@ -117,12 +118,12 @@ def test_king() -> None:
 def test_reentrance() -> None:
     fixture = [
         "00362a95 000000000000000000000000c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0\tvalue: 1125899906842623",
-        "2e1a7d4d 0000000000000000000000000000000000000000000000000003ebffffffffff\tvia proxy",
-        " -> Proxy CALL -       \tvalue: 1103909674287103",
+        "2e1a7d4d 0000000000000000000000000000000000000000000000000003ffffffffffff\tvia proxy",
+        " -> Proxy CALL -       \tvalue: 1125899906842623",
         "     -> To 0x79cf5bd9e06f09ace1ade01aedeac5c979b77d6c:",
-        "        CALL 2e1a7d4d 0000000000000000000000000000000000000000000000000003a17ea4c68000",
-        "         -> Proxy CALL -       \tvalue: 1021990232555520",
-        "            RETURN 00",
+        "        CALL 2e1a7d4d 00000000000000000000000000000000000000000000000000038d7ea4c68000",
+        "         -> Proxy CALL -       \tvalue: 1000000000000000",
+        "            RETURN -       ",
         "        RETURN -       ",
         "    RETURN -",
     ]
@@ -164,10 +165,10 @@ def test_gatekeeper_two() -> None:
 
 def test_naughtcoin() -> None:
     fixture = [
-        "39509351 000000000000000000000000cacacacacacacacacacacacacacacacacacacaca"
+        "095ea7b3 000000000000000000000000cacacacacacacacacacacacacacacacacacacaca"
         + "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
         "23b872dd 000000000000000000000000cacacacacacacacacacacacacacacacacacacaca"
-        + "0000000000000000000000002000000000000000000000000000000000000000"
+        + "0000000000000000000000008000000000000000000000000000000000000001"
         + "00000000000000000000000000000000000000000000d3c21bcecceda1000000",
     ]
     check_level(15, fixture, True)
@@ -175,7 +176,7 @@ def test_naughtcoin() -> None:
 
 def test_preservation() -> None:
     fixture = [
-        "5bda8fa4 000000000000000000000000c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0",
+        "f1e02620 000000000000000000000000c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0",
         "f1e02620 0000000000000000000000000000000000000000000000000000000000000000",
         " -> Proxy DELEGATECALL 3beb26c4 0000000000000000000000000000000000000000000000000000000000000000",
         "    RETURN 00",
@@ -187,7 +188,7 @@ def test_preservation() -> None:
 def test_recovery() -> None:
     fixture = [
         "To 0xfab8648a23eebdd484c15aaeebba94e17ac78129:",
-        "    00f55d9d 0000000000000000000000000000000000000000000000000000000000000000",
+        "    00f55d9d 000000000000000000000000cacacacacacacacacacacacacacacacacacacacb",
     ]
     check_level(17, fixture, True)
 
@@ -227,9 +228,9 @@ def test_shop() -> None:
     fixture = [
         "a6f2ae3a\tvia proxy",
         " -> Proxy CALL a035b1fe",
-        "    RETURN 8000000000000000000000000000000000000000000000000000000000000000",
+        "    RETURN 8000000000000000000000000000000000000000000000000000000000000033",
         " -> Proxy CALL a035b1fe",
-        "    RETURN 0000000000000000000000000000000000000000000000000000000000000000",
+        "    RETURN 0000000000000000000000000000000000000000000000000000000000000033",
     ]
     check_level(21, fixture, True)
 
@@ -257,8 +258,8 @@ def test_motorbike() -> None:
         "    4f1ef286 ffffffffffffffffffffffffc0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0"
         + "0000000000000000000000000000000000000000000000000000000000000040"
         + "0000000000000000000000000000000000000000000000000000000000000001"
-        + "60",
-        " -> Proxy DELEGATECALL 60",
+        + "00",
+        " -> Proxy DELEGATECALL 00",
         "    SELFDESTRUCT",
     ]
     check_level(25, fixture, False)
@@ -270,7 +271,7 @@ def test_double_entry_point() -> None:
     # https://github.com/ethereum/solidity/issues/12725
     fixture = [
         "To 0x01a11621db21dd3eb323ada87bbb1d0d8a099544:",
-        "    9e927c68 000000000000000000000000ffffffffffffffffffffffffffffffffffffffff",
+        "    9e927c68 0000000000000000000000000000000000000000000000000000000000000001",
     ]
     check_level(26, fixture, False)
 
@@ -303,7 +304,7 @@ def test_switch() -> None:
     fixture = [
         "30c13ade "
         + "0000000000000000000000000000000000000000000000000000000000000044"
-        + "496949c000000000444444000065650000000000000000000000000000000044"
+        + "04a45eba000000005eba44444444444444444444444444444444444400444444"
         + "20606e1500000000000000000000000000000000000000000000000000000000"
         + "0000000476227e12"
     ]
@@ -312,7 +313,7 @@ def test_switch() -> None:
 
 def test_higher_order() -> None:
     fixture = [
-        "211c85ab 8000000000000000000000000000000000000000000000000000000000000000",
+        "211c85ab 80000000000000000000000000000000000000000000000000000000000000ff",
         "5b3e8fe7",
     ]
     check_level(30, fixture, True)
