@@ -127,7 +127,7 @@ class Solver:
         assert self._replace is not None, "solver is not ready for replace"
         return term.replace(self._replace)
 
-    def dump(self) -> None:
+    def pretty(self) -> str:
         ctx = DumpContext(pretty=True)
         queue = [self.constraint._term]  # pyright: ignore[reportPrivateUsage]
         while queue:
@@ -137,7 +137,7 @@ class Solver:
                 case item:
                     ctx.write(b"\n* ")
                     item.dump(ctx)
-        print(ctx.out.decode())
+        return ctx.out.decode()
 
     def check(self, *assumptions: Constraint) -> bool:
         global checks, last_solver
