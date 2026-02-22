@@ -76,17 +76,25 @@ class Solver:
             match queue.pop(0):
                 case And(a, b):
                     queue.extend((a, b))
-                case Eq(CTerm() as v, Select(ASymbol() as a, k)) | Eq(
-                    Select(ASymbol() as a, k), CTerm() as v
+                case Eq(BTerm() as v, Select(ASymbol() as a, k)) | Eq(
+                    Select(ASymbol() as a, k), BTerm() as v
                 ):
-                    assert a not in self._replace.terms
-                    self._replace.terms[a] = Store(a).set(k, v)
-                case Eq(CTerm() as v, Select(Store() as a, k)) | Eq(
-                    Select(Store() as a, k), CTerm() as v
+                    if a in self._replace.terms:
+                        z = self._replace.terms[a]
+                        assert isinstance(z, Store)
+                    else:
+                        z = Store(a)
+                    self._replace.terms[a] = z.set(k, v)
+                case Eq(BTerm() as v, Select(Store() as a, k)) | Eq(
+                    Select(Store() as a, k), BTerm() as v
                 ):
-                    assert a not in self._replace.terms
-                    a.freeze = True
-                    self._replace.terms[a] = a.set(k, v)
+                    if a in self._replace.terms:
+                        z = self._replace.terms[a]
+                        assert isinstance(z, Store)
+                    else:
+                        z = a
+                        z.freeze = True
+                    self._replace.terms[a] = z.set(k, v)
                 case Eq(CTerm() as a, CTerm() as b) | Eq(BTerm() as a, BTerm() as b):
                     assert b not in self._replace.terms
                     self._replace.terms[b] = a
