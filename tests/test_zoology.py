@@ -123,9 +123,9 @@ def test_reentrance() -> None:
         "     -> To 0x79cf5bd9e06f09ace1ade01aedeac5c979b77d6c:",
         "        CALL 2e1a7d4d 00000000000000000000000000000000000000000000000000038d7ea4c68000",
         "         -> Proxy CALL -       \tvalue: 1000000000000000",
-        "            RETURN -       ",
+        "            RETURN 00",
         "        RETURN -       ",
-        "    RETURN -",
+        "    RETURN 00",
     ]
     check_level(10, fixture, True)
 

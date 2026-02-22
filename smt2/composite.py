@@ -328,6 +328,10 @@ class Eq[S: BaseTerm](CTerm):
                 return CValue(False)
             case Eq(BTerm() as x, BTerm() as y) if y.max < x.min:
                 return CValue(False)
+            case Eq(BTerm() as x, BTerm() as y) if (
+                x in y.exclusions or y in x.exclusions
+            ):
+                return CValue(False)
             case _:
                 return self
 
@@ -388,11 +392,21 @@ class BTerm(BaseTerm):
     width: int = field(init=False)
     min: int = field(init=False, compare=False)
     max: int = field(init=False, compare=False)
+    exclusions: set[BTerm] = field(
+        init=False, compare=False, default_factory=set["BTerm"]
+    )
 
     def sort(self) -> bytes:
         return b"(_ BitVec %d)" % self.width
 
-    def realcopy(self, /, *, min_: int | None = None, max_: int | None = None) -> BTerm:
+    def realcopy(
+        self,
+        /,
+        *,
+        min_: int | None = None,
+        max_: int | None = None,
+        exclude: BTerm | None = None,
+    ) -> BTerm:
         args = list[Any]()
         for name in self.__match_args__:
             if name == "w":
@@ -401,10 +415,13 @@ class BTerm(BaseTerm):
                 args.append(getattr(self, name))
         r = self.__class__(*args, cache=False)
         r.min, r.max = (self.min, self.max)
+        r.exclusions = copy.copy(self.exclusions)
         if min_ is not None:
             r.min = max(r.min, min_)
         if max_ is not None:
             r.max = min(r.max, max_)
+        if exclude is not None:
+            r.exclusions.add(exclude)
         return r
 
 

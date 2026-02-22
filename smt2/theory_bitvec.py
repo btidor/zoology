@@ -9,6 +9,7 @@ See: https://smt-lib.org/logics-all.shtml#QF_BV
 
 from __future__ import annotations
 
+import copy
 from dataclasses import InitVar, dataclass, field
 from functools import reduce
 from typing import Any, ClassVar, Iterable, override
@@ -34,6 +35,9 @@ class BTerm(BaseTerm):
     width: int = field(init=False)
     min: int = field(init=False, compare=False)
     max: int = field(init=False, compare=False)
+    exclusions: set[BTerm] = field(
+        init=False, compare=False, default_factory=set["BTerm"]
+    )
 
     def sort(self) -> bytes:
         return b"(_ BitVec %d)" % self.width
@@ -44,6 +48,7 @@ class BTerm(BaseTerm):
         *,
         min_: int | None = None,
         max_: int | None = None,
+        exclude: BTerm | None = None,
     ) -> BTerm:
         args = list[Any]()
         for name in self.__match_args__:
@@ -53,10 +58,13 @@ class BTerm(BaseTerm):
                 args.append(getattr(self, name))
         r = self.__class__(*args, cache=False)
         r.min, r.max = self.min, self.max
+        r.exclusions = copy.copy(self.exclusions)
         if min_ is not None:
             r.min = max(r.min, min_)
         if max_ is not None:
             r.max = min(r.max, max_)
+        if exclude is not None:
+            r.exclusions.add(exclude)
         return r
 
 

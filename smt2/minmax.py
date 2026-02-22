@@ -71,6 +71,9 @@ def constraint_minmax(term: CTerm) -> CTerm:
         case Eq(BTerm() as x, BTerm() as y) if y.max < x.min:
             """eq.gt"""
             return CValue(False)
+        case Eq(BTerm() as x, BTerm() as y) if x in y.exclusions or y in x.exclusions:
+            """eq.exclude"""
+            return CValue(False)
         case Ult(x, y) if x.max < y.min:
             """ult.t"""
             return CValue(True)

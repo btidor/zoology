@@ -98,6 +98,17 @@ class Solver:
                 case Eq(CTerm() as a, CTerm() as b) | Eq(BTerm() as a, BTerm() as b):
                     assert b not in self._replace.terms
                     self._replace.terms[b] = a
+                case Not(Eq(BTerm() as a, BTerm() as b)):
+                    if (p := self._replace.terms.get(a)) is not None:
+                        assert isinstance(p, BTerm)
+                        p.exclusions.add(b)
+                    else:
+                        self._replace.terms[a] = a.realcopy(exclude=b)
+                    if (q := self._replace.terms.get(b)) is not None:
+                        assert isinstance(q, BTerm)
+                        q.exclusions.add(a)
+                    else:
+                        self._replace.terms[b] = b.realcopy(exclude=a)
                 case Ult(b, BValue(x)):
                     assert b not in self._replace.terms
                     if b.max > x - 1:
