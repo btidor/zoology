@@ -38,7 +38,13 @@ class BTerm(BaseTerm):
     def sort(self) -> bytes:
         return b"(_ BitVec %d)" % self.width
 
-    def realcopy(self, min: int, max: int) -> BTerm:
+    def realcopy(
+        self,
+        /,
+        *,
+        min_: int | None = None,
+        max_: int | None = None,
+    ) -> BTerm:
         args = list[Any]()
         for name in self.__match_args__:
             if name == "w":
@@ -46,7 +52,11 @@ class BTerm(BaseTerm):
             else:
                 args.append(getattr(self, name))
         r = self.__class__(*args, cache=False)
-        r.min, r.max = min, max
+        r.min, r.max = self.min, self.max
+        if min_ is not None:
+            r.min = max(r.min, min_)
+        if max_ is not None:
+            r.max = min(r.max, max_)
         return r
 
 

@@ -101,11 +101,11 @@ class Solver:
                 case Ult(b, BValue(x)):
                     assert b not in self._replace.terms
                     if b.max > x - 1:
-                        self._replace.terms[b] = b.realcopy(b.min, x - 1)
+                        self._replace.terms[b] = b.realcopy(max_=x - 1)
                 case Not(Ult(b, BValue(x))):
                     assert b not in self._replace.terms
                     if b.min < x:
-                        self._replace.terms[b] = b.realcopy(x, b.max)
+                        self._replace.terms[b] = b.realcopy(min_=x)
                 case Not(inv):
                     self._replace.terms[inv] = CValue(False)
                 case item:
