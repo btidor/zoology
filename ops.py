@@ -267,6 +267,14 @@ def GASPRICE(s: State) -> Uint256:
 def EXTCODESIZE(s: State, _address: Uint256) -> Uint256:
     """3B - Get size of an account's code."""
     address = _address.into(Uint160)
+    if s.require_concrete_calls:
+        if (a := address.reveal()) is None:
+            raise AbstractCallError
+        else:
+            # Even with a concrete address, we can't know if the size will
+            # change later due to a SELFDESTRUCT.
+            return Uint256(f"CODESIZE@{a.to_bytes(20).hex()}")
+
     result = Uint256(0)
     for contract in s.contracts.values():
         result = (address == contract.address).ite(contract.codesize, result)
@@ -286,6 +294,11 @@ def EXTCODECOPY(
     """3C - Copy an account's code to memory."""
     address = _address.reveal()
     assert address is not None, "EXTCODECOPY requires concrete address"
+
+    if s.require_concrete_calls:
+        # Even with a concrete address, we can't know if the contract will later
+        # be SELFDESTRUCTed.
+        raise AbstractCallError
 
     contract = s.contracts.get(address, None)
     code = contract.program.code if contract else Bytes()
@@ -312,6 +325,11 @@ def EXTCODEHASH(s: State, _address: Uint256) -> Uint256:
     """3F - Get hash of an account's code."""
     address = _address.reveal()
     assert address is not None, "EXTCODEHASH requires concrete address"
+
+    if s.require_concrete_calls:
+        # Even with a concrete address, we can't know if the contract will later
+        # be SELFDESTRUCTed.
+        raise AbstractCallError
 
     contract = s.contracts.get(address, None)
     if contract is None:
@@ -756,8 +774,9 @@ def _call_common(
     delegate: bool,
 ) -> ControlFlow:
     address = _address.into(Uint160)
-    if address.reveal() is None and s.require_concrete_calls:
-        raise AbstractCallError
+    if s.require_concrete_calls:
+        if (a := address.reveal()) is None or a not in s.contracts:
+            raise AbstractCallError
 
     calldata = s.memory.slice(argsOffset, argsSize)
 

@@ -106,9 +106,9 @@ class State:
     # infinite loop. Since this is unsound, do not use in the main analysis.
     skip_self_calls: bool = False
 
-    # Raise an AbstractCallError if a contract tries to call a symbolic address.
-    # This is used when simulating validateInstance(...) with fully-symbolic
-    # state.
+    # Raise an AbstractCallError if a contract tries to access a symbolic
+    # address. This is used when simulating validateInstance(...) with
+    # fully-symbolic state.
     require_concrete_calls: bool = False
 
     def px(self) -> str:

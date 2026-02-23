@@ -64,16 +64,12 @@ class Validator:
             contracts={},
             balances=Array[Uint160, Uint256]("BALANCE"),
             solver=copy.deepcopy(previous.solver),
-            # TODO: do we need these? why?
-            mystery_proxy=PROXY,
-            mystery_size=previous.mystery_size,
             gas_count=0,
             require_concrete_calls=True,
         )
 
         # ASSUMPTION: when executing validateInstance(...), no contract calls a
-        # concrete address that (a) does not exist at the outset and is created
-        # later, or (b) is later SELFDESTRUCTed.
+        # concrete address that currently exists but is later SELFDESTRUCTed.
         for reference in previous.contracts.values():
             assert (a := reference.address.reveal()) is not None
             start = start.with_contract(
@@ -118,9 +114,9 @@ class Validator:
         for name in constants:
             if name.startswith(b"STORAGE@"):
                 continue
-            elif name == b"BALANCE":
+            elif name.startswith(b"CODESIZE@"):
                 continue
-            elif name == b"CODESIZE":
+            elif name == b"BALANCE":
                 continue
             elif name == b"NUMBER":
                 continue
@@ -143,10 +139,14 @@ class Validator:
                     substitutions[name] = sequence.states[-1].contracts[addr].storage
                 else:
                     substitutions[name] = Array[Uint256, Uint256](Uint256(0))
+            elif name.startswith(b"CODESIZE@"):
+                addr = int(name[9:], 16)
+                if addr in sequence.states[-1].contracts:
+                    substitutions[name] = sequence.states[-1].contracts[addr].codesize
+                else:
+                    substitutions[name] = Array[Uint256, Uint256](Uint256(0))
             elif name == b"BALANCE":
                 substitutions[name] = sequence.states[-1].balances
-            elif name == b"CODESIZE":
-                pass
             elif name == b"NUMBER":
                 substitutions[name] = sequence.blocks[len(sequence.states) - 1].number
             else:
