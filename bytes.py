@@ -78,6 +78,16 @@ class Bytes:
             raise ValueError("bigvector requires concrete length")
         return Uint[8 * n].concat(*(self[Uint256(i)] for i in range(n)))
 
+    def peek(self, n: int = 4) -> str:
+        """Reveal the first n bytes as a hexadecimal string."""
+        result = list[str]()
+        for i in range(n):
+            if (r := self[Uint256(i)].reveal()) is None:
+                result.append("??")
+            else:
+                result.append(f"{r:02x}")
+        return "".join(result)
+
     def describe(self, solver: Solver, prefix: int = 4) -> Iterable[str]:
         """Use a model to evaluate this instance as a hexadecimal string."""
         length = solver.evaluate(self.length)

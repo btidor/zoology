@@ -17,6 +17,7 @@ from smt2.composite import (
     CSymbol,
     CTerm,
     CValue,
+    Concat,
     Eq,
     Ite,
     Not,
@@ -76,6 +77,10 @@ class Solver:
             match queue.pop(0):
                 case And(a, b):
                     queue.extend((a, b))
+                case Eq(BValue(x), Concat(terms)):
+                    for a in reversed(terms):
+                        queue.append(Eq(a, BValue(x & ((1 << a.width) - 1), a.width)))
+                        x >>= a.width
                 case Eq(BTerm() as v, Select(ASymbol() as a, k)) | Eq(
                     Select(ASymbol() as a, k), BTerm() as v
                 ):

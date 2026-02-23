@@ -216,7 +216,7 @@ def check_candidate(
     """Check whether a sequence solves the level."""
     global count
     if verbose:
-        vprint(f"- {candidate.pz()} ({candidate.states[-1].cost})\n")
+        vprint(f"- {candidate.pz()}\n")
         vprint(f"  {':'.join(candidate.states[-1].trace)}\n")
     else:
         if count > 0:

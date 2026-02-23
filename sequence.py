@@ -62,7 +62,10 @@ class Sequence:
 
     def pz(self) -> str:
         """Return a human-readable version of the sequence of paths."""
-        return "Pz" + ":".join(map(lambda s: s.px()[2:], self.states[1:]))
+        cost = self.states[-1].cost
+        calldata = self.states[-1].transaction.calldata.slice(Uint256(0), Uint256(4))
+        pz = ":".join(map(lambda s: s.px()[2:], self.states[1:]))
+        return f"{calldata.peek()} / Pz{pz} ({cost})"
 
     def extend(self, state: State) -> Sequence:
         """Add a new transaction to the Sequence."""
