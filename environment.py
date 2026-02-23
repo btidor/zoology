@@ -10,6 +10,7 @@ from bytes import Bytes
 from disassembler import Program, disassemble
 from sha3 import concrete_hash
 from smt import Array, Solver, Uint, Uint8, Uint160, Uint256
+from smt2.theory_core import ReplaceContext
 
 
 @dataclass(frozen=True, slots=True)
@@ -147,3 +148,14 @@ class Transaction:
                 case str():
                     s[k] = v
         return s
+
+    def replace(self, model: ReplaceContext) -> Transaction:
+        """Simplify this instance with the given model."""
+        return Transaction(
+            origin=self.origin.replace(model),
+            caller=self.caller.replace(model),
+            address=self.address.replace(model),
+            callvalue=self.callvalue.replace(model),
+            calldata=self.calldata.replace(model),
+            gasprice=self.gasprice.replace(model),
+        )

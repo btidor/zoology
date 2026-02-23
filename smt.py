@@ -25,7 +25,7 @@ from smt2.composite import (
     Store,
     Ult,
 )
-from smt2.theory_core import BaseTerm, DumpContext, ReplaceContext
+from smt2.theory_core import DumpContext, ReplaceContext
 
 
 Uint8 = Uint[Literal[8]]
@@ -52,25 +52,25 @@ checks = 0
 
 
 class Solver:
-    __slots__ = ("constraint", "_minmax", "_last_check", "_replace")
+    __slots__ = ("constraint", "replace", "_last_check")
+
     constraint: Constraint
-    _minmax: dict[BaseTerm, tuple[int, int]]
+    replace: ReplaceContext | None
     _last_check: bool
-    _replace: ReplaceContext | None
 
     def __init__(self) -> None:
         self.constraint = Constraint(True)
         self._last_check = False
-        self._replace = None
+        self.replace = None
 
     def add(self, assertion: Constraint, /) -> None:
         self._last_check = False
-        self._replace = None
+        self.replace = None
         self.constraint &= assertion
 
     def add_for_replace(self, assertion: Constraint, /) -> None:
         self._last_check = False
-        self._replace = ReplaceContext()
+        self.replace = ReplaceContext()
         queue = [assertion._term]  # pyright: ignore[reportPrivateUsage]
         # TODO: do we need to replace within sibling terms?
         while queue:
@@ -84,53 +84,49 @@ class Solver:
                 case Eq(BTerm() as v, Select(ASymbol() as a, k)) | Eq(
                     Select(ASymbol() as a, k), BTerm() as v
                 ):
-                    if a in self._replace.terms:
-                        z = self._replace.terms[a]
+                    if a in self.replace.terms:
+                        z = self.replace.terms[a]
                         assert isinstance(z, Store)
                     else:
                         z = Store(a)
-                    self._replace.terms[a] = z.set(k, v)
+                    self.replace.terms[a] = z.set(k, v)
                 case Eq(BTerm() as v, Select(Store() as a, k)) | Eq(
                     Select(Store() as a, k), BTerm() as v
                 ):
-                    if a in self._replace.terms:
-                        z = self._replace.terms[a]
+                    if a in self.replace.terms:
+                        z = self.replace.terms[a]
                         assert isinstance(z, Store)
                     else:
                         z = a
                         z.freeze = True
-                    self._replace.terms[a] = z.set(k, v)
+                    self.replace.terms[a] = z.set(k, v)
                 case Eq(CTerm() as a, CTerm() as b) | Eq(BTerm() as a, BTerm() as b):
-                    assert b not in self._replace.terms
-                    self._replace.terms[b] = a
+                    assert b not in self.replace.terms
+                    self.replace.terms[b] = a
                 case Not(Eq(BTerm() as a, BTerm() as b)):
-                    if (p := self._replace.terms.get(a)) is not None:
+                    if (p := self.replace.terms.get(a)) is not None:
                         assert isinstance(p, BTerm)
                         p.exclusions.add(b)
                     else:
-                        self._replace.terms[a] = a.realcopy(exclude=b)
-                    if (q := self._replace.terms.get(b)) is not None:
+                        self.replace.terms[a] = a.realcopy(exclude=b)
+                    if (q := self.replace.terms.get(b)) is not None:
                         assert isinstance(q, BTerm)
                         q.exclusions.add(a)
                     else:
-                        self._replace.terms[b] = b.realcopy(exclude=a)
+                        self.replace.terms[b] = b.realcopy(exclude=a)
                 case Ult(b, BValue(x)):
-                    assert b not in self._replace.terms
+                    assert b not in self.replace.terms
                     if b.max > x - 1:
-                        self._replace.terms[b] = b.realcopy(max_=x - 1)
+                        self.replace.terms[b] = b.realcopy(max_=x - 1)
                 case Not(Ult(b, BValue(x))):
-                    assert b not in self._replace.terms
+                    assert b not in self.replace.terms
                     if b.min < x:
-                        self._replace.terms[b] = b.realcopy(min_=x)
+                        self.replace.terms[b] = b.realcopy(min_=x)
                 case Not(inv):
-                    self._replace.terms[inv] = CValue(False)
+                    self.replace.terms[inv] = CValue(False)
                 case item:
-                    self._replace.terms[item] = CValue(True)
-        self.constraint = self.constraint.replace(self._replace) & assertion
-
-    def replace[S: Symbolic](self, term: S, /) -> S:
-        assert self._replace is not None, "solver is not ready for replace"
-        return term.replace(self._replace)
+                    self.replace.terms[item] = CValue(True)
+        self.constraint = self.constraint.replace(self.replace) & assertion
 
     def pretty(self) -> str:
         ctx = DumpContext(pretty=True)
@@ -148,7 +144,7 @@ class Solver:
         global checks, last_solver
         checks += 1
         self._last_check = False
-        self._replace = None
+        self.replace = None
 
         constraint = reduce(Constraint.__and__, assumptions, self.constraint)
         r = BZLA.check(self, constraint._term)  # pyright: ignore[reportPrivateUsage]

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import copy
 from dataclasses import dataclass, field
 from typing import Any, Callable, Iterable, Self
 
@@ -228,21 +227,15 @@ class State:
             self.solver.add(constraint)
             return
 
-        self.solver.add_for_replace(constraint)
         if trace is not None:
             self.trace.append(trace)
-        self.stack = [self.solver.replace(i) for i in self.stack]
-        self.memory.replace(self.solver)
-        calldata = copy.copy(self.transaction.calldata)
-        calldata.replace(self.solver)
-        self.transaction = Transaction(
-            origin=self.solver.replace(self.transaction.origin),
-            caller=self.solver.replace(self.transaction.caller),
-            address=self.solver.replace(self.transaction.address),
-            callvalue=self.solver.replace(self.transaction.callvalue),
-            calldata=calldata,
-            gasprice=self.solver.replace(self.transaction.gasprice),
-        )
+
+        self.solver.add_for_replace(constraint)
+
+        assert self.solver.replace is not None, "solver is not ready for replace"
+        self.stack = [i.replace(self.solver.replace) for i in self.stack]
+        self.memory = self.memory.replace(self.solver.replace)
+        self.transaction = self.transaction.replace(self.solver.replace)
 
 
 @dataclass(frozen=True, slots=True)

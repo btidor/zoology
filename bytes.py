@@ -6,6 +6,7 @@ import copy
 from typing import Any, ClassVar, Iterable, Self
 
 from smt import Array, Solver, Uint, Uint8, Uint64, Uint256, safe_get
+from smt2.theory_core import ReplaceContext
 
 type BytesWrite = tuple[Uint256, Uint8 | ByteSlice]
 
@@ -120,10 +121,14 @@ class Bytes:
             return self.data
         return _reveal(self)
 
-    def replace(self, solver: Solver) -> None:
-        """Re-simplify this instance with the given solver."""
-        self.length = solver.replace(self.length)
-        self.array = solver.replace(self.array)
+    def replace(self, model: ReplaceContext) -> Bytes:
+        """Simplify this instance with the given model."""
+        b = self.__new__(self.__class__)
+        b.data = self.data
+        b.length = self.length.replace(model)
+        b.check_length = self.check_length
+        b.array = self.array.replace(model)
+        return b
 
 
 class ByteSlice(Bytes):
@@ -159,11 +164,14 @@ class ByteSlice(Bytes):
             return Uint256.concat(*words)
         return super().bigvector()
 
-    def replace(self, solver: Solver) -> None:
-        """Re-simplify this instance with the given solver."""
-        self.inner.replace(solver)
-        self.offset = solver.replace(self.offset)
-        self.length = solver.replace(self.length)
+    def replace(self, model: ReplaceContext) -> ByteSlice:
+        """Simplify this instance with the given model."""
+        b = self.__new__(self.__class__)
+        b.inner = self.inner.replace(model)
+        b.offset = self.offset.replace(model)
+        b.length = self.length.replace(model)
+        b.data = self.data
+        return b
 
 
 class Memory:
@@ -294,13 +302,16 @@ class Memory:
         """Unwrap this instance to bytes."""
         return _reveal(self)
 
-    def replace(self, solver: Solver) -> None:
-        """Re-simplify this instance with the given solver."""
-        self.length = solver.replace(self.length)
-        self.array = solver.replace(self.array)
-        self.writes = [_replace_byteswrite(solver, i) for i in self.writes]
+    def replace(self, model: ReplaceContext) -> Memory:
+        """Simplify this instance with the given model."""
+        m = self.__new__(self.__class__)
+        m.length = self.length.replace(model)
+        m.array = self.array.replace(model)
+        m.writes = [(a.replace(model), b.replace(model)) for (a, b) in self.writes]
+        m.wordcache = dict[int, Uint256]()
         for k, v in self.wordcache.items():
-            self.wordcache[k] = solver.replace(v)
+            m.wordcache[k] = v.replace(model)
+        return m
 
 
 def _reveal(instance: Bytes | Memory) -> bytes | None:
@@ -312,13 +323,3 @@ def _reveal(instance: Bytes | Memory) -> bytes | None:
             return None
         data.append(v)
     return bytes(data)
-
-
-def _replace_byteswrite(solver: Solver, write: BytesWrite) -> BytesWrite:
-    at, data = write
-    at = solver.replace(at)
-    if isinstance(data, Uint):
-        data = solver.replace(data)
-    else:
-        data.replace(solver)
-    return at, data
