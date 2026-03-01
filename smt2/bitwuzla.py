@@ -93,9 +93,10 @@ class BitwuzlaManager:
                 assert isinstance(value, BitwuzlaTerm)
                 return self._bzla.mk_const_array(sort, value)
 
-    def check(self, solver: Any, term: Any) -> bool:
+    def check(self, solver: Any, *terms: Any) -> bool:
         self.last_solver = solver
-        self._bzla.assume_formula(term.bzla)
+        for term in terms:
+            self._bzla.assume_formula(term.bzla)
         match self._bzla.check_sat():
             case Result.SAT:
                 return True

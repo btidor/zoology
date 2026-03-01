@@ -52,25 +52,25 @@ checks = 0
 
 
 class Solver:
-    __slots__ = ("constraint", "replace", "_last_check")
+    __slots__ = ("replace", "_constraints", "_last_check")
 
-    constraint: Constraint
     replace: ReplaceContext | None
+    _constraints: set[CTerm]
     _last_check: bool
 
     def __init__(self) -> None:
-        self.constraint = Constraint(True)
-        self._last_check = False
         self.replace = None
+        self._constraints = set()
+        self._last_check = False
 
     def add(self, assertion: Constraint, /) -> None:
-        self._last_check = False
         self.replace = None
-        self.constraint &= assertion
+        self._constraints.add(assertion._term)  # pyright: ignore[reportPrivateUsage]
+        self._last_check = False
 
     def add_for_replace(self, assertion: Constraint, /) -> None:
-        self._last_check = False
         self.replace = ReplaceContext()
+        self._last_check = False
         queue = [assertion._term]  # pyright: ignore[reportPrivateUsage]
         # TODO: do we need to replace within sibling terms?
         while queue:
@@ -126,29 +126,27 @@ class Solver:
                     self.replace.terms[inv] = CValue(False)
                 case item:
                     self.replace.terms[item] = CValue(True)
-        self.constraint = self.constraint.replace(self.replace) & assertion
-
-    def pretty(self) -> str:
-        ctx = DumpContext(pretty=True)
-        queue = [self.constraint._term]  # pyright: ignore[reportPrivateUsage]
-        while queue:
-            match queue.pop(0):
-                case And(a, b):
-                    queue.extend((a, b))
-                case item:
-                    ctx.write(b"\n* ")
-                    item.dump(ctx)
-        return ctx.out.decode()
+        self._constraints = set(c.replace(self.replace) for c in self._constraints)
+        self._constraints.add(assertion._term)  # pyright: ignore[reportPrivateUsage]
 
     def check(self, *assumptions: Constraint) -> bool:
-        global checks, last_solver
+        global checks
         checks += 1
-        self._last_check = False
         self.replace = None
+        self._last_check = False
 
-        constraint = reduce(Constraint.__and__, assumptions, self.constraint)
-        r = BZLA.check(self, constraint._term)  # pyright: ignore[reportPrivateUsage]
+        terms = set(a._term for a in assumptions)  # pyright: ignore[reportPrivateUsage]
+        terms.update(self._constraints)
+        r = BZLA.check(self, *terms)
         self._last_check = r
+        return r
+
+    @property
+    def constraint(self) -> Constraint:
+        if not self._constraints:
+            return Constraint(True)
+        r = Constraint.__new__(Constraint)
+        r._term = reduce(And, self._constraints)  # pyright: ignore[reportPrivateUsage]
         return r
 
     @overload
@@ -182,6 +180,18 @@ class Solver:
                 for p, q in v.items():
                     d[int(p, 2)] = int(q, 2)
                 return d
+
+    def pretty(self) -> str:
+        ctx = DumpContext(pretty=True)
+        queue = list(self._constraints)
+        while queue:
+            match queue.pop(0):
+                case And(a, b):
+                    queue.extend((a, b))
+                case item:
+                    ctx.write(b"\n* ")
+                    item.dump(ctx)
+        return ctx.out.decode()
 
 
 ZERO = Uint[Literal[8]](0)
