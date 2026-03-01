@@ -223,19 +223,18 @@ class State:
 
     def update(self, constraint: Constraint, trace: str | None = None) -> None:
         """Add a constraint to the solver and re-simplify state."""
+        self.solver.add(constraint)
+
         if constraint.reveal() is not None:
-            self.solver.add(constraint)
             return
 
         if trace is not None:
             self.trace.append(trace)
 
-        self.solver.add_for_replace(constraint)
-
-        assert self.solver.replace is not None, "solver is not ready for replace"
-        self.stack = [i.replace(self.solver.replace) for i in self.stack]
-        self.memory = self.memory.replace(self.solver.replace)
-        self.transaction = self.transaction.replace(self.solver.replace)
+        model = self.solver.replace()
+        self.stack = [i.replace(model) for i in self.stack]
+        self.memory = self.memory.replace(model)
+        self.transaction = self.transaction.replace(model)
 
 
 @dataclass(frozen=True, slots=True)

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from functools import reduce
+from itertools import chain
 from typing import Literal, overload
 
 from smt2 import Array, Constraint, Int, Symbolic, Uint
@@ -52,101 +53,107 @@ checks = 0
 
 
 class Solver:
-    __slots__ = ("replace", "_constraints", "_last_check")
+    __slots__ = ("_committed", "_pending", "_last_check")
 
-    replace: ReplaceContext | None
-    _constraints: set[CTerm]
+    _committed: set[CTerm]
+    _pending: set[CTerm]
     _last_check: bool
 
     def __init__(self) -> None:
-        self.replace = None
-        self._constraints = set()
+        self._committed = set()
+        self._pending = set()
         self._last_check = False
 
     def add(self, assertion: Constraint, /) -> None:
-        self.replace = None
-        self._constraints.add(assertion._term)  # pyright: ignore[reportPrivateUsage]
-        self._last_check = False
-
-    def add_for_replace(self, assertion: Constraint, /) -> None:
-        self.replace = ReplaceContext()
         self._last_check = False
         queue = [assertion._term]  # pyright: ignore[reportPrivateUsage]
-        # TODO: do we need to replace within sibling terms?
         while queue:
             match queue.pop(0):
                 case And(a, b):
                     queue.extend((a, b))
                 case Eq(BValue(x), Concat(terms)):
                     for a in reversed(terms):
-                        queue.append(Eq(a, BValue(x & ((1 << a.width) - 1), a.width)))
+                        self._pending.add(
+                            Eq(a, BValue(x & ((1 << a.width) - 1), a.width))
+                        )
                         x >>= a.width
+                case other:
+                    self._pending.add(other)
+
+    def replace(self) -> ReplaceContext:
+        model = ReplaceContext()
+        self._last_check = False
+        # TODO: do we need to replace within sibling terms?
+        for term in self._pending:
+            match term:
                 case Eq(BTerm() as v, Select(ASymbol() as a, k)) | Eq(
                     Select(ASymbol() as a, k), BTerm() as v
                 ):
-                    if a in self.replace.terms:
-                        z = self.replace.terms[a]
+                    if a in model.terms:
+                        z = model.terms[a]
                         assert isinstance(z, Store)
                     else:
                         z = Store(a)
-                    self.replace.terms[a] = z.set(k, v)
+                    model.terms[a] = z.set(k, v)
                 case Eq(BTerm() as v, Select(Store() as a, k)) | Eq(
                     Select(Store() as a, k), BTerm() as v
                 ):
-                    if a in self.replace.terms:
-                        z = self.replace.terms[a]
+                    if a in model.terms:
+                        z = model.terms[a]
                         assert isinstance(z, Store)
                     else:
                         z = a
                         z.freeze = True
-                    self.replace.terms[a] = z.set(k, v)
+                    model.terms[a] = z.set(k, v)
                 case Eq(CTerm() as a, CTerm() as b) | Eq(BTerm() as a, BTerm() as b):
-                    assert b not in self.replace.terms
-                    self.replace.terms[b] = a
+                    assert b not in model.terms
+                    model.terms[b] = a
                 case Not(Eq(BTerm() as a, BTerm() as b)):
-                    if (p := self.replace.terms.get(a)) is not None:
+                    if (p := model.terms.get(a)) is not None:
                         assert isinstance(p, BTerm)
                         p.exclusions.add(b)
                     else:
-                        self.replace.terms[a] = a.realcopy(exclude=b)
-                    if (q := self.replace.terms.get(b)) is not None:
+                        model.terms[a] = a.realcopy(exclude=b)
+                    if (q := model.terms.get(b)) is not None:
                         assert isinstance(q, BTerm)
                         q.exclusions.add(a)
                     else:
-                        self.replace.terms[b] = b.realcopy(exclude=a)
+                        model.terms[b] = b.realcopy(exclude=a)
                 case Ult(b, BValue(x)):
-                    assert b not in self.replace.terms
+                    assert b not in model.terms
                     if b.max > x - 1:
-                        self.replace.terms[b] = b.realcopy(max_=x - 1)
+                        model.terms[b] = b.realcopy(max_=x - 1)
                 case Not(Ult(b, BValue(x))):
-                    assert b not in self.replace.terms
+                    assert b not in model.terms
                     if b.min < x:
-                        self.replace.terms[b] = b.realcopy(min_=x)
+                        model.terms[b] = b.realcopy(min_=x)
                 case Not(inv):
-                    self.replace.terms[inv] = CValue(False)
+                    model.terms[inv] = CValue(False)
                 case item:
-                    self.replace.terms[item] = CValue(True)
-        self._constraints = set(c.replace(self.replace) for c in self._constraints)
-        self._constraints.add(assertion._term)  # pyright: ignore[reportPrivateUsage]
+                    model.terms[item] = CValue(True)
+        self._committed = set(c.replace(model) for c in self._committed)
+        self._committed.update(self._pending)
+        self._pending.clear()
+        return model
 
     def check(self, *assumptions: Constraint) -> bool:
         global checks
         checks += 1
-        self.replace = None
         self._last_check = False
 
         terms = set(a._term for a in assumptions)  # pyright: ignore[reportPrivateUsage]
-        terms.update(self._constraints)
+        terms.update(self._committed)
+        terms.update(self._pending)
         r = BZLA.check(self, *terms)
         self._last_check = r
         return r
 
     @property
     def constraint(self) -> Constraint:
-        if not self._constraints:
+        if not self._committed and not self._pending:
             return Constraint(True)
         r = Constraint.__new__(Constraint)
-        r._term = reduce(And, self._constraints)  # pyright: ignore[reportPrivateUsage]
+        r._term = reduce(And, chain(self._committed, self._pending))  # pyright: ignore[reportPrivateUsage]
         return r
 
     @overload
@@ -183,7 +190,7 @@ class Solver:
 
     def pretty(self) -> str:
         ctx = DumpContext(pretty=True)
-        queue = list(self._constraints)
+        queue = list(chain(self._committed, self._pending))
         while queue:
             match queue.pop(0):
                 case And(a, b):
