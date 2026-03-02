@@ -807,7 +807,11 @@ def bitvector_yolo(term: BTerm) -> BTerm:
                     return Select(base, key)
 
             up = list((k, v) for k, v, _ in filtered)
-            down = dict((k, v) for k, v in lower.items() if key.min <= k <= key.max)
+            down = dict(
+                (k, v)
+                for k, v in lower.items()
+                if key.min <= k <= key.max and k not in key.exclusions
+            )
             if not up and not down:
                 return Select(base, key)
             return Select(Store(base, down, up), key, recurse=False)

@@ -106,17 +106,23 @@ class Solver:
                         z.freeze = True
                     model.terms[a] = z.set(k, v)
                 case Eq(CTerm() as a, CTerm() as b) | Eq(BTerm() as a, BTerm() as b):
-                    assert b not in model.terms
-                    model.terms[b] = a
+                    if b in model.terms:
+                        pass  # probably a contradiction
+                    else:
+                        model.terms[b] = a
                 case Not(Eq(BTerm() as a, BTerm() as b)):
                     if (p := model.terms.get(a)) is not None:
                         assert isinstance(p, BTerm)
                         p.exclusions.add(b)
+                        if isinstance(b, BValue):
+                            p.exclusions.add(b.value)
                     else:
                         model.terms[a] = a.realcopy(exclude=b)
                     if (q := model.terms.get(b)) is not None:
                         assert isinstance(q, BTerm)
                         q.exclusions.add(a)
+                        if isinstance(a, BValue):
+                            q.exclusions.add(a)
                     else:
                         model.terms[b] = b.realcopy(exclude=a)
                 case Ult(b, BValue(x)):

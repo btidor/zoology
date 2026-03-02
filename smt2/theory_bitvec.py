@@ -35,8 +35,8 @@ class BTerm(BaseTerm):
     width: int = field(init=False)
     min: int = field(init=False, compare=False)
     max: int = field(init=False, compare=False)
-    exclusions: set[BTerm] = field(
-        init=False, compare=False, default_factory=set["BTerm"]
+    exclusions: set[BTerm | int] = field(
+        init=False, compare=False, default_factory=set["BTerm | int"]
     )
 
     def sort(self) -> bytes:
