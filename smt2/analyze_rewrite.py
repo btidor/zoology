@@ -19,17 +19,16 @@ from . import theory_bitvec, theory_core
 from .theory_bitvec import *
 from .theory_core import *
 
-# Run validation on all bitvector widths in the range [1, MAX_WIDTH] and all
-# parameter values in the range [0, MAX_PARAM]. For now, these are set to low
-# values for speed.
-MAX_WIDTH = 8
-MAX_PARAM = 2 * MAX_WIDTH
+# Run validation on all bitvector widths (that we actually use) and all
+# parameter values in the range [0, MAX_PARAM].
+SUPPORTED_WIDTHS = [8, 64, 128, 160, 256]
+MAX_PARAM = max(SUPPORTED_WIDTHS)
 
 # Python ints must be represented as bitvectors also (because we want to perform
 # boolean operations on them). Use a special, extra-large width for this to
-# avoid overflow (must be able to multiply two MAX_WIDTH numbers without making
+# avoid overflow (must be able to multiply two WIDTH-size numbers without making
 # the sign bit set).
-NATIVE_WIDTH = 2 * MAX_WIDTH + 8
+NATIVE_WIDTH = 520
 ZERO = BValue(0, NATIVE_WIDTH)
 
 type Vars = tuple[tuple[str, FieldValue], ...]
@@ -265,7 +264,7 @@ class CaseParser:
                     case [ast.MatchValue(ast.Constant(int() as i))]:
                         # Concrete: BValue(0).
                         assert op.sort == BitVectorSort
-                        for width in range(1, MAX_WIDTH + 1):
+                        for width in SUPPORTED_WIDTHS:
                             yield BValue(i, width), ()
                     case [ast.MatchAs(_, str() as name)]:
                         # Named: Value(a).
@@ -318,7 +317,7 @@ class CaseParser:
                     try:
                         sym = op.cls(*terms)
                         if isinstance(sym, BTerm):
-                            assert sym.width <= MAX_WIDTH
+                            assert sym.width in SUPPORTED_WIDTHS
                         yield sym, tuple(vars)
                     except AssertionError:
                         # This combination of arguments is unconstructable (and
@@ -572,18 +571,15 @@ class BitVectorSort:
         """Create Symbols with the given name, all widths."""
         if name is None:
             name = f"_{randint(0, 2**16)}"
-        for width in range(1, MAX_WIDTH + 1):
+        for width in SUPPORTED_WIDTHS:
             yield BSymbol(name.encode(), width)
 
 
-def variadic_sort(name: str, *prefix: BSymbol) -> Iterable[tuple[BSymbol, ...]]:
+def variadic_sort(name: str) -> Iterable[tuple[BSymbol, ...]]:
     """Create a tuple of Symbols for Concat, all combinations of widths."""
-    yield prefix
-    iname = f"{name}{len(prefix)}"
-    pfxw = reduce(lambda p, q: p + q.width, prefix, 0)
-    for width in range(1, MAX_WIDTH + 1 - pfxw):
-        sym = BSymbol(iname.encode(), width)
-        yield from variadic_sort(name, *prefix, sym)
+    # ASSUMPTION: Concat()s are only created from subterms of width 8.
+    for width in SUPPORTED_WIDTHS:
+        yield tuple(BSymbol(f"{name}{i}".encode(), 8) for i in range(width // 8))
 
 
 class Op:

@@ -19,7 +19,7 @@ from typing import Any, Callable
 from . import rewrite, theory_array, theory_bitvec, theory_core
 from .analyze_minmax import MinMaxCase
 from .analyze_rewrite import RewriteCase
-from .minmax import constraint_minmax, propagate_minmax
+from .minmax import constraint_minmax, minmax_yolo, propagate_minmax
 from .theory_bitvec import BTerm
 from .theory_core import BaseTerm, CTerm
 
@@ -41,6 +41,9 @@ class Compositor:
                 assert isinstance(case.pattern.cls, ast.Name)
                 self.rwcases[case.pattern.cls.id].append(case)
         for case in RewriteCase.from_function(constraint_minmax):
+            assert isinstance(case.pattern.cls, ast.Name)
+            self.rwcases[case.pattern.cls.id].append(case)
+        for case in RewriteCase.from_function(minmax_yolo):
             assert isinstance(case.pattern.cls, ast.Name)
             self.rwcases[case.pattern.cls.id].append(case)
 

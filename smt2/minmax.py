@@ -71,9 +71,6 @@ def constraint_minmax(term: CTerm) -> CTerm:
         case Eq(BTerm() as x, BTerm() as y) if y.max < x.min:
             """eq.gt"""
             return CValue(False)
-        case Eq(BTerm() as x, BTerm() as y) if x in y.exclusions or y in x.exclusions:
-            """eq.exclude"""
-            return CValue(False)
         case Ult(x, y) if x.max < y.min:
             """ult.t"""
             return CValue(True)
@@ -98,6 +95,16 @@ def constraint_minmax(term: CTerm) -> CTerm:
             return CValue(True)
         case Slt(x, y) if y.max <= x.min and y.min >= (1 << (y.width - 1)):
             """slt.nf"""
+            return CValue(False)
+        case _:
+            return term
+
+
+def minmax_yolo(term: CTerm) -> CTerm:
+    """Warning: unverified rewrite rules for minmax."""
+    match term:
+        case Eq(BTerm() as x, BTerm() as y) if x in y.exclusions or y in x.exclusions:
+            """eq.exclude"""
             return CValue(False)
         case _:
             return term
