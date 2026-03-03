@@ -83,6 +83,19 @@ class Block:
             hashes=hashes,
         )
 
+    def replace(self, model: ReplaceContext) -> Block:
+        """Simplify this instance with the given model."""
+        return Block(
+            number=self.number.replace(model),
+            coinbase=self.coinbase.replace(model),
+            timestamp=self.timestamp.replace(model),
+            prevrandao=self.prevrandao.replace(model),
+            gaslimit=self.gaslimit.replace(model),
+            chainid=self.chainid.replace(model),
+            basefee=self.basefee.replace(model),
+            hashes=self.hashes.replace(model),
+        )
+
 
 @dataclass(slots=True)
 class Contract:

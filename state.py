@@ -232,9 +232,14 @@ class State:
             self.trace.append(trace)
 
         model = self.solver.replace()
+
+        self.block = self.block.replace(model)
+        self.transaction = self.transaction.replace(model)
+        self.sha3.update(model)
+
         self.stack = [i.replace(model) for i in self.stack]
         self.memory = self.memory.replace(model)
-        self.transaction = self.transaction.replace(model)
+        # TODO: must replace in *all* state...
 
 
 @dataclass(frozen=True, slots=True)

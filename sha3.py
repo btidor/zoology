@@ -18,6 +18,7 @@ from smt import (
     Uint128,
     Uint256,
 )
+from smt2.theory_core import ReplaceContext
 
 
 def concrete_hash(data: bytes | str) -> Uint256:
@@ -55,6 +56,15 @@ class SHA3:
         result.symbolic = copy.copy(self.symbolic)
         result.concrete = copy.copy(self.concrete)
         return result
+
+    def update(self, model: ReplaceContext) -> None:
+        """Simplify this instance in-place with the given model."""
+        self.free = [(x.replace(model), y.replace(model)) for x, y in self.free]
+        self.symbolic = [(x.replace(model), y.replace(model)) for x, y in self.symbolic]
+        self.concrete = {
+            k: (x.replace(model), y.replace(model))
+            for (k, (x, y)) in self.concrete.items()
+        }
 
     def hash(self, input: Bytes) -> tuple[Uint256, Constraint]:
         """
