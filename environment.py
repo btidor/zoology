@@ -118,6 +118,17 @@ class Contract:
     def __post_init__(self) -> None:
         assert self.address.reveal() is not None, "Contract requires concrete address"
 
+    def replace(self, model: ReplaceContext) -> Contract:
+        """Simplify this instance with the given model."""
+        return Contract(
+            address=self.address.replace(model),
+            storage=self.storage.replace(model),
+            program=self.program,
+            nonce=self.nonce.replace(model),
+            invisible=self.invisible,
+            destructed=self.destructed,
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class Transaction:

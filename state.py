@@ -237,9 +237,18 @@ class State:
         self.transaction = self.transaction.replace(model)
         self.sha3.update(model)
 
+        self.contracts = {k: v.replace(model) for k, v in self.contracts.items()}
+        self.balances = self.balances.replace(model)
+
+        assert isinstance(self.pc, int)
         self.stack = [i.replace(model) for i in self.stack]
         self.memory = self.memory.replace(model)
+        self.latest_return = self.latest_return.replace(model)
         # TODO: must replace in *all* state...
+
+        # FYI: this has one minor bug: if we recreate a term from the cache,
+        # e.g. with BSymbol("NAME") or BValue(0, 256), it will be the original
+        # and won't have updates like min, max and exclude.
 
 
 @dataclass(frozen=True, slots=True)
