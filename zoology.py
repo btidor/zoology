@@ -34,7 +34,11 @@ count = 0
 
 
 def search(
-    beginning: Sequence, validator: Validator, depth: int, verbose: int = 0
+    beginning: Sequence,
+    validator: Validator,
+    depth: int,
+    path: int = 0,
+    verbose: int = 0,
 ) -> Solution | None:
     """Symbolically execute the given level until a solution is found."""
     queue = list[Node]()
@@ -46,6 +50,11 @@ def search(
         while isinstance(state.pc, int):
             if verbose > 2:
                 print(state.program.instructions[state.pc])
+            if path:
+                i = path.bit_length()
+                j = node.state.path.bit_length()
+                if i < j or (path >> (i - j)) != node.state.path:
+                    break
             match step(state):
                 case None:
                     if verbose > 2:
@@ -288,8 +297,16 @@ def handle_level(factory: Uint160, args: argparse.Namespace) -> None:
             assert (code := contract.program.code.reveal()) is not None
             vprint(": " + code.hex() + "\n")
 
+    if args.path:
+        assert args.path.startswith("Pz")
+        path = int(args.path[2:], 16)
+    else:
+        path = 0
+
     if solution is None:
-        solution = search(beginning, validator, args.depth, verbose=args.verbose)
+        solution = search(
+            beginning, validator, args.depth, path=path, verbose=args.verbose
+        )
         if not solution:
             vprint("\tno solution\n")
             return
@@ -314,6 +331,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "-d", "--depth", help="maximum number of transactions", type=int, default=10
+    )
+    parser.add_argument(
+        "-p", "--path", help="restrict execution to a single path (Pz...)", type=str
     )
     parser.add_argument("-v", "--verbose", action="count", default=0)
     args = parser.parse_args()
