@@ -94,16 +94,6 @@ class AValue(ATerm):
         ctx.write(b")")
 
     @override
-    def substitute(self, model: dict[bytes, BaseTerm]) -> BaseTerm:
-        return self
-
-    @override
-    def replace(self, model: ReplaceContext) -> BaseTerm:
-        if (r := model.check(self)) is not None:
-            return r
-        return self
-
-    @override
     def _bzterm(self) -> BitwuzlaTerm:
         return BZLA.mk_value(self.default.bzla, self.width())
 

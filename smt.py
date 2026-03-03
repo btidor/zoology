@@ -77,6 +77,8 @@ class Solver:
                             Eq(a, BValue(x & ((1 << a.width) - 1), a.width))
                         )
                         x >>= a.width
+                case CValue(True):
+                    pass
                 case other:
                     self._pending.add(other)
 
@@ -110,21 +112,12 @@ class Solver:
                         pass  # probably a contradiction
                     else:
                         model.terms[b] = a
-                case Not(Eq(BTerm() as a, BTerm() as b)):
+                case Not(Eq(BValue(v), BTerm() as a)):
                     if (p := model.terms.get(a)) is not None:
                         assert isinstance(p, BTerm)
-                        p.exclusions.add(b)
-                        if isinstance(b, BValue):
-                            p.exclusions.add(b.value)
+                        p.exclusions.add(v)
                     else:
-                        model.terms[a] = a.realcopy(exclude=b)
-                    if (q := model.terms.get(b)) is not None:
-                        assert isinstance(q, BTerm)
-                        q.exclusions.add(a)
-                        if isinstance(a, BValue):
-                            q.exclusions.add(a)
-                    else:
-                        model.terms[b] = b.realcopy(exclude=a)
+                        model.terms[a] = a.realcopy(exclude=v)
                 case Ult(b, BValue(x)):
                     assert b not in model.terms
                     if b.max > x - 1:
@@ -196,14 +189,9 @@ class Solver:
 
     def pretty(self) -> str:
         ctx = DumpContext(pretty=True)
-        queue = list(chain(self._committed, self._pending))
-        while queue:
-            match queue.pop(0):
-                case And(a, b):
-                    queue.extend((a, b))
-                case item:
-                    ctx.write(b"\n* ")
-                    item.dump(ctx)
+        for term in chain(self._committed, self._pending):
+            ctx.write(b"\n* ")
+            term.dump(ctx)
         return ctx.out.decode()
 
 

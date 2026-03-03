@@ -35,9 +35,7 @@ class BTerm(BaseTerm):
     width: int = field(init=False)
     min: int = field(init=False, compare=False)
     max: int = field(init=False, compare=False)
-    exclusions: set[BTerm | int] = field(
-        init=False, compare=False, default_factory=set["BTerm | int"]
-    )
+    exclusions: set[int] = field(init=False, compare=False, default_factory=set[int])
 
     def sort(self) -> bytes:
         return b"(_ BitVec %d)" % self.width
@@ -48,7 +46,7 @@ class BTerm(BaseTerm):
         *,
         min_: int | None = None,
         max_: int | None = None,
-        exclude: BTerm | None = None,
+        exclude: int | None = None,
     ) -> BTerm:
         args = list[Any]()
         for name in self.__match_args__:
@@ -65,6 +63,14 @@ class BTerm(BaseTerm):
             r.max = min(r.max, max_)
         if exclude is not None:
             r.exclusions.add(exclude)
+        return r
+
+    @override
+    def replace(self, model: ReplaceContext) -> BaseTerm:
+        if (r := model.check(self)) is not None:
+            return r
+        r = super().replace(model)
+        r.exclusions = copy.copy(self.exclusions)
         return r
 
 
