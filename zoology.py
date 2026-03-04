@@ -37,7 +37,7 @@ def search(
     beginning: Sequence,
     validator: Validator,
     depth: int,
-    path: int = 0,
+    path: tuple[int] = tuple[int](),
     verbose: int = 0,
 ) -> Solution | None:
     """Symbolically execute the given level until a solution is found."""
@@ -50,11 +50,8 @@ def search(
         while isinstance(state.pc, int):
             if verbose > 2:
                 print(state.program.instructions[state.pc])
-            if path:
-                i = path.bit_length()
-                j = node.state.path.bit_length()
-                if i < j or (path >> (i - j)) != node.state.path:
-                    break
+            if path and not node.is_prefix_of(path):
+                break
             match step(state):
                 case None:
                     if verbose > 2:
@@ -114,6 +111,18 @@ class Node:
         if not isinstance(other, Node):
             return NotImplemented
         return self.state < other.state
+
+    def is_prefix_of(self, path_: tuple[int]) -> bool:
+        """Return true if this node is a prefix of the given path."""
+        path = list(path_)
+        parts = [s.path for s in self.prefix.states[1:]]
+        parts.append(self.state.path)
+        while len(parts) > 1:
+            if parts.pop(0) != path.pop(0):
+                return False
+        i = path[0].bit_length()
+        j = parts[0].bit_length()
+        return i >= j and (path[0] >> (i - j)) == parts[0]
 
 
 def starting_sequence(
@@ -299,9 +308,9 @@ def handle_level(factory: Uint160, args: argparse.Namespace) -> None:
 
     if args.path:
         assert args.path.startswith("Pz")
-        path = int(args.path[2:], 16)
+        path = tuple[int](int(i, 16) for i in args.path[2:].split(":"))
     else:
-        path = 0
+        path = tuple[int]()
 
     if solution is None:
         solution = search(
