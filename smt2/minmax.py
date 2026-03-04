@@ -103,7 +103,9 @@ def constraint_minmax(term: CTerm) -> CTerm:
 def minmax_yolo(term: CTerm) -> CTerm:
     """Warning: unverified rewrite rules for minmax."""
     match term:
-        case Eq(BTerm() as x, BTerm() as y) if x in y.exclusions or y in x.exclusions:
+        case Eq(BTerm() as x, BTerm() as y) if (y.exclusions and x in y.exclusions) or (
+            x.exclusions and y in x.exclusions
+        ):
             """eq.exclude"""
             return CValue(False)
         case _:

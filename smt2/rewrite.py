@@ -810,7 +810,8 @@ def bitvector_yolo(term: BTerm) -> BTerm:
             down = dict(
                 (k, v)
                 for k, v in lower.items()
-                if key.min <= k <= key.max and k not in key.exclusions
+                if key.min <= k <= key.max
+                and (not key.exclusions or k not in key.exclusions)
             )
             if not up and not down:
                 return Select(base, key)

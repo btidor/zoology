@@ -112,9 +112,17 @@ class Solver:
                         pass  # probably a contradiction
                     else:
                         model.terms[b] = a
+                case Not(Eq(BValue(v), BTerm() as a)) if v == a.min:
+                    assert a not in model.terms
+                    model.terms[a] = a.realcopy(min_=v + 1)
+                case Not(Eq(BValue(v), BTerm() as a)) if v == a.max:
+                    assert a not in model.terms
+                    model.terms[a] = a.realcopy(max_=v - 1)
                 case Not(Eq(BValue(v), BTerm() as a)):
                     if (p := model.terms.get(a)) is not None:
                         assert isinstance(p, BTerm)
+                        if p.exclusions is None:
+                            p.exclusions = set()
                         p.exclusions.add(v)
                     else:
                         model.terms[a] = a.realcopy(exclude=v)

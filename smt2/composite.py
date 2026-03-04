@@ -329,7 +329,9 @@ class Eq[S: BaseTerm](CTerm):
             case Eq(BTerm() as x, BTerm() as y) if y.max < x.min:
                 return CValue(False)
             case Eq(BTerm() as x, BTerm() as y) if (
-                x in y.exclusions or y in x.exclusions
+                y.exclusions
+                and x in y.exclusions
+                or (x.exclusions and y in x.exclusions)
             ):
                 return CValue(False)
             case _:
@@ -392,7 +394,7 @@ class BTerm(BaseTerm):
     width: int = field(init=False)
     min: int = field(init=False, compare=False)
     max: int = field(init=False, compare=False)
-    exclusions: set[int] = field(init=False, compare=False, default_factory=set[int])
+    exclusions: set[int] | None = field(init=False, compare=False, default=None)
 
     def sort(self) -> bytes:
         return b"(_ BitVec %d)" % self.width
@@ -419,6 +421,8 @@ class BTerm(BaseTerm):
         if max_ is not None:
             r.max = min(r.max, max_)
         if exclude is not None:
+            if r.exclusions is None:
+                r.exclusions = set()
             r.exclusions.add(exclude)
         return r
 
@@ -2033,7 +2037,8 @@ class Select(BTerm):
                     (
                         (k, v)
                         for k, v in lower.items()
-                        if key.min <= k <= key.max and k not in key.exclusions
+                        if key.min <= k <= key.max
+                        and (not key.exclusions or k not in key.exclusions)
                     )
                 )
                 if not up and (not down):

@@ -35,7 +35,7 @@ class BTerm(BaseTerm):
     width: int = field(init=False)
     min: int = field(init=False, compare=False)
     max: int = field(init=False, compare=False)
-    exclusions: set[int] = field(init=False, compare=False, default_factory=set[int])
+    exclusions: set[int] | None = field(init=False, compare=False, default=None)
 
     def sort(self) -> bytes:
         return b"(_ BitVec %d)" % self.width
@@ -62,6 +62,8 @@ class BTerm(BaseTerm):
         if max_ is not None:
             r.max = min(r.max, max_)
         if exclude is not None:
+            if r.exclusions is None:
+                r.exclusions = set()
             r.exclusions.add(exclude)
         return r
 
