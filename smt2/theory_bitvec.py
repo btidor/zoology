@@ -14,8 +14,6 @@ from dataclasses import InitVar, dataclass, field
 from functools import reduce
 from typing import Any, ClassVar, Iterable, override
 
-from line_profiler import profile
-
 from .bitwuzla import BZLA
 from .theory_core import (
     BaseTerm,
@@ -72,6 +70,7 @@ class BTerm(BaseTerm):
         if (r := model.check(self)) is not None:
             return r
         r = super().replace(model)
+        assert isinstance(r, BTerm)
         r.exclusions = copy.copy(self.exclusions)
         return r
 
@@ -128,7 +127,6 @@ class BValue(BTerm):
         super(BValue, self).__post_init__()
 
     @property
-    @profile
     def sgnd(self) -> int:
         # https://stackoverflow.com/a/9147327 (CC BY-SA 3.0)
         if self.value & (1 << (self.width - 1)):

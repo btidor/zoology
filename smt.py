@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from functools import reduce
 from itertools import chain
-from typing import Literal, overload
+from typing import Literal, cast, overload
 
 from smt2 import Array, Constraint, Int, Symbolic, Uint
 from smt2.bitwuzla import BZLA
@@ -138,7 +138,7 @@ class Solver:
                     model.terms[inv] = CValue(False)
                 case item:
                     model.terms[item] = CValue(True)
-        self._committed = set(c.replace(model) for c in self._committed)
+        self._committed = set(cast(CTerm, c.replace(model)) for c in self._committed)
         self._committed.update(self._pending)
         self._pending.clear()
         return model

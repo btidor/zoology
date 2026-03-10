@@ -14,8 +14,6 @@ import copy
 from dataclasses import dataclass, field
 from typing import Any, ClassVar, Iterable, Self, override
 
-from line_profiler import profile
-
 from .bitwuzla import BZLA
 from .theory_bitvec import BTerm, BValue
 from .theory_core import (
@@ -171,14 +169,12 @@ class Store(ATerm):
             *(v for _, v in self.upper),
         )
 
-    @profile
     def set(self, key: BTerm, value: BTerm) -> Store:
         array = copy.deepcopy(self) if self.freeze else self
         array._bzla = None
         array._set(key, value)
         return array
 
-    @profile
     def _set(self, key: BTerm, value: BTerm) -> None:
         for i, (k, v) in reverse_enumerate(self.upper):
             match Eq(k, key):

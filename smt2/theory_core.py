@@ -15,7 +15,6 @@ from enum import Enum
 from subprocess import PIPE, Popen
 from typing import Any, ClassVar, Iterable, Protocol, Self, TypeVar, override
 
-from line_profiler import profile
 from zbitvector.pybitwuzla import (
     BitwuzlaTerm,
     Kind,
@@ -52,7 +51,6 @@ class TermCategory(Enum):
 class TermMeta(abc.ABCMeta):
     """Performs term rewriting and caching."""
 
-    @profile
     def __call__(self, *args: Any, recurse: bool = True, cache: bool = True) -> Any:
         """Construct the requested term, then rewrite it."""
         assert issubclass(self, BaseTerm)
@@ -152,7 +150,6 @@ class BaseTerm(abc.ABC, metaclass=TermMeta):
     def rewrite(self) -> BaseTerm:
         return self
 
-    @profile
     def dump(self, ctx: DumpContext) -> None:
         if ctx.pretty and self._pretty:
             raise NotImplementedError
@@ -170,7 +167,6 @@ class BaseTerm(abc.ABC, metaclass=TermMeta):
             term.dump(ctx)
         ctx.write(b")")
 
-    @profile
     def substitute(self, model: dict[bytes, BaseTerm]) -> BaseTerm:
         args = list[Any]()
         for name in self.__match_args__:
@@ -196,7 +192,6 @@ class BaseTerm(abc.ABC, metaclass=TermMeta):
                 args.append(arg)
         return self.__class__(*args)
 
-    @profile
     def replace(self, model: ReplaceContext) -> BaseTerm:
         if (r := model.check(self)) is not None:
             return r
@@ -250,7 +245,6 @@ class DumpContext:
     pretty: bool = field(default=False)
     out: bytearray = field(default_factory=bytearray)
 
-    @profile
     def visit(self, term: BaseTerm) -> bool:
         if term in self.visited:
             return True
@@ -258,7 +252,6 @@ class DumpContext:
             self.visited.add(term)
             return False
 
-    @profile
     def prepare(self, *terms: BaseTerm) -> None:
         queue = list[BaseTerm](terms)
         visited = set[BaseTerm]()
@@ -273,7 +266,6 @@ class DumpContext:
         for name, symbol in self.symbols.items():
             self.write(b"(declare-fun %b () %b)\n" % (name, symbol.sort()))
 
-    @profile
     def write(self, b: bytes) -> None:
         self.out.extend(b)
 
