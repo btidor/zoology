@@ -56,12 +56,12 @@ class Solver:
     __slots__ = ("_committed", "_pending", "_last_check")
 
     _committed: set[CTerm]
-    _pending: set[CTerm]
+    _pending: list[CTerm]
     _last_check: bool
 
     def __init__(self) -> None:
         self._committed = set()
-        self._pending = set()
+        self._pending = list()
         self._last_check = False
 
     def add(self, assertion: Constraint, /) -> None:
@@ -73,20 +73,22 @@ class Solver:
                     queue.extend((a, b))
                 case Eq(BValue(x), Concat(terms)):
                     for a in reversed(terms):
-                        self._pending.add(
+                        self._pending.append(
                             Eq(a, BValue(x & ((1 << a.width) - 1), a.width))
                         )
                         x >>= a.width
                 case CValue(True):
                     pass
                 case other:
-                    self._pending.add(other)
+                    self._pending.append(other)
 
     def replace(self) -> ReplaceContext:
         model = ReplaceContext()
         self._last_check = False
         # TODO: do we need to replace within sibling terms?
-        for term in self._pending:
+        while self._pending:
+            term = self._pending.pop(0)
+            self._committed.add(term)
             match term:
                 case Eq(BTerm() as v, Select(ASymbol() as a, k)) | Eq(
                     Select(ASymbol() as a, k), BTerm() as v
@@ -139,8 +141,6 @@ class Solver:
                 case item:
                     model.terms[item] = CValue(True)
         self._committed = set(cast(CTerm, c.replace(model)) for c in self._committed)
-        self._committed.update(self._pending)
-        self._pending.clear()
         return model
 
     def check(self, *assumptions: Constraint) -> bool:
