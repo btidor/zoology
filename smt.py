@@ -195,8 +195,8 @@ class Solver:
                     d[int(p, 2)] = int(q, 2)
                 return d
 
-    def pretty(self) -> str:
-        ctx = DumpContext(pretty=True)
+    def verbose(self) -> str:
+        ctx = DumpContext(mode="verbose")
         for term in chain(self._committed, self._pending):
             ctx.write(b"\n* ")
             term.dump(ctx)

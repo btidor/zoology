@@ -118,7 +118,7 @@ class Select(BTerm):
 
     @override
     def dump(self, ctx: DumpContext) -> None:
-        if ctx.pretty and self._pretty == "safe_select":
+        if ctx.mode and self._pretty == "safe_select":
             self.array.dump(ctx)
             ctx.write(b"[")
             self.key.dump(ctx)
@@ -204,7 +204,7 @@ class Store(ATerm):
 
     @override
     def dump(self, ctx: DumpContext) -> None:
-        if ctx.pretty:
+        if ctx.mode:
             ctx.write(b"{\n  ")
             self.base.dump(ctx)
             for k, v in sorted(self.lower.items()):

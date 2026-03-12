@@ -66,6 +66,18 @@ class BTerm(BaseTerm):
         return r
 
     @override
+    def dump(self, ctx: DumpContext) -> None:
+        super().dump(ctx)
+        self._post_dump(ctx)
+
+    def _post_dump(self, ctx: DumpContext) -> None:
+        if ctx.mode != "verbose":
+            return
+        ctx.write(
+            f"[{self.min:x} {self.max:x} {len(self.exclusions) if self.exclusions else 0}]".encode()
+        )
+
+    @override
     def replace(self, model: ReplaceContext) -> BaseTerm:
         if (r := model.check(self)) is not None:
             return r
@@ -94,6 +106,7 @@ class BSymbol(BTerm):
     @override
     def dump(self, ctx: DumpContext) -> None:
         ctx.write(self.name)
+        self._post_dump(ctx)
 
     @override
     def substitute(self, model: dict[bytes, BaseTerm]) -> BaseTerm:
@@ -139,7 +152,7 @@ class BValue(BTerm):
 
     @override
     def dump(self, ctx: DumpContext) -> None:
-        if ctx.pretty:
+        if ctx.mode:
             ctx.write(hex(self.value).encode())
         elif self.width % 8 == 0:
             ctx.write(b"#x" + self.value.to_bytes(self.width // 8).hex().encode())
@@ -240,7 +253,7 @@ class Concat(BTerm):
     def dump(self, ctx: DumpContext) -> None:
         terms = self.terms
         if (
-            ctx.pretty
+            ctx.mode
             and len(self.terms) > 1
             and isinstance(terms[0], BValue)
             and terms[0].value == 0
@@ -253,7 +266,7 @@ class Concat(BTerm):
         written = False
         state: tuple[BaseTerm, BTerm, BTerm, int] | None = None
         for term in terms:
-            if ctx.pretty and term._pretty == "safe_get":
+            if ctx.mode and term._pretty == "safe_get":
                 res = self.pretty_terms(term)
                 if res:
                     if not state:
@@ -281,6 +294,7 @@ class Concat(BTerm):
             self.pretty_dump(ctx, *state)
         if written:
             ctx.write(b")")
+        self._post_dump(ctx)
 
     def pretty_terms(self, term: BTerm) -> tuple[BaseTerm, BTerm, BTerm] | None:
         assert isinstance(term, Ite)
@@ -604,7 +618,7 @@ class Ite(BTerm):
 
     @override
     def dump(self, ctx: DumpContext) -> None:
-        if ctx.pretty and self._pretty == "safe_get":
+        if ctx.mode and self._pretty == "safe_get":
             if self.left._pretty == "safe_select":
                 self.left.dump(ctx)
                 return
@@ -614,3 +628,4 @@ class Ite(BTerm):
             else:
                 self._pretty = None
         super(Ite, self).dump(ctx)
+        self._post_dump(ctx)

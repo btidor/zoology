@@ -13,7 +13,7 @@ import abc
 from dataclasses import dataclass, field
 from enum import Enum
 from subprocess import PIPE, Popen
-from typing import Any, ClassVar, Iterable, Protocol, Self, TypeVar, override
+from typing import Any, ClassVar, Iterable, Literal, Protocol, Self, TypeVar, override
 
 from zbitvector.pybitwuzla import (
     BitwuzlaTerm,
@@ -108,7 +108,7 @@ class BaseTerm(abc.ABC, metaclass=TermMeta):
         self.count = sum(c.count for c in self.children()) + 1
 
     def __repr__(self) -> str:
-        ctx = DumpContext(pretty=True)
+        ctx = DumpContext(mode="pretty")
         self.dump(ctx)
         return ctx.out.decode()
 
@@ -151,7 +151,7 @@ class BaseTerm(abc.ABC, metaclass=TermMeta):
         return self
 
     def dump(self, ctx: DumpContext) -> None:
-        if ctx.pretty and self._pretty:
+        if ctx.mode == "pretty" and self._pretty:
             raise NotImplementedError
         # 1. Determine Op
         assert self.op
@@ -236,13 +236,25 @@ class ReplaceContext:
         self._cache[term] = replacement
         return replacement
 
+    def verbose(self) -> str:
+        ctx = DumpContext(mode="verbose")
+        for pre, post in self.terms.items():
+            ctx.write(b"\nA: ")
+            pre.dump(ctx)
+            ctx.write(b"\nB: ")
+            post.dump(ctx)
+        return ctx.out.decode()
+
+
+type DumpMode = None | Literal["pretty"] | Literal["verbose"]
+
 
 @dataclass
 class DumpContext:
     symbols: dict[bytes, BaseTerm] = field(default_factory=dict[bytes, BaseTerm])
     visited: set[BaseTerm] = field(default_factory=set[BaseTerm])
 
-    pretty: bool = field(default=False)
+    mode: DumpMode = field(default=None)
     out: bytearray = field(default_factory=bytearray)
 
     def visit(self, term: BaseTerm) -> bool:
