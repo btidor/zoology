@@ -77,71 +77,88 @@ class Solver:
                             Eq(a, BValue(x & ((1 << a.width) - 1), a.width))
                         )
                         x >>= a.width
-                case CValue(True):
-                    pass
                 case other:
                     self._pending.append(other)
 
     def replace(self) -> ReplaceContext:
         model = ReplaceContext()
         self._last_check = False
-        # TODO: do we need to replace within sibling terms?
+        # TODO: what happens when replacement results in new extractable term?
         while self._pending:
             term = self._pending.pop(0)
-            self._committed.add(term)
-            match term:
-                case Eq(BTerm() as v, Select(ASymbol() as a, k)) | Eq(
-                    Select(ASymbol() as a, k), BTerm() as v
-                ):
-                    if a in model.terms:
-                        z = model.terms[a]
-                        assert isinstance(z, Store)
-                    else:
+            if term == CValue(True):
+                continue
+            elif term in self._committed:
+                continue
+            assert term != CValue(False), f"TODO: handle unreachable states"
+            m = self._extract(term, model)
+
+            committed = set[CTerm]((term,))
+            for pre in self._committed:
+                post = pre.replace(m)
+                assert isinstance(post, CTerm)
+                committed.add(post)
+            self._committed = committed
+            self._pending = list(cast(CTerm, p.replace(model)) for p in self._pending)
+        return model
+
+    def _extract(self, term: CTerm, model: ReplaceContext) -> ReplaceContext:
+        m = ReplaceContext()
+        match term:
+            case Eq(BTerm() as v, Select(a, k)) | Eq(Select(a, k), BTerm() as v):
+                match a:
+                    case ASymbol():
                         z = Store(a)
-                    model.terms[a] = z.set(k, v)
-                case Eq(BTerm() as v, Select(Store() as a, k)) | Eq(
-                    Select(Store() as a, k), BTerm() as v
-                ):
-                    if a in model.terms:
-                        z = model.terms[a]
-                        assert isinstance(z, Store)
-                    else:
+                    case Store():
                         z = a
                         z.freeze = True
+                    case _:
+                        raise NotImplementedError
+                m.terms[a] = z.set(k, v)
+                if a in model.terms:
+                    z = model.terms[a]
+                    assert isinstance(z, Store)
                     model.terms[a] = z.set(k, v)
-                case Eq(CTerm() as a, CTerm() as b) | Eq(BTerm() as a, BTerm() as b):
-                    if b in model.terms:
-                        pass  # probably a contradiction
-                    else:
-                        model.terms[b] = a
-                case Not(Eq(BValue(v), BTerm() as a)) if v == a.min:
-                    assert a not in model.terms
-                    model.terms[a] = a.realcopy(min_=v + 1)
-                case Not(Eq(BValue(v), BTerm() as a)) if v == a.max:
-                    assert a not in model.terms
-                    model.terms[a] = a.realcopy(max_=v - 1)
-                case Not(Eq(BValue(v), BTerm() as a)):
-                    if (p := model.terms.get(a)) is not None:
-                        assert isinstance(p, BTerm)
-                        if p.exclusions is None:
-                            p.exclusions = set()
-                        p.exclusions.add(v)
-                    else:
-                        model.terms[a] = a.realcopy(exclude=v)
-                case Ult(b, BValue(x)):
-                    assert b not in model.terms
-                    if b.max > x - 1:
-                        model.terms[b] = b.realcopy(max_=x - 1)
-                case Not(Ult(b, BValue(x))):
-                    assert b not in model.terms
-                    if b.min < x:
-                        model.terms[b] = b.realcopy(min_=x)
-                case Not(inv):
-                    model.terms[inv] = CValue(False)
-                case item:
-                    model.terms[item] = CValue(True)
-        self._committed = set(cast(CTerm, c.replace(model)) for c in self._committed)
-        return model
+                else:
+                    model.terms[a] = m.terms[a]
+            case Eq(CTerm() as a, CTerm() as b) | Eq(BTerm() as a, BTerm() as b):
+                assert b not in model.terms
+                m.terms[b] = a
+                model.terms[b] = m.terms[b]
+            case Not(Eq(BValue(v), BTerm() as b)) if v == b.min:
+                assert b not in model.terms
+                m.terms[b] = b.realcopy(min_=v + 1)
+                model.terms[b] = m.terms[b]
+            case Not(Eq(BValue(v), BTerm() as b)) if v == b.max:
+                assert b not in model.terms
+                m.terms[b] = b.realcopy(max_=v - 1)
+                model.terms[b] = m.terms[b]
+            case Not(Eq(BValue(v), BTerm() as b)):
+                if (p := model.terms.get(b)) is not None:
+                    assert isinstance(p, BTerm)
+                    if p.exclusions is None:
+                        p.exclusions = set()
+                    p.exclusions.add(v)
+                else:
+                    model.terms[b] = b.realcopy(exclude=v)
+                m.terms[b] = b.realcopy(exclude=v)
+            case Ult(b, BValue(x)):
+                assert b not in model.terms
+                if b.max > x - 1:
+                    m.terms[b] = b.realcopy(max_=x - 1)
+                    model.terms[b] = m.terms[b]
+            case Not(Ult(b, BValue(x))):
+                assert b not in model.terms
+                if b.min < x:
+                    m.terms[b] = b.realcopy(min_=x)
+                    model.terms[b] = m.terms[b]
+            case Not(inv):
+                m.terms[inv] = CValue(False)
+                model.terms[inv] = m.terms[inv]
+            case item:
+                m.terms[item] = CValue(True)
+                model.terms[item] = m.terms[item]
+        return m
 
     def check(self, *assumptions: Constraint) -> bool:
         global checks
