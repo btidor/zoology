@@ -246,9 +246,11 @@ class State:
         self.latest_return = self.latest_return.replace(model)
         # TODO: must replace in *all* state...
 
-        # FYI: this has one minor bug: if we recreate a term from the cache,
+        # FYI: this has one minor issue: if we recreate a term from the cache,
         # e.g. with BSymbol("NAME") or BValue(0, 256), it will be the original
-        # and won't have updates like min, max and exclude.
+        # and won't have updates like min, max and exclude. This is necessary so
+        # that constraints applied to, say, a DIGEST variable in one branch
+        # don't affect other branches with a DIGEST of the same name.
 
 
 @dataclass(frozen=True, slots=True)
