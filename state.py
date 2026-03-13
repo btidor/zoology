@@ -184,7 +184,7 @@ class State:
         Automatically adds hash constraints to the current constraint.
         """
         digest, constraint = self.sha3.hash(input)
-        self.update(constraint)
+        self.solver.add(constraint)
         return digest
 
     def cleanup(self) -> None:
